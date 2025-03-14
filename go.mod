@@ -2,6 +2,8 @@ module github.com/labring/aiproxy
 
 go 1.23.0
 
+toolchain go1.24.1
+
 require (
 	cloud.google.com/go/iam v1.4.1
 	github.com/aws/aws-sdk-go-v2 v1.36.3
@@ -32,7 +34,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/image v0.25.0
 	golang.org/x/sync v0.12.0
-	google.golang.org/api v0.224.0
+	google.golang.org/api v0.226.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
