@@ -32,7 +32,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/image v0.25.0
 	golang.org/x/sync v0.12.0
-	google.golang.org/api v0.224.0
+	google.golang.org/api v0.226.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
