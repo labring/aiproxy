@@ -4,8 +4,8 @@ cloud.google.com/go/auth/oauth2adapt v0.2.7 h1:/Lc7xODdqcEw8IrZ9SvwnlLX6j9FHQM74
 cloud.google.com/go/auth/oauth2adapt v0.2.7/go.mod h1:NTbTTzfvPl1Y3V1nPpOgl2w6d/FjO7NNUQaWSox6ZMc=
 cloud.google.com/go/compute/metadata v0.6.0 h1:A6hENjEsCDtC1k8byVsgwvVcioamEHvZ4j01OwKxG9I=
 cloud.google.com/go/compute/metadata v0.6.0/go.mod h1:FjyFAW1MW0C203CEOMDTu3Dk1FlqW3Rga40jzHL4hfg=
-cloud.google.com/go/iam v1.4.1 h1:cFC25Nv+u5BkTR/BT1tXdoF2daiVbZ1RLx2eqfQ9RMM=
-cloud.google.com/go/iam v1.4.1/go.mod h1:2vUEJpUG3Q9p2UdsyksaKpDzlwOrnMzS30isdReIcLM=
+cloud.google.com/go/iam v1.4.2 h1:4AckGYAYsowXeHzsn/LCKWIwSWLkdb0eGjH8wWkd27Q=
+cloud.google.com/go/iam v1.4.2/go.mod h1:REGlrt8vSlh4dfCJfSEcNjLGq75wW75c5aU3FLOYq34=
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/aws/aws-sdk-go-v2 v1.36.3 h1:mJoei2CxPutQVxaATCzDUjcZEjVRdpsiiXi2o38yqWM=
