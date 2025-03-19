@@ -21,10 +21,7 @@ func (a *Adaptor) GetBaseURL() string {
 const baseURL = "https://spark-api-open.xf-yun.com/v1"
 
 func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (string, http.Header, io.Reader, error) {
-	domain, err := getXunfeiDomain(meta.ActualModel)
-	if err != nil {
-		return "", nil, nil, err
-	}
+	domain := getXunfeiDomain(meta.ActualModel)
 	model := meta.ActualModel
 	meta.ActualModel = domain
 	defer func() {
