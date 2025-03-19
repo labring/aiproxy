@@ -1,38 +1,28 @@
 package xunfei
 
 import (
-	"errors"
 	"strings"
 )
 
 // https://console.xfyun.cn/services/cbm
 // https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html
 
-func getXunfeiDomain(modelName string) (string, error) {
-	// check if the model ID matches directly
-	switch strings.ToLower(modelName) {
-	case "lite", "generalv3", "pro-128k", "generalv3.5", "max-32k", "4.0ultra":
-		return modelName, nil
-	}
-
-	// If it is not a direct model ID, try to parse the spark-xxx format
-	_, s, ok := strings.Cut(modelName, "-")
-	if !ok {
-		return "", errors.New("invalid model name")
-	}
+func getXunfeiDomain(modelName string) string {
+	_, s, _ := strings.Cut(modelName, "-")
 	switch strings.ToLower(s) {
 	case "lite":
-		return "lite", nil
+		return "lite"
 	case "pro":
-		return "generalv3", nil
+		return "generalv3"
 	case "pro-128k":
-		return "pro-128k", nil
+		return "pro-128k"
 	case "max":
-		return "generalv3.5", nil
+		return "generalv3.5"
 	case "max-32k":
-		return "max-32k", nil
+		return "max-32k"
 	case "4.0-ultra":
-		return "4.0Ultra", nil
+		return "4.0Ultra"
+	default:
+		return modelName
 	}
-	return "", errors.New("invalid model name")
 }
