@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	cloud.google.com/go/iam v1.4.2
 	github.com/aws/aws-sdk-go-v2 v1.36.3
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.62
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.64
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.26.1
 	github.com/bytedance/sonic v1.13.2
 	github.com/gin-contrib/cors v1.7.4
