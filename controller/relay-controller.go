@@ -357,7 +357,7 @@ func getPreConsumedAmount(usage model.Usage, price model.Price) float64 {
 		return 0
 	}
 	return decimal.
-		NewFromInt(int64(usage.InputTokens)).
+		NewFromInt(usage.InputTokens).
 		Mul(decimal.NewFromFloat(price.InputPrice)).
 		Div(decimal.NewFromInt(model.PriceUnit)).
 		InexactFloat64()
