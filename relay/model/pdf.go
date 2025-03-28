@@ -1,7 +1,7 @@
 package model
 
 type ParsePdfResponse struct {
-	Pages    int    `json:"pages"`
+	Pages    int64  `json:"pages"`
 	Markdown string `json:"markdown"`
 }
 

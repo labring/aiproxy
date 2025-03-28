@@ -28,7 +28,7 @@ func GetSTTRequestUsage(c *gin.Context, _ *model.ModelConfig) (model.Usage, erro
 		return model.Usage{}, err
 	}
 
-	durationInt := int(math.Ceil(duration))
+	durationInt := int64(math.Ceil(duration))
 	log := middleware.GetLogger(c)
 	log.Data["duration"] = durationInt
 

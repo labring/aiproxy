@@ -418,7 +418,7 @@ type retryState struct {
 
 	meta             *meta.Meta
 	price            model.Price
-	inputTokens      int
+	inputTokens      int64
 	result           *controller.HandleResult
 	migratedChannels []*model.Channel
 }
@@ -628,14 +628,20 @@ func handleRetryResult(ctx *gin.Context, retry bool, newChannel *model.Channel, 
 	return false
 }
 
+var channelNoRetryStatusCodesMap = map[int]struct{}{
+	http.StatusBadRequest:                 {},
+	http.StatusRequestEntityTooLarge:      {},
+	http.StatusUnprocessableEntity:        {},
+	http.StatusUnavailableForLegalReasons: {},
+}
+
 // 仅当是channel错误时，才需要记录，用户请求参数错误时，不需要记录
 func shouldRetry(_ *gin.Context, relayErr relaymodel.ErrorWithStatusCode) bool {
 	if relayErr.Error.Code == controller.ErrInvalidChannelTypeCode {
 		return false
 	}
-	return relayErr.StatusCode != http.StatusBadRequest &&
-		relayErr.StatusCode != http.StatusRequestEntityTooLarge &&
-		relayErr.StatusCode != http.StatusUnprocessableEntity
+	_, ok := channelNoRetryStatusCodesMap[relayErr.StatusCode]
+	return !ok
 }
 
 var channelNoPermissionStatusCodesMap = map[int]struct{}{

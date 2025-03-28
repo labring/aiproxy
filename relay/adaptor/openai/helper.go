@@ -7,7 +7,7 @@ import (
 	"github.com/labring/aiproxy/relay/model"
 )
 
-func ResponseText2Usage(responseText string, modeName string, promptTokens int) *model.Usage {
+func ResponseText2Usage(responseText string, modeName string, promptTokens int64) *model.Usage {
 	usage := &model.Usage{
 		PromptTokens:     promptTokens,
 		CompletionTokens: CountTokenText(responseText, modeName),

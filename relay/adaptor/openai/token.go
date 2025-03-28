@@ -13,11 +13,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
-	return len(tokenEncoder.Encode(text, nil, nil))
+func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int64 {
+	return int64(len(tokenEncoder.Encode(text, nil, nil)))
 }
 
-func CountTokenMessages(messages []*model.Message, model string) int {
+func CountTokenMessages(messages []*model.Message, model string) int64 {
 	if !config.GetBillingEnabled() {
 		return 0
 	}
@@ -27,8 +27,8 @@ func CountTokenMessages(messages []*model.Message, model string) int {
 	// https://github.com/pkoukk/tiktoken-go/issues/6
 	//
 	// Every message follows <|start|>{role/name}\n{content}<|end|>\n
-	var tokensPerMessage int
-	var tokensPerName int
+	var tokensPerMessage int64
+	var tokensPerName int64
 	if model == "gpt-3.5-turbo-0301" {
 		tokensPerMessage = 4
 		tokensPerName = -1 // If there's a name, the role is omitted
@@ -36,7 +36,7 @@ func CountTokenMessages(messages []*model.Message, model string) int {
 		tokensPerMessage = 3
 		tokensPerName = 1
 	}
-	tokenNum := 0
+	var tokenNum int64
 	for _, message := range messages {
 		tokenNum += tokensPerMessage
 		switch v := message.Content.(type) {
@@ -101,7 +101,7 @@ const (
 
 // https://platform.openai.com/docs/guides/vision/calculating-costs
 // https://github.com/openai/openai-cookbook/blob/05e3f9be4c7a2ae7ecf029a7c32065b024730ebe/examples/How_to_count_tokens_with_tiktoken.ipynb
-func countImageTokens(url string, detail string, model string) (_ int, err error) {
+func countImageTokens(url string, detail string, model string) (_ int64, err error) {
 	fetchSize := true
 	var width, height int
 	// Reference: https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
@@ -156,7 +156,7 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 			width = int(float64(width) * ratio)
 			height = int(float64(height) * ratio)
 		}
-		numSquares := int(math.Ceil(float64(width)/512) * math.Ceil(float64(height)/512))
+		numSquares := int64(math.Ceil(float64(width)/512) * math.Ceil(float64(height)/512))
 		if strings.HasPrefix(model, "gpt-4o-mini") {
 			return numSquares*gpt4oMiniHighDetailCost + gpt4oMiniAdditionalCost, nil
 		}
@@ -167,7 +167,7 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 	}
 }
 
-func CountTokenInput(input any, model string) int {
+func CountTokenInput(input any, model string) int64 {
 	if !config.GetBillingEnabled() {
 		return 0
 	}
@@ -175,22 +175,22 @@ func CountTokenInput(input any, model string) int {
 	case string:
 		return CountTokenText(v, model)
 	case []any:
-		num := 0
+		var num int64
 		for _, s := range v {
 			num += CountTokenInput(s, model)
 		}
 		return num
 	case []string:
-		text := ""
+		builder := strings.Builder{}
 		for _, s := range v {
-			text += s
+			builder.WriteString(s)
 		}
-		return CountTokenText(text, model)
+		return CountTokenText(builder.String(), model)
 	}
 	return 0
 }
 
-func CountTokenText(text string, model string) int {
+func CountTokenText(text string, model string) int64 {
 	if !config.GetBillingEnabled() {
 		return 0
 	}

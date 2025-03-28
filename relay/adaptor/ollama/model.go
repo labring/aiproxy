@@ -51,8 +51,8 @@ type ChatResponse struct {
 	Message         *Message `json:"message,omitempty"`
 	TotalDuration   int      `json:"total_duration,omitempty"`
 	LoadDuration    int      `json:"load_duration,omitempty"`
-	PromptEvalCount int      `json:"prompt_eval_count,omitempty"`
-	EvalCount       int      `json:"eval_count,omitempty"`
+	PromptEvalCount int64    `json:"prompt_eval_count,omitempty"`
+	EvalCount       int64    `json:"eval_count,omitempty"`
 	EvalDuration    int      `json:"eval_duration,omitempty"`
 	Done            bool     `json:"done,omitempty"`
 	DoneReason      string   `json:"done_reason,omitempty"`
@@ -68,5 +68,5 @@ type EmbeddingResponse struct {
 	Error           string      `json:"error,omitempty"`
 	Model           string      `json:"model"`
 	Embeddings      [][]float64 `json:"embeddings"`
-	PromptEvalCount int         `json:"prompt_eval_count,omitempty"`
+	PromptEvalCount int64       `json:"prompt_eval_count,omitempty"`
 }

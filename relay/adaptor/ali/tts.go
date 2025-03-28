@@ -84,7 +84,7 @@ type TTSPhoneme struct {
 }
 
 type TTSUsage struct {
-	Characters int `json:"characters"`
+	Characters int64 `json:"characters"`
 }
 
 var ttsSupportedFormat = map[string]struct{}{

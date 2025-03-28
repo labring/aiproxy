@@ -375,7 +375,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response, preHandler Pr
 	}
 
 	if usage.TotalTokens == 0 || (usage.PromptTokens == 0 && usage.CompletionTokens == 0) {
-		completionTokens := 0
+		var completionTokens int64
 		for _, choice := range choices {
 			if choice.Text != "" {
 				completionTokens += CountTokenText(choice.Text, meta.ActualModel)

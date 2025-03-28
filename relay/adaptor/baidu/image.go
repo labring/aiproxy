@@ -39,8 +39,8 @@ func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usa
 	}
 
 	usage := &model.Usage{
-		PromptTokens: len(imageResponse.Data),
-		TotalTokens:  len(imageResponse.Data),
+		PromptTokens: int64(len(imageResponse.Data)),
+		TotalTokens:  int64(len(imageResponse.Data)),
 	}
 
 	if imageResponse.Error != nil && imageResponse.Error.ErrorMsg != "" {

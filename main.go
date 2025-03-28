@@ -303,7 +303,7 @@ func main() {
 
 	batchProcessorCtx, batchProcessorCancel := context.WithCancel(context.Background())
 	wg.Add(1)
-	go model.StartBatchProcessor(batchProcessorCtx, &wg)
+	go model.StartBatchProcessorSummary(batchProcessorCtx, &wg)
 
 	<-ctx.Done()
 
@@ -327,7 +327,7 @@ func main() {
 	wg.Wait()
 
 	log.Info("shutting down batch processor...")
-	model.ProcessBatchUpdates()
+	model.ProcessBatchUpdatesSummary()
 
 	log.Info("server exiting")
 }

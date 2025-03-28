@@ -110,7 +110,7 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 	if err != nil {
 		return nil, ErrorWrapper(err, "get_text_from_body_err", http.StatusInternalServerError)
 	}
-	var promptTokens int
+	var promptTokens int64
 	if meta.InputTokens > 0 {
 		promptTokens = meta.InputTokens
 	} else {

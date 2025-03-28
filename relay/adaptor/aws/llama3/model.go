@@ -16,14 +16,14 @@ type Request struct {
 type Response struct {
 	Generation           string `json:"generation"`
 	StopReason           string `json:"stop_reason"`
-	PromptTokenCount     int    `json:"prompt_token_count"`
-	GenerationTokenCount int    `json:"generation_token_count"`
+	PromptTokenCount     int64  `json:"prompt_token_count"`
+	GenerationTokenCount int64  `json:"generation_token_count"`
 }
 
 // {'generation': 'Hi', 'prompt_token_count': 15, 'generation_token_count': 1, 'stop_reason': None}
 type StreamResponse struct {
 	Generation           string `json:"generation"`
 	StopReason           string `json:"stop_reason"`
-	PromptTokenCount     int    `json:"prompt_token_count"`
-	GenerationTokenCount int    `json:"generation_token_count"`
+	PromptTokenCount     int64  `json:"prompt_token_count"`
+	GenerationTokenCount int64  `json:"generation_token_count"`
 }

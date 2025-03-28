@@ -323,7 +323,7 @@ func handleParsePdfResponse(meta *meta.Meta, c *gin.Context, response *StatusRes
 		mds = append(mds, page.MD)
 		totalLength += len(page.MD)
 	}
-	pages := len(response.Pages)
+	pages := int64(len(response.Pages))
 
 	switch meta.GetString("response_format") {
 	case "list":

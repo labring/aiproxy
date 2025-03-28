@@ -33,7 +33,7 @@ type Meta struct {
 	ActualModel string
 	Mode        mode.Mode
 	// TODO: remove this field
-	InputTokens int
+	InputTokens int64
 }
 
 type Option func(meta *Meta)
@@ -74,7 +74,7 @@ func WithToken(token *model.TokenCache) Option {
 	}
 }
 
-func WithInputTokens(inputTokens int) Option {
+func WithInputTokens(inputTokens int64) Option {
 	return func(meta *Meta) {
 		meta.InputTokens = inputTokens
 	}

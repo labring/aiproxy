@@ -6,9 +6,9 @@ import (
 )
 
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
 
 	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
 }
@@ -29,8 +29,8 @@ func (u *Usage) Add(other *Usage) {
 }
 
 type PromptTokensDetails struct {
-	CachedTokens        int `json:"cached_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
+	CachedTokens        int64 `json:"cached_tokens"`
+	CacheCreationTokens int64 `json:"cache_creation_tokens"`
 }
 
 func (d *PromptTokensDetails) Add(other *PromptTokensDetails) {

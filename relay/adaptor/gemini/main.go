@@ -283,9 +283,9 @@ type ChatResponse struct {
 }
 
 type UsageMetadata struct {
-	PromptTokenCount     int `json:"promptTokenCount"`
-	CandidatesTokenCount int `json:"candidatesTokenCount"`
-	TotalTokenCount      int `json:"totalTokenCount"`
+	PromptTokenCount     int64 `json:"promptTokenCount"`
+	CandidatesTokenCount int64 `json:"candidatesTokenCount"`
+	TotalTokenCount      int64 `json:"totalTokenCount"`
 }
 
 func (g *ChatResponse) GetResponseText() string {
