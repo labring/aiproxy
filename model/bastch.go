@@ -142,7 +142,7 @@ func ProcessBatchUpdatesSummary() {
 		defer wg.Done()
 		if len(batchData.Summaries) > 0 {
 			for key, data := range batchData.Summaries {
-				err := UpdateSummary(data.SummaryUnique, data.SummaryData)
+				err := UpsertSummary(data.SummaryUnique, data.SummaryData)
 				if err != nil {
 					notify.ErrorThrottle(
 						"batchUpdateSummary",

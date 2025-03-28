@@ -15,11 +15,11 @@ type Summary struct {
 }
 
 type SummaryUnique struct {
-	GroupID       string
-	Model         string
-	TokenName     string
-	ChannelID     int
-	HourTimestamp int64
+	GroupID       string `gorm:"uniqueIndex:idx_summary_unique,priority:1"`
+	TokenName     string `gorm:"uniqueIndex:idx_summary_unique,priority:2"`
+	Model         string `gorm:"uniqueIndex:idx_summary_unique,priority:3"`
+	ChannelID     int    `gorm:"uniqueIndex:idx_summary_unique,priority:4"`
+	HourTimestamp int64  `gorm:"uniqueIndex:idx_summary_unique,priority:5,sort:desc"`
 }
 
 type SummaryData struct {
@@ -56,8 +56,6 @@ func validateHourTimestamp(hourTimestamp int64) error {
 
 func CreateSummaryIndexs(db *gorm.DB) error {
 	indexes := []string{
-		"CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_unique_group_token_model_channel_hour ON summaries (group_id, token_name, model, channel_id, hour_timestamp DESC)",
-
 		"CREATE INDEX IF NOT EXISTS idx_summary_group_hour ON summaries (group_id, hour_timestamp DESC)",
 		"CREATE INDEX IF NOT EXISTS idx_summary_group_token_hour ON summaries (group_id, token_name, hour_timestamp DESC)",
 		"CREATE INDEX IF NOT EXISTS idx_summary_group_model_hour ON summaries (group_id, model, hour_timestamp DESC)",
@@ -76,7 +74,7 @@ func CreateSummaryIndexs(db *gorm.DB) error {
 	return nil
 }
 
-func UpdateSummary(unique SummaryUnique, data SummaryData) error {
+func UpsertSummary(unique SummaryUnique, data SummaryData) error {
 	err := validateHourTimestamp(unique.HourTimestamp)
 	if err != nil {
 		return err

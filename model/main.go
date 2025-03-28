@@ -205,6 +205,12 @@ func migrateLOGDB() error {
 		}
 	}()
 
+	go func() {
+		err := CreateSummaryIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle("createSummaryIndexs", time.Minute, "failed to create summary indexs", err.Error())
+		}
+	}()
 	return nil
 }
 
