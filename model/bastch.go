@@ -20,17 +20,17 @@ type BatchUpdateData struct {
 }
 
 type GroupUpdate struct {
-	Amount float64
+	Amount decimal.Decimal
 	Count  int
 }
 
 type TokenUpdate struct {
-	Amount float64
+	Amount decimal.Decimal
 	Count  int
 }
 
 type ChannelUpdate struct {
-	Amount float64
+	Amount decimal.Decimal
 	Count  int
 }
 
@@ -75,69 +75,89 @@ func ProcessBatchUpdatesSummary() {
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	if len(batchData.Groups) > 0 {
-		for groupID, data := range batchData.Groups {
-			err := UpdateGroupUsedAmountAndRequestCount(groupID, data.Amount, data.Count)
-			if IgnoreNotFound(err) != nil {
-				notify.ErrorThrottle(
-					"batchUpdateGroupUsedAmountAndRequestCount",
-					time.Minute,
-					"failed to batch update group",
-					err.Error(),
-				)
-			} else {
-				delete(batchData.Groups, groupID)
-			}
-		}
-	}
+	var wg sync.WaitGroup
 
-	if len(batchData.Tokens) > 0 {
-		for tokenID, data := range batchData.Tokens {
-			err := UpdateTokenUsedAmount(tokenID, data.Amount, data.Count)
-			if IgnoreNotFound(err) != nil {
-				notify.ErrorThrottle(
-					"batchUpdateTokenUsedAmount",
-					time.Minute,
-					"failed to batch update token",
-					err.Error(),
-				)
-			} else {
-				delete(batchData.Tokens, tokenID)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if len(batchData.Groups) > 0 {
+			for groupID, data := range batchData.Groups {
+				err := UpdateGroupUsedAmountAndRequestCount(groupID, data.Amount.InexactFloat64(), data.Count)
+				if IgnoreNotFound(err) != nil {
+					notify.ErrorThrottle(
+						"batchUpdateGroupUsedAmountAndRequestCount",
+						time.Minute,
+						"failed to batch update group",
+						err.Error(),
+					)
+				} else {
+					delete(batchData.Groups, groupID)
+				}
 			}
 		}
-	}
+	}()
 
-	if len(batchData.Channels) > 0 {
-		for channelID, data := range batchData.Channels {
-			err := UpdateChannelUsedAmount(channelID, data.Amount, data.Count)
-			if IgnoreNotFound(err) != nil {
-				notify.ErrorThrottle(
-					"batchUpdateChannelUsedAmount",
-					time.Minute,
-					"failed to batch update channel",
-					err.Error(),
-				)
-			} else {
-				delete(batchData.Channels, channelID)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if len(batchData.Tokens) > 0 {
+			for tokenID, data := range batchData.Tokens {
+				err := UpdateTokenUsedAmount(tokenID, data.Amount.InexactFloat64(), data.Count)
+				if IgnoreNotFound(err) != nil {
+					notify.ErrorThrottle(
+						"batchUpdateTokenUsedAmount",
+						time.Minute,
+						"failed to batch update token",
+						err.Error(),
+					)
+				} else {
+					delete(batchData.Tokens, tokenID)
+				}
 			}
 		}
-	}
+	}()
 
-	if len(batchData.Summaries) > 0 {
-		for key, data := range batchData.Summaries {
-			err := UpdateSummary(data.SummaryUnique, data.SummaryData)
-			if err != nil {
-				notify.ErrorThrottle(
-					"batchUpdateSummary",
-					time.Minute,
-					"failed to batch update summary",
-					err.Error(),
-				)
-			} else {
-				delete(batchData.Summaries, key)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if len(batchData.Channels) > 0 {
+			for channelID, data := range batchData.Channels {
+				err := UpdateChannelUsedAmount(channelID, data.Amount.InexactFloat64(), data.Count)
+				if IgnoreNotFound(err) != nil {
+					notify.ErrorThrottle(
+						"batchUpdateChannelUsedAmount",
+						time.Minute,
+						"failed to batch update channel",
+						err.Error(),
+					)
+				} else {
+					delete(batchData.Channels, channelID)
+				}
 			}
 		}
-	}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if len(batchData.Summaries) > 0 {
+			for key, data := range batchData.Summaries {
+				err := UpdateSummary(data.SummaryUnique, data.SummaryData)
+				if err != nil {
+					notify.ErrorThrottle(
+						"batchUpdateSummary",
+						time.Minute,
+						"failed to batch update summary",
+						err.Error(),
+					)
+				} else {
+					delete(batchData.Summaries, key)
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
 }
 
 func BatchRecordConsume(
@@ -197,8 +217,7 @@ func BatchRecordConsume(
 
 		if amount > 0 {
 			batchData.Channels[channelID].Amount = amountDecimal.
-				Add(decimal.NewFromFloat(batchData.Channels[channelID].Amount)).
-				InexactFloat64()
+				Add(batchData.Channels[channelID].Amount)
 		}
 		batchData.Channels[channelID].Count++
 	}
@@ -214,8 +233,7 @@ func BatchRecordConsume(
 
 		if amount > 0 {
 			batchData.Groups[group].Amount = amountDecimal.
-				Add(decimal.NewFromFloat(batchData.Groups[group].Amount)).
-				InexactFloat64()
+				Add(batchData.Groups[group].Amount)
 		}
 		batchData.Groups[group].Count++
 	}
@@ -227,8 +245,7 @@ func BatchRecordConsume(
 
 		if amount > 0 {
 			batchData.Tokens[tokenID].Amount = amountDecimal.
-				Add(decimal.NewFromFloat(batchData.Tokens[tokenID].Amount)).
-				InexactFloat64()
+				Add(batchData.Tokens[tokenID].Amount)
 		}
 		batchData.Tokens[tokenID].Count++
 	}
