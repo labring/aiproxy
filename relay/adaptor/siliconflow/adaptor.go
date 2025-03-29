@@ -42,8 +42,8 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 	case mode.AudioSpeech:
 		size := c.Writer.Size()
 		usage = &relaymodel.Usage{
-			CompletionTokens: size,
-			TotalTokens:      size,
+			CompletionTokens: int64(size),
+			TotalTokens:      int64(size),
 		}
 	}
 	return usage, nil

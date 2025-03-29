@@ -62,8 +62,8 @@ func ImageHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.
 	}
 
 	usage := &model.Usage{
-		PromptTokens: len(imageResponse.Data),
-		TotalTokens:  len(imageResponse.Data),
+		PromptTokens: int64(len(imageResponse.Data)),
+		TotalTokens:  int64(len(imageResponse.Data)),
 	}
 
 	if responseFormat == "b64_json" {

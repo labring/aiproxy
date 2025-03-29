@@ -61,7 +61,7 @@ type STTSentence struct {
 }
 
 type STTUsage struct {
-	Characters int `json:"characters"`
+	Characters int64 `json:"characters"`
 }
 
 func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (string, http.Header, io.Reader, error) {

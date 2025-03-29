@@ -58,6 +58,6 @@ func GetImageRequestUsage(c *gin.Context, _ *model.ModelConfig) (model.Usage, er
 	}
 
 	return model.Usage{
-		InputTokens: imageRequest.N,
+		InputTokens: int64(imageRequest.N),
 	}, nil
 }

@@ -19,6 +19,6 @@ func GetTTSRequestUsage(c *gin.Context, _ *model.ModelConfig) (model.Usage, erro
 	}
 
 	return model.Usage{
-		InputTokens: utf8.RuneCountInString(ttsRequest.Input),
+		InputTokens: int64(utf8.RuneCountInString(ttsRequest.Input)),
 	}, nil
 }

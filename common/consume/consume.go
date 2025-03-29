@@ -112,8 +112,8 @@ func CalculateAmount(
 ) float64 {
 	promptTokens := usage.PromptTokens
 	completionTokens := usage.CompletionTokens
-	var cachedTokens int
-	var cacheCreationTokens int
+	var cachedTokens int64
+	var cacheCreationTokens int64
 	if usage.PromptTokensDetails != nil {
 		cachedTokens = usage.PromptTokensDetails.CachedTokens
 		cacheCreationTokens = usage.PromptTokensDetails.CacheCreationTokens
@@ -126,16 +126,16 @@ func CalculateAmount(
 		promptTokens -= cacheCreationTokens
 	}
 
-	promptAmount := decimal.NewFromInt(int64(promptTokens)).
+	promptAmount := decimal.NewFromInt(promptTokens).
 		Mul(decimal.NewFromFloat(modelPrice.InputPrice)).
 		Div(decimal.NewFromInt(model.PriceUnit))
-	completionAmount := decimal.NewFromInt(int64(completionTokens)).
+	completionAmount := decimal.NewFromInt(completionTokens).
 		Mul(decimal.NewFromFloat(modelPrice.OutputPrice)).
 		Div(decimal.NewFromInt(model.PriceUnit))
-	cachedAmount := decimal.NewFromInt(int64(cachedTokens)).
+	cachedAmount := decimal.NewFromInt(cachedTokens).
 		Mul(decimal.NewFromFloat(modelPrice.CachedPrice)).
 		Div(decimal.NewFromInt(model.PriceUnit))
-	cacheCreationAmount := decimal.NewFromInt(int64(cacheCreationTokens)).
+	cacheCreationAmount := decimal.NewFromInt(cacheCreationTokens).
 		Mul(decimal.NewFromFloat(modelPrice.CacheCreationPrice)).
 		Div(decimal.NewFromInt(model.PriceUnit))
 

@@ -23,7 +23,7 @@ type RerankOutput struct {
 	Results []*model.RerankResult `json:"results"`
 }
 type RerankUsage struct {
-	TotalTokens int `json:"total_tokens"`
+	TotalTokens int64 `json:"total_tokens"`
 }
 
 func ConvertRerankRequest(meta *meta.Meta, req *http.Request) (string, http.Header, io.Reader, error) {

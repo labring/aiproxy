@@ -28,8 +28,8 @@ func getRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, error) {
 	return rerankRequest, nil
 }
 
-func rerankPromptTokens(rerankRequest *relaymodel.RerankRequest) int {
-	return len(rerankRequest.Query) + len(strings.Join(rerankRequest.Documents, ""))
+func rerankPromptTokens(rerankRequest *relaymodel.RerankRequest) int64 {
+	return int64(len(rerankRequest.Query)) + int64(len(strings.Join(rerankRequest.Documents, "")))
 }
 
 func GetRerankRequestPrice(_ *gin.Context, mc *model.ModelConfig) (model.Price, error) {

@@ -86,7 +86,7 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (string, http.Header,
 
 type TTSExtraInfo struct {
 	AudioFormat     string `json:"audio_format"`
-	UsageCharacters int    `json:"usage_characters"`
+	UsageCharacters int64  `json:"usage_characters"`
 }
 
 type TTSBaseResp struct {

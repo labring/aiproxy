@@ -46,11 +46,22 @@ type Price struct {
 }
 
 type Usage struct {
-	InputTokens         int `json:"input_tokens,omitempty"`
-	OutputTokens        int `json:"output_tokens,omitempty"`
-	CachedTokens        int `json:"cached_tokens,omitempty"`
-	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
-	TotalTokens         int `json:"total_tokens,omitempty"`
+	InputTokens         int64 `json:"input_tokens,omitempty"`
+	OutputTokens        int64 `json:"output_tokens,omitempty"`
+	CachedTokens        int64 `json:"cached_tokens,omitempty"`
+	CacheCreationTokens int64 `json:"cache_creation_tokens,omitempty"`
+	TotalTokens         int64 `json:"total_tokens,omitempty"`
+}
+
+func (u *Usage) Add(other *Usage) {
+	if other == nil {
+		return
+	}
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.CachedTokens += other.CachedTokens
+	u.CacheCreationTokens += other.CacheCreationTokens
+	u.TotalTokens += other.TotalTokens
 }
 
 type Log struct {
