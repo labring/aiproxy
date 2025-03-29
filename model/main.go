@@ -191,7 +191,8 @@ func migrateLOGDB() error {
 	err := LogDB.AutoMigrate(
 		&Log{},
 		&RequestDetail{},
-		&Summary{},
+		&Group{},
+		&GroupSummary{},
 		&ConsumeError{},
 	)
 	if err != nil {
@@ -203,12 +204,13 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle("createLogIndexes", time.Minute, "failed to create log indexes", err.Error())
 		}
-	}()
-
-	go func() {
-		err := CreateSummaryIndexs(LogDB)
+		err = CreateSummaryIndexs(LogDB)
 		if err != nil {
 			notify.ErrorThrottle("createSummaryIndexs", time.Minute, "failed to create summary indexs", err.Error())
+		}
+		err = CreateGroupSummaryIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle("createGroupSummaryIndexs", time.Minute, "failed to create group summary indexs", err.Error())
 		}
 	}()
 	return nil

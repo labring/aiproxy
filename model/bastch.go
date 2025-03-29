@@ -12,10 +12,11 @@ import (
 )
 
 type BatchUpdateData struct {
-	Groups    map[string]*GroupUpdate
-	Tokens    map[int]*TokenUpdate
-	Channels  map[int]*ChannelUpdate
-	Summaries map[string]*SummaryUpdate
+	Groups         map[string]*GroupUpdate
+	Tokens         map[int]*TokenUpdate
+	Channels       map[int]*ChannelUpdate
+	Summaries      map[string]*SummaryUpdate
+	GroupSummaries map[string]*GroupSummaryUpdate
 	sync.Mutex
 }
 
@@ -40,17 +41,27 @@ type SummaryUpdate struct {
 }
 
 func summaryUniqueKey(unique SummaryUnique) string {
-	return fmt.Sprintf("%s:%s:%s:%d:%d", unique.GroupID, unique.TokenName, unique.Model, unique.ChannelID, unique.HourTimestamp)
+	return fmt.Sprintf("%d:%s:%d", unique.ChannelID, unique.Model, unique.HourTimestamp)
+}
+
+type GroupSummaryUpdate struct {
+	GroupSummaryUnique
+	SummaryData
+}
+
+func groupSummaryUniqueKey(unique GroupSummaryUnique) string {
+	return fmt.Sprintf("%s:%s:%s:%d", unique.GroupID, unique.TokenName, unique.Model, unique.HourTimestamp)
 }
 
 var batchData BatchUpdateData
 
 func init() {
 	batchData = BatchUpdateData{
-		Groups:    make(map[string]*GroupUpdate),
-		Tokens:    make(map[int]*TokenUpdate),
-		Channels:  make(map[int]*ChannelUpdate),
-		Summaries: make(map[string]*SummaryUpdate),
+		Groups:         make(map[string]*GroupUpdate),
+		Tokens:         make(map[int]*TokenUpdate),
+		Channels:       make(map[int]*ChannelUpdate),
+		Summaries:      make(map[string]*SummaryUpdate),
+		GroupSummaries: make(map[string]*GroupSummaryUpdate),
 	}
 }
 
@@ -78,86 +89,106 @@ func ProcessBatchUpdatesSummary() {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if len(batchData.Groups) > 0 {
-			for groupID, data := range batchData.Groups {
-				err := UpdateGroupUsedAmountAndRequestCount(groupID, data.Amount.InexactFloat64(), data.Count)
-				if IgnoreNotFound(err) != nil {
-					notify.ErrorThrottle(
-						"batchUpdateGroupUsedAmountAndRequestCount",
-						time.Minute,
-						"failed to batch update group",
-						err.Error(),
-					)
-				} else {
-					delete(batchData.Groups, groupID)
-				}
-			}
-		}
-	}()
+	go processGroupUpdates(&wg)
 
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if len(batchData.Tokens) > 0 {
-			for tokenID, data := range batchData.Tokens {
-				err := UpdateTokenUsedAmount(tokenID, data.Amount.InexactFloat64(), data.Count)
-				if IgnoreNotFound(err) != nil {
-					notify.ErrorThrottle(
-						"batchUpdateTokenUsedAmount",
-						time.Minute,
-						"failed to batch update token",
-						err.Error(),
-					)
-				} else {
-					delete(batchData.Tokens, tokenID)
-				}
-			}
-		}
-	}()
+	go processTokenUpdates(&wg)
 
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if len(batchData.Channels) > 0 {
-			for channelID, data := range batchData.Channels {
-				err := UpdateChannelUsedAmount(channelID, data.Amount.InexactFloat64(), data.Count)
-				if IgnoreNotFound(err) != nil {
-					notify.ErrorThrottle(
-						"batchUpdateChannelUsedAmount",
-						time.Minute,
-						"failed to batch update channel",
-						err.Error(),
-					)
-				} else {
-					delete(batchData.Channels, channelID)
-				}
-			}
-		}
-	}()
+	go processChannelUpdates(&wg)
 
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if len(batchData.Summaries) > 0 {
-			for key, data := range batchData.Summaries {
-				err := UpsertSummary(data.SummaryUnique, data.SummaryData)
-				if err != nil {
-					notify.ErrorThrottle(
-						"batchUpdateSummary",
-						time.Minute,
-						"failed to batch update summary",
-						err.Error(),
-					)
-				} else {
-					delete(batchData.Summaries, key)
-				}
-			}
-		}
-	}()
+	go processGroupSummaryUpdates(&wg)
+
+	wg.Add(1)
+	go processSummaryUpdates(&wg)
 
 	wg.Wait()
+}
+
+func processGroupUpdates(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for groupID, data := range batchData.Groups {
+		err := UpdateGroupUsedAmountAndRequestCount(groupID, data.Amount.InexactFloat64(), data.Count)
+		if IgnoreNotFound(err) != nil {
+			notify.ErrorThrottle(
+				"batchUpdateGroupUsedAmountAndRequestCount",
+				time.Minute,
+				"failed to batch update group",
+				err.Error(),
+			)
+		} else {
+			delete(batchData.Groups, groupID)
+		}
+	}
+}
+
+func processTokenUpdates(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for tokenID, data := range batchData.Tokens {
+		err := UpdateTokenUsedAmount(tokenID, data.Amount.InexactFloat64(), data.Count)
+		if IgnoreNotFound(err) != nil {
+			notify.ErrorThrottle(
+				"batchUpdateTokenUsedAmount",
+				time.Minute,
+				"failed to batch update token",
+				err.Error(),
+			)
+		} else {
+			delete(batchData.Tokens, tokenID)
+		}
+	}
+}
+
+func processChannelUpdates(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for channelID, data := range batchData.Channels {
+		err := UpdateChannelUsedAmount(channelID, data.Amount.InexactFloat64(), data.Count)
+		if IgnoreNotFound(err) != nil {
+			notify.ErrorThrottle(
+				"batchUpdateChannelUsedAmount",
+				time.Minute,
+				"failed to batch update channel",
+				err.Error(),
+			)
+		} else {
+			delete(batchData.Channels, channelID)
+		}
+	}
+}
+
+func processGroupSummaryUpdates(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for key, data := range batchData.GroupSummaries {
+		err := UpsertGroupSummary(data.GroupSummaryUnique, data.SummaryData)
+		if err != nil {
+			notify.ErrorThrottle(
+				"batchUpdateGroupSummary",
+				time.Minute,
+				"failed to batch update group summary",
+				err.Error(),
+			)
+		} else {
+			delete(batchData.GroupSummaries, key)
+		}
+	}
+}
+
+func processSummaryUpdates(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for key, data := range batchData.Summaries {
+		err := UpsertSummary(data.SummaryUnique, data.SummaryData)
+		if err != nil {
+			notify.ErrorThrottle(
+				"batchUpdateSummary",
+				time.Minute,
+				"failed to batch update summary",
+				err.Error(),
+			)
+		} else {
+			delete(batchData.Summaries, key)
+		}
+	}
 }
 
 func BatchRecordConsume(
@@ -210,6 +241,24 @@ func BatchRecordConsume(
 	batchData.Lock()
 	defer batchData.Unlock()
 
+	updateChannelData(channelID, amount, amountDecimal)
+
+	if !downstreamResult {
+		return err
+	}
+
+	updateGroupData(group, amount, amountDecimal)
+
+	updateTokenData(tokenID, amount, amountDecimal)
+
+	updateSummaryData(channelID, modelName, requestAt, code, amountDecimal, usage)
+
+	updateGroupSummaryData(group, tokenName, modelName, requestAt, code, amountDecimal, usage)
+
+	return err
+}
+
+func updateChannelData(channelID int, amount float64, amountDecimal decimal.Decimal) {
 	if channelID > 0 {
 		if _, ok := batchData.Channels[channelID]; !ok {
 			batchData.Channels[channelID] = &ChannelUpdate{}
@@ -221,11 +270,9 @@ func BatchRecordConsume(
 		}
 		batchData.Channels[channelID].Count++
 	}
+}
 
-	if !downstreamResult {
-		return err
-	}
-
+func updateGroupData(group string, amount float64, amountDecimal decimal.Decimal) {
 	if group != "" {
 		if _, ok := batchData.Groups[group]; !ok {
 			batchData.Groups[group] = &GroupUpdate{}
@@ -237,7 +284,9 @@ func BatchRecordConsume(
 		}
 		batchData.Groups[group].Count++
 	}
+}
 
+func updateTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal) {
 	if tokenID > 0 {
 		if _, ok := batchData.Tokens[tokenID]; !ok {
 			batchData.Tokens[tokenID] = &TokenUpdate{}
@@ -249,20 +298,47 @@ func BatchRecordConsume(
 		}
 		batchData.Tokens[tokenID].Count++
 	}
+}
 
-	unique := SummaryUnique{
+func updateGroupSummaryData(group string, tokenName string, modelName string, requestAt time.Time, code int, amountDecimal decimal.Decimal, usage Usage) {
+	groupUnique := GroupSummaryUnique{
 		GroupID:       group,
 		TokenName:     tokenName,
 		Model:         modelName,
-		ChannelID:     channelID,
 		HourTimestamp: requestAt.Truncate(time.Hour).Unix(),
 	}
 
-	summaryKey := summaryUniqueKey(unique)
+	groupSummaryKey := groupSummaryUniqueKey(groupUnique)
+	groupSummary, ok := batchData.GroupSummaries[groupSummaryKey]
+	if !ok {
+		groupSummary = &GroupSummaryUpdate{
+			GroupSummaryUnique: groupUnique,
+		}
+		batchData.GroupSummaries[groupSummaryKey] = groupSummary
+	}
+
+	groupSummary.RequestCount++
+	groupSummary.UsedAmount = amountDecimal.
+		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
+		InexactFloat64()
+	groupSummary.Usage.Add(&usage)
+	if code != http.StatusOK {
+		groupSummary.ExceptionCount++
+	}
+}
+
+func updateSummaryData(channelID int, modelName string, requestAt time.Time, code int, amountDecimal decimal.Decimal, usage Usage) {
+	summaryUnique := SummaryUnique{
+		ChannelID:     channelID,
+		Model:         modelName,
+		HourTimestamp: requestAt.Truncate(time.Hour).Unix(),
+	}
+
+	summaryKey := summaryUniqueKey(summaryUnique)
 	summary, ok := batchData.Summaries[summaryKey]
 	if !ok {
 		summary = &SummaryUpdate{
-			SummaryUnique: unique,
+			SummaryUnique: summaryUnique,
 		}
 		batchData.Summaries[summaryKey] = summary
 	}
@@ -275,6 +351,4 @@ func BatchRecordConsume(
 	if code != http.StatusOK {
 		summary.ExceptionCount++
 	}
-
-	return err
 }

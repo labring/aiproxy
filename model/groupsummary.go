@@ -2,35 +2,25 @@ package model
 
 import (
 	"errors"
-	"time"
 
 	"gorm.io/gorm"
 )
 
 // only summary result only requests
-type Summary struct {
-	ID     int           `gorm:"primaryKey"`
-	Unique SummaryUnique `gorm:"embedded"`
-	Data   SummaryData   `gorm:"embedded"`
+type GroupSummary struct {
+	ID     int                `gorm:"primaryKey"`
+	Unique GroupSummaryUnique `gorm:"embedded"`
+	Data   SummaryData        `gorm:"embedded"`
 }
 
-type SummaryUnique struct {
-	ChannelID     int    `gorm:"uniqueIndex:idx_summary_unique,priority:1"`
-	Model         string `gorm:"uniqueIndex:idx_summary_unique,priority:2"`
-	HourTimestamp int64  `gorm:"uniqueIndex:idx_summary_unique,priority:3,sort:desc"`
+type GroupSummaryUnique struct {
+	GroupID       string `gorm:"uniqueIndex:idx_summary_unique,priority:1"`
+	TokenName     string `gorm:"uniqueIndex:idx_summary_unique,priority:2"`
+	Model         string `gorm:"uniqueIndex:idx_summary_unique,priority:3"`
+	HourTimestamp int64  `gorm:"uniqueIndex:idx_summary_unique,priority:4,sort:desc"`
 }
 
-type SummaryData struct {
-	RequestCount   int64   `json:"request_count"`
-	UsedAmount     float64 `json:"used_amount"`
-	ExceptionCount int64   `json:"exception_count"`
-	Usage          Usage   `gorm:"embedded"        json:"usage,omitempty"`
-}
-
-func (l *Summary) BeforeCreate(_ *gorm.DB) (err error) {
-	if l.Unique.ChannelID == 0 {
-		return errors.New("channel id is required")
-	}
+func (l *GroupSummary) BeforeCreate(_ *gorm.DB) (err error) {
 	if l.Unique.Model == "" {
 		return errors.New("model is required")
 	}
@@ -43,19 +33,11 @@ func (l *Summary) BeforeCreate(_ *gorm.DB) (err error) {
 	return
 }
 
-var hourTimestampDivisor = int64(time.Hour.Seconds())
-
-func validateHourTimestamp(hourTimestamp int64) error {
-	if hourTimestamp%hourTimestampDivisor != 0 {
-		return errors.New("hour timestamp must be an exact hour")
-	}
-	return nil
-}
-
-func CreateSummaryIndexs(db *gorm.DB) error {
+func CreateGroupSummaryIndexs(db *gorm.DB) error {
 	indexes := []string{
-		"CREATE INDEX IF NOT EXISTS idx_summary_channel_hour ON summaries (channel_id, hour_timestamp DESC)",
-		"CREATE INDEX IF NOT EXISTS idx_summary_model_hour ON summaries (model, hour_timestamp DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_groupsummary_group_hour ON summaries (group_id, hour_timestamp DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_groupsummary_group_token_hour ON summaries (group_id, token_name, hour_timestamp DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_groupsummary_group_model_hour ON summaries (group_id, model, hour_timestamp DESC)",
 	}
 
 	for _, index := range indexes {
@@ -67,7 +49,7 @@ func CreateSummaryIndexs(db *gorm.DB) error {
 	return nil
 }
 
-func UpsertSummary(unique SummaryUnique, data SummaryData) error {
+func UpsertGroupSummary(unique GroupSummaryUnique, data SummaryData) error {
 	err := validateHourTimestamp(unique.HourTimestamp)
 	if err != nil {
 		return err
@@ -75,10 +57,11 @@ func UpsertSummary(unique SummaryUnique, data SummaryData) error {
 
 	for range 3 {
 		result := LogDB.
-			Model(&Summary{}).
+			Model(&GroupSummary{}).
 			Where(
-				"channel_id = ? AND model = ? AND hour_timestamp = ?",
-				unique.ChannelID,
+				"group_id = ? AND token_name = ? AND model = ? AND hour_timestamp = ?",
+				unique.GroupID,
+				unique.TokenName,
 				unique.Model,
 				unique.HourTimestamp,
 			).
@@ -100,7 +83,7 @@ func UpsertSummary(unique SummaryUnique, data SummaryData) error {
 			return nil
 		}
 
-		err = createSummary(unique, data)
+		err = createGroupSummary(unique, data)
 		if err == nil {
 			return nil
 		}
@@ -112,8 +95,8 @@ func UpsertSummary(unique SummaryUnique, data SummaryData) error {
 	return err
 }
 
-func createSummary(unique SummaryUnique, data SummaryData) error {
-	return LogDB.Create(&Summary{
+func createGroupSummary(unique GroupSummaryUnique, data SummaryData) error {
+	return LogDB.Create(&GroupSummary{
 		Unique: unique,
 		Data:   data,
 	}).Error
