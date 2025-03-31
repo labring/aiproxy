@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -97,4 +98,27 @@ func createGroupSummary(unique GroupSummaryUnique, data SummaryData) error {
 			Unique: unique,
 			Data:   data,
 		}).Error
+}
+
+func GetGroupLastRequestTime(group string) (time.Time, error) {
+	if group == "" {
+		return time.Time{}, errors.New("group is required")
+	}
+	var summary GroupSummary
+	err := LogDB.
+		Model(&GroupSummary{}).
+		Where("group_id = ?", group).
+		Order("hour_timestamp desc").
+		First(&summary).Error
+	return time.Unix(summary.Unique.HourTimestamp, 0), err
+}
+
+func GetGroupTokenLastRequestTime(group string, token string) (time.Time, error) {
+	var summary GroupSummary
+	err := LogDB.
+		Model(&GroupSummary{}).
+		Where("group_id = ? AND token_name = ?", group, token).
+		Order("hour_timestamp desc").
+		First(&summary).Error
+	return time.Unix(summary.Unique.HourTimestamp, 0), err
 }

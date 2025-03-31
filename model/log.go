@@ -1453,22 +1453,6 @@ func GetGroupDashboardData(
 	}, nil
 }
 
-func GetGroupLastRequestTime(group string) (time.Time, error) {
-	if group == "" {
-		return time.Time{}, errors.New("group is required")
-	}
-	var log Log
-	err := LogDB.Model(&Log{}).Where("group_id = ?", group).Order("request_at desc").First(&log).Error
-	return log.RequestAt, err
-}
-
-func GetTokenLastRequestTime(id int) (time.Time, error) {
-	var log Log
-	tx := LogDB.Model(&Log{})
-	err := tx.Where("token_id = ?", id).Order("request_at desc").First(&log).Error
-	return log.RequestAt, err
-}
-
 func GetGroupModelTPM(group string, model string) (int64, error) {
 	end := time.Now()
 	start := end.Add(-time.Minute)

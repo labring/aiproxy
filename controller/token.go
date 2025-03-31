@@ -88,7 +88,7 @@ func validateTokenUpdate(token AddTokenRequest) error {
 }
 
 func buildTokenResponse(token *model.Token) *TokenResponse {
-	lastRequestAt, _ := model.GetTokenLastRequestTime(token.ID)
+	lastRequestAt, _ := model.GetGroupTokenLastRequestTime(token.GroupID, string(token.Name))
 	return &TokenResponse{
 		Token:      token,
 		AccessedAt: lastRequestAt,
