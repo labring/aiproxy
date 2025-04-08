@@ -20,8 +20,8 @@ github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34 h1:ZK5jHhnrioRkUNOc+
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34/go.mod h1:p4VfIceZokChbA9FzMbRGz5OV+lekcVtHlPKEO0gSZY=
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34 h1:SZwFm17ZUNNg5Np0ioo/gq8Mn6u9w19Mri8DnJ15Jf0=
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34/go.mod h1:dFZsC0BLo346mvKQLWmoJxT+Sjp+qcVR1tRVHQGOH9Q=
-github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.28.0 h1:Lh4LitQr5CiWdWExkT+5Qrc1HA/fNJpsO4yO0dNurbg=
-github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.28.0/go.mod h1:0b5Rq7rUvSQFYHI1UO0zFTV/S6j6DUyuykXA80C+YOI=
+github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.29.0 h1:boQXeyuKflrFOrujG/GA96Igr+WnULQrwHgjJdirbsk=
+github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.29.0/go.mod h1:0b5Rq7rUvSQFYHI1UO0zFTV/S6j6DUyuykXA80C+YOI=
 github.com/aws/smithy-go v1.22.3 h1:Z//5NuZCSW6R4PhQ93hShNbyBbn8BWCmCVCt+Q8Io5k=
 github.com/aws/smithy-go v1.22.3/go.mod h1:t1ufH5HMublsJYulve2RKmHDC15xu1f26kHCp/HgceI=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
