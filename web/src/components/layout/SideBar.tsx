@@ -2,7 +2,6 @@ import type React from "react"
 
 import { Link, useLocation, useNavigate } from "react-router"
 import {
-    // Settings,
     Bot,
     Layers,
     BarChart2,
@@ -21,6 +20,23 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import useAuthStore from "@/store/auth"
+
+// Add custom animation keyframes
+const animationStyles = `
+  @keyframes bounce-subtle {
+    0%, 100% { transform: translateY(0) scale(1.25) rotate(6deg); }
+    50% { transform: translateY(-5px) scale(1.25) rotate(6deg); }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7)); }
+    50% { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9)); }
+  }
+  
+  .animate-bounce-subtle {
+    animation: bounce-subtle 0.8s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite;
+  }
+`
 
 interface SidebarItem {
     title: string
@@ -133,6 +149,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                 collapsed ? "w-20" : "w-64",
             )}
         >
+            <style dangerouslySetInnerHTML={{ __html: animationStyles }} />
             {/* 粒子效果 */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 {Array.from({ length: 25 }).map((_, i) => (
@@ -181,7 +198,13 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                             const content = (
                                 <>
                                     <div className="flex items-center justify-center w-5 h-5">
-                                        <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-white/90")} />
+                                        <item.icon
+                                            className={cn(
+                                                "w-5 h-5 transition-all duration-300 ease-in-out",
+                                                isActive ? "text-white" : "text-white/90",
+                                                "group-hover:scale-125 group-hover:rotate-6 group-hover:animate-bounce-subtle",
+                                            )}
+                                        />
                                     </div>
 
                                     <span
@@ -205,7 +228,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className={cn(
-                                                    "flex items-center px-6 py-3 my-1 mx-2 rounded-lg transition-all duration-200",
+                                                    "group flex items-center px-6 py-3 my-1 mx-2 rounded-lg transition-all duration-200",
                                                     "text-white/90 hover:bg-white/10",
                                                     collapsed ? "justify-center" : "",
                                                 )}
@@ -216,7 +239,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                                             <Link
                                                 to={item.href}
                                                 className={cn(
-                                                    "flex items-center px-6 py-3 my-1 mx-2 rounded-lg transition-all duration-200",
+                                                    "group flex items-center px-6 py-3 my-1 mx-2 rounded-lg transition-all duration-200",
                                                     isActive
                                                         ? "bg-white/15 text-white backdrop-blur-sm shadow-[0_0_10px_rgba(255,255,255,0.15)]"
                                                         : "text-white/90 hover:bg-white/10",
@@ -242,13 +265,13 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                             variant="secondary"
                             onClick={handleLogout}
                             className={cn(
-                                "w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200",
+                                "group w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200",
                                 "text-[#6A6DE6] bg-white hover:bg-gray-100",
                                 collapsed ? "justify-center" : "justify-start",
                             )}
                         >
                             <div className="flex items-center justify-center w-5 h-5">
-                                <LogOut className="w-5 h-5" />
+                                <LogOut className="w-5 h-5 transition-all duration-300 ease-in-out group-hover:scale-125 group-hover:rotate-6 group-hover:animate-bounce-subtle" />
                             </div>
                             <span
                                 className={cn(

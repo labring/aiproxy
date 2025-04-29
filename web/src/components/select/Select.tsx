@@ -43,9 +43,10 @@ export const CustomSelect = function <T>({
         <div className="w-full relative flex-1">
             <div
                 className={cn(
-                    "h-8 w-full rounded-md border border-input bg-white flex items-center px-3",
+                    "h-8 w-full rounded-md border border-input flex items-center px-3",
+                    "bg-background dark:bg-background",
                     "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-                    "hover:border-primary-300"
+                    "hover:border-primary-300 dark:hover:border-primary"
                 )}
                 {...getToggleButtonProps()}
             >
@@ -65,7 +66,7 @@ export const CustomSelect = function <T>({
                     </p>
                 )}
                 <div className="ml-auto" style={{ transform: isOpen ? 'rotate(180deg)' : undefined }}>
-                    <ChevronDownIcon className="size-3" />
+                    <ChevronDownIcon className="size-3 text-foreground" />
                 </div>
             </div>
 
@@ -74,6 +75,8 @@ export const CustomSelect = function <T>({
                 className={cn(
                     "absolute mt-0.5 w-full py-1.5 px-1.5 bg-popover",
                     "border border-input max-h-60 overflow-y-auto z-10 rounded-md",
+                    "dark:bg-popover dark:border-input dark:text-popover-foreground",
+                    "shadow-md",
                     isOpen && items.length ? "block" : "hidden"
                 )}
             >
@@ -85,9 +88,9 @@ export const CustomSelect = function <T>({
                             className={cn(
                                 "flex p-2 items-center gap-2 self-stretch rounded",
                                 "text-xs font-normal leading-4 tracking-[0.5px] cursor-pointer",
-                                highlightedIndex === index ? "bg-accent" : "bg-transparent",
+                                highlightedIndex === index ? "bg-accent dark:bg-accent" : "bg-transparent",
                                 selectedItem === item ? "font-bold" : "font-normal",
-                                "hover:bg-accent text-foreground"
+                                "hover:bg-accent dark:hover:bg-accent hover:text-accent-foreground dark:hover:text-accent-foreground text-foreground"
                             )}
                         >
                             {handleDropdownItemDisplay(item as T)}

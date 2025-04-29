@@ -5,7 +5,9 @@ import { AnimatedRoute } from '@/components/layout/AnimatedRoute'
 export default function TokenPage() {
     return (
         <AnimatedRoute>
-            <TokenTable />
+            <div className="container mx-auto">
+                <TokenTable />
+            </div>
         </AnimatedRoute>
     )
 }

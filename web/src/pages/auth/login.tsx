@@ -12,6 +12,7 @@ import { loginSchema, type LoginFormValues } from "@/validation/auth"
 import { useLoginMutation } from "@/feature/auth/hooks"
 import { LanguageSelector } from "@/components/common/LanguageSelector"
 import { ParticlesBackground } from "@/components/ui/animation/components/particles-background"
+import { ThemeToggle } from "@/components/common/ThemeToggle"
 
 export default function LoginPage() {
     const { t } = useTranslation()
@@ -35,28 +36,29 @@ export default function LoginPage() {
                 {/* 圆形渐变光效 */}
                 <div className="absolute left-0 top-0 w-full h-60 bg-gradient-to-r from-[#6A6DE6]/20 to-[#8A8DF7]/20 blur-3xl transform -translate-y-20 rounded-full"></div>
                 <div className="absolute right-0 bottom-0 w-full h-60 bg-gradient-to-l from-[#6A6DE6]/20 to-[#8A8DF7]/20 blur-3xl transform translate-y-20 rounded-full"></div>
-                
+
                 {/* 光晕效果 */}
                 <div className="absolute left-1/4 top-1/4 w-32 h-32 bg-[#6A6DE6]/10 rounded-full blur-2xl"></div>
                 <div className="absolute right-1/4 bottom-1/3 w-40 h-40 bg-[#8A8DF7]/15 rounded-full blur-3xl"></div>
-                
+
                 {/* 方块颗粒动画背景 */}
-                <ParticlesBackground 
-                  particleColor="rgba(106, 109, 230, 0.08)" 
-                  particleSize={6} 
-                  particleCount={40}
-                  speed={0.3}
+                <ParticlesBackground
+                    particleColor="rgba(106, 109, 230, 0.08)"
+                    particleSize={6}
+                    particleCount={40}
+                    speed={0.3}
                 />
-                <ParticlesBackground 
-                  particleColor="rgba(138, 141, 247, 0.1)" 
-                  particleSize={8} 
-                  particleCount={25}
-                  speed={0.2}
+                <ParticlesBackground
+                    particleColor="rgba(138, 141, 247, 0.1)"
+                    particleSize={8}
+                    particleCount={25}
+                    speed={0.2}
                 />
             </div>
 
-            {/* Language Selector */}
-            <div className="absolute top-4 right-4 z-10">
+            {/* Language Selector and Theme Toggle */}
+            <div className="absolute top-4 right-4 z-10 flex items-center gap-4">
+                <ThemeToggle />
                 <LanguageSelector variant="minimal" />
             </div>
 
@@ -152,7 +154,7 @@ export default function LoginPage() {
 
                 <div className="mt-8 text-center">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                        © {new Date().getFullYear()} AI Proxy. {t("auth.login.allRightsReserved")}
+                        © {new Date().getFullYear()} Sealos. {t("auth.login.allRightsReserved")}
                     </p>
                 </div>
             </div>
