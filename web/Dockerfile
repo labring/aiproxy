@@ -22,7 +22,7 @@ COPY nginx.template.conf /etc/nginx/templates/default.conf.template
 # 设置健康检查
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:80/ || exit 1
 # 设置默认环境变量
-ENV API_BACKEND_URL="http://localhost:8080"
+ENV API_BACKEND_URL="http://aiproxy-v2.ns-4pq9ctes.svc.cluster.local:3000"
 EXPOSE 80
-# 改进的启动脚本，修复路径处理
-CMD ["sh", "-c", "API_URL=\"$API_BACKEND_URL\"; if [ \"${API_URL: -1}\" != \"/\" ]; then API_URL=\"${API_URL}/\"; fi; echo \"使用API后端: $API_URL\"; export API_BACKEND_URL=\"$API_URL\"; envsubst '$${API_BACKEND_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+# 修改后的启动脚本，不再自动添加斜杠
+CMD ["sh", "-c", "echo \"使用API后端: $API_BACKEND_URL\"; envsubst '$${API_BACKEND_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
