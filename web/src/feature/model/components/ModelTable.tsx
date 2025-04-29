@@ -5,7 +5,7 @@ import { ModelConfig } from '@/types/model'
 import { Button } from '@/components/ui/button'
 import {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil
+    MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil, FileText,
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -21,6 +21,7 @@ import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
+import ApiDocDrawer from './api-doc/ApiDoc'
 
 export function ModelTable() {
     const { t } = useTranslation()
@@ -32,6 +33,9 @@ export function ModelTable() {
     const [dialogMode, setDialogMode] = useState<'create' | 'update'>('create')
     const [selectedModel, setSelectedModel] = useState<ModelConfig | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+
+    // API Doc drawer state
+    const [apiDocOpen, setApiDocOpen] = useState(false)
 
     // Get models list
     const {
@@ -79,6 +83,12 @@ export function ModelTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onClick={() => openApiDoc(row.original)}
+                        >
+                            <FileText className="mr-2 h-4 w-4" />
+                            {t("model.apiDetails")}
+                        </DropdownMenuItem>
                         {/* <DropdownMenuItem
                             onClick={() => openUpdateDialog(row.original)}
                         >
@@ -123,6 +133,12 @@ export function ModelTable() {
     const openDeleteDialog = (id: string) => {
         setSelectedModelId(id)
         setDeleteDialogOpen(true)
+    }
+
+    // Open API documentation drawer
+    const openApiDoc = (model: ModelConfig) => {
+        setSelectedModel(model)
+        setApiDocOpen(true)
     }
 
     // Refresh models
@@ -204,6 +220,16 @@ export function ModelTable() {
                 modelId={selectedModelId}
                 onDeleted={() => setSelectedModelId(null)}
             />
+
+            {/* API Documentation Drawer */}
+
+            {selectedModel && (
+                <ApiDocDrawer
+                    isOpen={apiDocOpen}
+                    onClose={() => setApiDocOpen(false)}
+                    modelConfig={selectedModel}
+                />
+            )}
         </>
     )
 }

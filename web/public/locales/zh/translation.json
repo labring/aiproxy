@@ -10,7 +10,9 @@
     "logout": "登出"
   },
   "common": {
-    "noResult": "没有数据"
+    "noResult": "没有数据",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "复制失败"
   },
   "auth": {
     "login": {
@@ -39,8 +41,6 @@
     "enable": "启用",
     "disable": "禁用",
     "refresh": "刷新",
-    "copied": "已复制到剪贴板",
-    "copyFailed": "复制失败",
     "copyKey": "复制密钥",
     "never": "从未使用",
     "invalidDate": "无效日期",
@@ -72,6 +72,7 @@
     "delete": "删除",
     "refresh": "刷新",
     "noResults": "未找到模型",
+    "apiDetails": "API 详情",
     "dialog": {
       "createTitle": "创建模型",
       "updateTitle": "更新模型",
@@ -92,6 +93,13 @@
       "delete": "删除",
       "deleting": "删除中..."
     }
+  },
+  "apiDoc": {
+    "requestExample": "请求示例",
+    "voice": "必填",
+    "voiceValues": "可用的选项有:",
+    "responseFormatValues": "音频输出支持的格式有:",
+    "responseExample": "响应示例"
   },
   "channel": {
     "management": "渠道管理",

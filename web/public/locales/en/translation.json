@@ -10,7 +10,9 @@
     "logout": "Logout"
   },
   "common": {
-    "noResult": "No Data"
+    "noResult": "No Data",
+    "copied": "Copied to clipboard",
+    "copyFailed": "Copy failed"
   },
   "auth": {
     "login": {
@@ -39,8 +41,6 @@
     "enable": "Enable",
     "disable": "Disable",
     "refresh": "Refresh",
-    "copied": "Copied to clipboard",
-    "copyFailed": "Copy failed",
     "copyKey": "Copy Key",
     "never": "Never used",
     "invalidDate": "Invalid date",
@@ -72,6 +72,7 @@
     "delete": "Delete",
     "refresh": "Refresh",
     "noResults": "No models found",
+    "apiDetails": "API Detail",
     "dialog": {
       "createTitle": "Create Model",
       "updateTitle": "Update Model",
@@ -92,6 +93,13 @@
       "delete": "Delete",
       "deleting": "Deleting..."
     }
+  },
+  "apiDoc": {
+    "requestExample": "Request Example",
+    "voice": "required",
+    "voiceValues": "Available options:",
+    "responseFormatValues": "The audio output supports for the following formats:",
+    "responseExample": "Response Example"
   },
   "channel": {
     "management": "Channel Management",

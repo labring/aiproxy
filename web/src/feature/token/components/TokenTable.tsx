@@ -109,9 +109,9 @@ export function TokenTable() {
     // 复制Token到剪贴板
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
-            toast.success(t('token.copied'))
+            toast.success(t('common.copied'))
         }).catch(() => {
-            toast.error(t('token.copyFailed'))
+            toast.error(t('common.copyFailed'))
         })
     }
 
