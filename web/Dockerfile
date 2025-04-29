@@ -1,4 +1,3 @@
-# Dockerfile - 修复版
 FROM node:23-alpine as builder
 WORKDIR /app
 # 安装pnpm
@@ -16,16 +15,14 @@ RUN pnpm build
 FROM nginx:alpine
 # 安装需要的工具
 RUN apk add --no-cache bash gettext
-# 创建配置目录
-RUN mkdir -p /etc/nginx/conf.d
-# 复制nginx配置模板
-COPY nginx.template.conf /etc/nginx/templates/default.conf.template
 # 从构建阶段复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
+# 复制nginx配置文件
+COPY nginx.template.conf /etc/nginx/templates/default.conf.template
 # 设置健康检查
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:80/ || exit 1
 # 设置默认环境变量
 ENV API_BACKEND_URL="http://localhost:8080"
 EXPOSE 80
-# 改进的启动脚本
-CMD ["/bin/sh", "-c", "API_URL=\"$API_BACKEND_URL\"; if [[ \"$API_URL\" != */ ]]; then API_URL=\"${API_URL}/\"; fi; export API_BACKEND_URL=\"$API_URL\"; echo \"使用API后端: $API_BACKEND_URL\"; envsubst < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+# 改进的启动脚本，修复路径处理
+CMD ["sh", "-c", "API_URL=\"$API_BACKEND_URL\"; if [ \"${API_URL: -1}\" != \"/\" ]; then API_URL=\"${API_URL}/\"; fi; echo \"使用API后端: $API_URL\"; export API_BACKEND_URL=\"$API_URL\"; envsubst '$${API_BACKEND_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
