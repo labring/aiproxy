@@ -22,7 +22,7 @@ COPY nginx.template.conf /etc/nginx/templates/default.conf.template
 # 设置健康检查
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:80/ || exit 1
 # 设置默认环境变量
-ENV API_BACKEND_URL="http://localhost:8080"
+ENV API_BACKEND_URL="http://localhost:3000"
 EXPOSE 80
-# 启动脚本，处理API地址并配置Nginx
+# 修改后的启动脚本，不再自动添加斜杠
 CMD ["sh", "-c", "echo \"使用API后端: $API_BACKEND_URL\"; envsubst '$${API_BACKEND_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
