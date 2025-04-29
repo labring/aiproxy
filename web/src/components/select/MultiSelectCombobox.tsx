@@ -63,6 +63,7 @@ export const MultiSelectCombobox = function <T>({
         defaultHighlightedIndex: 0, // after selection, highlight the first item.
         selectedItem: null,
         inputValue,
+        // @ts-expect-error 忽略未使用参数
         stateReducer(state, actionAndChanges) {
             const { changes, type } = actionAndChanges
 

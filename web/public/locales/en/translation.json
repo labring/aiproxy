@@ -14,6 +14,15 @@
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed"
   },
+  "table": {
+    "selected": "{{selected}} of {{total}} row(s) selected",
+    "rowsPerPage": "Rows per page",
+    "pageInfo": "Page {{current}} of {{total}}",
+    "firstPage": "Go to first page",
+    "previousPage": "Go to previous page",
+    "nextPage": "Go to next page",
+    "lastPage": "Go to last page"
+  },
   "auth": {
     "login": {
       "title": "Login to Admin Panel",

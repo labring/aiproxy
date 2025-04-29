@@ -14,6 +14,15 @@
     "copied": "已复制到剪贴板",
     "copyFailed": "复制失败"
   },
+  "table": {
+    "selected": "已选择 {{selected}} 行，共 {{total}} 行",
+    "rowsPerPage": "每页行数",
+    "pageInfo": "第 {{current}} 页，共 {{total}} 页",
+    "firstPage": "首页",
+    "previousPage": "上一页",
+    "nextPage": "下一页",
+    "lastPage": "尾页"
+  },
   "auth": {
     "login": {
       "title": "登录到管理面板",

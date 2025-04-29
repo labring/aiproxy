@@ -37,6 +37,7 @@ interface ModelFormProps {
 
 export function ModelForm({
     mode = 'create',
+    // @ts-expect-error 忽略未使用参数
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     modelId,
     onSuccess,

@@ -65,36 +65,36 @@ export function DataTablePagination<TData>({
                         className="hidden h-8 w-8 p-0 lg:flex"
                         onClick={() => table.setPageIndex(0)}
                         disabled={!table.getCanPreviousPage()}
+                        aria-label={t('table.firstPage')}
                     >
-                        <span className="sr-only">{t('table.firstPage')}</span>
-                        <ChevronsLeft />
+                        <ChevronsLeft className="h-4 w-4" />
                     </Button>
                     <Button
                         variant="outline"
                         className="h-8 w-8 p-0"
                         onClick={() => table.previousPage()}
                         disabled={!table.getCanPreviousPage()}
+                        aria-label={t('table.previousPage')}
                     >
-                        <span className="sr-only">{t('table.previousPage')}</span>
-                        <ChevronLeft />
+                        <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button
                         variant="outline"
                         className="h-8 w-8 p-0"
                         onClick={() => table.nextPage()}
                         disabled={!table.getCanNextPage()}
+                        aria-label={t('table.nextPage')}
                     >
-                        <span className="sr-only">{t('table.nextPage')}</span>
-                        <ChevronRight />
+                        <ChevronRight className="h-4 w-4" />
                     </Button>
                     <Button
                         variant="outline"
                         className="hidden h-8 w-8 p-0 lg:flex"
                         onClick={() => table.setPageIndex(table.getPageCount() - 1)}
                         disabled={!table.getCanNextPage()}
+                        aria-label={t('table.lastPage')}
                     >
-                        <span className="sr-only">{t('table.lastPage')}</span>
-                        <ChevronsRight />
+                        <ChevronsRight className="h-4 w-4" />
                     </Button>
                 </div>
             </div>

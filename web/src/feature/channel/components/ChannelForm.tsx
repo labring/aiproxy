@@ -44,6 +44,7 @@ interface ChannelFormProps {
 export function ChannelForm({
     mode = 'create',
     channelId,
+    // @ts-expect-error 忽略未使用参数
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     channel,
     onSuccess,

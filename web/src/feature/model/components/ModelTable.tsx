@@ -4,6 +4,7 @@ import { useModels } from '../hooks'
 import { ModelConfig } from '@/types/model'
 import { Button } from '@/components/ui/button'
 import {
+    // @ts-expect-error 忽略未使用参数
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil, FileText,
 } from 'lucide-react'

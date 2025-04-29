@@ -1,12 +1,12 @@
 import { get } from './index'
 import { AxiosRequestConfig } from 'axios'
-import { ChannelTypeMap } from '@/types/channel'
+import { ChannelTypeMeta } from '@/types/channel'
 
 // Auth API endpoints
 export const authApi = {
 
     // Get channel type metas
-    getChannelTypeMetas: (token?: string): Promise<ChannelTypeMap> => {
+    getChannelTypeMetas: (token?: string): Promise<ChannelTypeMeta[]> => {
         const config: AxiosRequestConfig = {}
 
         if (token) {
@@ -15,7 +15,7 @@ export const authApi = {
             }
         }
 
-        return get<ChannelTypeMap>('/channels/type_metas', config)
+        return get<ChannelTypeMeta[]>('/channels/type_metas', config)
     },
 
 } 
