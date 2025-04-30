@@ -13,5 +13,6 @@ func SetRouter(router *gin.Engine) {
 	SetAPIRouter(router)
 	SetRelayRouter(router)
 	SetMCPRouter(router)
+	SetStaticFileRouter(router)
 	SetSwaggerRouter(router)
 }
