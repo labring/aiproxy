@@ -57,7 +57,7 @@ export function ChannelTable() {
 
     // 扁平化分页数据
     const flatData = useMemo(() =>
-        data?.pages.flatMap(page => page.channels) || [],
+        (data?.pages.flatMap(page => page.channels) || []).filter(channel => channel != null),
         [data]
     )
 
