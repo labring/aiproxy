@@ -21,7 +21,11 @@ WORKDIR /aiproxy/core/web
 
 COPY ./core/web/ ./
 
-RUN npm ci && npm run build
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Install dependencies and build with pnpm
+RUN pnpm install && pnpm run build
 
 FROM alpine:latest
 
