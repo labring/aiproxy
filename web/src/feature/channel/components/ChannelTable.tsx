@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 export function ChannelTable() {
     const { t } = useTranslation()
@@ -169,12 +170,18 @@ export function ChannelTable() {
             cell: ({ row }) => (
                 <div>
                     {row.original.status === 1 ? (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-300 bg-yellow-50">
-                            {t("channel.disabled")}
+                        <Badge variant="outline" className={cn(
+                            "text-white dark:text-white/90",
+                            "bg-destructive dark:bg-red-600/90"
+                        )}>
+                            {t("token.disabled")}
                         </Badge>
                     ) : (
-                        <Badge variant="outline" className="text-emerald-600 border-emerald-300 bg-emerald-50">
-                            {t("channel.enabled")}
+                        <Badge variant="outline" className={cn(
+                            "text-white dark:text-white/90",
+                            "bg-primary dark:bg-[#4A4DA0]"
+                        )}>
+                            {t("token.enabled")}
                         </Badge>
                     )}
                 </div>
@@ -202,21 +209,20 @@ export function ChannelTable() {
                         >
                             {row.original.status === 1 ? (
                                 <>
-                                    <Power className="mr-2 h-4 w-4 text-emerald-600" />
+                                    <Power className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-500" />
                                     {t("channel.enable")}
                                 </>
                             ) : (
                                 <>
-                                    <PowerOff className="mr-2 h-4 w-4 text-yellow-600" />
+                                    <PowerOff className="mr-2 h-4 w-4 text-yellow-600 dark:text-yellow-500" />
                                     {t("channel.disable")}
                                 </>
                             )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => openDeleteDialog(row.original.id)}
-                            className="text-red-600"
                         >
-                            <Trash2 className="mr-2 h-4 w-4" />
+                            <Trash2 className="mr-2 h-4 w-4 text-red-600 dark:text-red-500" />
                             {t("channel.delete")}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -237,7 +243,7 @@ export function ChannelTable() {
             <Card className="border-none shadow-none p-6 flex flex-col h-full">
                 {/* 标题和操作按钮 - 固定在顶部 */}
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary">{t("channel.management")}</h2>
+                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
                     <div className="flex gap-2">
                         <AnimatedButton>
                             <Button
@@ -256,7 +262,7 @@ export function ChannelTable() {
                             <Button
                                 size="sm"
                                 onClick={openCreateDialog}
-                                className="flex items-center gap-1"
+                                className="flex items-center gap-1 bg-primary hover:bg-primary/90 dark:bg-[#4A4DA0] dark:hover:bg-[#5155A5]"
                             >
                                 <Plus className="h-3.5 w-3.5" />
                                 {t("channel.add")}

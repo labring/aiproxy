@@ -21,23 +21,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Button } from "@/components/ui/button"
 import useAuthStore from "@/store/auth"
 
-// Add custom animation keyframes
-const animationStyles = `
-  @keyframes bounce-subtle {
-    0%, 100% { transform: translateY(0) scale(1.25) rotate(6deg); }
-    50% { transform: translateY(-5px) scale(1.25) rotate(6deg); }
-  }
-  
-  @keyframes pulse-glow {
-    0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7)); }
-    50% { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9)); }
-  }
-  
-  .animate-bounce-subtle {
-    animation: bounce-subtle 0.8s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite;
-  }
-`
-
 interface SidebarItem {
     title: string
     icon: React.ComponentType<{ className?: string }>
@@ -145,17 +128,17 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
     return (
         <div
             className={cn(
-                "h-full relative overflow-hidden bg-gradient-to-b from-[#6A6DE6] to-[#8A8DF7] flex flex-col transition-all duration-300 ease-in-out",
+                "h-full relative overflow-hidden flex flex-col transition-all duration-300 ease-in-out",
+                "bg-gradient-to-b from-[#6A6DE6] to-[#8A8DF7] dark:from-[#4A4DA0] dark:to-[#5155A5]",
                 collapsed ? "w-20" : "w-64",
             )}
         >
-            <style dangerouslySetInnerHTML={{ __html: animationStyles }} />
             {/* 粒子效果 */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 {Array.from({ length: 25 }).map((_, i) => (
                     <div
                         key={i}
-                        className="absolute rounded-full bg-white/10 sidebar-particle"
+                        className="absolute rounded-full bg-white/10 dark:bg-white/5 sidebar-particle"
                         style={{
                             width: `${Math.random() * 6 + 2}px`,
                             height: `${Math.random() * 6 + 2}px`,
@@ -167,7 +150,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                 ))}
             </div>
 
-            <div className="relative z-10 flex items-center justify-between p-6 border-b border-white/20">
+            <div className="relative z-10 flex items-center justify-between p-6 border-b border-white/20 dark:border-white/10">
                 <div
                     className={cn(
                         "overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0",
@@ -258,7 +241,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
             </div>
 
             {/* Logout button */}
-            <div className="p-4 border-t border-white/20 relative z-10">
+            <div className="p-4 border-t border-white/20 dark:border-white/10 relative z-10">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
@@ -266,7 +249,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
                             onClick={handleLogout}
                             className={cn(
                                 "group w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200",
-                                "text-[#6A6DE6] bg-white hover:bg-gray-100",
+                                "text-[#6A6DE6] dark:text-[#4A4DA0] bg-white hover:bg-gray-100",
                                 collapsed ? "justify-center" : "justify-start",
                             )}
                         >

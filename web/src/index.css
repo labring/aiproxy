@@ -138,6 +138,7 @@
 }
 
 @keyframes float {
+
   0%,
   100% {
     transform: translateY(0) scale(1);
@@ -149,6 +150,7 @@
 }
 
 @keyframes float-reverse {
+
   0%,
   100% {
     transform: translateY(0) scale(1);
@@ -163,15 +165,18 @@
   0% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-10px);
   }
+
   100% {
     transform: translateY(0px);
   }
 }
 
 @keyframes pulse-glow {
+
   0%,
   100% {
     opacity: 0.6;
@@ -185,14 +190,29 @@
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 0.3;
   }
+
   50% {
     opacity: 0.7;
   }
 }
+
+@keyframes bounce-subtle {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1.25) rotate(6deg);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.25) rotate(6deg);
+  }
+}
+
 
 .sidebar-particle {
   animation: pulse 4s infinite ease-in-out, float-slow 15s infinite ease-in-out;
@@ -217,4 +237,5 @@
   --animate-float: float 15s ease-in-out infinite;
   --animate-float-reverse: float-reverse 15s ease-in-out infinite;
   --animate-pulse-glow: pulse-glow 4s ease-in-out infinite;
+  --animate-bounce-subtle: bounce-subtle 0.8s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite;
 }

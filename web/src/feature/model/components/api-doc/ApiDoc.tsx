@@ -257,8 +257,8 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                 <div className="flex flex-col gap-3 overflow-y-auto p-6 pb-3 h-[calc(100%-48px)]">
                     {/* method */}
                     <div className="flex gap-2.5 items-center">
-                        <Badge className="flex px-2 py-0.5 justify-center items-center gap-0.5 rounded bg-blue-100">
-                            <span className="text-blue-600 font-medium text-xs leading-4 tracking-wide">
+                        <Badge className="flex px-2 py-0.5 justify-center items-center gap-0.5 rounded bg-blue-100 dark:bg-blue-900">
+                            <span className="text-blue-600 dark:text-blue-300 font-medium text-xs leading-4 tracking-wide">
                                 {apiDoc.method}
                             </span>
                         </Badge>
@@ -268,7 +268,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                             height="18"
                             viewBox="0 0 2 18"
                             fill="none">
-                            <path d="M1 1L1 17" stroke="#F0F1F6" strokeLinecap="round" />
+                            <path d="M1 1L1 17" stroke="#F0F1F6" strokeLinecap="round" className="dark:stroke-zinc-700" />
                         </svg>
 
                         <div className="flex gap-1 items-center justify-start">
@@ -287,9 +287,10 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                                 d="M4.42017 1.30151L0.999965 10.6984"
                                                 stroke="#C4CBD7"
                                                 strokeLinecap="round"
+                                                className="dark:stroke-zinc-600"
                                             />
                                         </svg>
-                                        <span className="text-gray-600 font-medium text-xs leading-4 tracking-wide">
+                                        <span className="text-gray-600 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
                                             {segment}
                                         </span>
                                     </React.Fragment>
@@ -301,7 +302,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                     <div className="flex flex-col gap-4 items-start w-full">
                         {/* request example */}
                         <div className="flex flex-col gap-2 items-start w-full">
-                            <span className="text-gray-900 font-medium text-xs leading-4 tracking-wide">
+                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4 tracking-wide">
                                 {t('apiDoc.requestExample')}
                             </span>
 
@@ -350,23 +351,23 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                             {/* additional info */}
                             {apiDoc?.requestAdditionalInfo?.voices &&
                                 apiDoc?.requestAdditionalInfo?.voices?.length > 0 && (
-                                    <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200">
+                                    <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200 dark:border-gray-700">
                                         <div className="flex gap-2">
-                                            <span className="text-blue-600 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4 tracking-wide">
                                                 {'voice'}
                                             </span>
                                             <div className="flex gap-1">
-                                                <Badge variant="outline" className="bg-gray-100 text-gray-500 font-medium text-xs">
+                                                <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium text-xs">
                                                     {'enum<string>'}
                                                 </Badge>
-                                                <Badge className="bg-amber-50 text-amber-600 font-medium text-xs border-0">
+                                                <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-medium text-xs border-0">
                                                     {t('apiDoc.voice')}
                                                 </Badge>
                                             </div>
                                         </div>
 
                                         <div className="flex flex-col gap-1 items-start w-full">
-                                            <span className="text-gray-500 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
                                                 {t('apiDoc.voiceValues')}
                                             </span>
 
@@ -375,7 +376,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                                     <Badge
                                                         key={voice}
                                                         variant="outline"
-                                                        className="bg-gray-100 text-gray-900 font-medium text-xs">
+                                                        className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-300 font-medium text-xs">
                                                         {voice}
                                                     </Badge>
                                                 ))}
@@ -386,23 +387,23 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
 
                             {apiDoc?.requestAdditionalInfo?.formats &&
                                 apiDoc?.requestAdditionalInfo?.formats?.length > 0 && (
-                                    <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200">
+                                    <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200 dark:border-gray-700">
                                         <div className="flex gap-2">
-                                            <span className="text-blue-600 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4 tracking-wide">
                                                 {'response_format'}
                                             </span>
                                             <div className="flex gap-1">
-                                                <Badge variant="outline" className="bg-gray-100 text-gray-500 font-medium text-xs">
+                                                <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium text-xs">
                                                     {'enum<string>'}
                                                 </Badge>
-                                                <Badge variant="outline" className="bg-gray-100 text-gray-500 font-medium text-xs">
+                                                <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium text-xs">
                                                     {'default:mp3'}
                                                 </Badge>
                                             </div>
                                         </div>
 
                                         <div className="flex flex-col gap-1 items-start w-full">
-                                            <span className="text-gray-500 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
                                                 {t('apiDoc.responseFormatValues')}
                                             </span>
 
@@ -411,7 +412,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                                     <Badge
                                                         key={format}
                                                         variant="outline"
-                                                        className="bg-gray-100 text-gray-900 font-medium text-xs">
+                                                        className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-300 font-medium text-xs">
                                                         {format}
                                                     </Badge>
                                                 ))}
@@ -423,7 +424,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
 
                         {/* response example */}
                         <div className="flex flex-col gap-2 items-start w-full">
-                            <span className="text-gray-900 font-medium text-xs leading-4 tracking-wide">
+                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4 tracking-wide">
                                 {t('apiDoc.responseExample')}
                             </span>
 
