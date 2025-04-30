@@ -7,7 +7,7 @@ import (
 )
 
 func SetRouter(router *gin.Engine) {
-	router.GET("/", func(c *gin.Context) {
+	router.GET("/ok", func(c *gin.Context) {
 		c.String(http.StatusOK, "AI Proxy is running!")
 	})
 	SetAPIRouter(router)
