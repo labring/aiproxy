@@ -3,7 +3,7 @@ services:
   aiproxy:
     build:
       context: .
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     container_name: aiproxy
     restart: unless-stopped
     depends_on:
