@@ -47,6 +47,12 @@ Use AI Proxy to access models, click to [FastGPT](https://doc.tryfastgpt.ai/docs
 
 ## Deploy
 
+### Use Docker
+
+```bash
+docker run -d --name aiproxy -p 3000:3000 -v $(pwd)/aiproxy:/aiproxy ghcr.io/labring/aiproxy:latest
+```
+
 ### Use Docker Compose
 
 Copy [docker-compose.yaml](./docker-compose.yaml) to directory. default access key is `aiproxy`. default listen port is `3000`.
