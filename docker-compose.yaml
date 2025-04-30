@@ -1,7 +1,9 @@
 version: "3.3"
 services:
   aiproxy:
-    image: "ghcr.io/labring/aiproxy:latest"
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: aiproxy
     restart: unless-stopped
     depends_on:
@@ -17,7 +19,6 @@ services:
       - TZ=Asia/Shanghai
       - SQL_DSN=postgres://postgres:aiproxy@pgsql:5432/aiproxy
       - REDIS_CONN_STRING=redis://redis
-      - DISABLE_MODEL_CONFIG=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/status"]
       interval: 5s

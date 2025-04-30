@@ -17,9 +17,9 @@ RUN go build -trimpath -tags "jsoniter" -ldflags "-s -w" -o aiproxy
 # Frontend build stage
 FROM node:23-alpine AS frontend-builder
 
-WORKDIR /aiproxy/core/web
+WORKDIR /aiproxy/web
 
-COPY ./core/web/ ./
+COPY ./web/ ./
 
 # Install pnpm globally
 RUN npm install -g pnpm
@@ -40,7 +40,7 @@ RUN apk add --no-cache ca-certificates tzdata ffmpeg curl && \
 
 COPY --from=builder /aiproxy/core/aiproxy /usr/local/bin/aiproxy
 # Copy frontend dist files
-COPY --from=frontend-builder /aiproxy/core/web/dist/ ./web/dist/
+COPY --from=frontend-builder /aiproxy/web/dist/ ./web/dist/
 
 ENV PUID=0 PGID=0 UMASK=022
 
