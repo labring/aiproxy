@@ -1,7 +1,7 @@
-version: "3.3"
+version: '3.3'
 services:
   aiproxy:
-    image: "ghcr.io/labring/aiproxy:latest"
+    image: 'ghcr.io/labring/aiproxy:latest'
     container_name: aiproxy
     restart: unless-stopped
     depends_on:
@@ -10,7 +10,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "3000:3000/tcp"
+      - '3000:3000/tcp'
     environment:
       - ADMIN_KEY=aiproxy
       - LOG_DETAIL_STORAGE_HOURS=1

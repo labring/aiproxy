@@ -55,7 +55,7 @@ docker run -d --name aiproxy -p 3000:3000 -v $(pwd)/aiproxy:/aiproxy ghcr.io/lab
 
 ### Use Docker Compose
 
-Copy [docker-compose.yaml](./docker-compose.yaml) to directory. default access key is `aiproxy`. default listen port is `3000`.
+Copy [docker-compose.yaml](./docker-compose.yaml) to directory.
 
 ```bash
 docker-compose up -d
