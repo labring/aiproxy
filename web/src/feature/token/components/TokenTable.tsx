@@ -102,8 +102,8 @@ export function TokenTable() {
 
     // 更新Token状态
     const handleStatusChange = (id: number, currentStatus: number) => {
-        // 状态切换: 1 -> 2 (禁用 -> 启用), 2 -> 1 (启用 -> 禁用)
-        const newStatus = currentStatus === 1 ? 2 : 1
+        // 状态切换: 2 -> 1 (禁用 -> 启用), 1 -> 2 (启用 -> 禁用)
+        const newStatus = currentStatus === 2 ? 1 : 2
         updateStatus({ id, status: { status: newStatus } })
     }
 
@@ -186,7 +186,7 @@ export function TokenTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.status")}</div>,
             cell: ({ row }) => (
                 <div>
-                    {row.original.status === 1 ? (
+                    {row.original.status === 2 ? (
                         <Badge variant="outline" className={cn(
                             "text-white dark:text-white/90",
                             "bg-destructive dark:bg-red-600/90"
