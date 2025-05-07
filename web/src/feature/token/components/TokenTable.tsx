@@ -224,7 +224,7 @@ export function TokenTable() {
                             onClick={() => handleStatusChange(row.original.id, row.original.status)}
                             disabled={isStatusUpdating}
                         >
-                            {row.original.status === 1 ? (
+                            {row.original.status === 2 ? (
                                 <>
                                     <Power className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-500" />
                                     {t("token.enable")}
