@@ -48,6 +48,22 @@ func ConvertRerankRequest(meta *meta.Meta, req *http.Request) (string, http.Head
 		return "", nil, nil, fmt.Errorf("failed to remove documents field: %w", err)
 	}
 
+	returnDocumentsNode := node.Get("return_documents")
+	if returnDocumentsNode.Exists() {
+		returnDocuments, err := returnDocumentsNode.Bool()
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("failed to unmarshal return_documents field: %w", err)
+		}
+		_, err = node.Unset("return_documents")
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("failed to remove return_documents field: %w", err)
+		}
+		_, err = node.Set("return_text", ast.NewBool(returnDocuments))
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("failed to set return_text field: %w", err)
+		}
+	}
+
 	// Convert back to JSON
 	jsonData, err := node.MarshalJSON()
 	if err != nil {
@@ -62,16 +78,20 @@ type RerankResponse []RerankResponseItem
 type RerankResponseItem struct {
 	Index int     `json:"index"`
 	Score float64 `json:"score"`
-	Text  string  `json:"text"`
+	Text  string  `json:"text,omitempty"`
 }
 
 func (rri *RerankResponseItem) ToRerankModel() *relaymodel.RerankResult {
+	var document *relaymodel.Document
+	if rri.Text != "" {
+		document = &relaymodel.Document{
+			Text: rri.Text,
+		}
+	}
 	return &relaymodel.RerankResult{
 		Index:          rri.Index,
 		RelevanceScore: rri.Score,
-		Document: &relaymodel.Document{
-			Text: rri.Text,
-		},
+		Document:       document,
 	}
 }
 
