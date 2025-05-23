@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/mcpproxy"
+	statelessmcp "github.com/labring/aiproxy/core/common/stateless-mcp"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/openapi-mcp/convert"
@@ -247,9 +248,9 @@ func handleSSEMCPServer(c *gin.Context, s *server.MCPServer, mcpType model.Publi
 	newSession := store.New()
 
 	newEndpoint := newPublicMcpEndpoint(token.Key, mcpType).NewEndpoint(newSession)
-	server := NewSSEServer(
+	server := statelessmcp.NewSSEServer(
 		s,
-		WithMessageEndpoint(newEndpoint),
+		statelessmcp.WithMessageEndpoint(newEndpoint),
 	)
 
 	store.Set(newSession, string(mcpType))
@@ -293,7 +294,7 @@ func parseOpenAPIFromContent(config *model.MCPOpenAPIConfig, parser *convert.Par
 }
 
 // processMCPSseMpscMessages handles message processing for OpenAPI
-func processMCPSseMpscMessages(ctx context.Context, sessionID string, server *SSEServer) {
+func processMCPSseMpscMessages(ctx context.Context, sessionID string, server *statelessmcp.SSEServer) {
 	mpscInstance := getMCPMpsc()
 	for {
 		select {
@@ -304,7 +305,7 @@ func processMCPSseMpscMessages(ctx context.Context, sessionID string, server *SS
 			if err != nil {
 				return
 			}
-			if err := server.HandleMessage(data); err != nil {
+			if err := server.HandleMessage(ctx, data); err != nil {
 				continue
 			}
 		}

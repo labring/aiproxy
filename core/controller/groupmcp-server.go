@@ -10,6 +10,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/mcpproxy"
+	statelessmcp "github.com/labring/aiproxy/core/common/stateless-mcp"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -138,9 +139,9 @@ func handleGroupMCPServer(c *gin.Context, s *server.MCPServer, mcpType model.Gro
 	newSession := store.New()
 
 	newEndpoint := newGroupMcpEndpoint(token.Key, mcpType).NewEndpoint(newSession)
-	server := NewSSEServer(
+	server := statelessmcp.NewSSEServer(
 		s,
-		WithMessageEndpoint(newEndpoint),
+		statelessmcp.WithMessageEndpoint(newEndpoint),
 	)
 
 	store.Set(newSession, string(mcpType))

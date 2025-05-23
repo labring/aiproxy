@@ -1,4 +1,4 @@
-package controller
+package statelessmcp
 
 import (
 	"context"
@@ -48,13 +48,12 @@ func WithKeepAlive(keepAlive bool) SSEOption {
 }
 
 // NewSSEServer creates a new SSE server instance with the given MCP server and options.
-// TODO: notify support
 func NewSSEServer(server *server.MCPServer, opts ...SSEOption) *SSEServer {
 	s := &SSEServer{
 		server:            server,
 		messageEndpoint:   "/message",
 		keepAlive:         false,
-		keepAliveInterval: 10 * time.Second,
+		keepAliveInterval: 30 * time.Second,
 		eventQueue:        make(chan string, 100),
 	}
 
@@ -70,13 +69,7 @@ func NewSSEServer(server *server.MCPServer, opts ...SSEOption) *SSEServer {
 // It sets up appropriate headers and creates a new session for the client.
 func (s *SSEServer) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		errorResponse := CreateMCPErrorResponse(
-			mcp.NewRequestId(nil),
-			mcp.METHOD_NOT_FOUND,
-			"method not allowed",
-		)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = sonic.ConfigDefault.NewEncoder(w).Encode(errorResponse)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -87,13 +80,7 @@ func (s *SSEServer) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		errorResponse := CreateMCPErrorResponse(
-			mcp.NewRequestId(nil),
-			mcp.INTERNAL_ERROR,
-			"streaming unsupported",
-		)
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = sonic.ConfigDefault.NewEncoder(w).Encode(errorResponse)
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
@@ -102,10 +89,25 @@ func (s *SSEServer) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			ticker := time.NewTicker(s.keepAliveInterval)
 			defer ticker.Stop()
+			id := 0
 			for {
+				id++
 				select {
 				case <-ticker.C:
-					s.eventQueue <- fmt.Sprintf(":ping - %s\n\n", time.Now().Format(time.RFC3339))
+					message := mcp.JSONRPCRequest{
+						JSONRPC: "2.0",
+						ID:      mcp.NewRequestId(id),
+						Request: mcp.Request{
+							Method: "ping",
+						},
+					}
+					messageBytes, _ := sonic.Marshal(message)
+					pingMsg := fmt.Sprintf("event: message\ndata:%s\n\n", messageBytes)
+					select {
+					case s.eventQueue <- pingMsg:
+					case <-r.Context().Done():
+						return
+					}
 				case <-r.Context().Done():
 					return
 				}
@@ -132,7 +134,7 @@ func (s *SSEServer) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 // handleMessage processes incoming JSON-RPC messages from clients and sends responses
 // back through both the SSE connection and HTTP response.
-func (s *SSEServer) HandleMessage(req []byte) error {
+func (s *SSEServer) HandleMessage(ctx context.Context, req []byte) error {
 	// Parse message as raw JSON
 	var rawMessage json.RawMessage
 	if err := sonic.Unmarshal(req, &rawMessage); err != nil {
@@ -140,18 +142,21 @@ func (s *SSEServer) HandleMessage(req []byte) error {
 	}
 
 	// Process message through MCPServer
-	response := s.server.HandleMessage(context.Background(), rawMessage)
+	response := s.server.HandleMessage(ctx, rawMessage)
 
 	// Only send response if there is one (not for notifications)
 	if response != nil {
+		var message string
 		eventData, err := sonic.Marshal(response)
 		if err != nil {
-			return err
+			message = "event: message\ndata: {\"error\": \"internal error\",\"jsonrpc\": \"2.0\", \"id\": null}\n\n"
+		} else {
+			message = fmt.Sprintf("event: message\ndata: %s\n\n", eventData)
 		}
 
 		// Queue the event for sending via SSE
 		select {
-		case s.eventQueue <- fmt.Sprintf("event: message\ndata: %s\n\n", eventData):
+		case s.eventQueue <- message:
 			// Event queued successfully
 		default:
 			// Queue is full
