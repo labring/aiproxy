@@ -17,21 +17,23 @@ import (
 )
 
 type RequestDetail struct {
-	CreatedAt             time.Time `gorm:"autoCreateTime;index"              json:"-"`
-	RequestBody           string    `gorm:"type:text"                         json:"request_body,omitempty"`
-	ResponseBody          string    `gorm:"type:text"                         json:"response_body,omitempty"`
-	RequestBodyTruncated  bool      `json:"request_body_truncated,omitempty"`
-	ResponseBodyTruncated bool      `json:"response_body_truncated,omitempty"`
-	ID                    int       `gorm:"primaryKey"                        json:"id"`
-	LogID                 int       `gorm:"index"                             json:"log_id"`
+	CreatedAt             time.Time `gorm:"autoCreateTime;index" json:"-"`
+	RequestBody           string    `gorm:"type:text"            json:"request_body,omitempty"`
+	ResponseBody          string    `gorm:"type:text"            json:"response_body,omitempty"`
+	RequestBodyTruncated  bool      `                            json:"request_body_truncated,omitempty"`
+	ResponseBodyTruncated bool      `                            json:"response_body_truncated,omitempty"`
+	ID                    int       `gorm:"primaryKey"           json:"id"`
+	LogID                 int       `gorm:"index"                json:"log_id"`
 }
 
 func (d *RequestDetail) BeforeSave(_ *gorm.DB) (err error) {
-	if reqMax := config.GetLogDetailRequestBodyMaxSize(); reqMax > 0 && int64(len(d.RequestBody)) > reqMax {
+	if reqMax := config.GetLogDetailRequestBodyMaxSize(); reqMax > 0 &&
+		int64(len(d.RequestBody)) > reqMax {
 		d.RequestBody = common.TruncateByRune(d.RequestBody, int(reqMax)) + "..."
 		d.RequestBodyTruncated = true
 	}
-	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 && int64(len(d.ResponseBody)) > respMax {
+	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
+		int64(len(d.ResponseBody)) > respMax {
 		d.ResponseBody = common.TruncateByRune(d.ResponseBody, int(respMax)) + "..."
 		d.ResponseBodyTruncated = true
 	}
@@ -50,7 +52,8 @@ type Price struct {
 	OutputPrice     ZeroNullFloat64 `json:"output_price,omitempty"`
 	OutputPriceUnit ZeroNullInt64   `json:"output_price_unit,omitempty"`
 
-	// when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit will be overwritten
+	// when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit
+	// will be overwritten
 	ThinkingModeOutputPrice     ZeroNullFloat64 `json:"thinking_mode_output_price,omitempty"`
 	ThinkingModeOutputPriceUnit ZeroNullInt64   `json:"thinking_mode_output_price_unit,omitempty"`
 
@@ -129,29 +132,29 @@ func (u *Usage) Add(other Usage) {
 
 type Log struct {
 	RequestDetail    *RequestDetail  `gorm:"foreignKey:LogID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"request_detail,omitempty"`
-	RequestAt        time.Time       `json:"request_at"`
-	RetryAt          time.Time       `json:"retry_at,omitempty"`
-	TTFBMilliseconds ZeroNullInt64   `json:"ttfb_milliseconds,omitempty"`
+	RequestAt        time.Time       `                                                                      json:"request_at"`
+	RetryAt          time.Time       `                                                                      json:"retry_at,omitempty"`
+	TTFBMilliseconds ZeroNullInt64   `                                                                      json:"ttfb_milliseconds,omitempty"`
 	CreatedAt        time.Time       `gorm:"autoCreateTime;index"                                           json:"created_at"`
-	TokenName        string          `json:"token_name,omitempty"`
-	Endpoint         EmptyNullString `json:"endpoint,omitempty"`
+	TokenName        string          `                                                                      json:"token_name,omitempty"`
+	Endpoint         EmptyNullString `                                                                      json:"endpoint,omitempty"`
 	Content          EmptyNullString `gorm:"type:text"                                                      json:"content,omitempty"`
-	GroupID          string          `json:"group,omitempty"`
-	Model            string          `json:"model"`
+	GroupID          string          `                                                                      json:"group,omitempty"`
+	Model            string          `                                                                      json:"model"`
 	RequestID        EmptyNullString `gorm:"index:,where:request_id is not null"                            json:"request_id"`
 	ID               int             `gorm:"primaryKey"                                                     json:"id"`
 	TokenID          int             `gorm:"index"                                                          json:"token_id,omitempty"`
-	ChannelID        int             `json:"channel,omitempty"`
+	ChannelID        int             `                                                                      json:"channel,omitempty"`
 	Code             int             `gorm:"index"                                                          json:"code,omitempty"`
-	Mode             int             `json:"mode,omitempty"`
+	Mode             int             `                                                                      json:"mode,omitempty"`
 	IP               EmptyNullString `gorm:"index:,where:ip is not null"                                    json:"ip,omitempty"`
-	RetryTimes       ZeroNullInt64   `json:"retry_times,omitempty"`
+	RetryTimes       ZeroNullInt64   `                                                                      json:"retry_times,omitempty"`
 	Price            Price           `gorm:"embedded"                                                       json:"price,omitempty"`
 	Usage            Usage           `gorm:"embedded"                                                       json:"usage,omitempty"`
-	UsedAmount       float64         `json:"used_amount,omitempty"`
+	UsedAmount       float64         `                                                                      json:"used_amount,omitempty"`
 	// https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
-	User     EmptyNullString   `json:"user,omitempty"`
-	Metadata map[string]string `gorm:"serializer:fastjson;type:text" json:"metadata,omitempty"`
+	User     EmptyNullString   `                                                                      json:"user,omitempty"`
+	Metadata map[string]string `gorm:"serializer:fastjson;type:text"                                  json:"metadata,omitempty"`
 }
 
 func CreateLogIndexes(db *gorm.DB) error {
@@ -331,7 +334,11 @@ func cleanLog(batchSize int) error {
 		}
 	}
 
-	return nil
+	return LogDB.
+		Model(&Store{}).
+		Where("expires_at < ?", time.Now()).
+		Delete(&Store{}).
+		Error
 }
 
 func optimizeLog() error {
@@ -1252,7 +1259,10 @@ func GetUsedTokenNamesFromLog(group string, start, end time.Time) ([]string, err
 	return getLogGroupByValuesFromLog[string]("token_name", group, start, end)
 }
 
-func getLogGroupByValuesFromLog[T cmp.Ordered](field string, group string, start, end time.Time) ([]T, error) {
+func getLogGroupByValuesFromLog[T cmp.Ordered](
+	field, group string,
+	start, end time.Time,
+) ([]T, error) {
 	var values []T
 	query := LogDB.
 		Model(&Log{})
@@ -1396,7 +1406,16 @@ func GetGroupDashboardData(
 
 	g.Go(func() error {
 		var err error
-		chartData, err = getChartData(group, start, end, tokenName, modelName, 0, timeSpan, timezone)
+		chartData, err = getChartData(
+			group,
+			start,
+			end,
+			tokenName,
+			modelName,
+			0,
+			timeSpan,
+			timezone,
+		)
 		return err
 	})
 

@@ -20,10 +20,10 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
-func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
 	reqMap, err := utils.UnmarshalMap(req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	reqMap["model"] = meta.ActualModel
@@ -80,13 +80,15 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequ
 
 	body, err := sonic.Marshal(reqMap)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(body),
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(body))},
+		},
+		Body: bytes.NewReader(body),
 	}, nil
 }
 
@@ -111,12 +113,17 @@ type TTSResponse struct {
 	Data      TTSData      `json:"data"`
 }
 
-func TTSHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func TTSHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, openai.ErrorHanlder(resp)
+		return model.Usage{}, openai.ErrorHanlder(resp)
 	}
 
-	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") && meta.GetBool("stream") {
+	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") &&
+		meta.GetBool("stream") {
 		return ttsStreamHandler(meta, c, resp)
 	}
 
@@ -126,27 +133,27 @@ func TTSHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "TTS_ERROR", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"TTS_ERROR",
+			http.StatusInternalServerError,
+		)
 	}
 
 	var result TTSResponse
 	if err := sonic.Unmarshal(body, &result); err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "TTS_ERROR", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"TTS_ERROR",
+			http.StatusInternalServerError,
+		)
 	}
 	if result.BaseResp != nil && result.BaseResp.StatusCode != 0 {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(result.BaseResp.StatusMsg, "TTS_ERROR_"+strconv.Itoa(result.BaseResp.StatusCode), http.StatusInternalServerError)
-	}
-
-	resp.Header.Set("Content-Type", "audio/"+result.ExtraInfo.AudioFormat)
-
-	audioBytes, err := hex.DecodeString(result.Data.Audio)
-	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "TTS_ERROR", http.StatusInternalServerError)
-	}
-
-	_, err = c.Writer.Write(audioBytes)
-	if err != nil {
-		log.Warnf("write response body failed: %v", err)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			result.BaseResp.StatusMsg,
+			"TTS_ERROR_"+strconv.Itoa(result.BaseResp.StatusCode),
+			http.StatusInternalServerError,
+		)
 	}
 
 	usageCharacters := meta.RequestUsage.InputTokens
@@ -154,13 +161,37 @@ func TTSHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 		usageCharacters = model.ZeroNullInt64(result.ExtraInfo.UsageCharacters)
 	}
 
-	return &model.Usage{
+	usage := model.Usage{
 		InputTokens: usageCharacters,
 		TotalTokens: usageCharacters,
-	}, nil
+	}
+
+	resp.Header.Set("Content-Type", "audio/"+result.ExtraInfo.AudioFormat)
+
+	audioBytes, err := hex.DecodeString(result.Data.Audio)
+	if err != nil {
+		return usage, relaymodel.WrapperOpenAIError(
+			err,
+			"TTS_ERROR",
+			http.StatusInternalServerError,
+		)
+	}
+
+	c.Writer.Header().Set("Content-Type", "audio/"+result.ExtraInfo.AudioFormat)
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(audioBytes)))
+	_, err = c.Writer.Write(audioBytes)
+	if err != nil {
+		log.Warnf("write response body failed: %v", err)
+	}
+
+	return usage, nil
 }
 
-func ttsStreamHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func ttsStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	defer resp.Body.Close()
 
 	resp.Header.Set("Content-Type", "application/octet-stream")
@@ -205,7 +236,7 @@ func ttsStreamHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*mo
 		}
 	}
 
-	return &model.Usage{
+	return model.Usage{
 		InputTokens: usageCharacters,
 		TotalTokens: usageCharacters,
 	}, nil

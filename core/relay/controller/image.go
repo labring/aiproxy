@@ -25,7 +25,7 @@ func getImagesRequest(c *gin.Context) (*relaymodel.ImageRequest, error) {
 	return imageRequest, nil
 }
 
-func GetImagesOutputPrice(modelConfig model.ModelConfig, size string, quality string) (float64, bool) {
+func GetImagesOutputPrice(modelConfig model.ModelConfig, size, quality string) (float64, bool) {
 	switch {
 	case len(modelConfig.ImagePrices) == 0 && len(modelConfig.ImageQualityPrices) == 0:
 		return float64(modelConfig.Price.OutputPrice), true
@@ -48,7 +48,11 @@ func GetImagesRequestPrice(c *gin.Context, mc model.ModelConfig) (model.Price, e
 
 	imageCostPrice, ok := GetImagesOutputPrice(mc, imageRequest.Size, imageRequest.Quality)
 	if !ok {
-		return model.Price{}, fmt.Errorf("invalid image size `%s` or quality `%s`", imageRequest.Size, imageRequest.Quality)
+		return model.Price{}, fmt.Errorf(
+			"invalid image size `%s` or quality `%s`",
+			imageRequest.Size,
+			imageRequest.Quality,
+		)
 	}
 
 	return model.Price{

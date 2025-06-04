@@ -14,10 +14,6 @@ func (a *Adaptor) ValidateKey(key string) error {
 	return err
 }
 
-func (a *Adaptor) KeyHelp() string {
-	return "ak|sk"
-}
-
 // key格式: ak|sk
 func getAKAndSK(key string) (string, string, error) {
 	parts := strings.Split(key, "|")

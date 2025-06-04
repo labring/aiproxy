@@ -14,7 +14,11 @@ func OpenAIErrorHandler(resp *http.Response) adaptor.Error {
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return relaymodel.WrapperOpenAIError(err, "read_response_failed", http.StatusInternalServerError)
+		return relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
 	return OpenAIErrorHandlerWithBody(resp.StatusCode, respBody)
@@ -44,7 +48,9 @@ func GetError(resp *http.Response) (int, relaymodel.AnthropicError) {
 	return GetErrorWithBody(resp.StatusCode, respBody)
 }
 
-// status 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}
+// status 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance
+// is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase
+// credits."}}
 // status 529 {Message:Overloaded Type:overloaded_error Param:}
 func GetErrorWithBody(statusCode int, respBody []byte) (int, relaymodel.AnthropicError) {
 	var e relaymodel.AnthropicErrorResponse

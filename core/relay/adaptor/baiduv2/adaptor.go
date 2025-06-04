@@ -22,7 +22,7 @@ const (
 	baseURL = "https://qianfan.baidubce.com/v2"
 )
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
@@ -39,18 +39,29 @@ func toV2ModelName(modelName string) string {
 	return strings.ToLower(modelName)
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
-		return meta.Channel.BaseURL + "/chat/completions", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    meta.Channel.BaseURL + "/chat/completions",
+		}, nil
 	case mode.Rerank:
-		return meta.Channel.BaseURL + "/rerankers", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    meta.Channel.BaseURL + "/rerankers",
+		}, nil
 	default:
-		return "", fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) error {
 	token, err := GetBearerToken(context.Background(), meta.Channel.Key)
 	if err != nil {
 		return err
@@ -59,7 +70,11 @@ func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions, mode.Rerank:
 		actModel := meta.ActualModel
@@ -68,22 +83,32 @@ func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.C
 			meta.ActualModel = v2Model
 			defer func() { meta.ActualModel = actModel }()
 		}
-		return openai.ConvertRequest(meta, req)
+		return openai.ConvertRequest(meta, store, req)
 	default:
-		return nil, fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, req *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	return utils.DoRequest(req)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions, mode.Rerank:
-		return openai.DoResponse(meta, c, resp)
+		return openai.DoResponse(meta, store, c, resp)
 	default:
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			nil,
 			http.StatusBadRequest,
@@ -91,6 +116,9 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 	}
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		KeyHelp: "ak|sk",
+		Models:  ModelList,
+	}
 }

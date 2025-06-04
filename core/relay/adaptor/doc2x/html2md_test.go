@@ -51,7 +51,8 @@ func TestHTMLTable2Md(t *testing.T) {
 	}
 }
 
-// var htmlImage = `<img src="https://cdn.noedgeai.com/01956426-b164-730d-a1fe-8be8972145d6_0.jpg?x=258&y=694&w=1132&h=826"/>`
+// var htmlImage = `<img
+// src="https://cdn.noedgeai.com/01956426-b164-730d-a1fe-8be8972145d6_0.jpg?x=258&y=694&w=1132&h=826"/>`
 
 // func TestInlineMdImage(t *testing.T) {
 // 	t.Parallel()

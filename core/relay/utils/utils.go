@@ -26,6 +26,17 @@ func UnmarshalGeneralOpenAIRequest(req *http.Request) (*model.GeneralOpenAIReque
 	return &request, nil
 }
 
+func UnmarshalVideoGenerationJobRequest(
+	req *http.Request,
+) (*model.VideoGenerationJobRequest, error) {
+	var request model.VideoGenerationJobRequest
+	err := common.UnmarshalBodyReusable(req, &request)
+	if err != nil {
+		return nil, err
+	}
+	return &request, nil
+}
+
 func UnmarshalImageRequest(req *http.Request) (*model.ImageRequest, error) {
 	var request model.ImageRequest
 	err := common.UnmarshalBodyReusable(req, &request)

@@ -19,10 +19,18 @@ func RerankErrorHanlder(resp *http.Response) adaptor.Error {
 	errResp := RerankErrorResponse{}
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&errResp)
 	if err != nil {
-		return relaymodel.WrapperOpenAIError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
-	return relaymodel.WrapperOpenAIErrorWithMessage(errResp.Error, errResp.ErrorType, resp.StatusCode)
+	return relaymodel.WrapperOpenAIErrorWithMessage(
+		errResp.Error,
+		errResp.ErrorType,
+		resp.StatusCode,
+	)
 }
 
 type EmbeddingsErrorResponse struct {
@@ -36,7 +44,11 @@ func EmbeddingsErrorHanlder(resp *http.Response) adaptor.Error {
 	errResp := EmbeddingsErrorResponse{}
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&errResp)
 	if err != nil {
-		return relaymodel.WrapperOpenAIError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
 	return relaymodel.WrapperOpenAIErrorWithMessage(errResp.Message, errResp.Type, resp.StatusCode)

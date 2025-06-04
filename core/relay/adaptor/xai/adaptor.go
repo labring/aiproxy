@@ -16,18 +16,25 @@ type Adaptor struct {
 
 const baseURL = "https://api.x.ai/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, ErrorHandler(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
-	return a.Adaptor.DoResponse(meta, c, resp)
+	return a.Adaptor.DoResponse(meta, store, c, resp)
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Models: ModelList,
+	}
 }

@@ -94,14 +94,14 @@ var ttsSupportedFormat = map[string]struct{}{
 	"mp3": {},
 }
 
-func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
 	request, err := utils.UnmarshalTTSRequest(req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	reqMap, err := utils.UnmarshalMap(req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	var sampleRate int
 	sampleRateI, ok := reqMap["sample_rate"].(float64)
@@ -115,7 +115,11 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequ
 		if voice == "" {
 			voice = "zhinan"
 		}
-		request.Model = fmt.Sprintf("sambert-%s-v%s", voice, strings.TrimPrefix(request.Model, "sambert-v"))
+		request.Model = fmt.Sprintf(
+			"sambert-%s-v%s",
+			voice,
+			strings.TrimPrefix(request.Model, "sambert-v"),
+		)
 	}
 
 	ttsRequest := TTSMessage{
@@ -157,10 +161,9 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequ
 
 	data, err := sonic.Marshal(ttsRequest)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
+	return adaptor.ConvertResult{
 		Header: http.Header{
 			"X-DashScope-DataInspection": {"enable"},
 		},
@@ -195,18 +198,29 @@ func TTSDoRequest(meta *meta.Meta, req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-func TTSDoResponse(meta *meta.Meta, c *gin.Context, _ *http.Response) (usage *model.Usage, err adaptor.Error) {
+func TTSDoResponse(
+	meta *meta.Meta,
+	c *gin.Context,
+	_ *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	log := middleware.GetLogger(c)
 
-	conn := meta.MustGet("ws_conn").(*websocket.Conn)
+	conn, ok := meta.MustGet("ws_conn").(*websocket.Conn)
+	if !ok {
+		panic(fmt.Sprintf("ws conn type error: %T, %v", conn, conn))
+	}
 	defer conn.Close()
 
-	usage = &model.Usage{}
+	usage = model.Usage{}
 
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
-			return usage, relaymodel.WrapperOpenAIErrorWithMessage("ali_wss_read_msg_failed", nil, http.StatusInternalServerError)
+			return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+				"ali_wss_read_msg_failed",
+				nil,
+				http.StatusInternalServerError,
+			)
 		}
 
 		var msg TTSMessage
@@ -214,7 +228,11 @@ func TTSDoResponse(meta *meta.Meta, c *gin.Context, _ *http.Response) (usage *mo
 		case websocket.TextMessage:
 			err = sonic.Unmarshal(data, &msg)
 			if err != nil {
-				return usage, relaymodel.WrapperOpenAIErrorWithMessage("ali_wss_read_msg_failed", nil, http.StatusInternalServerError)
+				return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+					"ali_wss_read_msg_failed",
+					nil,
+					http.StatusInternalServerError,
+				)
 			}
 			switch msg.Header.Event {
 			case "task-started":
@@ -226,7 +244,11 @@ func TTSDoResponse(meta *meta.Meta, c *gin.Context, _ *http.Response) (usage *mo
 				usage.TotalTokens = model.ZeroNullInt64(msg.Payload.Usage.Characters)
 				return usage, nil
 			case "task-failed":
-				return usage, relaymodel.WrapperOpenAIErrorWithMessage(msg.Header.ErrorMessage, msg.Header.ErrorCode, http.StatusInternalServerError)
+				return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+					msg.Header.ErrorMessage,
+					msg.Header.ErrorCode,
+					http.StatusInternalServerError,
+				)
 			}
 		case websocket.BinaryMessage:
 			_, writeErr := c.Writer.Write(data)

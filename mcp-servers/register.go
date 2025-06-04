@@ -7,17 +7,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/mark3labs/mcp-go/server"
 )
 
 type mcpServerCacheItem struct {
-	MCPServer         *server.MCPServer
+	MCPServer         Server
 	LastUsedTimestamp atomic.Int64
 }
 
 var (
-	servers             = make(map[string]EmbedMcp)
+	servers             = make(map[string]McpServer)
 	mcpServerCache      = make(map[string]*mcpServerCacheItem)
 	mcpServerCacheLock  = sync.RWMutex{}
 	cacheExpirationTime = 3 * time.Minute
@@ -52,16 +50,26 @@ func init() {
 	startCacheCleaner(time.Minute)
 }
 
-func Register(mcp EmbedMcp) {
+func Register(mcp McpServer) {
 	if mcp.ID == "" {
 		panic("mcp id is required")
 	}
 	if mcp.Name == "" {
 		panic("mcp name is required")
 	}
-	if mcp.newServer == nil {
-		panic(fmt.Sprintf("mcp %s new server is required", mcp.ID))
+	switch mcp.Type {
+	case McpTypeEmbed:
+		if mcp.newServer == nil {
+			panic(fmt.Sprintf("mcp %s new server is required", mcp.ID))
+		}
+	case McpTypeDocs:
+		if mcp.Readme == "" {
+			panic(fmt.Sprintf("mcp %s readme is required", mcp.ID))
+		}
+	default:
+		panic(fmt.Sprintf("mcp %s type is invalid", mcp.ID))
 	}
+
 	if mcp.ConfigTemplates != nil {
 		if err := CheckConfigTemplatesValidate(mcp.ConfigTemplates); err != nil {
 			panic(fmt.Sprintf("mcp %s config templates example is invalid: %v", mcp.ID, err))
@@ -73,7 +81,7 @@ func Register(mcp EmbedMcp) {
 	servers[mcp.ID] = mcp
 }
 
-func GetMCPServer(id string, config map[string]string, reusingConfig map[string]string) (*server.MCPServer, error) {
+func GetMCPServer(id string, config, reusingConfig map[string]string) (Server, error) {
 	embedServer, ok := servers[id]
 	if !ok {
 		return nil, fmt.Errorf("mcp %s not found", id)
@@ -88,7 +96,9 @@ func GetMCPServer(id string, config map[string]string, reusingConfig map[string]
 
 	for _, template := range embedServer.ConfigTemplates {
 		switch template.Required {
-		case ConfigRequiredTypeReusingOptional, ConfigRequiredTypeReusingOnly, ConfigRequiredTypeInitOrReusingOnly:
+		case ConfigRequiredTypeReusingOptional,
+			ConfigRequiredTypeReusingOnly,
+			ConfigRequiredTypeInitOrReusingOnly:
 			return embedServer.NewServer(config, reusingConfig)
 		}
 	}
@@ -105,7 +115,7 @@ func buildNoReusingConfigCacheKey(config map[string]string) string {
 	return strings.Join(keys, ":")
 }
 
-func loadCacheServer(embedServer EmbedMcp, config map[string]string) (*server.MCPServer, error) {
+func loadCacheServer(embedServer McpServer, config map[string]string) (Server, error) {
 	cacheKey := embedServer.ID
 	if len(config) > 0 {
 		cacheKey = fmt.Sprintf("%s:%s", embedServer.ID, buildNoReusingConfigCacheKey(config))
@@ -139,11 +149,11 @@ func loadCacheServer(embedServer EmbedMcp, config map[string]string) (*server.MC
 	return mcpServer, nil
 }
 
-func Servers() map[string]EmbedMcp {
+func Servers() map[string]McpServer {
 	return servers
 }
 
-func GetEmbedMCP(id string) (EmbedMcp, bool) {
+func GetEmbedMCP(id string) (McpServer, bool) {
 	mcp, ok := servers[id]
 	return mcp, ok
 }

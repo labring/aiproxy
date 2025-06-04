@@ -75,6 +75,18 @@ func SetRelayRouter(router *gin.Engine) {
 			"/parse/pdf",
 			controller.ParsePdf()...,
 		)
+		relayRouter.POST(
+			"/video/generations/jobs",
+			controller.VideoGenerationsJobs()...,
+		)
+		relayRouter.GET(
+			"/video/generations/jobs/:id",
+			controller.VideoGenerationsGetJobs()...,
+		)
+		relayRouter.GET(
+			"/video/generations/:id/content/video",
+			controller.VideoGenerationsContent()...,
+		)
 
 		relayRouter.POST("/images/variations", controller.RelayNotImplemented)
 		relayRouter.GET("/files", controller.RelayNotImplemented)
@@ -104,13 +116,19 @@ func SetRelayRouter(router *gin.Engine) {
 		relayRouter.POST("/threads/:id/messages", controller.RelayNotImplemented)
 		relayRouter.GET("/threads/:id/messages/:messageId", controller.RelayNotImplemented)
 		relayRouter.POST("/threads/:id/messages/:messageId", controller.RelayNotImplemented)
-		relayRouter.GET("/threads/:id/messages/:messageId/files/:filesId", controller.RelayNotImplemented)
+		relayRouter.GET(
+			"/threads/:id/messages/:messageId/files/:filesId",
+			controller.RelayNotImplemented,
+		)
 		relayRouter.GET("/threads/:id/messages/:messageId/files", controller.RelayNotImplemented)
 		relayRouter.POST("/threads/:id/runs", controller.RelayNotImplemented)
 		relayRouter.GET("/threads/:id/runs/:runsId", controller.RelayNotImplemented)
 		relayRouter.POST("/threads/:id/runs/:runsId", controller.RelayNotImplemented)
 		relayRouter.GET("/threads/:id/runs", controller.RelayNotImplemented)
-		relayRouter.POST("/threads/:id/runs/:runsId/submit_tool_outputs", controller.RelayNotImplemented)
+		relayRouter.POST(
+			"/threads/:id/runs/:runsId/submit_tool_outputs",
+			controller.RelayNotImplemented,
+		)
 		relayRouter.POST("/threads/:id/runs/:runsId/cancel", controller.RelayNotImplemented)
 		relayRouter.GET("/threads/:id/runs/:runsId/steps/:stepId", controller.RelayNotImplemented)
 		relayRouter.GET("/threads/:id/runs/:runsId/steps", controller.RelayNotImplemented)

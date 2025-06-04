@@ -17,7 +17,7 @@ import (
 
 type Adaptor struct{}
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return ""
 }
 
@@ -27,28 +27,47 @@ type Config struct {
 	ADCJSON   string
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, request *http.Request) (*adaptor.ConvertRequestResult, error) {
-	adaptor := GetAdaptor(meta.ActualModel)
-	if adaptor == nil {
-		return nil, errors.New("adaptor not found")
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	request *http.Request,
+) (adaptor.ConvertResult, error) {
+	aa := GetAdaptor(meta.ActualModel)
+	if aa == nil {
+		return adaptor.ConvertResult{}, errors.New("adaptor not found")
 	}
 
-	return adaptor.ConvertRequest(meta, request)
+	return aa.ConvertRequest(meta, store, request)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	adaptor := GetAdaptor(meta.ActualModel)
 	if adaptor == nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(meta.ActualModel+" adaptor not found", "adaptor_not_found", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			meta.ActualModel+" adaptor not found",
+			"adaptor_not_found",
+			http.StatusInternalServerError,
+		)
 	}
-	return adaptor.DoResponse(meta, c, resp)
+	return adaptor.DoResponse(meta, store, c, resp)
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return modelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"Claude support native Endpoint: /v1/messages",
+		},
+		KeyHelp: "region|adcJSON",
+		Models:  modelList,
+	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	var suffix string
 	if strings.HasPrefix(meta.ActualModel, "gemini") {
 		if meta.GetBool("stream") {
@@ -66,30 +85,41 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 	config, err := getConfigFromKey(meta.Channel.Key)
 	if err != nil {
-		return "", err
+		return adaptor.RequestURL{}, err
 	}
 
 	if meta.Channel.BaseURL != "" {
-		return fmt.Sprintf(
-			"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
-			meta.Channel.BaseURL,
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL: fmt.Sprintf(
+				"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+				meta.Channel.BaseURL,
+				config.ProjectID,
+				config.Region,
+				meta.ActualModel,
+				suffix,
+			),
+		}, nil
+	}
+	return adaptor.RequestURL{
+		Method: http.MethodPost,
+		URL: fmt.Sprintf(
+			"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+			config.Region,
 			config.ProjectID,
 			config.Region,
 			meta.ActualModel,
 			suffix,
-		), nil
-	}
-	return fmt.Sprintf(
-		"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
-		config.Region,
-		config.ProjectID,
-		config.Region,
-		meta.ActualModel,
-		suffix,
-	), nil
+		),
+	}, nil
 }
 
-func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) error {
 	config, err := getConfigFromKey(meta.Channel.Key)
 	if err != nil {
 		return err
@@ -102,6 +132,11 @@ func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.
 	return nil
 }
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, req *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	return utils.DoRequest(req)
 }

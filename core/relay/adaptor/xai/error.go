@@ -21,13 +21,21 @@ func ErrorHandler(resp *http.Response) adaptor.Error {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return relaymodel.WrapperOpenAIErrorWithMessage("read response body error: "+err.Error(), nil, http.StatusInternalServerError)
+		return relaymodel.WrapperOpenAIErrorWithMessage(
+			"read response body error: "+err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	var er errorResponse
 	err = sonic.Unmarshal(data, &er)
 	if err != nil {
-		return relaymodel.WrapperOpenAIErrorWithMessage(conv.BytesToString(data), nil, http.StatusInternalServerError)
+		return relaymodel.WrapperOpenAIErrorWithMessage(
+			conv.BytesToString(data),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	statusCode := resp.StatusCode

@@ -16,11 +16,8 @@ type Usage struct {
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
 }
 
-func (u *Usage) ToModelUsage() *model.Usage {
-	if u == nil {
-		return nil
-	}
-	usage := &model.Usage{
+func (u Usage) ToModelUsage() model.Usage {
+	usage := model.Usage{
 		InputTokens:    model.ZeroNullInt64(u.PromptTokens),
 		OutputTokens:   model.ZeroNullInt64(u.CompletionTokens),
 		TotalTokens:    model.ZeroNullInt64(u.TotalTokens),

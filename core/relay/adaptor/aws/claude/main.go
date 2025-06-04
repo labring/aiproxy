@@ -2,7 +2,9 @@
 package aws
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,10 +94,14 @@ func awsModelID(requestModel string) (string, error) {
 	return "", errors.Errorf("model %s not found", requestModel)
 }
 
-func Handler(meta *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
+func Handler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
 	awsModelID, err := awsModelID(meta.ActualModel)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsReq := &bedrockruntime.InvokeModelInput{
@@ -106,47 +112,83 @@ func Handler(meta *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
 
 	convReq, ok := meta.Get(ConvertedRequest)
 	if !ok {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage("request not found", nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			"request not found",
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
-	claudeReq := convReq.(*anthropic.Request)
+	claudeReq, ok := convReq.(*anthropic.Request)
+	if !ok {
+		panic(fmt.Sprintf("claude request type error: %T, %v", claudeReq, claudeReq))
+	}
 	awsClaudeReq := &Request{
 		AnthropicVersion: "bedrock-2023-05-31",
 	}
 	if err = copier.Copy(awsClaudeReq, claudeReq); err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsReq.Body, err = sonic.Marshal(awsClaudeReq)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsClient, err := utils.AwsClientFromMeta(meta)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsResp, err := awsClient.InvokeModel(c.Request.Context(), awsReq)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
-	claudeResponse := new(anthropic.Response)
-	err = sonic.Unmarshal(awsResp.Body, claudeResponse)
+	openaiResp, adaptorErr := anthropic.Response2OpenAI(meta, awsResp.Body)
+	if adaptorErr != nil {
+		return model.Usage{}, adaptorErr
+	}
+
+	jsonBody, err := sonic.Marshal(openaiResp)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return openaiResp.ToModelUsage(), relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
-	openaiResp := anthropic.Response2OpenAI(meta, claudeResponse)
-	c.JSON(http.StatusOK, openaiResp)
-	return openaiResp.Usage.ToModelUsage(), nil
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonBody)))
+	_, _ = c.Writer.Write(jsonBody)
+	return openaiResp.ToModelUsage(), nil
 }
 
-func StreamHandler(m *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
+func StreamHandler(m *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
 	log := middleware.GetLogger(c)
 	awsModelID, err := awsModelID(m.ActualModel)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsReq := &bedrockruntime.InvokeModelWithResponseStreamInput{
@@ -157,32 +199,51 @@ func StreamHandler(m *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
 
 	convReq, ok := m.Get(ConvertedRequest)
 	if !ok {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage("request not found", nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			"request not found",
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 	claudeReq, ok := convReq.(*anthropic.Request)
 	if !ok {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage("request not found", nil, http.StatusInternalServerError)
+		panic(fmt.Sprintf("claude request type error: %T, %v", claudeReq, claudeReq))
 	}
-
 	awsClaudeReq := &Request{
 		AnthropicVersion: "bedrock-2023-05-31",
 	}
 	if err = copier.Copy(awsClaudeReq, claudeReq); err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 	awsReq.Body, err = sonic.Marshal(awsClaudeReq)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsClient, err := utils.AwsClientFromMeta(m)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 
 	awsResp, err := awsClient.InvokeModelWithResponseStream(c.Request.Context(), awsReq)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(err.Error(), nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			err.Error(),
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
 	stream := awsResp.GetStream()
 	defer stream.Close()
@@ -191,9 +252,6 @@ func StreamHandler(m *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
 	responseText := strings.Builder{}
 	var writed bool
 
-	// c.Stream(func(_ io.Writer) bool {
-
-	// })
 	for event := range stream.Events() {
 		switch v := event.(type) {
 		case *types.ResponseStreamMemberChunk:
@@ -242,12 +300,17 @@ func StreamHandler(m *meta.Meta, c *gin.Context) (*model.Usage, adaptor.Error) {
 		usage = &relaymodel.Usage{
 			PromptTokens:     int64(m.RequestUsage.InputTokens),
 			CompletionTokens: openai.CountTokenText(responseText.String(), m.OriginModel),
-			TotalTokens:      int64(m.RequestUsage.InputTokens) + openai.CountTokenText(responseText.String(), m.OriginModel),
+			TotalTokens: int64(
+				m.RequestUsage.InputTokens,
+			) + openai.CountTokenText(
+				responseText.String(),
+				m.OriginModel,
+			),
 		}
 		_ = render.ObjectData(c, &relaymodel.ChatCompletionsStreamResponse{
 			ID:      openai.ChatCompletionID(),
 			Model:   m.OriginModel,
-			Object:  relaymodel.ChatCompletionChunk,
+			Object:  relaymodel.ChatCompletionChunkObject,
 			Created: time.Now().Unix(),
 			Choices: []*relaymodel.ChatCompletionsStreamResponseChoice{},
 			Usage:   usage,

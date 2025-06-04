@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/env"
 	"github.com/labring/aiproxy/core/controller"
+	mcp "github.com/labring/aiproxy/core/controller/mcp"
 	"github.com/labring/aiproxy/core/middleware"
 )
 
@@ -186,39 +187,44 @@ func SetAPIRouter(router *gin.Engine) {
 		}
 		publicMcpRoute := apiRouter.Group("/mcp/public")
 		{
-			publicMcpRoute.GET("/", controller.GetPublicMCPs)
-			publicMcpRoute.GET("/:id", controller.GetPublicMCPByIDHandler)
-			publicMcpRoute.POST("/", controller.CreatePublicMCP)
-			publicMcpRoute.PUT("/:id", controller.UpdatePublicMCP)
-			publicMcpRoute.DELETE("/:id", controller.DeletePublicMCP)
-			publicMcpRoute.POST("/:id/status", controller.UpdatePublicMCPStatus)
-			publicMcpRoute.GET("/:id/group/:group/params", controller.GetGroupPublicMCPReusingParam)
-			publicMcpRoute.POST("/:id/group/:group/params", controller.SaveGroupPublicMCPReusingParam)
+			publicMcpRoute.GET("/", mcp.GetPublicMCPs)
+			publicMcpRoute.GET("/all", mcp.GetAllPublicMCPs)
+			publicMcpRoute.GET("/:id", mcp.GetPublicMCPByIDHandler)
+			publicMcpRoute.POST("/", mcp.CreatePublicMCP)
+			publicMcpRoute.PUT("/:id", mcp.UpdatePublicMCP)
+			publicMcpRoute.DELETE("/:id", mcp.DeletePublicMCP)
+			publicMcpRoute.POST("/:id/status", mcp.UpdatePublicMCPStatus)
+			publicMcpRoute.GET("/:id/group/:group/params", mcp.GetGroupPublicMCPReusingParam)
+			publicMcpRoute.POST(
+				"/:id/group/:group/params",
+				mcp.SaveGroupPublicMCPReusingParam,
+			)
 		}
 
 		groupMcpRoute := apiRouter.Group("/mcp/group")
 		{
-			groupMcpRoute.GET("/:group", controller.GetGroupMCPs)
-			groupMcpRoute.GET("/:group/:id", controller.GetGroupMCPByID)
-			groupMcpRoute.POST("/:group", controller.CreateGroupMCP)
-			groupMcpRoute.PUT("/:group/:id", controller.UpdateGroupMCP)
-			groupMcpRoute.DELETE("/:group/:id", controller.DeleteGroupMCP)
-			groupMcpRoute.POST("/:group/:id/status", controller.UpdateGroupMCPStatus)
+			groupMcpRoute.GET("/:group", mcp.GetGroupMCPs)
+			groupMcpRoute.GET("/all", mcp.GetAllGroupMCPs)
+			groupMcpRoute.GET("/:group/:id", mcp.GetGroupMCPByID)
+			groupMcpRoute.POST("/:group", mcp.CreateGroupMCP)
+			groupMcpRoute.PUT("/:group/:id", mcp.UpdateGroupMCP)
+			groupMcpRoute.DELETE("/:group/:id", mcp.DeleteGroupMCP)
+			groupMcpRoute.POST("/:group/:id/status", mcp.UpdateGroupMCPStatus)
 		}
 
 		embedMcpRoute := apiRouter.Group("/embedmcp")
 		{
-			embedMcpRoute.GET("/", controller.GetEmbedMCPs)
-			embedMcpRoute.POST("/", controller.SaveEmbedMCP)
+			embedMcpRoute.GET("/", mcp.GetEmbedMCPs)
+			embedMcpRoute.POST("/", mcp.SaveEmbedMCP)
 		}
 
 		testEmbedMcpRoute := apiRouter.Group("/test-embedmcp")
 		{
-			testEmbedMcpRoute.GET("/:id/sse", controller.TestEmbedMCPSseServer)
-			testEmbedMcpRoute.POST("/message", controller.TestEmbedMCPMessage)
-			testEmbedMcpRoute.GET("/:id/streamable", controller.TestEmbedMCPStreamable)
-			testEmbedMcpRoute.POST("/:id/streamable", controller.TestEmbedMCPStreamable)
-			testEmbedMcpRoute.DELETE("/:id/streamable", controller.TestEmbedMCPStreamable)
+			testEmbedMcpRoute.GET("/:id/sse", mcp.TestEmbedMCPSseServer)
+			testEmbedMcpRoute.POST("/message", mcp.TestEmbedMCPMessage)
+			testEmbedMcpRoute.GET("/:id", mcp.TestEmbedMCPStreamable)
+			testEmbedMcpRoute.POST("/:id", mcp.TestEmbedMCPStreamable)
+			testEmbedMcpRoute.DELETE("/:id", mcp.TestEmbedMCPStreamable)
 		}
 	}
 }

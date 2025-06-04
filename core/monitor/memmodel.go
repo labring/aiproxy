@@ -92,7 +92,12 @@ func (m *MemModelMonitor) cleanupExpiredData() {
 	}
 }
 
-func (m *MemModelMonitor) AddRequest(model string, channelID int64, isError, tryBan bool, maxErrorRate float64) (beyondThreshold, banExecution bool) {
+func (m *MemModelMonitor) AddRequest(
+	model string,
+	channelID int64,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (beyondThreshold, banExecution bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -122,7 +127,12 @@ func (m *MemModelMonitor) AddRequest(model string, channelID int64, isError, try
 	return m.checkAndBan(now, channel, tryBan, maxErrorRate)
 }
 
-func (m *MemModelMonitor) checkAndBan(now time.Time, channel *ChannelStats, tryBan bool, maxErrorRate float64) (beyondThreshold, banExecution bool) {
+func (m *MemModelMonitor) checkAndBan(
+	now time.Time,
+	channel *ChannelStats,
+	tryBan bool,
+	maxErrorRate float64,
+) (beyondThreshold, banExecution bool) {
 	canBan := maxErrorRate > 0
 	if tryBan && canBan {
 		if channel.bannedUntil.After(now) {
@@ -166,7 +176,10 @@ func (m *MemModelMonitor) GetModelsErrorRate(_ context.Context) (map[string]floa
 	return result, nil
 }
 
-func (m *MemModelMonitor) GetModelChannelErrorRate(_ context.Context, model string) (map[int64]float64, error) {
+func (m *MemModelMonitor) GetModelChannelErrorRate(
+	_ context.Context,
+	model string,
+) (map[int64]float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -179,7 +192,10 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(_ context.Context, model stri
 	return result, nil
 }
 
-func (m *MemModelMonitor) GetChannelModelErrorRates(_ context.Context, channelID int64) (map[string]float64, error) {
+func (m *MemModelMonitor) GetChannelModelErrorRates(
+	_ context.Context,
+	channelID int64,
+) (map[string]float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -192,7 +208,9 @@ func (m *MemModelMonitor) GetChannelModelErrorRates(_ context.Context, channelID
 	return result, nil
 }
 
-func (m *MemModelMonitor) GetAllChannelModelErrorRates(_ context.Context) (map[int64]map[string]float64, error) {
+func (m *MemModelMonitor) GetAllChannelModelErrorRates(
+	_ context.Context,
+) (map[int64]map[string]float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -208,7 +226,10 @@ func (m *MemModelMonitor) GetAllChannelModelErrorRates(_ context.Context) (map[i
 	return result, nil
 }
 
-func (m *MemModelMonitor) GetBannedChannelsWithModel(_ context.Context, model string) ([]int64, error) {
+func (m *MemModelMonitor) GetBannedChannelsWithModel(
+	_ context.Context,
+	model string,
+) ([]int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -244,7 +265,11 @@ func (m *MemModelMonitor) GetAllBannedModelChannels(_ context.Context) (map[stri
 	return result, nil
 }
 
-func (m *MemModelMonitor) ClearChannelModelErrors(_ context.Context, model string, channelID int) error {
+func (m *MemModelMonitor) ClearChannelModelErrors(
+	_ context.Context,
+	model string,
+	channelID int,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

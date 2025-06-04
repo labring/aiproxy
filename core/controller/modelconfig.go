@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -19,7 +20,7 @@ import (
 //	@Success		200		{object}	middleware.APIResponse{data=map[string]any{configs=[]model.ModelConfig,total=int}}
 //	@Router			/api/model_configs/ [get]
 func GetModelConfigs(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	_model := c.Query("model")
 	configs, total, err := model.GetModelConfigs(page, perPage, _model)
 	if err != nil {
@@ -95,10 +96,16 @@ func GetModelConfigsByModelsContains(c *gin.Context) {
 //	@Router			/api/model_configs/search [get]
 func SearchModelConfigs(c *gin.Context) {
 	keyword := c.Query("keyword")
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	_model := c.Query("model")
 	owner := c.Query("owner")
-	configs, total, err := model.SearchModelConfigs(keyword, page, perPage, _model, model.ModelOwner(owner))
+	configs, total, err := model.SearchModelConfigs(
+		keyword,
+		page,
+		perPage,
+		_model,
+		model.ModelOwner(owner),
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

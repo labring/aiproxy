@@ -2,38 +2,63 @@ package openai
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 
-	"github.com/bytedance/sonic"
+	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 )
 
-//nolint:gocritic
-func ConvertEmbeddingsRequest(meta *meta.Meta, req *http.Request, inputToSlices bool) (*adaptor.ConvertRequestResult, error) {
-	reqMap := make(map[string]any)
-	err := common.UnmarshalBodyReusable(req, &reqMap)
+func ConvertEmbeddingsRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	callback func(node *ast.Node) error,
+	inputToSlices bool,
+) (adaptor.ConvertResult, error) {
+	node, err := common.UnmarshalBody2Node(req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
-	reqMap["model"] = meta.ActualModel
-
-	if inputToSlices {
-		switch v := reqMap["input"].(type) {
-		case string:
-			reqMap["input"] = []string{v}
+	if callback != nil {
+		err = callback(&node)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
 		}
 	}
 
-	jsonData, err := sonic.Marshal(reqMap)
+	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(jsonData),
+
+	if inputToSlices {
+		inputNode := node.Get("input")
+		if inputNode.Exists() {
+			inputString, err := inputNode.String()
+			if err != nil {
+				if !errors.Is(err, ast.ErrUnsupportType) {
+					return adaptor.ConvertResult{}, err
+				}
+			} else {
+				_, err = node.SetAny("input", []string{inputString})
+				if err != nil {
+					return adaptor.ConvertResult{}, err
+				}
+			}
+		}
+	}
+
+	jsonData, err := node.MarshalJSON()
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: bytes.NewReader(jsonData),
 	}, nil
 }

@@ -7,10 +7,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -25,35 +25,37 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
 	// Parse request body into AST node
 	node, err := common.UnmarshalBody2Node(req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	// Set the actual model in the request
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	// Process image content if present
 	err = ConvertImage2Base64(req.Context(), &node)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	// Serialize the modified node
 	newBody, err := node.MarshalJSON()
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(newBody),
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(newBody))},
+		},
+		Body: bytes.NewReader(newBody),
 	}, nil
 }
 
@@ -156,9 +158,13 @@ func convertImageURLToBase64(ctx context.Context, contentItem *ast.Node) error {
 	return nil
 }
 
-func StreamHandler(m *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func StreamHandler(
+	m *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, ErrorHandler(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -224,33 +230,40 @@ func StreamHandler(m *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 		usage = &relaymodel.Usage{
 			PromptTokens:     int64(m.RequestUsage.InputTokens),
 			CompletionTokens: openai.CountTokenText(responseText.String(), m.OriginModel),
-			TotalTokens:      int64(m.RequestUsage.InputTokens) + openai.CountTokenText(responseText.String(), m.OriginModel),
+			TotalTokens: int64(
+				m.RequestUsage.InputTokens,
+			) + openai.CountTokenText(
+				responseText.String(),
+				m.OriginModel,
+			),
 		}
 	}
 
 	return usage.ToModelUsage(), nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, ErrorHandler(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperAnthropicError(err, "read_response_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperAnthropicError(
+			err,
+			"read_response_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
-	var claudeResponse Response
-	err = sonic.Unmarshal(respBody, &claudeResponse)
-	if err != nil {
-		return nil, relaymodel.WrapperAnthropicError(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+	fullTextResponse, adaptorErr := Response2OpenAI(meta, respBody)
+	if adaptorErr != nil {
+		return model.Usage{}, adaptorErr
 	}
-	fullTextResponse := Response2OpenAI(meta, &claudeResponse)
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(respBody)))
 	_, _ = c.Writer.Write(respBody)
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return fullTextResponse.ToModelUsage(), nil
 }

@@ -16,7 +16,7 @@ type OneAPIChannel struct {
 	Status       int               `gorm:"default:1"                              json:"status"`
 	Name         string            `gorm:"index"                                  json:"name"`
 	BaseURL      string            `gorm:"column:base_url;default:''"`
-	Models       string            `json:"models"`
+	Models       string            `                                              json:"models"`
 	ModelMapping map[string]string `gorm:"type:varchar(1024);serializer:fastjson"`
 	Priority     int32             `gorm:"bigint;default:0"`
 	Config       ChannelConfig     `gorm:"serializer:fastjson"`
@@ -188,7 +188,11 @@ func ImportChannelFromOneAPI(c *gin.Context) {
 	case strings.HasPrefix(req.DSN, "postgres"):
 		db, err = model.OpenPostgreSQL(req.DSN)
 	default:
-		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid dsn, only mysql and postgres are supported")
+		middleware.ErrorResponse(
+			c,
+			http.StatusBadRequest,
+			"invalid dsn, only mysql and postgres are supported",
+		)
 		return
 	}
 

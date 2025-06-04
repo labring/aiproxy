@@ -31,7 +31,6 @@ type EmbeddingData struct {
 }
 
 type EmbeddingResponse struct {
-	Error      *Error          `json:"error,omitempty"`
 	Embeddings []EmbeddingData `json:"embeddings"`
 }
 

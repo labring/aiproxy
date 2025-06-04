@@ -35,7 +35,11 @@ func GetBearerToken(ctx context.Context, apiKey string) (string, error) {
 		log.Errorf("get baiduv2 access token failed: %v", err)
 		return "", errors.New("get baiduv2 access token failed")
 	}
-	tokenCache.Set(apiKey, tokenResponse.Token, time.Until(tokenResponse.ExpireTime.Add(-time.Minute*10)))
+	tokenCache.Set(
+		apiKey,
+		tokenResponse.Token,
+		time.Until(tokenResponse.ExpireTime.Add(-time.Minute*10)),
+	)
 	return tokenResponse.Token, nil
 }
 
@@ -50,7 +54,12 @@ func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*TokenRespon
 		return nil, err
 	}
 	authorization := generateAuthorizationString(ak, sk)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://iam.bj.baidubce.com/v1/BCE-BEARER/token", nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		"https://iam.bj.baidubce.com/v1/BCE-BEARER/token",
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +92,12 @@ func generateAuthorizationString(ak, sk string) string {
 
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 	expirationPeriodInSeconds := 1800
-	authStringPrefix := fmt.Sprintf("bce-auth-v1/%s/%s/%d", ak, timestamp, expirationPeriodInSeconds)
+	authStringPrefix := fmt.Sprintf(
+		"bce-auth-v1/%s/%s/%d",
+		ak,
+		timestamp,
+		expirationPeriodInSeconds,
+	)
 
 	signingKey := hmacSHA256(sk, authStringPrefix)
 

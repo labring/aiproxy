@@ -3,39 +3,74 @@ package adaptor
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
+	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 )
 
+type StoreCache struct {
+	ID        string
+	GroupID   string
+	TokenID   int
+	ChannelID int
+	Model     string
+	ExpiresAt time.Time
+}
+
+type Store interface {
+	GetStore(id string) (StoreCache, error)
+	SaveStore(store StoreCache) error
+}
+
+type Metadata struct {
+	Config   ConfigTemplates
+	KeyHelp  string
+	Features []string
+	Models   []model.ModelConfig
+}
+
+type RequestURL struct {
+	Method string
+	URL    string
+}
+
 type GetRequestURL interface {
-	GetRequestURL(meta *meta.Meta) (string, error)
+	GetRequestURL(meta *meta.Meta, store Store) (RequestURL, error)
 }
 
 type SetupRequestHeader interface {
-	SetupRequestHeader(meta *meta.Meta, c *gin.Context, req *http.Request) error
+	SetupRequestHeader(meta *meta.Meta, store Store, c *gin.Context, req *http.Request) error
 }
 
 type ConvertRequest interface {
-	ConvertRequest(meta *meta.Meta, req *http.Request) (*ConvertRequestResult, error)
+	ConvertRequest(meta *meta.Meta, store Store, req *http.Request) (ConvertResult, error)
 }
 
 type DoRequest interface {
-	DoRequest(meta *meta.Meta, c *gin.Context, req *http.Request) (*http.Response, error)
+	DoRequest(
+		meta *meta.Meta,
+		store Store,
+		c *gin.Context,
+		req *http.Request,
+	) (*http.Response, error)
 }
 
 type DoResponse interface {
-	DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, Error)
+	DoResponse(
+		meta *meta.Meta,
+		store Store,
+		c *gin.Context,
+		resp *http.Response,
+	) (model.Usage, Error)
 }
 
 type Adaptor interface {
-	GetBaseURL() string
-	GetModelList() []model.ModelConfig
+	Metadata() Metadata
+	DefaultBaseURL() string
 	GetRequestURL
 	SetupRequestHeader
 	ConvertRequest
@@ -43,8 +78,7 @@ type Adaptor interface {
 	DoResponse
 }
 
-type ConvertRequestResult struct {
-	Method string
+type ConvertResult struct {
 	Header http.Header
 	Body   io.Reader
 }
@@ -55,23 +89,6 @@ type Error interface {
 	StatusCode() int
 }
 
-type BasicError[T any] struct {
-	error      T
-	statusCode int
-}
-
-func (e BasicError[T]) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(e.error)
-}
-
-func (e BasicError[T]) StatusCode() int {
-	return e.statusCode
-}
-
-func (e BasicError[T]) Error() string {
-	return fmt.Sprintf("status code: %d, error: %v", e.statusCode, e.error)
-}
-
 var ErrGetBalanceNotImplemented = errors.New("get balance not implemented")
 
 type Balancer interface {
@@ -80,11 +97,6 @@ type Balancer interface {
 
 type KeyValidator interface {
 	ValidateKey(key string) error
-	KeyHelp() string
-}
-
-type Features interface {
-	Features() []string
 }
 
 type ConfigType string
@@ -106,7 +118,3 @@ type ConfigTemplate struct {
 }
 
 type ConfigTemplates = map[string]ConfigTemplate
-
-type Config interface {
-	ConfigTemplates() ConfigTemplates
-}

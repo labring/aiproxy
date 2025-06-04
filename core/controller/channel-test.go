@@ -40,7 +40,7 @@ var (
 func guessModelConfig(modelName string) model.ModelConfig {
 	modelConfigCacheOnce.Do(func() {
 		for _, c := range adaptors.ChannelAdaptor {
-			for _, m := range c.GetModelList() {
+			for _, m := range c.Metadata().Models {
 				if _, ok := modelConfigCache[m.Model]; !ok {
 					modelConfigCache[m.Model] = m
 				}
@@ -55,7 +55,11 @@ func guessModelConfig(modelName string) model.ModelConfig {
 }
 
 // testSingleModel tests a single model in the channel
-func testSingleModel(mc *model.ModelCaches, channel *model.Channel, modelName string) (*model.ChannelTest, error) {
+func testSingleModel(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+) (*model.ChannelTest, error) {
 	modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
 	if !ok {
 		return nil, errors.New(modelName + " model config not found")
@@ -184,10 +188,22 @@ func TestChannel(c *gin.Context) {
 
 	ct, err := testSingleModel(model.LoadModelCaches(), channel, modelName)
 	if err != nil {
-		log.Errorf("failed to test channel %s(%d) model %s: %s", channel.Name, channel.ID, modelName, err.Error())
+		log.Errorf(
+			"failed to test channel %s(%d) model %s: %s",
+			channel.Name,
+			channel.ID,
+			modelName,
+			err.Error(),
+		)
 		c.JSON(http.StatusOK, middleware.APIResponse{
 			Success: false,
-			Message: fmt.Sprintf("failed to test channel %s(%d) model %s: %s", channel.Name, channel.ID, modelName, err.Error()),
+			Message: fmt.Sprintf(
+				"failed to test channel %s(%d) model %s: %s",
+				channel.Name,
+				channel.ID,
+				modelName,
+				err.Error(),
+			),
 		})
 		return
 	}
@@ -208,7 +224,12 @@ type TestResult struct {
 	Success bool               `json:"success"`
 }
 
-func processTestResult(mc *model.ModelCaches, channel *model.Channel, modelName string, returnSuccess bool, successResponseBody bool) *TestResult {
+func processTestResult(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	returnSuccess, successResponseBody bool,
+) *TestResult {
 	ct, err := testSingleModel(mc, channel, modelName)
 
 	e := &utils.UnsupportedModelTypeError{}
@@ -221,7 +242,13 @@ func processTestResult(mc *model.ModelCaches, channel *model.Channel, modelName 
 		Success: err == nil,
 	}
 	if err != nil {
-		result.Message = fmt.Sprintf("failed to test channel %s(%d) model %s: %s", channel.Name, channel.ID, modelName, err.Error())
+		result.Message = fmt.Sprintf(
+			"failed to test channel %s(%d) model %s: %s",
+			channel.Name,
+			channel.ID,
+			modelName,
+			err.Error(),
+		)
 		return result
 	}
 
@@ -324,7 +351,12 @@ func TestChannelModels(c *gin.Context) {
 	if !hasError.Load() {
 		err := model.ClearLastTestErrorAt(channel.ID)
 		if err != nil {
-			log.Errorf("failed to clear last test error at for channel %s(%d): %s", channel.Name, channel.ID, err.Error())
+			log.Errorf(
+				"failed to clear last test error at for channel %s(%d): %s",
+				channel.Name,
+				channel.ID,
+				err.Error(),
+			)
 		}
 	}
 
@@ -442,7 +474,10 @@ func TestAllChannels(c *gin.Context) {
 }
 
 func tryTestChannel(channelID int, modelName string) bool {
-	return trylock.Lock(fmt.Sprintf("channel_test_lock:%d:%s", channelID, modelName), 30*time.Second)
+	return trylock.Lock(
+		fmt.Sprintf("channel_test_lock:%d:%s", channelID, modelName),
+		30*time.Second,
+	)
 }
 
 func AutoTestBannedModels() {
@@ -472,11 +507,29 @@ func AutoTestBannedModels() {
 			}
 			result, err := testSingleModel(mc, channel, modelName)
 			if err != nil {
-				notify.Error(fmt.Sprintf("channel %s (type: %d, id: %d) model %s test failed", channel.Name, channel.Type, channel.ID, modelName), err.Error())
+				notify.Error(
+					fmt.Sprintf(
+						"channel %s (type: %d, id: %d) model %s test failed",
+						channel.Name,
+						channel.Type,
+						channel.ID,
+						modelName,
+					),
+					err.Error(),
+				)
 				continue
 			}
 			if result.Success {
-				notify.Info(fmt.Sprintf("channel %s (type: %d, id: %d) model %s test success", channel.Name, channel.Type, channel.ID, modelName), "unban it")
+				notify.Info(
+					fmt.Sprintf(
+						"channel %s (type: %d, id: %d) model %s test success",
+						channel.Name,
+						channel.Type,
+						channel.ID,
+						modelName,
+					),
+					"unban it",
+				)
 				err = monitor.ClearChannelModelErrors(context.Background(), modelName, channel.ID)
 				if err != nil {
 					log.Errorf("clear channel errors failed: %+v", err)

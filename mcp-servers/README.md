@@ -167,7 +167,7 @@ Establishes a Server-Sent Events connection for testing the embed MCP server.
 #### Test Streamable Connection  
 
 ```http
-GET|POST|DELETE /api/test-embedmcp/{id}/streamable?key=adminkey&config[key]=value&reusing[key]=value
+GET|POST|DELETE /api/test-embedmcp/{id}?key=adminkey&config[key]=value&reusing[key]=value
 ```
 
 HTTP-based request/response interface for testing.
@@ -219,7 +219,7 @@ http://localhost:3000/api/test-embedmcp/message?key=adminkey&sessionId=abc123
 #### 3. Test Streamable Interface
 
 ```http
-http://localhost:3000/api/test-embedmcp/aiproxy-openapi/streamable?key=adminkey&config[host]=http://localhost:3000&reusing[authorization]=admin-key
+http://localhost:3000/api/test-embedmcp/aiproxy-openapi?key=adminkey&config[host]=http://localhost:3000&reusing[authorization]=admin-key
 ```
 
 ### Configuration Examples

@@ -954,7 +954,9 @@ var ModelList = []model.ModelConfig{
 		},
 		Config: model.NewModelConfig(
 			model.WithModelConfigMaxInputTokens(10000),
-			model.WithModelConfigSupportFormats([]string{"pcm", "wav", "opus", "speex", "aac", "amr"}),
+			model.WithModelConfigSupportFormats(
+				[]string{"pcm", "wav", "opus", "speex", "aac", "amr"},
+			),
 		),
 	},
 

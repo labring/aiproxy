@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -15,8 +16,16 @@ import (
 )
 
 type AwsAdapter interface {
-	ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error)
-	DoResponse(meta *meta.Meta, c *gin.Context) (usage *model.Usage, err adaptor.Error)
+	ConvertRequest(
+		meta *meta.Meta,
+		store adaptor.Store,
+		req *http.Request,
+	) (adaptor.ConvertResult, error)
+	DoResponse(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+	) (usage model.Usage, err adaptor.Error)
 }
 
 type AwsConfig struct {
@@ -39,8 +48,10 @@ func GetAwsConfigFromKey(key string) (*AwsConfig, error) {
 
 func AwsClient(config *AwsConfig) *bedrockruntime.Client {
 	return bedrockruntime.New(bedrockruntime.Options{
-		Region:      config.Region,
-		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(config.AK, config.SK, "")),
+		Region: config.Region,
+		Credentials: aws.NewCredentialsCache(
+			credentials.NewStaticCredentialsProvider(config.AK, config.SK, ""),
+		),
 	})
 }
 
@@ -57,7 +68,11 @@ const AwsClientKey = "aws_client"
 func AwsClientFromMeta(meta *meta.Meta) (*bedrockruntime.Client, error) {
 	awsClientI, ok := meta.Get(AwsClientKey)
 	if ok {
-		return awsClientI.(*bedrockruntime.Client), nil
+		v, ok := awsClientI.(*bedrockruntime.Client)
+		if !ok {
+			panic(fmt.Sprintf("aws client type error: %T, %v", v, v))
+		}
+		return v, nil
 	}
 	awsClient, err := awsClientFromKey(meta.Channel.Key)
 	if err != nil {

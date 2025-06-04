@@ -29,7 +29,7 @@ definitions:
     - ConfigTypeObject
   adaptors.AdaptorMeta:
     properties:
-      configTemplates:
+      config:
         $ref: '#/definitions/adaptor.ConfigTemplates'
       defaultBaseUrl:
         type: string
@@ -199,6 +199,29 @@ definitions:
           type: string
         type: array
     type: object
+  controller.GroupMCPResponse:
+    properties:
+      created_at:
+        type: string
+      endpoints:
+        $ref: '#/definitions/controller.MCPEndpoint'
+      group_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      openapi_config:
+        $ref: '#/definitions/model.MCPOpenAPIConfig'
+      proxy_config:
+        $ref: '#/definitions/model.GroupMCPProxyConfig'
+      status:
+        $ref: '#/definitions/model.GroupMCPStatus'
+      type:
+        $ref: '#/definitions/model.GroupMCPType'
+      update_at:
+        type: string
+    type: object
   controller.GroupResponse:
     properties:
       accessed_at:
@@ -229,6 +252,15 @@ definitions:
   controller.ImportChannelFromOneAPIRequest:
     properties:
       dsn:
+        type: string
+    type: object
+  controller.MCPEndpoint:
+    properties:
+      host:
+        type: string
+      sse:
+        type: string
+      streamable_http:
         type: string
     type: object
   controller.OpenAIModelPermission:
@@ -275,6 +307,43 @@ definitions:
           $ref: '#/definitions/controller.OpenAIModelPermission'
         type: array
       root:
+        type: string
+    type: object
+  controller.PublicMCPResponse:
+    properties:
+      created_at:
+        type: string
+      embed_config:
+        $ref: '#/definitions/model.MCPEmbeddingConfig'
+      endpoints:
+        $ref: '#/definitions/controller.MCPEndpoint'
+      id:
+        type: string
+      logo_url:
+        type: string
+      name:
+        type: string
+      openapi_config:
+        $ref: '#/definitions/model.MCPOpenAPIConfig'
+      price:
+        $ref: '#/definitions/model.MCPPrice'
+      proxy_config:
+        $ref: '#/definitions/model.PublicMCPProxyConfig'
+      readme:
+        type: string
+      readme_url:
+        type: string
+      repo_url:
+        type: string
+      status:
+        $ref: '#/definitions/model.PublicMCPStatus'
+      tags:
+        items:
+          type: string
+        type: array
+      type:
+        $ref: '#/definitions/model.PublicMCPType'
+      update_at:
         type: string
     type: object
   controller.SaveEmbedMCPRequest:
@@ -508,6 +577,9 @@ definitions:
     - 10
     - 11
     - 12
+    - 13
+    - 14
+    - 15
     type: integer
     x-enum-varnames:
     - Unknown
@@ -523,6 +595,9 @@ definitions:
     - Rerank
     - ParsePdf
     - Anthropic
+    - VideoGenerationsJobs
+    - VideoGenerationsGetJobs
+    - VideoGenerationsContent
   model.AnthropicMessageRequest:
     properties:
       messages:
@@ -530,13 +605,6 @@ definitions:
           $ref: '#/definitions/model.Message'
         type: array
       model:
-        type: string
-    type: object
-  model.Audio:
-    properties:
-      format:
-        type: string
-      voice:
         type: string
     type: object
   model.Channel:
@@ -626,6 +694,7 @@ definitions:
     enum:
     - 1
     - 3
+    - 4
     - 12
     - 13
     - 14
@@ -663,6 +732,7 @@ definitions:
     x-enum-varnames:
     - ChannelTypeOpenAI
     - ChannelTypeAzure
+    - ChannelTypeAzure2
     - ChannelTypeGoogleGeminiOpenAI
     - ChannelTypeBaiduV2
     - ChannelTypeAnthropic
@@ -878,19 +948,11 @@ definitions:
     type: object
   model.GeneralOpenAIRequest:
     properties:
-      audio:
-        $ref: '#/definitions/model.Audio'
-      dimensions:
-        type: integer
-      encoding_format:
-        type: string
       frequency_penalty:
         type: number
       function_call: {}
       functions: {}
       input: {}
-      instruction:
-        type: string
       logit_bias: {}
       logprobs:
         type: boolean
@@ -903,41 +965,24 @@ definitions:
           $ref: '#/definitions/model.Message'
         type: array
       metadata: {}
-      modalities:
-        items:
-          type: string
-        type: array
       model:
         type: string
-      "n":
-        type: integer
       num_ctx:
         type: integer
-      parallel_tool_calls:
-        type: boolean
-      prediction: {}
       presence_penalty:
         type: number
       prompt: {}
-      quality:
-        type: string
       response_format:
         $ref: '#/definitions/model.ResponseFormat'
       seed:
         type: number
-      service_tier:
-        type: string
       size:
         type: string
       stop: {}
-      store:
-        type: boolean
       stream:
         type: boolean
       stream_options:
         $ref: '#/definitions/model.StreamOptions'
-      style:
-        type: string
       temperature:
         type: number
       tool_choice: {}
@@ -1506,8 +1551,9 @@ definitions:
       per_request_price:
         type: number
       thinking_mode_output_price:
-        description: when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice
-          and OutputPriceUnit will be overwritten
+        description: |-
+          when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit
+          will be overwritten
         type: number
       thinking_mode_output_price_unit:
         type: integer
@@ -1604,16 +1650,16 @@ definitions:
     enum:
     - mcp_proxy_sse
     - mcp_proxy_streamable
-    - mcp_git_repo
+    - mcp_docs
     - mcp_openapi
     - mcp_embed
     type: string
     x-enum-comments:
-      PublicMCPTypeGitRepo: read only
+      PublicMCPTypeDocs: read only
     x-enum-varnames:
     - PublicMCPTypeProxySSE
     - PublicMCPTypeProxyStreamable
-    - PublicMCPTypeGitRepo
+    - PublicMCPTypeDocs
     - PublicMCPTypeOpenAPI
     - PublicMCPTypeEmbed
   model.RequestDetail:
@@ -1765,6 +1811,85 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  model.VideoGenerationJob:
+    properties:
+      created_at:
+        type: integer
+      expires_at:
+        type: integer
+      finish_reason:
+        type: string
+      finished_at:
+        type: integer
+      generations:
+        items:
+          $ref: '#/definitions/model.VideoGenerations'
+        type: array
+      height:
+        type: integer
+      id:
+        type: string
+      model:
+        type: string
+      n_seconds:
+        type: integer
+      n_variants:
+        type: integer
+      object:
+        type: string
+      prompt:
+        type: string
+      status:
+        $ref: '#/definitions/model.VideoGenerationJobStatus'
+      width:
+        type: integer
+    type: object
+  model.VideoGenerationJobRequest:
+    properties:
+      height:
+        type: integer
+      model:
+        type: string
+      n_seconds:
+        type: integer
+      n_variants:
+        type: integer
+      prompt:
+        type: string
+      width:
+        type: integer
+    type: object
+  model.VideoGenerationJobStatus:
+    enum:
+    - queued
+    - processing
+    - running
+    - succeeded
+    type: string
+    x-enum-varnames:
+    - VideoGenerationJobStatusQueued
+    - VideoGenerationJobStatusProcessing
+    - VideoGenerationJobStatusRunning
+    - VideoGenerationJobStatusSucceeded
+  model.VideoGenerations:
+    properties:
+      created_at:
+        type: integer
+      height:
+        type: integer
+      id:
+        type: string
+      job_id:
+        type: string
+      n_seconds:
+        type: integer
+      object:
+        type: string
+      prompt:
+        type: string
+      width:
+        type: integer
     type: object
   openai.SubscriptionResponse:
     properties:
@@ -3783,7 +3908,7 @@ paths:
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/model.GroupMCP'
+                    $ref: '#/definitions/controller.GroupMCPResponse'
                   type: array
               type: object
       security:
@@ -3817,7 +3942,7 @@ paths:
             - $ref: '#/definitions/middleware.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/model.GroupMCP'
+                  $ref: '#/definitions/controller.GroupMCPResponse'
               type: object
       security:
       - ApiKeyAuth: []
@@ -3873,7 +3998,7 @@ paths:
             - $ref: '#/definitions/middleware.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/model.GroupMCP'
+                  $ref: '#/definitions/controller.GroupMCPResponse'
               type: object
       security:
       - ApiKeyAuth: []
@@ -3911,7 +4036,7 @@ paths:
             - $ref: '#/definitions/middleware.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/model.GroupMCP'
+                  $ref: '#/definitions/controller.GroupMCPResponse'
               type: object
       security:
       - ApiKeyAuth: []
@@ -3952,6 +4077,33 @@ paths:
       summary: Update Group MCP status
       tags:
       - mcp
+  /api/mcp/group/all:
+    get:
+      description: Get all Group MCPs with filtering
+      parameters:
+      - description: MCP status
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupMCPResponse'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Group MCPs
+      tags:
+      - mcp
   /api/mcp/public/:
     get:
       description: Get a list of MCPs with pagination and filtering
@@ -3987,7 +4139,7 @@ paths:
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/model.PublicMCP'
+                    $ref: '#/definitions/controller.PublicMCPResponse'
                   type: array
               type: object
       security:
@@ -4012,7 +4164,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/middleware.APIResponse'
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.PublicMCPResponse'
+              type: object
       security:
       - ApiKeyAuth: []
       summary: Create MCP
@@ -4057,7 +4214,7 @@ paths:
             - $ref: '#/definitions/middleware.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/model.PublicMCP'
+                  $ref: '#/definitions/controller.PublicMCPResponse'
               type: object
       security:
       - ApiKeyAuth: []
@@ -4086,7 +4243,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/middleware.APIResponse'
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.PublicMCPResponse'
+              type: object
       security:
       - ApiKeyAuth: []
       summary: Update MCP
@@ -4183,6 +4345,33 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Update MCP status
+      tags:
+      - mcp
+  /api/mcp/public/all:
+    get:
+      description: Get all MCPs with filtering
+      parameters:
+      - description: MCP status
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.PublicMCPResponse'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all MCPs
       tags:
       - mcp
   /api/model_config/:
@@ -4568,6 +4757,7 @@ paths:
         enum:
         - 1
         - 3
+        - 4
         - 12
         - 13
         - 14
@@ -5122,34 +5312,7 @@ paths:
       summary: Get status
       tags:
       - misc
-  /api/test-embedmcp/{id}/sse:
-    get:
-      description: Test Embed MCP SSE Server
-      parameters:
-      - description: MCP ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Initial configuration parameters (e.g., config[host]=http://localhost:3000)
-        in: query
-        name: config[key]
-        type: string
-      - description: Reusing configuration parameters (e.g., reusing[authorization]=apikey)
-        in: query
-        name: reusing[key]
-        type: string
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-      security:
-      - ApiKeyAuth: []
-      summary: Test Embed MCP SSE Server
-      tags:
-      - embedmcp
-  /api/test-embedmcp/{id}/streamable:
+  /api/test-embedmcp/{id}:
     delete:
       consumes:
       - application/json
@@ -5160,7 +5323,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Initial configuration parameters (e.g., config[host]=http://localhost:3000)
+      - description: Initial configuration parameters (e.g. config[host]=http://localhost:3000)
         in: query
         name: config[key]
         type: string
@@ -5190,7 +5353,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Initial configuration parameters (e.g., config[host]=http://localhost:3000)
+      - description: Initial configuration parameters (e.g. config[host]=http://localhost:3000)
         in: query
         name: config[key]
         type: string
@@ -5220,7 +5383,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Initial configuration parameters (e.g., config[host]=http://localhost:3000)
+      - description: Initial configuration parameters (e.g. config[host]=http://localhost:3000)
         in: query
         name: config[key]
         type: string
@@ -5238,6 +5401,33 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Test Embed MCP Streamable Server
+      tags:
+      - embedmcp
+  /api/test-embedmcp/{id}/sse:
+    get:
+      description: Test Embed MCP SSE Server
+      parameters:
+      - description: MCP ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Initial configuration parameters (e.g. config[host]=http://localhost:3000)
+        in: query
+        name: config[key]
+        type: string
+      - description: Reusing configuration parameters (e.g. reusing[authorization]=apikey)
+        in: query
+        name: reusing[key]
+        type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      security:
+      - ApiKeyAuth: []
+      summary: Test Embed MCP SSE Server
       tags:
       - embedmcp
   /api/test-embedmcp/message:
@@ -5895,41 +6085,51 @@ paths:
       summary: Search tokens
       tags:
       - tokens
+  /mcp:
+    delete:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Host MCP Streamable Server
+    get:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Host MCP Streamable Server
+    post:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Host MCP Streamable Server
+  /mcp/group/{id}:
+    delete:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Group MCP Streamable Server
+    get:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Group MCP Streamable Server
+    post:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Group MCP Streamable Server
   /mcp/group/{id}/sse:
     get:
       responses: {}
       security:
       - ApiKeyAuth: []
       summary: Group MCP SSE Server
-  /mcp/group/{id}/streamable:
-    delete:
-      responses: {}
-      security:
-      - ApiKeyAuth: []
-      summary: Group MCP Streamable Server
-    get:
-      responses: {}
-      security:
-      - ApiKeyAuth: []
-      summary: Group MCP Streamable Server
-    post:
-      responses: {}
-      security:
-      - ApiKeyAuth: []
-      summary: Group MCP Streamable Server
   /mcp/group/message:
     post:
       responses: {}
       security:
       - ApiKeyAuth: []
       summary: MCP SSE Proxy
-  /mcp/public/{id}/sse:
-    get:
-      responses: {}
-      security:
-      - ApiKeyAuth: []
-      summary: Public MCP SSE Server
-  /mcp/public/{id}/streamable:
+  /mcp/public/{id}:
     delete:
       responses: {}
       security:
@@ -5945,8 +6145,26 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Public MCP Streamable Server
+  /mcp/public/{id}/sse:
+    get:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Public MCP SSE Server
   /mcp/public/message:
     post:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Public MCP SSE Server
+  /message:
+    post:
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Public MCP SSE Server
+  /sse:
+    get:
       responses: {}
       security:
       - ApiKeyAuth: []
@@ -6532,6 +6750,141 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Rerank
+      tags:
+      - relay
+  /v1/video/generations/{id}/content/video:
+    get:
+      description: VideoGenerationsContent
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.VideoGenerationJobRequest'
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: video binary
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: file
+      security:
+      - ApiKeyAuth: []
+      summary: VideoGenerationsContent
+      tags:
+      - relay
+  /v1/video/generations/jobs:
+    post:
+      description: VideoGenerationsJobs
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.VideoGenerationJobRequest'
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            $ref: '#/definitions/model.VideoGenerationJob'
+      security:
+      - ApiKeyAuth: []
+      summary: VideoGenerationsJobs
+      tags:
+      - relay
+  /v1/video/generations/jobs/{id}:
+    get:
+      description: VideoGenerationsGetJobs
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.VideoGenerationJobRequest'
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            $ref: '#/definitions/model.VideoGenerationJob'
+      security:
+      - ApiKeyAuth: []
+      summary: VideoGenerationsGetJobs
       tags:
       - relay
 securityDefinitions:

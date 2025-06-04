@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,10 @@ import (
 // Deprecated: Use openai.ConvertRequest instead
 // /api/v1/services/embeddings/text-embedding/text-embedding
 
-func ConvertEmbeddingsRequest(meta *meta.Meta, req *http.Request) (string, http.Header, io.Reader, error) {
+func ConvertEmbeddingsRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (string, http.Header, io.Reader, error) {
 	var reqMap map[string]any
 	err := common.UnmarshalBodyReusable(req, &reqMap)
 	if err != nil {
@@ -56,7 +60,10 @@ func ConvertEmbeddingsRequest(meta *meta.Meta, req *http.Request) (string, http.
 	return http.MethodPost, nil, bytes.NewReader(jsonData), nil
 }
 
-func embeddingResponse2OpenAI(meta *meta.Meta, response *EmbeddingResponse) *relaymodel.EmbeddingResponse {
+func embeddingResponse2OpenAI(
+	meta *meta.Meta,
+	response *EmbeddingResponse,
+) *relaymodel.EmbeddingResponse {
 	openAIEmbeddingResponse := relaymodel.EmbeddingResponse{
 		Object: "list",
 		Data:   make([]*relaymodel.EmbeddingResponseItem, 0, 1),
@@ -65,28 +72,43 @@ func embeddingResponse2OpenAI(meta *meta.Meta, response *EmbeddingResponse) *rel
 	}
 
 	for i, embedding := range response.Output.Embeddings {
-		openAIEmbeddingResponse.Data = append(openAIEmbeddingResponse.Data, &relaymodel.EmbeddingResponseItem{
-			Object:    "embedding",
-			Index:     i,
-			Embedding: embedding.Embedding,
-		})
+		openAIEmbeddingResponse.Data = append(
+			openAIEmbeddingResponse.Data,
+			&relaymodel.EmbeddingResponseItem{
+				Object:    "embedding",
+				Index:     i,
+				Embedding: embedding.Embedding,
+			},
+		)
 	}
 	return &openAIEmbeddingResponse
 }
 
-func EmbeddingsHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func EmbeddingsHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := middleware.GetLogger(c)
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "read_response_body_failed", resp.StatusCode)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			resp.StatusCode,
+		)
 	}
 	var respBody EmbeddingResponse
 	err = sonic.Unmarshal(responseBody, &respBody)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "unmarshal_response_body_failed", resp.StatusCode)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			resp.StatusCode,
+		)
 	}
 	if respBody.Usage.PromptTokens == 0 {
 		respBody.Usage.PromptTokens = respBody.Usage.TotalTokens
@@ -94,11 +116,18 @@ func EmbeddingsHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*m
 	openaiResponse := embeddingResponse2OpenAI(meta, &respBody)
 	data, err := sonic.Marshal(openaiResponse)
 	if err != nil {
-		return openaiResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "marshal_response_body_failed", resp.StatusCode)
+		return openaiResponse.ToModelUsage(), relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			resp.StatusCode,
+		)
 	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	_, err = c.Writer.Write(data)
 	if err != nil {
 		log.Warnf("write response body failed: %v", err)
 	}
-	return openaiResponse.Usage.ToModelUsage(), nil
+	return openaiResponse.ToModelUsage(), nil
 }

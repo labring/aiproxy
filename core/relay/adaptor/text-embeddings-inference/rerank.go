@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -17,62 +18,79 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-func ConvertRerankRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertRerankRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	node, err := common.UnmarshalBody2Node(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse request body: %w", err)
+		return adaptor.ConvertResult{}, fmt.Errorf("failed to parse request body: %w", err)
 	}
 
 	// Set the actual model in the request
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	// Get the documents array and rename it to texts
 	documentsNode := node.Get("documents")
 	if !documentsNode.Exists() {
-		return nil, errors.New("documents field not found")
+		return adaptor.ConvertResult{}, errors.New("documents field not found")
 	}
 
 	// Set the texts field with the documents value
 	_, err = node.Set("texts", *documentsNode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set texts field: %w", err)
+		return adaptor.ConvertResult{}, fmt.Errorf("failed to set texts field: %w", err)
 	}
 
 	// Remove the documents field
 	_, err = node.Unset("documents")
 	if err != nil {
-		return nil, fmt.Errorf("failed to remove documents field: %w", err)
+		return adaptor.ConvertResult{}, fmt.Errorf(
+			"failed to remove documents field: %w",
+			err,
+		)
 	}
 
 	returnDocumentsNode := node.Get("return_documents")
 	if returnDocumentsNode.Exists() {
 		returnDocuments, err := returnDocumentsNode.Bool()
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal return_documents field: %w", err)
+			return adaptor.ConvertResult{}, fmt.Errorf(
+				"failed to unmarshal return_documents field: %w",
+				err,
+			)
 		}
 		_, err = node.Unset("return_documents")
 		if err != nil {
-			return nil, fmt.Errorf("failed to remove return_documents field: %w", err)
+			return adaptor.ConvertResult{}, fmt.Errorf(
+				"failed to remove return_documents field: %w",
+				err,
+			)
 		}
 		_, err = node.Set("return_text", ast.NewBool(returnDocuments))
 		if err != nil {
-			return nil, fmt.Errorf("failed to set return_text field: %w", err)
+			return adaptor.ConvertResult{}, fmt.Errorf(
+				"failed to set return_text field: %w",
+				err,
+			)
 		}
 	}
 
 	// Convert back to JSON
 	jsonData, err := node.MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return adaptor.ConvertResult{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(jsonData),
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(jsonData))},
+		},
+		Body: bytes.NewReader(jsonData),
 	}, nil
 }
 
@@ -98,9 +116,13 @@ func (rri *RerankResponseItem) ToRerankModel() *relaymodel.RerankResult {
 	}
 }
 
-func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func RerankHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, RerankErrorHanlder(resp)
+		return model.Usage{}, RerankErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -110,10 +132,14 @@ func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 	respSlice := RerankResponse{}
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&respSlice)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
-	usage := &model.Usage{
+	usage := model.Usage{
 		InputTokens: meta.RequestUsage.InputTokens,
 		TotalTokens: meta.RequestUsage.InputTokens,
 	}
@@ -135,9 +161,15 @@ func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 
 	jsonResponse, err := sonic.Marshal(rerankResp)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return usage, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, err = c.Writer.Write(jsonResponse)
 	if err != nil {
 		log.Warnf("write response body failed: %v", err)

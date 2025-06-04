@@ -28,7 +28,7 @@ func WrapperAnthropicError(err error, typ string, statusCode int) adaptor.Error 
 	return WrapperAnthropicErrorWithMessage(err.Error(), typ, statusCode)
 }
 
-func WrapperAnthropicErrorWithMessage(message string, typ string, statusCode int) adaptor.Error {
+func WrapperAnthropicErrorWithMessage(message, typ string, statusCode int) adaptor.Error {
 	return NewAnthropicError(statusCode, AnthropicError{
 		Type:    typ,
 		Message: message,

@@ -10,6 +10,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/network"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -118,7 +119,7 @@ func buildTokenResponses(tokens []*model.Token) []*TokenResponse {
 //	@Success		200			{object}	middleware.APIResponse{data=map[string]any{tokens=[]TokenResponse,total=int}}
 //	@Router			/api/tokens/ [get]
 func GetTokens(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	group := c.Query("group")
 	order := c.Query("order")
 	status, _ := strconv.Atoi(c.Query("status"))
@@ -156,7 +157,7 @@ func GetGroupTokens(c *gin.Context) {
 		return
 	}
 
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	order := c.Query("order")
 	status, _ := strconv.Atoi(c.Query("status"))
 
@@ -190,7 +191,7 @@ func GetGroupTokens(c *gin.Context) {
 //	@Success		200			{object}	middleware.APIResponse{data=map[string]any{tokens=[]TokenResponse,total=int}}
 //	@Router			/api/tokens/search [get]
 func SearchTokens(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	keyword := c.Query("keyword")
 	order := c.Query("order")
 	name := c.Query("name")
@@ -198,7 +199,16 @@ func SearchTokens(c *gin.Context) {
 	status, _ := strconv.Atoi(c.Query("status"))
 	group := c.Query("group")
 
-	tokens, total, err := model.SearchTokens(group, keyword, page, perPage, order, status, name, key)
+	tokens, total, err := model.SearchTokens(
+		group,
+		keyword,
+		page,
+		perPage,
+		order,
+		status,
+		name,
+		key,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -234,14 +244,23 @@ func SearchGroupTokens(c *gin.Context) {
 		return
 	}
 
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	keyword := c.Query("keyword")
 	order := c.Query("order")
 	name := c.Query("name")
 	key := c.Query("key")
 	status, _ := strconv.Atoi(c.Query("status"))
 
-	tokens, total, err := model.SearchGroupTokens(group, keyword, page, perPage, order, status, name, key)
+	tokens, total, err := model.SearchGroupTokens(
+		group,
+		keyword,
+		page,
+		perPage,
+		order,
+		status,
+		name,
+		key,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

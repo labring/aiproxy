@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/relay/mode"
-
 	// relay model used by swagger
 	_ "github.com/labring/aiproxy/core/relay/model"
 )
@@ -282,5 +281,77 @@ func ParsePdf() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.NewDistribute(mode.ParsePdf),
 		NewRelay(mode.ParsePdf),
+	}
+}
+
+// VideoGenerationsJobs godoc
+//
+//	@Summary		VideoGenerationsJobs
+//	@Description	VideoGenerationsJobs
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
+//	@Success		200				{object}	model.VideoGenerationJob
+//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Router			/v1/video/generations/jobs [post]
+func VideoGenerationsJobs() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.VideoGenerationsJobs),
+		NewRelay(mode.VideoGenerationsJobs),
+	}
+}
+
+// VideoGenerationsGetJobs godoc
+//
+//	@Summary		VideoGenerationsGetJobs
+//	@Description	VideoGenerationsGetJobs
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
+//	@Success		200				{object}	model.VideoGenerationJob
+//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Router			/v1/video/generations/jobs/{id} [get]
+func VideoGenerationsGetJobs() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.VideoGenerationsGetJobs),
+		NewRelay(mode.VideoGenerationsGetJobs),
+	}
+}
+
+// VideoGenerationsContent godoc
+//
+//	@Summary		VideoGenerationsContent
+//	@Description	VideoGenerationsContent
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
+//	@Success		200				{file}		file							"video binary"
+//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Router			/v1/video/generations/{id}/content/video [get]
+func VideoGenerationsContent() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.VideoGenerationsContent),
+		NewRelay(mode.VideoGenerationsContent),
 	}
 }

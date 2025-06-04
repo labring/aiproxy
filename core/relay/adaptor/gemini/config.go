@@ -6,8 +6,6 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 )
 
-var _ adaptor.Config = (*Adaptor)(nil)
-
 type Config struct {
 	Safety string `json:"safety"`
 }
@@ -24,10 +22,17 @@ var ConfigTemplates = adaptor.ConfigTemplates{
 				return fmt.Errorf("invalid safety settings type: %v, must be a string", a)
 			}
 			switch s {
-			case "BLOCK_NONE", "BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "HARM_BLOCK_THRESHOLD_UNSPECIFIED":
+			case "BLOCK_NONE",
+				"BLOCK_ONLY_HIGH",
+				"BLOCK_MEDIUM_AND_ABOVE",
+				"BLOCK_LOW_AND_ABOVE",
+				"HARM_BLOCK_THRESHOLD_UNSPECIFIED":
 				return nil
 			default:
-				return fmt.Errorf("invalid safety settings: %s, must be one of: BLOCK_NONE, BLOCK_ONLY_HIGH, BLOCK_MEDIUM_AND_ABOVE, BLOCK_LOW_AND_ABOVE, HARM_BLOCK_THRESHOLD_UNSPECIFIED", s)
+				return fmt.Errorf(
+					"invalid safety settings: %s, must be one of: BLOCK_NONE, BLOCK_ONLY_HIGH, BLOCK_MEDIUM_AND_ABOVE, BLOCK_LOW_AND_ABOVE, HARM_BLOCK_THRESHOLD_UNSPECIFIED",
+					s,
+				)
 			}
 		},
 	},

@@ -1,26 +1,11 @@
 package config
 
 import (
-	"os"
 	"slices"
 	"strconv"
 	"sync/atomic"
 
 	"github.com/labring/aiproxy/core/common/env"
-)
-
-var (
-	DebugEnabled    = env.Bool("DEBUG", false)
-	DebugSQLEnabled = env.Bool("DEBUG_SQL", false)
-)
-
-var (
-	DisableAutoMigrateDB = env.Bool("DISABLE_AUTO_MIGRATE_DB", false)
-	AdminKey             = os.Getenv("ADMIN_KEY")
-	WebPath              = os.Getenv("WEB_PATH")
-	DisableWeb           = env.Bool("DISABLE_WEB", false)
-	FfmpegEnabled        = env.Bool("FFMPEG_ENABLED", false)
-	InternalToken        = os.Getenv("INTERNAL_TOKEN")
 )
 
 var (
@@ -35,32 +20,23 @@ var (
 	notifyNote                   atomic.Value
 	ipGroupsThreshold            int64
 	ipGroupsBanThreshold         int64
-)
+	retryTimes                   atomic.Int64
+	defaultChannelModels         atomic.Value
+	defaultChannelModelMapping   atomic.Value
+	groupMaxTokenNum             atomic.Int64
+	groupConsumeLevelRatio       atomic.Value
 
-var (
-	retryTimes         atomic.Int64
-	disableModelConfig = env.Bool("DISABLE_MODEL_CONFIG", false)
+	publicMCPHost atomic.Value
+	groupMCPHost  atomic.Value
 )
-
-var (
-	defaultChannelModels       atomic.Value
-	defaultChannelModelMapping atomic.Value
-	groupMaxTokenNum           atomic.Int64
-	groupConsumeLevelRatio     atomic.Value
-)
-
-var billingEnabled atomic.Bool
 
 func init() {
 	defaultChannelModels.Store(make(map[int][]string))
 	defaultChannelModelMapping.Store(make(map[int]map[string]string))
 	groupConsumeLevelRatio.Store(make(map[float64]float64))
-	billingEnabled.Store(true)
-	notifyNote.Store(os.Getenv("NOTIFY_NOTE"))
-}
-
-func GetDisableModelConfig() bool {
-	return disableModelConfig
+	notifyNote.Store("")
+	publicMCPHost.Store("")
+	groupMCPHost.Store("")
 }
 
 func GetRetryTimes() int64 {
@@ -215,15 +191,6 @@ func SetGroupMaxTokenNum(num int64) {
 	groupMaxTokenNum.Store(num)
 }
 
-func GetBillingEnabled() bool {
-	return billingEnabled.Load()
-}
-
-func SetBillingEnabled(enabled bool) {
-	enabled = env.Bool("BILLING_ENABLED", enabled)
-	billingEnabled.Store(enabled)
-}
-
 func GetNotifyNote() string {
 	n, _ := notifyNote.Load().(string)
 	return n
@@ -232,4 +199,24 @@ func GetNotifyNote() string {
 func SetNotifyNote(note string) {
 	note = env.String("NOTIFY_NOTE", note)
 	notifyNote.Store(note)
+}
+
+func GetPublicMCPHost() string {
+	h, _ := publicMCPHost.Load().(string)
+	return h
+}
+
+func SetPublicMCPHost(host string) {
+	host = env.String("PUBLIC_MCP_HOST", host)
+	publicMCPHost.Store(host)
+}
+
+func GetGroupMCPHost() string {
+	h, _ := groupMCPHost.Load().(string)
+	return h
+}
+
+func SetGroupMCPHost(host string) {
+	host = env.String("GROUP_MCP_HOST", host)
+	groupMCPHost.Store(host)
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/labring/aiproxy/core/docs"
 	mcpservers "github.com/labring/aiproxy/mcp-servers"
 	"github.com/labring/aiproxy/openapi-mcp/convert"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 var configTemplates = map[string]mcpservers.ConfigTemplate{
@@ -53,22 +52,10 @@ func getParser() *convert.Parser {
 	return parser
 }
 
-func NewServer(config map[string]string, reusingConfig map[string]string) (*server.MCPServer, error) {
+func NewServer(config, reusingConfig map[string]string) (mcpservers.Server, error) {
 	converter := convert.NewConverter(getParser(), convert.Options{
 		OpenAPIFrom:   config["host"],
 		Authorization: reusingConfig["authorization"],
 	})
 	return converter.Convert()
-}
-
-// need import in mcpregister/init.go
-func init() {
-	mcpservers.Register(
-		mcpservers.NewEmbedMcp(
-			"aiproxy-openapi",
-			"AI Proxy OpenAPI",
-			NewServer,
-			mcpservers.WithConfigTemplates(configTemplates),
-		),
-	)
 }

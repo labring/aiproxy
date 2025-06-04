@@ -46,12 +46,14 @@ if [ ${#directories[@]} -eq 0 ]; then
     exit 0
 fi
 
-echo "Found ${#directories[@]} directories to run golangci-lint --fix:"
+echo "Found ${#directories[@]} directories to run golangci-lint-v2 --fix:"
 for dir in "${directories[@]}"; do
     echo "  - $dir"
 done
 
 echo
+
+has_error=false
 
 for dir in "${directories[@]}"; do
     echo "Processing directory: $dir"
@@ -66,14 +68,19 @@ for dir in "${directories[@]}"; do
         exit 1
     fi
 
-    if (cd "$dir" && golangci-lint run --fix --out-format colored-line-number --max-issues-per-linter 0 --max-same-issues 0 --config ./.golangci.yml); then
+    # --fix will ignore some issues, so we run it twice
+    if (cd "$dir" && golangci-lint-v2 run --fix && golangci-lint-v2 run); then
         echo "Successfully fixed lint issues in '$dir'"
     else
         echo "Failed to fix lint issues in '$dir'"
-        exit 1
+        has_error=true
     fi
 
     echo
 done
 
 go work sync
+
+if [ "$has_error" = true ]; then
+    exit 1
+fi

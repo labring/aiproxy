@@ -20,7 +20,7 @@ type Adaptor struct {
 
 const baseURL = "https://openrouter.ai/api/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
@@ -88,7 +88,12 @@ func handlerPreHandler(_ *meta.Meta, node *ast.Node) error {
 	return nil
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
@@ -96,10 +101,15 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 		}
 		return openai.Handler(meta, c, resp, handlerPreHandler)
 	default:
-		return openai.DoResponse(meta, c, resp)
+		return openai.DoResponse(meta, store, c, resp)
 	}
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return openai.ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"The `reasoning` field is converted to `reasoning_content`",
+		},
+		Models: openai.ModelList,
+	}
 }

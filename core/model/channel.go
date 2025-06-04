@@ -69,23 +69,23 @@ func (c *ChannelConfig) Get(key ...any) (ast.Node, error) {
 type Channel struct {
 	DeletedAt               gorm.DeletedAt    `gorm:"index"                              json:"-"`
 	CreatedAt               time.Time         `gorm:"index"                              json:"created_at"`
-	LastTestErrorAt         time.Time         `json:"last_test_error_at"`
+	LastTestErrorAt         time.Time         `                                          json:"last_test_error_at"`
 	ChannelTests            []*ChannelTest    `gorm:"foreignKey:ChannelID;references:ID" json:"channel_tests,omitempty"`
-	BalanceUpdatedAt        time.Time         `json:"balance_updated_at"`
+	BalanceUpdatedAt        time.Time         `                                          json:"balance_updated_at"`
 	ModelMapping            map[string]string `gorm:"serializer:fastjson;type:text"      json:"model_mapping"`
 	Key                     string            `gorm:"type:text;index"                    json:"key"`
 	Name                    string            `gorm:"index"                              json:"name"`
 	BaseURL                 string            `gorm:"index"                              json:"base_url"`
 	Models                  []string          `gorm:"serializer:fastjson;type:text"      json:"models"`
-	Balance                 float64           `json:"balance"`
+	Balance                 float64           `                                          json:"balance"`
 	ID                      int               `gorm:"primaryKey"                         json:"id"`
 	UsedAmount              float64           `gorm:"index"                              json:"used_amount"`
 	RequestCount            int               `gorm:"index"                              json:"request_count"`
 	Status                  int               `gorm:"default:1;index"                    json:"status"`
 	Type                    ChannelType       `gorm:"default:0;index"                    json:"type"`
-	Priority                int32             `json:"priority"`
-	EnabledAutoBalanceCheck bool              `json:"enabled_auto_balance_check"`
-	BalanceThreshold        float64           `json:"balance_threshold"`
+	Priority                int32             `                                          json:"priority"`
+	EnabledAutoBalanceCheck bool              `                                          json:"enabled_auto_balance_check"`
+	BalanceThreshold        float64           `                                          json:"balance_threshold"`
 	Config                  *ChannelConfig    `gorm:"serializer:fastjson;type:text"      json:"config,omitempty"`
 	Sets                    []string          `gorm:"serializer:fastjson;type:text"      json:"sets,omitempty"`
 }
@@ -120,7 +120,7 @@ func (c *Channel) GetPriority() int32 {
 }
 
 func GetModelConfigWithModels(models []string) ([]string, []string, error) {
-	if len(models) == 0 || config.GetDisableModelConfig() {
+	if len(models) == 0 || config.DisableModelConfig {
 		return models, nil, nil
 	}
 
@@ -190,7 +190,16 @@ func (c *Channel) MarshalJSON() ([]byte, error) {
 func getChannelOrder(order string) string {
 	prefix, suffix, _ := strings.Cut(order, "-")
 	switch prefix {
-	case "name", "type", "created_at", "status", "test_at", "balance_updated_at", "used_amount", "request_count", "priority", "id":
+	case "name",
+		"type",
+		"created_at",
+		"status",
+		"test_at",
+		"balance_updated_at",
+		"used_amount",
+		"request_count",
+		"priority",
+		"id":
 		switch suffix {
 		case "asc":
 			return prefix + " asc"
@@ -208,7 +217,12 @@ func GetAllChannels() (channels []*Channel, err error) {
 	return channels, err
 }
 
-func GetChannels(page int, perPage int, id int, name string, key string, channelType int, baseURL string, order string) (channels []*Channel, total int64, err error) {
+func GetChannels(
+	page, perPage, id int,
+	name, key string,
+	channelType int,
+	baseURL, order string,
+) (channels []*Channel, total int64, err error) {
 	tx := DB.Model(&Channel{})
 	if id != 0 {
 		tx = tx.Where("id = ?", id)
@@ -237,7 +251,13 @@ func GetChannels(page int, perPage int, id int, name string, key string, channel
 	return channels, total, err
 }
 
-func SearchChannels(keyword string, page int, perPage int, id int, name string, key string, channelType int, baseURL string, order string) (channels []*Channel, total int64, err error) {
+func SearchChannels(
+	keyword string,
+	page, perPage, id int,
+	name, key string,
+	channelType int,
+	baseURL, order string,
+) (channels []*Channel, total int64, err error) {
 	tx := DB.Model(&Channel{})
 
 	// Handle exact match conditions for non-zero values
@@ -384,15 +404,27 @@ func UpdateChannel(channel *Channel) (err error) {
 }
 
 func ClearLastTestErrorAt(id int) error {
-	result := DB.Model(&Channel{}).Where("id = ?", id).Update("last_test_error_at", gorm.Expr("NULL"))
+	result := DB.Model(&Channel{}).
+		Where("id = ?", id).
+		Update("last_test_error_at", gorm.Expr("NULL"))
 	return HandleUpdateResult(result, ErrChannelNotFound)
 }
 
-func (c *Channel) UpdateModelTest(testAt time.Time, model, actualModel string, mode mode.Mode, took float64, success bool, response string, code int) (*ChannelTest, error) {
+func (c *Channel) UpdateModelTest(
+	testAt time.Time,
+	model, actualModel string,
+	mode mode.Mode,
+	took float64,
+	success bool,
+	response string,
+	code int,
+) (*ChannelTest, error) {
 	var ct *ChannelTest
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if !success {
-			result := tx.Model(&Channel{}).Where("id = ?", c.ID).Update("last_test_error_at", testAt)
+			result := tx.Model(&Channel{}).
+				Where("id = ?", c.ID).
+				Update("last_test_error_at", testAt)
 			if err := HandleUpdateResult(result, ErrChannelNotFound); err != nil {
 				return err
 			}
@@ -463,7 +495,7 @@ func DeleteChannelsByIDs(ids []int) (err error) {
 	})
 }
 
-func UpdateChannelStatusByID(id int, status int) error {
+func UpdateChannelStatusByID(id, status int) error {
 	result := DB.Model(&Channel{}).
 		Where("id = ?", id).
 		Update("status", status)

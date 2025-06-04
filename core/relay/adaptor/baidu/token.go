@@ -35,7 +35,11 @@ func GetAccessToken(ctx context.Context, apiKey string) (string, error) {
 		log.Errorf("get baidu access token failed: %v", err)
 		return "", errors.New("get baidu access token failed")
 	}
-	tokenCache.Set(apiKey, accessToken.AccessToken, time.Duration(accessToken.ExpiresIn)*time.Second-time.Minute*10)
+	tokenCache.Set(
+		apiKey,
+		accessToken.AccessToken,
+		time.Duration(accessToken.ExpiresIn)*time.Second-time.Minute*10,
+	)
 	return accessToken.AccessToken, nil
 }
 
@@ -44,11 +48,16 @@ func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*AccessToken
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx,
+	req, err := http.NewRequestWithContext(
+		ctx,
 		http.MethodPost,
-		fmt.Sprintf("https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=%s&client_secret=%s",
-			clientID, clientSecret),
-		nil)
+		fmt.Sprintf(
+			"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=%s&client_secret=%s",
+			clientID,
+			clientSecret,
+		),
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +75,11 @@ func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*AccessToken
 		return nil, err
 	}
 	if accessToken.Error != "" {
-		return nil, fmt.Errorf("get baidu access token failed: %s: %s", accessToken.Error, accessToken.ErrorDescription)
+		return nil, fmt.Errorf(
+			"get baidu access token failed: %s: %s",
+			accessToken.Error,
+			accessToken.ErrorDescription,
+		)
 	}
 	if accessToken.AccessToken == "" {
 		return nil, errors.New("get baidu access token return empty access token")

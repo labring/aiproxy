@@ -11,10 +11,9 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/env"
-	"github.com/labring/aiproxy/core/common/notify"
-
 	// import fastjson serializer
 	_ "github.com/labring/aiproxy/core/common/fastJSONSerializer"
+	"github.com/labring/aiproxy/core/common/notify"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -198,6 +197,7 @@ func migrateLOGDB() error {
 		&GroupSummary{},
 		&Summary{},
 		&ConsumeError{},
+		&Store{},
 	)
 	if err != nil {
 		return err
@@ -206,15 +206,30 @@ func migrateLOGDB() error {
 	go func() {
 		err := CreateLogIndexes(LogDB)
 		if err != nil {
-			notify.ErrorThrottle("createLogIndexes", time.Minute, "failed to create log indexes", err.Error())
+			notify.ErrorThrottle(
+				"createLogIndexes",
+				time.Minute,
+				"failed to create log indexes",
+				err.Error(),
+			)
 		}
 		err = CreateSummaryIndexs(LogDB)
 		if err != nil {
-			notify.ErrorThrottle("createSummaryIndexs", time.Minute, "failed to create summary indexs", err.Error())
+			notify.ErrorThrottle(
+				"createSummaryIndexs",
+				time.Minute,
+				"failed to create summary indexs",
+				err.Error(),
+			)
 		}
 		err = CreateGroupSummaryIndexs(LogDB)
 		if err != nil {
-			notify.ErrorThrottle("createGroupSummaryIndexs", time.Minute, "failed to create group summary indexs", err.Error())
+			notify.ErrorThrottle(
+				"createGroupSummaryIndexs",
+				time.Minute,
+				"failed to create group summary indexs",
+				err.Error(),
+			)
 		}
 	}()
 	return nil

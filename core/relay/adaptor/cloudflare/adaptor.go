@@ -2,9 +2,10 @@ package cloudflare
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
-	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -16,7 +17,7 @@ type Adaptor struct {
 
 const baseURL = "https://api.cloudflare.com"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
@@ -24,10 +25,11 @@ func (a *Adaptor) GetBaseURL() string {
 // https://developers.cloudflare.com/ai-gateway/providers/workersai/#openai-compatible-endpoints
 // https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/workers-ai
 func isAIGateWay(baseURL string) bool {
-	return strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") && strings.HasSuffix(baseURL, "/workers-ai")
+	return strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") &&
+		strings.HasSuffix(baseURL, "/workers-ai")
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 	isAIGateWay := isAIGateWay(u)
 	var urlPrefix string
@@ -39,17 +41,31 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 	switch meta.Mode {
 	case mode.ChatCompletions:
-		return urlPrefix + "/v1/chat/completions", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    urlPrefix + "/v1/chat/completions",
+		}, nil
 	case mode.Embeddings:
-		return urlPrefix + "/v1/embeddings", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    urlPrefix + "/v1/embeddings",
+		}, nil
 	default:
 		if isAIGateWay {
-			return fmt.Sprintf("%s/%s", urlPrefix, meta.ActualModel), nil
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    fmt.Sprintf("%s/%s", urlPrefix, meta.ActualModel),
+			}, nil
 		}
-		return fmt.Sprintf("%s/run/%s", urlPrefix, meta.ActualModel), nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    fmt.Sprintf("%s/run/%s", urlPrefix, meta.ActualModel),
+		}, nil
 	}
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Models: ModelList,
+	}
 }

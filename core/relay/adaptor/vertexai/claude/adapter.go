@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -24,9 +25,13 @@ const anthropicVersion = "vertex-2023-10-16"
 
 type Adaptor struct{}
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, request *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	request *http.Request,
+) (adaptor.ConvertResult, error) {
 	if request == nil {
-		return nil, errors.New("request is nil")
+		return adaptor.ConvertResult{}, errors.New("request is nil")
 	}
 
 	var (
@@ -40,17 +45,19 @@ func (a *Adaptor) ConvertRequest(meta *meta.Meta, request *http.Request) (*adapt
 	case mode.Anthropic:
 		data, err = handleAnthropicRequest(meta, request)
 	default:
-		return nil, fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(data),
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(data))},
+		},
+		Body: bytes.NewReader(data),
 	}, nil
 }
 
@@ -100,7 +107,12 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 	return node.MarshalJSON()
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
@@ -115,7 +127,11 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 			usage, err = anthropic.Handler(meta, c, resp)
 		}
 	default:
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(fmt.Sprintf("unsupported mode: %s", meta.Mode), "unsupported_mode", http.StatusBadRequest)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			fmt.Sprintf("unsupported mode: %s", meta.Mode),
+			"unsupported_mode",
+			http.StatusBadRequest,
+		)
 	}
 	return
 }

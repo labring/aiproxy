@@ -44,7 +44,7 @@ func calculateGroupConsumeLevelRatio(usedAmount float64) float64 {
 	return groupConsumeLevelRatio
 }
 
-func getGroupPMRatio(group *model.GroupCache) (float64, float64) {
+func getGroupPMRatio(group model.GroupCache) (float64, float64) {
 	groupRPMRatio := group.RPMRatio
 	if groupRPMRatio <= 0 {
 		groupRPMRatio = 1
@@ -56,7 +56,7 @@ func getGroupPMRatio(group *model.GroupCache) (float64, float64) {
 	return groupRPMRatio, groupTPMRatio
 }
 
-func GetGroupAdjustedModelConfig(group *model.GroupCache, mc model.ModelConfig) model.ModelConfig {
+func GetGroupAdjustedModelConfig(group model.GroupCache, mc model.ModelConfig) model.ModelConfig {
 	if groupModelConfig, ok := group.ModelConfigs[mc.Model]; ok {
 		mc = mc.LoadFromGroupModelConfig(groupModelConfig)
 	}
@@ -84,19 +84,19 @@ const (
 	XRateLimitResetTokens = "X-RateLimit-Reset-Tokens"
 )
 
-func setRpmHeaders(c *gin.Context, rpm int64, remainingRequests int64) {
+func setRpmHeaders(c *gin.Context, rpm, remainingRequests int64) {
 	c.Header(XRateLimitLimitRequests, strconv.FormatInt(rpm, 10))
 	c.Header(XRateLimitRemainingRequests, strconv.FormatInt(remainingRequests, 10))
 	c.Header(XRateLimitResetRequests, "1m0s")
 }
 
-func setTpmHeaders(c *gin.Context, tpm int64, remainingRequests int64) {
+func setTpmHeaders(c *gin.Context, tpm, remainingRequests int64) {
 	c.Header(XRateLimitLimitTokens, strconv.FormatInt(tpm, 10))
 	c.Header(XRateLimitRemainingTokens, strconv.FormatInt(remainingRequests, 10))
 	c.Header(XRateLimitResetTokens, "1m0s")
 }
 
-func UpdateGroupModelRequest(c *gin.Context, group *model.GroupCache, rpm, rps int64) {
+func UpdateGroupModelRequest(c *gin.Context, group model.GroupCache, rpm, rps int64) {
 	if group.Status == model.GroupStatusInternal {
 		return
 	}
@@ -106,7 +106,7 @@ func UpdateGroupModelRequest(c *gin.Context, group *model.GroupCache, rpm, rps i
 	log.Data["group_rps"] = strconv.FormatInt(rps, 10)
 }
 
-func UpdateGroupModelTokensRequest(c *gin.Context, group *model.GroupCache, tpm, tps int64) {
+func UpdateGroupModelTokensRequest(c *gin.Context, group model.GroupCache, tpm, tps int64) {
 	if group.Status == model.GroupStatusInternal {
 		return
 	}
@@ -132,16 +132,40 @@ func UpdateGroupModelTokennameTokensRequest(c *gin.Context, tpm, tps int64) {
 	// log.Data["tps"] = strconv.FormatInt(tps, 10)
 }
 
-func checkGroupModelRPMAndTPM(c *gin.Context, group *model.GroupCache, mc model.ModelConfig, tokenName string) error {
+func checkGroupModelRPMAndTPM(
+	c *gin.Context,
+	group model.GroupCache,
+	mc model.ModelConfig,
+	tokenName string,
+) error {
 	log := GetLogger(c)
 
 	adjustedModelConfig := GetGroupAdjustedModelConfig(group, mc)
 
-	groupModelCount, groupModelOverLimitCount, groupModelSecondCount := reqlimit.PushGroupModelRequest(c.Request.Context(), group.ID, mc.Model, adjustedModelConfig.RPM)
-	UpdateGroupModelRequest(c, group, groupModelCount+groupModelOverLimitCount, groupModelSecondCount)
+	groupModelCount, groupModelOverLimitCount, groupModelSecondCount := reqlimit.PushGroupModelRequest(
+		c.Request.Context(),
+		group.ID,
+		mc.Model,
+		adjustedModelConfig.RPM,
+	)
+	UpdateGroupModelRequest(
+		c,
+		group,
+		groupModelCount+groupModelOverLimitCount,
+		groupModelSecondCount,
+	)
 
-	groupModelTokenCount, groupModelTokenOverLimitCount, groupModelTokenSecondCount := reqlimit.PushGroupModelTokennameRequest(c.Request.Context(), group.ID, mc.Model, tokenName)
-	UpdateGroupModelTokennameRequest(c, groupModelTokenCount+groupModelTokenOverLimitCount, groupModelTokenSecondCount)
+	groupModelTokenCount, groupModelTokenOverLimitCount, groupModelTokenSecondCount := reqlimit.PushGroupModelTokennameRequest(
+		c.Request.Context(),
+		group.ID,
+		mc.Model,
+		tokenName,
+	)
+	UpdateGroupModelTokennameRequest(
+		c,
+		groupModelTokenCount+groupModelTokenOverLimitCount,
+		groupModelTokenSecondCount,
+	)
 
 	if group.Status != model.GroupStatusInternal &&
 		adjustedModelConfig.RPM > 0 {
@@ -153,10 +177,19 @@ func checkGroupModelRPMAndTPM(c *gin.Context, group *model.GroupCache, mc model.
 		setRpmHeaders(c, adjustedModelConfig.RPM, adjustedModelConfig.RPM-groupModelCount)
 	}
 
-	groupModelCountTPM, groupModelCountTPS := reqlimit.GetGroupModelTokensRequest(c.Request.Context(), group.ID, mc.Model)
+	groupModelCountTPM, groupModelCountTPS := reqlimit.GetGroupModelTokensRequest(
+		c.Request.Context(),
+		group.ID,
+		mc.Model,
+	)
 	UpdateGroupModelTokensRequest(c, group, groupModelCountTPM, groupModelCountTPS)
 
-	groupModelTokenCountTPM, groupModelTokenCountTPS := reqlimit.GetGroupModelTokennameTokensRequest(c.Request.Context(), group.ID, mc.Model, tokenName)
+	groupModelTokenCountTPM, groupModelTokenCountTPS := reqlimit.GetGroupModelTokennameTokensRequest(
+		c.Request.Context(),
+		group.ID,
+		mc.Model,
+		tokenName,
+	)
 	UpdateGroupModelTokennameTokensRequest(c, groupModelTokenCountTPM, groupModelTokenCountTPS)
 
 	if group.Status != model.GroupStatusInternal &&
@@ -191,7 +224,10 @@ func GetGroupBalanceConsumerFromContext(c *gin.Context) *GroupBalanceConsumer {
 	return nil
 }
 
-func GetGroupBalanceConsumer(c *gin.Context, group *model.GroupCache) (*GroupBalanceConsumer, error) {
+func GetGroupBalanceConsumer(
+	c *gin.Context,
+	group model.GroupCache,
+) (*GroupBalanceConsumer, error) {
 	gbc := GetGroupBalanceConsumerFromContext(c)
 	if gbc != nil {
 		return gbc, nil
@@ -207,7 +243,7 @@ func GetGroupBalanceConsumer(c *gin.Context, group *model.GroupCache) (*GroupBal
 		}
 	} else {
 		log := GetLogger(c)
-		groupBalance, consumer, err := balance.GetGroupRemainBalance(c.Request.Context(), *group)
+		groupBalance, consumer, err := balance.GetGroupRemainBalance(c.Request.Context(), group)
 		if err != nil {
 			return nil, err
 		}
@@ -231,11 +267,16 @@ const (
 	GroupBalanceNotEnough = "group_balance_not_enough"
 )
 
-func checkGroupBalance(c *gin.Context, group *model.GroupCache) bool {
+func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 	gbc, err := GetGroupBalanceConsumer(c, group)
 	if err != nil {
 		if errors.Is(err, balance.ErrNoRealNameUsedAmountLimit) {
-			AbortLogWithMessage(c, http.StatusForbidden, err.Error(), "no_real_name_used_amount_limit")
+			AbortLogWithMessage(
+				c,
+				http.StatusForbidden,
+				err.Error(),
+				"no_real_name_used_amount_limit",
+			)
 			return false
 		}
 		notify.ErrorThrottle(
@@ -244,7 +285,12 @@ func checkGroupBalance(c *gin.Context, group *model.GroupCache) bool {
 			fmt.Sprintf("Get group `%s` balance error", group.ID),
 			err.Error(),
 		)
-		AbortWithMessage(c, http.StatusInternalServerError, fmt.Sprintf("get group `%s` balance error", group.ID), "get_group_balance_error")
+		AbortWithMessage(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("get group `%s` balance error", group.ID),
+			"get_group_balance_error",
+		)
 		return false
 	}
 
@@ -255,12 +301,21 @@ func checkGroupBalance(c *gin.Context, group *model.GroupCache) bool {
 			"groupBalanceAlert:"+group.ID,
 			time.Minute*15,
 			fmt.Sprintf("Group `%s` balance below threshold", group.ID),
-			fmt.Sprintf("Group `%s` balance has fallen below the threshold\nCurrent balance: %.2f", group.ID, gbc.balance),
+			fmt.Sprintf(
+				"Group `%s` balance has fallen below the threshold\nCurrent balance: %.2f",
+				group.ID,
+				gbc.balance,
+			),
 		)
 	}
 
 	if !gbc.CheckBalance(0) {
-		AbortLogWithMessage(c, http.StatusForbidden, fmt.Sprintf("group `%s` balance not enough", group.ID), GroupBalanceNotEnough)
+		AbortLogWithMessage(
+			c,
+			http.StatusForbidden,
+			fmt.Sprintf("group `%s` balance not enough", group.ID),
+			GroupBalanceNotEnough,
+		)
 		return false
 	}
 	return true
@@ -272,40 +327,7 @@ func NewDistribute(mode mode.Mode) gin.HandlerFunc {
 	}
 }
 
-const (
-	AIProxyChannelHeader = "Aiproxy-Channel"
-)
-
-func getChannelFromHeader(header string, mc *model.ModelCaches, availableSet []string, model string) (*model.Channel, error) {
-	channelIDInt, err := strconv.ParseInt(header, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, set := range availableSet {
-		enabledChannels := mc.EnabledModel2ChannelsBySet[set][model]
-		if len(enabledChannels) > 0 {
-			for _, channel := range enabledChannels {
-				if int64(channel.ID) == channelIDInt {
-					return channel, nil
-				}
-			}
-		}
-
-		disabledChannels := mc.DisabledModel2ChannelsBySet[set][model]
-		if len(disabledChannels) > 0 {
-			for _, channel := range disabledChannels {
-				if int64(channel.ID) == channelIDInt {
-					return channel, nil
-				}
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, model)
-}
-
-func CheckRelayMode(requestMode mode.Mode, modelMode mode.Mode) bool {
+func CheckRelayMode(requestMode, modelMode mode.Mode) bool {
 	if modelMode == mode.Unknown {
 		return true
 	}
@@ -317,6 +339,10 @@ func CheckRelayMode(requestMode mode.Mode, modelMode mode.Mode) bool {
 	case mode.ImagesGenerations, mode.ImagesEdits:
 		return modelMode == mode.ImagesGenerations ||
 			modelMode == mode.ImagesEdits
+	case mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent:
+		return modelMode == mode.VideoGenerationsJobs ||
+			modelMode == mode.VideoGenerationsGetJobs ||
+			modelMode == mode.VideoGenerationsContent
 	default:
 		return requestMode == modelMode
 	}
@@ -333,14 +359,20 @@ func distribute(c *gin.Context, mode mode.Mode) {
 	log := GetLogger(c)
 
 	group := GetGroup(c)
+	token := GetToken(c)
 
 	if !checkGroupBalance(c, group) {
 		return
 	}
 
-	requestModel, err := getRequestModel(c, mode)
+	requestModel, err := getRequestModel(c, mode, group.ID, token.ID)
 	if err != nil {
-		AbortLogWithMessage(c, http.StatusInternalServerError, err.Error(), "get_request_model_error")
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+			"get_request_model_error",
+		)
 		return
 	}
 	if requestModel == "" {
@@ -354,49 +386,55 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	mc, ok := GetModelCaches(c).ModelConfig.GetModelConfig(requestModel)
 	if !ok || !CheckRelayMode(mode, mc.Type) {
-		AbortLogWithMessage(c,
+		AbortLogWithMessage(
+			c,
 			http.StatusNotFound,
-			fmt.Sprintf("The model `%s` does not exist or you do not have access to it.", requestModel),
+			fmt.Sprintf(
+				"The model `%s` does not exist or you do not have access to it.",
+				requestModel,
+			),
 			"model_not_found",
 		)
 		return
 	}
 	c.Set(ModelConfig, mc)
 
-	if channelHeader := c.Request.Header.Get(AIProxyChannelHeader); group.Status == model.GroupStatusInternal && channelHeader != "" {
-		channel, err := getChannelFromHeader(channelHeader, GetModelCaches(c), group.GetAvailableSets(), requestModel)
-		if err != nil {
-			AbortLogWithMessage(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		c.Set(Channel, channel)
-	} else {
-		token := GetToken(c)
-		if !token.ContainsModel(requestModel) {
-			AbortLogWithMessage(c,
-				http.StatusNotFound,
-				fmt.Sprintf("The model `%s` does not exist or you do not have access to it.", requestModel),
-				"model_not_found",
-			)
-			return
-		}
+	if !token.ContainsModel(requestModel) {
+		AbortLogWithMessage(
+			c,
+			http.StatusNotFound,
+			fmt.Sprintf(
+				"The model `%s` does not exist or you do not have access to it.",
+				requestModel,
+			),
+			"model_not_found",
+		)
+		return
 	}
 
 	user, err := getRequestUser(c, mode)
 	if err != nil {
-		AbortLogWithMessage(c, http.StatusInternalServerError, err.Error(), "get_request_user_error")
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+			"get_request_user_error",
+		)
 		return
 	}
 	c.Set(RequestUser, user)
 
 	metadata, err := getRequestMetadata(c, mode)
 	if err != nil {
-		AbortLogWithMessage(c, http.StatusInternalServerError, err.Error(), "get_request_metadata_error")
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+			"get_request_metadata_error",
+		)
 		return
 	}
 	c.Set(RequestMetadata, metadata)
-
-	token := GetToken(c)
 
 	if err := checkGroupModelRPMAndTPM(c, group, mc, token.Name); err != nil {
 		errMsg := err.Error()
@@ -457,12 +495,28 @@ func GetRequestUser(c *gin.Context) string {
 	return c.GetString(RequestUser)
 }
 
+func GetChannelID(c *gin.Context) int {
+	return c.GetInt(ChannelID)
+}
+
+func GetJobID(c *gin.Context) string {
+	return c.GetString(JobID)
+}
+
+func GetGenerationID(c *gin.Context) string {
+	return c.GetString(GenerationID)
+}
+
 func GetRequestMetadata(c *gin.Context) map[string]string {
 	return c.GetStringMapString(RequestMetadata)
 }
 
 func GetModelConfig(c *gin.Context) model.ModelConfig {
-	return c.MustGet(ModelConfig).(model.ModelConfig)
+	v, ok := c.MustGet(ModelConfig).(model.ModelConfig)
+	if !ok {
+		panic(fmt.Sprintf("model config type error: %T, %v", v, v))
+	}
+	return v
 }
 
 func NewMetaByContext(c *gin.Context,
@@ -476,6 +530,8 @@ func NewMetaByContext(c *gin.Context,
 	modelName := GetRequestModel(c)
 	modelConfig := GetModelConfig(c)
 	requestAt := GetRequestAt(c)
+	jobID := GetJobID(c)
+	generationID := GetGenerationID(c)
 
 	opts = append(
 		opts,
@@ -484,6 +540,8 @@ func NewMetaByContext(c *gin.Context,
 		meta.WithGroup(group),
 		meta.WithToken(token),
 		meta.WithEndpoint(c.Request.URL.Path),
+		meta.WithJobID(jobID),
+		meta.WithGenerationID(generationID),
 	)
 
 	return meta.NewMeta(
@@ -496,7 +554,7 @@ func NewMetaByContext(c *gin.Context,
 }
 
 // https://platform.openai.com/docs/api-reference/chat
-func getRequestModel(c *gin.Context, m mode.Mode) (string, error) {
+func getRequestModel(c *gin.Context, m mode.Mode, groupID string, tokenID int) (string, error) {
 	path := c.Request.URL.Path
 	switch {
 	case m == mode.ParsePdf:
@@ -516,6 +574,30 @@ func getRequestModel(c *gin.Context, m mode.Mode) (string, error) {
 		// /engines/:model/embeddings
 		return c.Param("model"), nil
 
+	case m == mode.VideoGenerationsGetJobs:
+		jobID := c.Param("id")
+		store, err := model.CacheGetStore(jobID)
+		if err != nil {
+			return "", fmt.Errorf("get request model failed: %w", err)
+		}
+		if err := validateStoreGroupAndToken(store, groupID, tokenID); err != nil {
+			return "", fmt.Errorf("validate store group and token failed: %w", err)
+		}
+		c.Set(JobID, store.ID)
+		c.Set(ChannelID, store.ChannelID)
+		return store.Model, nil
+	case m == mode.VideoGenerationsContent:
+		generationID := c.Param("id")
+		store, err := model.CacheGetStore(generationID)
+		if err != nil {
+			return "", fmt.Errorf("get request model failed: %w", err)
+		}
+		if err := validateStoreGroupAndToken(store, groupID, tokenID); err != nil {
+			return "", fmt.Errorf("validate store group and token failed: %w", err)
+		}
+		c.Set(GenerationID, store.ID)
+		c.Set(ChannelID, store.ChannelID)
+		return store.Model, nil
 	default:
 		body, err := common.GetRequestBody(c.Request)
 		if err != nil {
@@ -523,6 +605,16 @@ func getRequestModel(c *gin.Context, m mode.Mode) (string, error) {
 		}
 		return GetModelFromJSON(body)
 	}
+}
+
+func validateStoreGroupAndToken(store *model.StoreCache, groupID string, tokenID int) error {
+	if store.GroupID != groupID {
+		return fmt.Errorf("store group id mismatch: %s != %s", store.GroupID, groupID)
+	}
+	if store.TokenID != tokenID {
+		return fmt.Errorf("store token id mismatch: %d != %d", store.TokenID, tokenID)
+	}
+	return nil
 }
 
 func GetModelFromJSON(body []byte) (string, error) {

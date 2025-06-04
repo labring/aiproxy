@@ -15,7 +15,3 @@ func (a *Adaptor) ValidateKey(key string) error {
 	}
 	return errors.New("invalid key format")
 }
-
-func (a *Adaptor) KeyHelp() string {
-	return "xxx:xxx"
-}

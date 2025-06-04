@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -82,7 +83,7 @@ func parseCommonParams(c *gin.Context) (params struct {
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetLogsResult}
 //	@Router			/api/logs/ [get]
 func GetLogs(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	startTime, endTime := parseTimeRange(c)
 	params := parseCommonParams(c)
 	group := c.Query("group")
@@ -144,7 +145,7 @@ func GetGroupLogs(c *gin.Context) {
 		return
 	}
 
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	startTime, endTime := parseTimeRange(c)
 	params := parseCommonParams(c)
 
@@ -200,7 +201,7 @@ func GetGroupLogs(c *gin.Context) {
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetLogsResult}
 //	@Router			/api/logs/search [get]
 func SearchLogs(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	startTime, endTime := parseTimeRange(c)
 	params := parseCommonParams(c)
 
@@ -266,7 +267,7 @@ func SearchGroupLogs(c *gin.Context) {
 		return
 	}
 
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	startTime, endTime := parseTimeRange(c)
 	params := parseCommonParams(c)
 	keyword := c.Query("keyword")
@@ -486,7 +487,7 @@ func SearchConsumeError(c *gin.Context) {
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
 	tokenID, _ := strconv.Atoi(c.Query("token_id"))
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	order := c.Query("order")
 	requestID := c.Query("request_id")
 

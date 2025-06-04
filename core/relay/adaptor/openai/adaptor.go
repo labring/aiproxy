@@ -1,14 +1,11 @@
 package openai
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
 
-	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -23,62 +20,119 @@ type Adaptor struct{}
 
 const baseURL = "https://api.openai.com/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
-	var path string
 	switch meta.Mode {
 	case mode.ChatCompletions:
-		path = "/chat/completions"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/chat/completions",
+		}, nil
 	case mode.Completions:
-		path = "/completions"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/completions",
+		}, nil
 	case mode.Embeddings:
-		path = "/embeddings"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/embeddings",
+		}, nil
 	case mode.Moderations:
-		path = "/moderations"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/moderations",
+		}, nil
 	case mode.ImagesGenerations:
-		path = "/images/generations"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/images/generations",
+		}, nil
 	case mode.ImagesEdits:
-		path = "/images/edits"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/images/edits",
+		}, nil
 	case mode.AudioSpeech:
-		path = "/audio/speech"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/audio/speech",
+		}, nil
 	case mode.AudioTranscription:
-		path = "/audio/transcriptions"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/audio/transcriptions",
+		}, nil
 	case mode.AudioTranslation:
-		path = "/audio/translations"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/audio/translations",
+		}, nil
 	case mode.Rerank:
-		path = "/rerank"
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/rerank",
+		}, nil
+	case mode.VideoGenerationsJobs:
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/video/generations/jobs",
+		}, nil
+	case mode.VideoGenerationsGetJobs:
+		return adaptor.RequestURL{
+			Method: http.MethodGet,
+			URL:    fmt.Sprintf("%s/video/generations/jobs/%s", u, meta.JobID),
+		}, nil
+	case mode.VideoGenerationsContent:
+		return adaptor.RequestURL{
+			Method: http.MethodGet,
+			URL:    fmt.Sprintf("%s/video/generations/%s/content/video", u, meta.GenerationID),
+		}, nil
 	default:
-		return "", fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
-
-	return u + path, nil
 }
 
-func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) error {
 	req.Header.Set("Authorization", "Bearer "+meta.Channel.Key)
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
-	return ConvertRequest(meta, req)
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	return ConvertRequest(meta, store, req)
 }
 
-func ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertRequest(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	if req == nil {
-		return nil, errors.New("request is nil")
+		return adaptor.ConvertResult{}, errors.New("request is nil")
 	}
 	switch meta.Mode {
 	case mode.Moderations:
-		return ConvertEmbeddingsRequest(meta, req, true)
-	case mode.Embeddings, mode.Completions:
-		return ConvertEmbeddingsRequest(meta, req, false)
+		return ConvertModerationsRequest(meta, req)
+	case mode.Embeddings:
+		return ConvertEmbeddingsRequest(meta, req, nil, false)
+	case mode.Completions:
+		return ConvertCompletionsRequest(meta, req, nil)
 	case mode.ChatCompletions:
-		return ConvertTextRequest(meta, req, false)
+		return ConvertChatCompletionsRequest(meta, req, nil, false)
 	case mode.ImagesGenerations:
 		return ConvertImagesRequest(meta, req)
 	case mode.ImagesEdits:
@@ -89,12 +143,23 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequest
 		return ConvertTTSRequest(meta, req, "")
 	case mode.Rerank:
 		return ConvertRerankRequest(meta, req)
+	case mode.VideoGenerationsJobs:
+		return ConvertVideoRequest(meta, req)
+	case mode.VideoGenerationsGetJobs:
+		return ConvertVideoGetJobsRequest(meta, req)
+	case mode.VideoGenerationsContent:
+		return ConvertVideoGetJobsContentRequest(meta, req)
 	default:
-		return nil, fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ImagesGenerations, mode.ImagesEdits:
 		usage, err = ImagesHandler(meta, c, resp)
@@ -114,77 +179,47 @@ func DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *mo
 		} else {
 			usage, err = Handler(meta, c, resp, nil)
 		}
+	case mode.VideoGenerationsJobs:
+		usage, err = VideoHandler(meta, store, c, resp)
+	case mode.VideoGenerationsGetJobs:
+		usage, err = VideoGetJobsHandler(meta, store, c, resp)
+	case mode.VideoGenerationsContent:
+		usage, err = VideoGetJobsContentHandler(meta, store, c, resp)
 	default:
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(fmt.Sprintf("unsupported mode: %s", meta.Mode), "unsupported_mode", http.StatusBadRequest)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			fmt.Sprintf("unsupported mode: %s", meta.Mode),
+			"unsupported_mode",
+			http.StatusBadRequest,
+		)
 	}
 	return usage, err
 }
 
-func ConvertTextRequest(meta *meta.Meta, req *http.Request, doNotPatchStreamOptionsIncludeUsage bool) (*adaptor.ConvertRequestResult, error) {
-	reqMap := make(map[string]any)
-	err := common.UnmarshalBodyReusable(req, &reqMap)
-	if err != nil {
-		return nil, err
-	}
-
-	if !doNotPatchStreamOptionsIncludeUsage {
-		if err := patchStreamOptions(reqMap); err != nil {
-			return nil, err
-		}
-	}
-
-	reqMap["model"] = meta.ActualModel
-	jsonData, err := sonic.Marshal(reqMap)
-	if err != nil {
-		return nil, err
-	}
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(jsonData),
-	}, nil
-}
-
-func patchStreamOptions(reqMap map[string]any) error {
-	stream, ok := reqMap["stream"]
-	if !ok {
-		return nil
-	}
-
-	streamBool, ok := stream.(bool)
-	if !ok {
-		return errors.New("stream is not a boolean")
-	}
-
-	if !streamBool {
-		return nil
-	}
-
-	streamOptions, ok := reqMap["stream_options"].(map[string]any)
-	if !ok {
-		if reqMap["stream_options"] != nil {
-			return errors.New("stream_options is not a map")
-		}
-		reqMap["stream_options"] = map[string]any{
-			"include_usage": true,
-		}
-		return nil
-	}
-
-	streamOptions["include_usage"] = true
-	return nil
-}
-
 const MetaResponseFormat = "response_format"
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, req *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	return utils.DoRequest(req)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
-	return DoResponse(meta, c, resp)
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
+	return DoResponse(meta, store, c, resp)
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"OpenAI compatibility",
+		},
+		Models: ModelList,
+	}
 }

@@ -1,14 +1,12 @@
 package openai
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/model"
 )
 
-func ResponseText2Usage(responseText string, modeName string, promptTokens int64) *model.Usage {
-	usage := &model.Usage{
+func ResponseText2Usage(responseText, modeName string, promptTokens int64) model.Usage {
+	usage := model.Usage{
 		PromptTokens:     promptTokens,
 		CompletionTokens: CountTokenText(responseText, modeName),
 	}
@@ -16,11 +14,10 @@ func ResponseText2Usage(responseText string, modeName string, promptTokens int64
 	return usage
 }
 
-func GetFullRequestURL(baseURL string, requestURL string) string {
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
+func ChatCompletionID() string {
+	return "chatcmpl-" + common.ShortUUID()
+}
 
-	if strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") {
-		fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/openai/deployments"))
-	}
-	return fullRequestURL
+func CallID() string {
+	return "call_" + common.ShortUUID()
 }

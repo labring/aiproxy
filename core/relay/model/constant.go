@@ -7,8 +7,10 @@ const (
 )
 
 const (
-	ChatCompletionChunk = "chat.completion.chunk"
-	ChatCompletion      = "chat.completion"
+	ChatCompletionChunkObject = "chat.completion.chunk"
+	ChatCompletionObject      = "chat.completion"
+	VideoGenerationJobObject  = "video.generation.job"
+	VideoGenerationObject     = "video.generation"
 )
 
 type FinishReason = string

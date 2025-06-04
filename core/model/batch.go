@@ -66,7 +66,13 @@ type GroupSummaryUpdate struct {
 }
 
 func groupSummaryUniqueKey(unique GroupSummaryUnique) string {
-	return fmt.Sprintf("%s:%s:%s:%d", unique.GroupID, unique.TokenName, unique.Model, unique.HourTimestamp)
+	return fmt.Sprintf(
+		"%s:%s:%s:%d",
+		unique.GroupID,
+		unique.TokenName,
+		unique.Model,
+		unique.HourTimestamp,
+	)
 }
 
 var batchData batchUpdateData
@@ -141,7 +147,11 @@ func ProcessBatchUpdatesSummary() {
 func processGroupUpdates(wg *sync.WaitGroup) {
 	defer wg.Done()
 	for groupID, data := range batchData.Groups {
-		err := UpdateGroupUsedAmountAndRequestCount(groupID, data.Amount.InexactFloat64(), data.Count)
+		err := UpdateGroupUsedAmountAndRequestCount(
+			groupID,
+			data.Amount.InexactFloat64(),
+			data.Count,
+		)
 		if IgnoreNotFound(err) != nil {
 			notify.ErrorThrottle(
 				"batchUpdateGroupUsedAmountAndRequestCount",
@@ -322,7 +332,16 @@ func BatchRecordLogs(
 		updateSummaryData(channelID, modelName, now, code, amountDecimal, usage, channelModelRate)
 	}
 
-	updateGroupSummaryData(group, tokenName, modelName, now, code, amountDecimal, usage, groupModelTokenRate)
+	updateGroupSummaryData(
+		group,
+		tokenName,
+		modelName,
+		now,
+		code,
+		amountDecimal,
+		usage,
+		groupModelTokenRate,
+	)
 
 	return err
 }
@@ -369,7 +388,14 @@ func updateTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal)
 	}
 }
 
-func updateGroupSummaryData(group string, tokenName string, modelName string, createAt time.Time, code int, amountDecimal decimal.Decimal, usage Usage, groupModelTokenRate RequestRate) {
+func updateGroupSummaryData(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	code int,
+	amountDecimal decimal.Decimal,
+	usage Usage,
+	groupModelTokenRate RequestRate,
+) {
 	groupUnique := GroupSummaryUnique{
 		GroupID:       group,
 		TokenName:     tokenName,
@@ -410,7 +436,15 @@ func updateGroupSummaryData(group string, tokenName string, modelName string, cr
 	}
 }
 
-func updateSummaryData(channelID int, modelName string, createAt time.Time, code int, amountDecimal decimal.Decimal, usage Usage, channelModelRate RequestRate) {
+func updateSummaryData(
+	channelID int,
+	modelName string,
+	createAt time.Time,
+	code int,
+	amountDecimal decimal.Decimal,
+	usage Usage,
+	channelModelRate RequestRate,
+) {
 	summaryUnique := SummaryUnique{
 		ChannelID:     channelID,
 		Model:         modelName,

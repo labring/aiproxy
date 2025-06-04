@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-
 	// import gif decoder
 	_ "image/gif"
 	// import jpeg decoder
@@ -31,7 +30,7 @@ func IsImageURL(resp *http.Response) bool {
 	return strings.HasPrefix(resp.Header.Get("Content-Type"), "image/")
 }
 
-func GetImageSizeFromURL(url string) (width int, height int, err error) {
+func GetImageSizeFromURL(url string) (width, height int, err error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		return 0, 0, err
@@ -109,7 +108,7 @@ func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 
 var reg = regexp.MustCompile(`data:image/([^;]+);base64,`)
 
-func GetImageSizeFromBase64(encoded string) (width int, height int, err error) {
+func GetImageSizeFromBase64(encoded string) (width, height int, err error) {
 	decoded, err := base64.StdEncoding.DecodeString(reg.ReplaceAllString(encoded, ""))
 	if err != nil {
 		return 0, 0, err
@@ -123,7 +122,7 @@ func GetImageSizeFromBase64(encoded string) (width int, height int, err error) {
 	return img.Width, img.Height, nil
 }
 
-func GetImageSize(image string) (width int, height int, err error) {
+func GetImageSize(image string) (width, height int, err error) {
 	if strings.HasPrefix(image, "data:image/") {
 		return GetImageSizeFromBase64(image)
 	}

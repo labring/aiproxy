@@ -10,6 +10,7 @@ import (
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 )
@@ -37,6 +38,10 @@ func AsyncConsume(
 	channelRate model.RequestRate,
 	groupRate model.RequestRate,
 ) {
+	if !checkNeedRecordConsume(code, meta) {
+		return
+	}
+
 	consumeWaitGroup.Add(1)
 	defer func() {
 		consumeWaitGroup.Done()
@@ -83,6 +88,10 @@ func Consume(
 	channelRate model.RequestRate,
 	groupRate model.RequestRate,
 ) {
+	if !checkNeedRecordConsume(code, meta) {
+		return
+	}
+
 	amount := CalculateAmount(code, usage, modelPrice)
 	amount = consumeAmount(ctx, amount, postGroupConsumer, meta)
 
@@ -106,6 +115,16 @@ func Consume(
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())
 		notify.ErrorThrottle("recordConsume", time.Minute, "record consume failed", err.Error())
+	}
+}
+
+func checkNeedRecordConsume(code int, meta *meta.Meta) bool {
+	switch meta.Mode {
+	case mode.VideoGenerationsGetJobs,
+		mode.VideoGenerationsContent:
+		return code != http.StatusOK
+	default:
+		return true
 	}
 }
 

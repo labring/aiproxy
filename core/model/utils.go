@@ -22,7 +22,6 @@ func HandleNotFound(err error, errMsg ...string) error {
 	return err
 }
 
-// Helper function to handle update results
 func HandleUpdateResult(result *gorm.DB, entityName string) error {
 	if result.Error != nil {
 		return HandleNotFound(result.Error, entityName)
@@ -148,7 +147,7 @@ func String2Int(keyword string) int {
 	return i
 }
 
-func toLimitOffset(page int, perPage int) (limit int, offset int) {
+func toLimitOffset(page, perPage int) (limit, offset int) {
 	page--
 	if page < 0 {
 		page = 0

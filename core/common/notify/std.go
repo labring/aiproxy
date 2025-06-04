@@ -40,7 +40,12 @@ func (n *StdNotifier) Notify(level Level, title, message string) {
 	}
 }
 
-func (n *StdNotifier) NotifyThrottle(level Level, key string, expiration time.Duration, title, message string) {
+func (n *StdNotifier) NotifyThrottle(
+	level Level,
+	key string,
+	expiration time.Duration,
+	title, message string,
+) {
 	if !trylock.MemLock(key, expiration) {
 		return
 	}

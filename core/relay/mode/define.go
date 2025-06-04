@@ -32,6 +32,12 @@ func (m Mode) String() string {
 		return "ParsePdf"
 	case Anthropic:
 		return "Anthropic"
+	case VideoGenerationsJobs:
+		return "VideoGenerationsJobs"
+	case VideoGenerationsGetJobs:
+		return "VideoGenerationsGetJobs"
+	case VideoGenerationsContent:
+		return "VideoGenerationsContent"
 	default:
 		return fmt.Sprintf("Mode(%d)", m)
 	}
@@ -51,4 +57,7 @@ const (
 	Rerank
 	ParsePdf
 	Anthropic
+	VideoGenerationsJobs
+	VideoGenerationsGetJobs
+	VideoGenerationsContent
 )

@@ -23,17 +23,17 @@ const (
 
 type Group struct {
 	CreatedAt              time.Time               `json:"created_at"`
-	ID                     string                  `gorm:"primaryKey"                    json:"id"`
-	Tokens                 []Token                 `gorm:"foreignKey:GroupID"            json:"-"`
-	GroupModelConfigs      []GroupModelConfig      `gorm:"foreignKey:GroupID"            json:"-"`
-	PublicMCPReusingParams []PublicMCPReusingParam `gorm:"foreignKey:GroupID"            json:"-"`
-	GroupMCPs              []GroupMCP              `gorm:"foreignKey:GroupID"            json:"-"`
-	Status                 int                     `gorm:"default:1;index"               json:"status"`
-	RPMRatio               float64                 `gorm:"index"                         json:"rpm_ratio,omitempty"`
-	TPMRatio               float64                 `gorm:"index"                         json:"tpm_ratio,omitempty"`
-	UsedAmount             float64                 `gorm:"index"                         json:"used_amount"`
-	RequestCount           int                     `gorm:"index"                         json:"request_count"`
-	AvailableSets          []string                `gorm:"serializer:fastjson;type:text" json:"available_sets,omitempty"`
+	ID                     string                  `json:"id"                       gorm:"primaryKey"`
+	Tokens                 []Token                 `json:"-"                        gorm:"foreignKey:GroupID"`
+	GroupModelConfigs      []GroupModelConfig      `json:"-"                        gorm:"foreignKey:GroupID"`
+	PublicMCPReusingParams []PublicMCPReusingParam `json:"-"                        gorm:"foreignKey:GroupID"`
+	GroupMCPs              []GroupMCP              `json:"-"                        gorm:"foreignKey:GroupID"`
+	Status                 int                     `json:"status"                   gorm:"default:1;index"`
+	RPMRatio               float64                 `json:"rpm_ratio,omitempty"      gorm:"index"`
+	TPMRatio               float64                 `json:"tpm_ratio,omitempty"      gorm:"index"`
+	UsedAmount             float64                 `json:"used_amount"              gorm:"index"`
+	RequestCount           int                     `json:"request_count"            gorm:"index"`
+	AvailableSets          []string                `json:"available_sets,omitempty" gorm:"serializer:fastjson;type:text"`
 
 	BalanceAlertEnabled   bool    `gorm:"default:false" json:"balance_alert_enabled"`
 	BalanceAlertThreshold float64 `gorm:"default:0"     json:"balance_alert_threshold"`
@@ -44,7 +44,10 @@ func (g *Group) BeforeDelete(tx *gorm.DB) (err error) {
 	if err != nil {
 		return err
 	}
-	err = tx.Model(&PublicMCPReusingParam{}).Where("group_id = ?", g.ID).Delete(&PublicMCPReusingParam{}).Error
+	err = tx.Model(&PublicMCPReusingParam{}).
+		Where("group_id = ?", g.ID).
+		Delete(&PublicMCPReusingParam{}).
+		Error
 	if err != nil {
 		return err
 	}
@@ -52,7 +55,10 @@ func (g *Group) BeforeDelete(tx *gorm.DB) (err error) {
 	if err != nil {
 		return err
 	}
-	return tx.Model(&GroupModelConfig{}).Where("group_id = ?", g.ID).Delete(&GroupModelConfig{}).Error
+	return tx.Model(&GroupModelConfig{}).
+		Where("group_id = ?", g.ID).
+		Delete(&GroupModelConfig{}).
+		Error
 }
 
 func getGroupOrder(order string) string {
@@ -70,7 +76,11 @@ func getGroupOrder(order string) string {
 	}
 }
 
-func GetGroups(page int, perPage int, order string, onlyDisabled bool) (groups []*Group, total int64, err error) {
+func GetGroups(
+	page, perPage int,
+	order string,
+	onlyDisabled bool,
+) (groups []*Group, total int64, err error) {
 	tx := DB.Model(&Group{})
 	if onlyDisabled {
 		tx = tx.Where("status = ?", GroupStatusDisabled)
@@ -255,11 +265,18 @@ func UpdateGroupsStatus(ids []string, status int) (rowsAffected int64, err error
 		}
 	}()
 
-	result := DB.Model(&Group{}).Where("id IN (?) AND status != ?", ids, status).Update("status", status)
+	result := DB.Model(&Group{}).
+		Where("id IN (?) AND status != ?", ids, status).
+		Update("status", status)
 	return result.RowsAffected, result.Error
 }
 
-func SearchGroup(keyword string, page int, perPage int, order string, status int) (groups []*Group, total int64, err error) {
+func SearchGroup(
+	keyword string,
+	page, perPage int,
+	order string,
+	status int,
+) (groups []*Group, total int64, err error) {
 	tx := DB.Model(&Group{})
 	if status != 0 {
 		tx = tx.Where("status = ?", status)

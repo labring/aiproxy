@@ -43,5 +43,5 @@ No configuration required - Arxiv is free to use.
 ## How to test in aiproxy
 
 ```http
-http://localhost:3000/api/test-embedmcp/web-search/streamable?key=sealos&config[google_api_key]=google-api-key&config[google_cx]=google-cx
+http://localhost:3000/api/test-embedmcp/web-search?key=sealos&config[google_api_key]=google-api-key&config[google_cx]=google-cx
 ```

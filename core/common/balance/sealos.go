@@ -42,7 +42,10 @@ var (
 
 var (
 	sealosCheckRealNameEnable       = env.Bool("BALANCE_SEALOS_CHECK_REAL_NAME_ENABLE", false)
-	sealosNoRealNameUsedAmountLimit = env.Float64("BALANCE_SEALOS_NO_REAL_NAME_USED_AMOUNT_LIMIT", 1)
+	sealosNoRealNameUsedAmountLimit = env.Float64(
+		"BALANCE_SEALOS_NO_REAL_NAME_USED_AMOUNT_LIMIT",
+		1,
+	)
 )
 
 type Sealos struct {
@@ -50,7 +53,7 @@ type Sealos struct {
 }
 
 // FIXME: 如果获取余额能成功，但是消费永远失败，需要加一个失败次数限制，如果失败次数超过一定阈值，暂停服务
-func InitSealos(jwtKey string, accountURL string) error {
+func InitSealos(jwtKey, accountURL string) error {
 	token, err := newSealosToken(jwtKey)
 	if err != nil {
 		return fmt.Errorf("failed to generate sealos jwt token: %w", err)
@@ -105,7 +108,6 @@ type sealosCache struct {
 	Balance int64  `redis:"b"`
 }
 
-//nolint:gosec
 func cacheSetGroupBalance(ctx context.Context, group string, balance int64, userUID string) error {
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
@@ -148,13 +150,16 @@ func cacheDecreaseGroupBalance(ctx context.Context, group string, amount int64) 
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
 	}
-	return decreaseGroupBalanceScript.Run(ctx, common.RDB, []string{fmt.Sprintf(sealosGroupBalanceKey, group)}, amount).Err()
+	return decreaseGroupBalanceScript.Run(ctx, common.RDB, []string{fmt.Sprintf(sealosGroupBalanceKey, group)}, amount).
+		Err()
 }
 
 var ErrNoRealNameUsedAmountLimit = errors.New("达到未实名用户使用额度限制，请实名认证")
 
-func (s *Sealos) GetGroupRemainBalance(ctx context.Context, group model.GroupCache) (float64, PostGroupConsumer, error) {
-	var errs []error
+func (s *Sealos) GetGroupRemainBalance(
+	ctx context.Context,
+	group model.GroupCache,
+) (float64, PostGroupConsumer, error) {
 	for i := 0; ; i++ {
 		balance, userUID, err := s.getGroupRemainBalance(ctx, group.ID)
 		if err == nil {
@@ -166,9 +171,8 @@ func (s *Sealos) GetGroupRemainBalance(ctx context.Context, group model.GroupCac
 			return decimal.NewFromInt(balance).Div(decimalBalancePrecision).InexactFloat64(),
 				newSealosPostGroupConsumer(s.accountURL, group.ID, userUID), nil
 		}
-		errs = append(errs, err)
 		if i == getBalanceRetry-1 {
-			return 0, nil, errors.Join(errs...)
+			return 0, nil, err
 		}
 		time.Sleep(time.Second)
 	}
@@ -199,7 +203,8 @@ func cacheSetUserRealName(ctx context.Context, userUID string, realName bool) er
 	} else {
 		expireTime = time.Minute * 1
 	}
-	return common.RDB.Set(ctx, fmt.Sprintf(sealosUserRealNameKey, userUID), realName, expireTime).Err()
+	return common.RDB.Set(ctx, fmt.Sprintf(sealosUserRealNameKey, userUID), realName, expireTime).
+		Err()
 }
 
 func (s *Sealos) checkRealName(ctx context.Context, userUID string) bool {
@@ -249,7 +254,12 @@ func (s *Sealos) fetchRealNameFromAPI(ctx context.Context, userUID string) (bool
 	}
 
 	if resp.StatusCode != http.StatusOK || sealosResp.Error != "" {
-		return false, fmt.Errorf("get user (%s) real name failed with status code %d, error: %s", userUID, resp.StatusCode, sealosResp.Error)
+		return false, fmt.Errorf(
+			"get user (%s) real name failed with status code %d, error: %s",
+			userUID,
+			resp.StatusCode,
+			sealosResp.Error,
+		)
 	}
 
 	return sealosResp.IsRealName, nil
@@ -275,11 +285,22 @@ func (s *Sealos) getGroupRemainBalance(ctx context.Context, group string) (int64
 	return balance, userUID, nil
 }
 
-func (s *Sealos) fetchBalanceFromAPI(ctx context.Context, group string) (balance int64, userUID string, err error) {
+func (s *Sealos) fetchBalanceFromAPI(
+	ctx context.Context,
+	group string,
+) (balance int64, userUID string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		fmt.Sprintf("%s/admin/v1alpha1/account-with-workspace?namespace=%s", s.accountURL, group), nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf(
+			"%s/admin/v1alpha1/account-with-workspace?namespace=%s",
+			s.accountURL,
+			group,
+		),
+		nil,
+	)
 	if err != nil {
 		return 0, "", err
 	}
@@ -301,7 +322,11 @@ func (s *Sealos) fetchBalanceFromAPI(ctx context.Context, group string) (balance
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, "", fmt.Errorf("get group (%s) balance failed with status code %d", group, resp.StatusCode)
+		return 0, "", fmt.Errorf(
+			"get group (%s) balance failed with status code %d",
+			group,
+			resp.StatusCode,
+		)
 	}
 
 	return sealosResp.Balance, sealosResp.UserUID, nil
@@ -321,7 +346,11 @@ func newSealosPostGroupConsumer(accountURL, group, uid string) *SealosPostGroupC
 	}
 }
 
-func (s *SealosPostGroupConsumer) PostGroupConsume(ctx context.Context, tokenName string, usage float64) (float64, error) {
+func (s *SealosPostGroupConsumer) PostGroupConsume(
+	ctx context.Context,
+	tokenName string,
+	usage float64,
+) (float64, error) {
 	amount := s.calculateAmount(usage)
 
 	if err := cacheDecreaseGroupBalance(ctx, s.group, amount.IntPart()); err != nil {
@@ -343,7 +372,11 @@ func (s *SealosPostGroupConsumer) calculateAmount(usage float64) decimal.Decimal
 	return amount
 }
 
-func (s *SealosPostGroupConsumer) postConsume(ctx context.Context, amount int64, tokenName string) error {
+func (s *SealosPostGroupConsumer) postConsume(
+	ctx context.Context,
+	amount int64,
+	tokenName string,
+) error {
 	reqBody, err := sonic.Marshal(sealosPostGroupConsumeReq{
 		Namespace: s.group,
 		Amount:    amount,

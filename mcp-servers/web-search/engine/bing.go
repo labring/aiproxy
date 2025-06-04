@@ -49,7 +49,12 @@ func (b *BingEngine) Search(ctx context.Context, query SearchQuery) ([]SearchRes
 		querys.Set("mkt", query.Language)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.bing.microsoft.com/v7.0/search?"+querys.Encode(), nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		"https://api.bing.microsoft.com/v7.0/search?"+querys.Encode(),
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}

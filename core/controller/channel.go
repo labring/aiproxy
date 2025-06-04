@@ -11,6 +11,7 @@ import (
 
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
@@ -50,14 +51,23 @@ func ChannelTypeMetas(c *gin.Context) {
 //	@Success		200				{object}	middleware.APIResponse{data=map[string]any{channels=[]model.Channel,total=int}}
 //	@Router			/api/channels/ [get]
 func GetChannels(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	id, _ := strconv.Atoi(c.Query("id"))
 	name := c.Query("name")
 	key := c.Query("key")
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
 	baseURL := c.Query("base_url")
 	order := c.Query("order")
-	channels, total, err := model.GetChannels(page, perPage, id, name, key, channelType, baseURL, order)
+	channels, total, err := model.GetChannels(
+		page,
+		perPage,
+		id,
+		name,
+		key,
+		channelType,
+		baseURL,
+		order,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -141,14 +151,24 @@ func AddChannels(c *gin.Context) {
 //	@Router			/api/channels/search [get]
 func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	id, _ := strconv.Atoi(c.Query("id"))
 	name := c.Query("name")
 	key := c.Query("key")
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
 	baseURL := c.Query("base_url")
 	order := c.Query("order")
-	channels, total, err := model.SearchChannels(keyword, page, perPage, id, name, key, channelType, baseURL, order)
+	channels, total, err := model.SearchChannels(
+		keyword,
+		page,
+		perPage,
+		id,
+		name,
+		key,
+		channelType,
+		baseURL,
+		order,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -202,18 +222,32 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid channel type: %d", r.Type)
 	}
+	metadata := a.Metadata()
 	if validator := adaptors.GetKeyValidator(a); validator != nil {
 		err := validator.ValidateKey(r.Key)
 		if err != nil {
-			keyHelp := validator.KeyHelp()
+			keyHelp := metadata.KeyHelp
 			if keyHelp == "" {
-				return nil, fmt.Errorf("%s [%s(%d)] invalid key: %w", r.Name, r.Type.String(), r.Type, err)
+				return nil, fmt.Errorf(
+					"%s [%s(%d)] invalid key: %w",
+					r.Name,
+					r.Type.String(),
+					r.Type,
+					err,
+				)
 			}
-			return nil, fmt.Errorf("%s [%s(%d)] invalid key: %w, %s", r.Name, r.Type.String(), r.Type, err, keyHelp)
+			return nil, fmt.Errorf(
+				"%s [%s(%d)] invalid key: %w, %s",
+				r.Name,
+				r.Type.String(),
+				r.Type,
+				err,
+				keyHelp,
+			)
 		}
 	}
 	if r.Config != nil {
-		for key, template := range adaptors.GetConfigTemplates(a) {
+		for key, template := range metadata.Config {
 			v, err := r.Config.Get(key)
 			if err != nil {
 				if errors.Is(err, ast.ErrNotExist) {

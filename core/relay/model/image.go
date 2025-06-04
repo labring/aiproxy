@@ -43,8 +43,8 @@ type ImageUsage struct {
 	InputTokensDetails ImageInputTokensDetails `json:"input_tokens_details"`
 }
 
-func (i *ImageUsage) ToModelUsage() *model.Usage {
-	return &model.Usage{
+func (i *ImageUsage) ToModelUsage() model.Usage {
+	return model.Usage{
 		InputTokens:      model.ZeroNullInt64(i.InputTokens),
 		ImageInputTokens: model.ZeroNullInt64(i.InputTokensDetails.ImageTokens),
 		OutputTokens:     model.ZeroNullInt64(i.OutputTokens),

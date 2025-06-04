@@ -24,7 +24,6 @@ type StreamOptions struct {
 }
 
 type GeneralOpenAIRequest struct {
-	Prediction          any             `json:"prediction,omitempty"`
 	Prompt              any             `json:"prompt,omitempty"`
 	Input               any             `json:"input,omitempty"`
 	Metadata            any             `json:"metadata,omitempty"`
@@ -35,29 +34,18 @@ type GeneralOpenAIRequest struct {
 	Stop                any             `json:"stop,omitempty"`
 	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
 	TopLogprobs         *int            `json:"top_logprobs,omitempty"`
-	Style               *string         `json:"style,omitempty"`
-	Quality             *string         `json:"quality,omitempty"`
-	Audio               *Audio          `json:"audio,omitempty"`
 	PresencePenalty     *float64        `json:"presence_penalty,omitempty"`
 	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
-	Store               *bool           `json:"store,omitempty"`
-	ServiceTier         *string         `json:"service_tier,omitempty"`
 	FrequencyPenalty    *float64        `json:"frequency_penalty,omitempty"`
 	Logprobs            *bool           `json:"logprobs,omitempty"`
 	StreamOptions       *StreamOptions  `json:"stream_options,omitempty"`
 	Temperature         *float64        `json:"temperature,omitempty"`
 	TopP                *float64        `json:"top_p,omitempty"`
-	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
-	EncodingFormat      string          `json:"encoding_format,omitempty"`
 	Model               string          `json:"model,omitempty"`
-	Instruction         string          `json:"instruction,omitempty"`
 	User                string          `json:"user,omitempty"`
 	Size                string          `json:"size,omitempty"`
-	Modalities          []string        `json:"modalities,omitempty"`
 	Messages            []*Message      `json:"messages,omitempty"`
 	Tools               []*Tool         `json:"tools,omitempty"`
-	N                   int             `json:"n,omitempty"`
-	Dimensions          int             `json:"dimensions,omitempty"`
 	Seed                float64         `json:"seed,omitempty"`
 	MaxTokens           int             `json:"max_tokens,omitempty"`
 	TopK                int             `json:"top_k,omitempty"`
@@ -194,10 +182,14 @@ func (m *Message) ParseContent() []MessageContent {
 				}
 			case ContentTypeImageURL:
 				if subObj, ok := contentMap["image_url"].(map[string]any); ok {
+					url, ok := subObj["url"].(string)
+					if !ok {
+						continue
+					}
 					contentList = append(contentList, MessageContent{
 						Type: ContentTypeImageURL,
 						ImageURL: &ImageURL{
-							URL: subObj["url"].(string),
+							URL: url,
 						},
 					})
 				}

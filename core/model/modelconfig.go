@@ -26,18 +26,18 @@ type ModelConfig struct {
 	Plugin           map[string]json.RawMessage `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"`
 	Model            string                     `gorm:"primaryKey"                    json:"model"`
 	Owner            ModelOwner                 `gorm:"type:varchar(255);index"       json:"owner"`
-	Type             mode.Mode                  `json:"type"`
-	ExcludeFromTests bool                       `json:"exclude_from_tests,omitempty"`
-	RPM              int64                      `json:"rpm,omitempty"`
-	TPM              int64                      `json:"tpm,omitempty"`
+	Type             mode.Mode                  `                                     json:"type"`
+	ExcludeFromTests bool                       `                                     json:"exclude_from_tests,omitempty"`
+	RPM              int64                      `                                     json:"rpm,omitempty"`
+	TPM              int64                      `                                     json:"tpm,omitempty"`
 	// map[size]map[quality]price_per_image
 	ImageQualityPrices map[string]map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_quality_prices,omitempty"`
 	// map[size]price_per_image
 	ImagePrices  map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"`
 	Price        Price              `gorm:"embedded"                      json:"price,omitempty"`
-	RetryTimes   int64              `json:"retry_times,omitempty"`
-	Timeout      int64              `json:"timeout,omitempty"`
-	MaxErrorRate float64            `json:"max_error_rate,omitempty"`
+	RetryTimes   int64              `                                     json:"retry_times,omitempty"`
+	Timeout      int64              `                                     json:"timeout,omitempty"`
+	MaxErrorRate float64            `                                     json:"max_error_rate,omitempty"`
 }
 
 func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
@@ -126,7 +126,10 @@ func (c *ModelConfig) SupportFormats() ([]string, bool) {
 	return GetModelConfigStringSlice(c.Config, ModelConfigSupportFormatsKey)
 }
 
-func GetModelConfigs(page int, perPage int, model string) (configs []*ModelConfig, total int64, err error) {
+func GetModelConfigs(
+	page, perPage int,
+	model string,
+) (configs []*ModelConfig, total int64, err error) {
 	tx := DB.Model(&ModelConfig{})
 	if model != "" {
 		tx = tx.Where("model = ?", model)
@@ -177,7 +180,12 @@ func GetModelConfig(model string) (ModelConfig, error) {
 	return config, HandleNotFound(err, ErrModelConfigNotFound)
 }
 
-func SearchModelConfigs(keyword string, page int, perPage int, model string, owner ModelOwner) (configs []ModelConfig, total int64, err error) {
+func SearchModelConfigs(
+	keyword string,
+	page, perPage int,
+	model string,
+	owner ModelOwner,
+) (configs []ModelConfig, total int64, err error) {
 	tx := DB.Model(&ModelConfig{}).Where("model LIKE ?", "%"+keyword+"%")
 	if model != "" {
 		tx = tx.Where("model = ?", model)

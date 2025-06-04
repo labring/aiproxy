@@ -2,6 +2,7 @@ package aws
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,43 +15,76 @@ import (
 
 type Adaptor struct{}
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return ""
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
-	adaptor := GetAdaptor(meta.ActualModel)
-	if adaptor == nil {
-		return nil, errors.New("adaptor not found")
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	aa := GetAdaptor(meta.ActualModel)
+	if aa == nil {
+		return adaptor.ConvertResult{}, errors.New("adaptor not found")
 	}
-	meta.Set("awsAdapter", adaptor)
-	return adaptor.ConvertRequest(meta, req)
+	meta.Set("awsAdapter", aa)
+	return aa.ConvertRequest(meta, store, req)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, _ *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	_ *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	adaptor, ok := meta.Get("awsAdapter")
 	if !ok {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage("awsAdapter not found", nil, http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			"awsAdapter not found",
+			nil,
+			http.StatusInternalServerError,
+		)
 	}
-	return adaptor.(utils.AwsAdapter).DoResponse(meta, c)
+	v, ok := adaptor.(utils.AwsAdapter)
+	if !ok {
+		panic(fmt.Sprintf("aws adapter type error: %T, %v", v, v))
+	}
+	return v.DoResponse(meta, store, c)
 }
 
-func (a *Adaptor) GetModelList() (models []model.ModelConfig) {
-	models = make([]model.ModelConfig, 0, len(adaptors))
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	models := make([]model.ModelConfig, 0, len(adaptors))
 	for _, model := range adaptors {
 		models = append(models, model.config)
 	}
-	return
+	return adaptor.Metadata{
+		Models:  models,
+		KeyHelp: "region|ak|sk",
+	}
 }
 
-func (a *Adaptor) GetRequestURL(_ *meta.Meta) (string, error) {
-	return "", nil
+func (a *Adaptor) GetRequestURL(_ *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+	return adaptor.RequestURL{
+		Method: http.MethodPost,
+		URL:    "",
+	}, nil
 }
 
-func (a *Adaptor) SetupRequestHeader(_ *meta.Meta, _ *gin.Context, _ *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	_ *http.Request,
+) error {
 	return nil
 }
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, _ *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	_ *http.Request,
+) (*http.Response, error) {
 	return nil, nil
 }

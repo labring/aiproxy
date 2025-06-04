@@ -44,5 +44,9 @@ func ErrorHandler(baiduError *Error) adaptor.Error {
 			http.StatusTooManyRequests,
 		)
 	}
-	return relaymodel.WrapperOpenAIErrorWithMessage(baiduError.ErrorMsg, "upstream_"+strconv.Itoa(baiduError.ErrorCode), http.StatusInternalServerError)
+	return relaymodel.WrapperOpenAIErrorWithMessage(
+		baiduError.ErrorMsg,
+		"upstream_"+strconv.Itoa(baiduError.ErrorCode),
+		http.StatusInternalServerError,
+	)
 }

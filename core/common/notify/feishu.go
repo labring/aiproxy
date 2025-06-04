@@ -36,7 +36,12 @@ func (f *FeishuNotifier) Notify(level Level, title, message string) {
 	}()
 }
 
-func (f *FeishuNotifier) NotifyThrottle(level Level, key string, expiration time.Duration, title, message string) {
+func (f *FeishuNotifier) NotifyThrottle(
+	level Level,
+	key string,
+	expiration time.Duration,
+	title, message string,
+) {
 	if trylock.Lock(key, expiration) {
 		stdNotifier.Notify(level, title, message)
 		go func() {

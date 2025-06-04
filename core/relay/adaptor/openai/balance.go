@@ -31,7 +31,7 @@ type UsageResponse struct {
 	TotalUsage float64 `json:"total_usage"` // unit: 0.01 dollar
 }
 
-func GetBalance(baseURL string, key string) (float64, error) {
+func GetBalance(baseURL, key string) (float64, error) {
 	u := baseURL
 	if u == "" {
 		u = baseURL
@@ -55,9 +55,9 @@ func GetBalance(baseURL string, key string) (float64, error) {
 	}
 	now := time.Now()
 	startDate := now.Format("2006-01") + "-01"
-	endDate := now.Format("2006-01-02")
+	endDate := now.Format(time.DateOnly)
 	if !subscription.HasPaymentMethod {
-		startDate = now.AddDate(0, 0, -100).Format("2006-01-02")
+		startDate = now.AddDate(0, 0, -100).Format(time.DateOnly)
 	}
 	url = u + "/v1/dashboard/billing/usage?start_date=" + startDate + "&end_date=" + endDate
 	req2, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)

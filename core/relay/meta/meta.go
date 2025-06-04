@@ -21,8 +21,8 @@ type Meta struct {
 	values        map[string]any
 	Channel       ChannelMeta
 	ChannelConfig model.ChannelConfig
-	Group         *model.GroupCache
-	Token         *model.TokenCache
+	Group         model.GroupCache
+	Token         model.TokenCache
 	ModelConfig   model.ModelConfig
 
 	Endpoint    string
@@ -34,6 +34,9 @@ type Meta struct {
 	Mode        mode.Mode
 
 	RequestUsage model.Usage
+
+	JobID        string
+	GenerationID string
 }
 
 type Option func(meta *Meta)
@@ -62,13 +65,13 @@ func WithRetryAt(retryAt time.Time) Option {
 	}
 }
 
-func WithGroup(group *model.GroupCache) Option {
+func WithGroup(group model.GroupCache) Option {
 	return func(meta *Meta) {
 		meta.Group = group
 	}
 }
 
-func WithToken(token *model.TokenCache) Option {
+func WithToken(token model.TokenCache) Option {
 	return func(meta *Meta) {
 		meta.Token = token
 	}
@@ -77,6 +80,18 @@ func WithToken(token *model.TokenCache) Option {
 func WithRequestUsage(requestUsage model.Usage) Option {
 	return func(meta *Meta) {
 		meta.RequestUsage = requestUsage
+	}
+}
+
+func WithJobID(jobID string) Option {
+	return func(meta *Meta) {
+		meta.JobID = jobID
+	}
+}
+
+func WithGenerationID(generationID string) Option {
+	return func(meta *Meta) {
+		meta.GenerationID = generationID
 	}
 }
 

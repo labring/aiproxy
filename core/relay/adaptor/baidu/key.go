@@ -14,10 +14,6 @@ func (a *Adaptor) ValidateKey(key string) error {
 	return err
 }
 
-func (a *Adaptor) KeyHelp() string {
-	return "client_id|client_secret"
-}
-
 // key格式: client_id|client_secret
 func getClientIDAndSecret(key string) (string, string, error) {
 	parts := strings.Split(key, "|")

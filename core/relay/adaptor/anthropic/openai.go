@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -277,7 +279,10 @@ func batchPatchImage2Base64(ctx context.Context, imageTasks []*Content) error {
 }
 
 // https://docs.anthropic.com/claude/reference/messages-streaming
-func StreamResponse2OpenAI(meta *meta.Meta, respData []byte) (*relaymodel.ChatCompletionsStreamResponse, adaptor.Error) {
+func StreamResponse2OpenAI(
+	meta *meta.Meta,
+	respData []byte,
+) (*relaymodel.ChatCompletionsStreamResponse, adaptor.Error) {
 	var usage *relaymodel.Usage
 	var content string
 	var thinking string
@@ -287,7 +292,11 @@ func StreamResponse2OpenAI(meta *meta.Meta, respData []byte) (*relaymodel.ChatCo
 	var claudeResponse StreamResponse
 	err := sonic.Unmarshal(respData, &claudeResponse)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "unmarshal_response", http.StatusInternalServerError)
+		return nil, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response",
+			http.StatusInternalServerError,
+		)
 	}
 
 	switch claudeResponse.Type {
@@ -332,10 +341,12 @@ func StreamResponse2OpenAI(meta *meta.Meta, respData []byte) (*relaymodel.ChatCo
 		if claudeResponse.Message == nil {
 			return nil, nil
 		}
-		usage = claudeResponse.Message.Usage.ToOpenAIUsage()
+		openAIUsage := claudeResponse.Message.Usage.ToOpenAIUsage()
+		usage = &openAIUsage
 	case "message_delta":
 		if claudeResponse.Usage != nil {
-			usage = claudeResponse.Usage.ToOpenAIUsage()
+			openAIUsage := claudeResponse.Usage.ToOpenAIUsage()
+			usage = &openAIUsage
 		}
 		if claudeResponse.Delta != nil && claudeResponse.Delta.StopReason != nil {
 			stopReason = *claudeResponse.Delta.StopReason
@@ -354,7 +365,7 @@ func StreamResponse2OpenAI(meta *meta.Meta, respData []byte) (*relaymodel.ChatCo
 
 	openaiResponse := relaymodel.ChatCompletionsStreamResponse{
 		ID:      openai.ChatCompletionID(),
-		Object:  relaymodel.ChatCompletionChunk,
+		Object:  relaymodel.ChatCompletionChunkObject,
 		Created: time.Now().Unix(),
 		Model:   meta.OriginModel,
 		Usage:   usage,
@@ -364,7 +375,27 @@ func StreamResponse2OpenAI(meta *meta.Meta, respData []byte) (*relaymodel.ChatCo
 	return &openaiResponse, nil
 }
 
-func Response2OpenAI(meta *meta.Meta, claudeResponse *Response) *relaymodel.TextResponse {
+func Response2OpenAI(
+	meta *meta.Meta,
+	respData []byte,
+) (*relaymodel.TextResponse, adaptor.Error) {
+	var claudeResponse Response
+	err := sonic.Unmarshal(respData, &claudeResponse)
+	if err != nil {
+		return nil, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	if claudeResponse.Type == "error" {
+		return nil, OpenAIErrorHandlerWithBody(
+			http.StatusBadRequest,
+			respData,
+		)
+	}
+
 	var content string
 	var thinking string
 	tools := make([]*relaymodel.Tool, 0)
@@ -405,28 +436,25 @@ func Response2OpenAI(meta *meta.Meta, claudeResponse *Response) *relaymodel.Text
 	fullTextResponse := relaymodel.TextResponse{
 		ID:      openai.ChatCompletionID(),
 		Model:   meta.OriginModel,
-		Object:  relaymodel.ChatCompletion,
+		Object:  relaymodel.ChatCompletionObject,
 		Created: time.Now().Unix(),
 		Choices: []*relaymodel.TextResponseChoice{&choice},
-		Usage: relaymodel.Usage{
-			PromptTokens:     claudeResponse.Usage.InputTokens + claudeResponse.Usage.CacheReadInputTokens + claudeResponse.Usage.CacheCreationInputTokens,
-			CompletionTokens: claudeResponse.Usage.OutputTokens,
-			PromptTokensDetails: &relaymodel.PromptTokensDetails{
-				CachedTokens:        claudeResponse.Usage.CacheReadInputTokens,
-				CacheCreationTokens: claudeResponse.Usage.CacheCreationInputTokens,
-			},
-		},
+		Usage:   claudeResponse.Usage.ToOpenAIUsage(),
 	}
-	if fullTextResponse.Usage.PromptTokens == 0 {
-		fullTextResponse.Usage.PromptTokens = int64(meta.RequestUsage.InputTokens)
+	if fullTextResponse.PromptTokens == 0 {
+		fullTextResponse.PromptTokens = int64(meta.RequestUsage.InputTokens)
 	}
-	fullTextResponse.Usage.TotalTokens = fullTextResponse.Usage.PromptTokens + fullTextResponse.Usage.CompletionTokens
-	return &fullTextResponse
+	fullTextResponse.TotalTokens = fullTextResponse.PromptTokens + fullTextResponse.CompletionTokens
+	return &fullTextResponse, nil
 }
 
-func OpenAIStreamHandler(m *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func OpenAIStreamHandler(
+	m *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, OpenAIErrorHandler(resp)
+		return model.Usage{}, OpenAIErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -498,12 +526,17 @@ func OpenAIStreamHandler(m *meta.Meta, c *gin.Context, resp *http.Response) (*mo
 		usage = &relaymodel.Usage{
 			PromptTokens:     int64(m.RequestUsage.InputTokens),
 			CompletionTokens: openai.CountTokenText(responseText.String(), m.OriginModel),
-			TotalTokens:      int64(m.RequestUsage.InputTokens) + openai.CountTokenText(responseText.String(), m.OriginModel),
+			TotalTokens: int64(
+				m.RequestUsage.InputTokens,
+			) + openai.CountTokenText(
+				responseText.String(),
+				m.OriginModel,
+			),
 		}
 		_ = render.ObjectData(c, &relaymodel.ChatCompletionsStreamResponse{
 			ID:      openai.ChatCompletionID(),
 			Model:   m.OriginModel,
-			Object:  relaymodel.ChatCompletionChunk,
+			Object:  relaymodel.ChatCompletionChunkObject,
 			Created: time.Now().Unix(),
 			Choices: []*relaymodel.ChatCompletionsStreamResponseChoice{},
 			Usage:   usage,
@@ -515,25 +548,40 @@ func OpenAIStreamHandler(m *meta.Meta, c *gin.Context, resp *http.Response) (*mo
 	return usage.ToModelUsage(), nil
 }
 
-func OpenAIHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func OpenAIHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, OpenAIErrorHandler(resp)
+		return model.Usage{}, OpenAIErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
-	var claudeResponse Response
-	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&claudeResponse)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
-	fullTextResponse := Response2OpenAI(meta, &claudeResponse)
+	fullTextResponse, adaptorErr := Response2OpenAI(meta, body)
+	if adaptorErr != nil {
+		return model.Usage{}, adaptorErr
+	}
+
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return fullTextResponse.ToModelUsage(), nil
 }

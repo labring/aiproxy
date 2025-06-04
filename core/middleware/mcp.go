@@ -22,21 +22,21 @@ func MCPAuth(c *gin.Context) {
 		"sk-",
 	)
 
-	var token *model.TokenCache
+	var token model.TokenCache
 	var useInternalToken bool
 	if config.AdminKey != "" && config.AdminKey == key ||
 		config.InternalToken != "" && config.InternalToken == key {
-		token = &model.TokenCache{
+		token = model.TokenCache{
 			Key: key,
 		}
 		useInternalToken = true
 	} else {
-		var err error
-		token, err = model.ValidateAndGetToken(key)
+		tokenCache, err := model.ValidateAndGetToken(key)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error(), "invalid_token")
 			return
 		}
+		token = *tokenCache
 	}
 
 	SetLogTokenFields(log.Data, token, useInternalToken)
@@ -58,18 +58,18 @@ func MCPAuth(c *gin.Context) {
 		}
 	}
 
-	var group *model.GroupCache
+	var group model.GroupCache
 	if useInternalToken {
-		group = &model.GroupCache{
+		group = model.GroupCache{
 			Status: model.GroupStatusInternal,
 		}
 	} else {
-		var err error
-		group, err = model.CacheGetGroup(token.Group)
+		groupCache, err := model.CacheGetGroup(token.Group)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
 			return
 		}
+		group = *groupCache
 	}
 	SetLogGroupFields(log.Data, group)
 	if group.Status != model.GroupStatusEnabled && group.Status != model.GroupStatusInternal {

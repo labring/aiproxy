@@ -151,8 +151,8 @@ type ServerToolUse struct {
 	ExecutionTimeSeconds float64 `json:"execution_time_seconds,omitempty"`
 }
 
-func (u *Usage) ToOpenAIUsage() *relaymodel.Usage {
-	usage := &relaymodel.Usage{
+func (u *Usage) ToOpenAIUsage() relaymodel.Usage {
+	usage := relaymodel.Usage{
 		PromptTokens:     u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
 		CompletionTokens: u.OutputTokens,
 		PromptTokensDetails: &relaymodel.PromptTokensDetails{

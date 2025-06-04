@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -19,10 +20,13 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertSTTRequest(
+	meta *meta.Meta,
+	request *http.Request,
+) (adaptor.ConvertResult, error) {
 	err := request.ParseMultipartForm(1024 * 1024 * 4)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
 	multipartBody := &bytes.Buffer{}
@@ -36,7 +40,7 @@ func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (*adaptor.Convert
 		if key == "model" {
 			err = multipartWriter.WriteField(key, meta.ActualModel)
 			if err != nil {
-				return nil, err
+				return adaptor.ConvertResult{}, err
 			}
 			continue
 		}
@@ -46,7 +50,7 @@ func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (*adaptor.Convert
 		}
 		err = multipartWriter.WriteField(key, value)
 		if err != nil {
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
 	}
 
@@ -57,24 +61,23 @@ func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (*adaptor.Convert
 		fileHeader := files[0]
 		file, err := fileHeader.Open()
 		if err != nil {
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
 		w, err := multipartWriter.CreateFormFile(key, fileHeader.Filename)
 		if err != nil {
 			file.Close()
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
 		_, err = io.Copy(w, file)
 		file.Close()
 		if err != nil {
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
 	}
 
 	multipartWriter.Close()
 	ContentType := multipartWriter.FormDataContentType()
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
+	return adaptor.ConvertResult{
 		Header: http.Header{
 			"Content-Type": {ContentType},
 		},
@@ -82,9 +85,13 @@ func ConvertSTTRequest(meta *meta.Meta, request *http.Request) (*adaptor.Convert
 	}, nil
 }
 
-func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func STTHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, ErrorHanlder(resp)
+		return model.Usage{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -95,7 +102,11 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
 	var text string
@@ -114,7 +125,11 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 		text, err = getTextFromJSON(responseBody)
 	}
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "get_text_from_body_err", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"get_text_from_body_err",
+			http.StatusInternalServerError,
+		)
 	}
 	var promptTokens int64
 	if meta.RequestUsage.InputTokens > 0 {
@@ -123,7 +138,7 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 		promptTokens = CountTokenText(text, meta.ActualModel)
 	}
 
-	usage := &relaymodel.Usage{
+	usage := relaymodel.Usage{
 		PromptTokens: promptTokens,
 		TotalTokens:  promptTokens,
 	}
@@ -134,16 +149,28 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 		strings.Contains(resp.Header.Get("Content-Type"), "json"):
 		node, err := sonic.Get(responseBody)
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "get_node_from_body_err", http.StatusInternalServerError)
+			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				err,
+				"get_node_from_body_err",
+				http.StatusInternalServerError,
+			)
 		}
 		if node.Get("usage").Exists() {
 			usageStr, err := node.Get("usage").Raw()
 			if err != nil {
-				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "unmarshal_response_err", http.StatusInternalServerError)
+				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+					err,
+					"unmarshal_response_err",
+					http.StatusInternalServerError,
+				)
 			}
 			err = sonic.UnmarshalString(usageStr, usage)
 			if err != nil {
-				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "unmarshal_response_err", http.StatusInternalServerError)
+				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+					err,
+					"unmarshal_response_err",
+					http.StatusInternalServerError,
+				)
 			}
 			switch {
 			case usage.PromptTokens != 0 && usage.TotalTokens == 0:
@@ -158,14 +185,24 @@ func STTHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Us
 
 		_, err = node.SetAny("usage", usage)
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "marshal_response_err", http.StatusInternalServerError)
+			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_err",
+				http.StatusInternalServerError,
+			)
 		}
 		responseBody, err = node.MarshalJSON()
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "marshal_response_err", http.StatusInternalServerError)
+			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_err",
+				http.StatusInternalServerError,
+			)
 		}
 	}
 
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, err = c.Writer.Write(responseBody)
 	if err != nil {
 		log.Warnf("write response body failed: %v", err)

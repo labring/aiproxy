@@ -32,7 +32,7 @@ type SummaryData struct {
 	MaxRPS         int64   `json:"max_rps,omitempty"`
 	MaxTPM         int64   `json:"max_tpm,omitempty"`
 	MaxTPS         int64   `json:"max_tps,omitempty"`
-	Usage          Usage   `gorm:"embedded"          json:"usage,omitempty"`
+	Usage          Usage   `json:"usage,omitempty"   gorm:"embedded"`
 }
 
 func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
@@ -49,39 +49,92 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 
 	// max rpm tpm update
 	if d.MaxRPM > 0 {
-		data["max_rpm"] = gorm.Expr(fmt.Sprintf("CASE WHEN %s.max_rpm < ? THEN ? ELSE %s.max_rpm END", tableName, tableName), d.MaxRPM, d.MaxRPM)
+		data["max_rpm"] = gorm.Expr(
+			fmt.Sprintf(
+				"CASE WHEN %s.max_rpm < ? THEN ? ELSE %s.max_rpm END",
+				tableName,
+				tableName,
+			),
+			d.MaxRPM,
+			d.MaxRPM,
+		)
 	}
 	if d.MaxRPS > 0 {
-		data["max_rps"] = gorm.Expr(fmt.Sprintf("CASE WHEN %s.max_rps < ? THEN ? ELSE %s.max_rps END", tableName, tableName), d.MaxRPS, d.MaxRPS)
+		data["max_rps"] = gorm.Expr(
+			fmt.Sprintf(
+				"CASE WHEN %s.max_rps < ? THEN ? ELSE %s.max_rps END",
+				tableName,
+				tableName,
+			),
+			d.MaxRPS,
+			d.MaxRPS,
+		)
 	}
 	if d.MaxTPM > 0 {
-		data["max_tpm"] = gorm.Expr(fmt.Sprintf("CASE WHEN %s.max_tpm < ? THEN ? ELSE %s.max_tpm END", tableName, tableName), d.MaxTPM, d.MaxTPM)
+		data["max_tpm"] = gorm.Expr(
+			fmt.Sprintf(
+				"CASE WHEN %s.max_tpm < ? THEN ? ELSE %s.max_tpm END",
+				tableName,
+				tableName,
+			),
+			d.MaxTPM,
+			d.MaxTPM,
+		)
 	}
 	if d.MaxTPS > 0 {
-		data["max_tps"] = gorm.Expr(fmt.Sprintf("CASE WHEN %s.max_tps < ? THEN ? ELSE %s.max_tps END", tableName, tableName), d.MaxTPS, d.MaxTPS)
+		data["max_tps"] = gorm.Expr(
+			fmt.Sprintf(
+				"CASE WHEN %s.max_tps < ? THEN ? ELSE %s.max_tps END",
+				tableName,
+				tableName,
+			),
+			d.MaxTPS,
+			d.MaxTPS,
+		)
 	}
 
 	// usage update
 	if d.Usage.InputTokens > 0 {
-		data["input_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.input_tokens, 0) + ?", tableName), d.Usage.InputTokens)
+		data["input_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.input_tokens, 0) + ?", tableName),
+			d.Usage.InputTokens,
+		)
 	}
 	if d.Usage.ImageInputTokens > 0 {
-		data["image_input_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.image_input_tokens, 0) + ?", tableName), d.Usage.ImageInputTokens)
+		data["image_input_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.image_input_tokens, 0) + ?", tableName),
+			d.Usage.ImageInputTokens,
+		)
 	}
 	if d.Usage.OutputTokens > 0 {
-		data["output_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.output_tokens, 0) + ?", tableName), d.Usage.OutputTokens)
+		data["output_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.output_tokens, 0) + ?", tableName),
+			d.Usage.OutputTokens,
+		)
 	}
 	if d.Usage.TotalTokens > 0 {
-		data["total_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.total_tokens, 0) + ?", tableName), d.Usage.TotalTokens)
+		data["total_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.total_tokens, 0) + ?", tableName),
+			d.Usage.TotalTokens,
+		)
 	}
 	if d.Usage.CachedTokens > 0 {
-		data["cached_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.cached_tokens, 0) + ?", tableName), d.Usage.CachedTokens)
+		data["cached_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cached_tokens, 0) + ?", tableName),
+			d.Usage.CachedTokens,
+		)
 	}
 	if d.Usage.CacheCreationTokens > 0 {
-		data["cache_creation_tokens"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.cache_creation_tokens, 0) + ?", tableName), d.Usage.CacheCreationTokens)
+		data["cache_creation_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cache_creation_tokens, 0) + ?", tableName),
+			d.Usage.CacheCreationTokens,
+		)
 	}
 	if d.Usage.WebSearchCount > 0 {
-		data["web_search_count"] = gorm.Expr(fmt.Sprintf("COALESCE(%s.web_search_count, 0) + ?", tableName), d.Usage.WebSearchCount)
+		data["web_search_count"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.web_search_count, 0) + ?", tableName),
+			d.Usage.WebSearchCount,
+		)
 	}
 	return data
 }
@@ -165,7 +218,11 @@ func UpsertSummary(unique SummaryUnique, data SummaryData) error {
 func createSummary(unique SummaryUnique, data SummaryData) error {
 	return LogDB.
 		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "channel_id"}, {Name: "model"}, {Name: "hour_timestamp"}},
+			Columns: []clause.Column{
+				{Name: "channel_id"},
+				{Name: "model"},
+				{Name: "hour_timestamp"},
+			},
 			DoUpdates: clause.Assignments(data.buildUpdateData("summaries")),
 		}).
 		Create(&Summary{
@@ -250,7 +307,7 @@ func GetUsedChannels(group string, start, end time.Time) ([]int, error) {
 	return getLogGroupByValues[int]("channel_id", group, "", start, end)
 }
 
-func GetUsedModels(group string, tokenName string, start, end time.Time) ([]string, error) {
+func GetUsedModels(group, tokenName string, start, end time.Time) ([]string, error) {
 	return getLogGroupByValues[string]("model", group, tokenName, start, end)
 }
 
@@ -258,7 +315,10 @@ func GetUsedTokenNames(group string, start, end time.Time) ([]string, error) {
 	return getLogGroupByValues[string]("token_name", group, "", start, end)
 }
 
-func getLogGroupByValues[T cmp.Ordered](field string, group string, tokenName string, start, end time.Time) ([]T, error) {
+func getLogGroupByValues[T cmp.Ordered](
+	field, group, tokenName string,
+	start, end time.Time,
+) ([]T, error) {
 	type Result struct {
 		Value        T
 		UsedAmount   float64
@@ -290,7 +350,9 @@ func getLogGroupByValues[T cmp.Ordered](field string, group string, tokenName st
 	}
 
 	err := query.
-		Select(field + " as value, SUM(request_count) as request_count, SUM(used_amount) as used_amount").
+		Select(
+			field + " as value, SUM(request_count) as request_count, SUM(used_amount) as used_amount",
+		).
 		Group(field).
 		Scan(&results).Error
 	if err != nil {
@@ -332,7 +394,11 @@ type CostRank struct {
 	MaxTPS int64 `json:"max_tps,omitempty"`
 }
 
-func GetModelCostRank(group string, tokenName string, channelID int, start, end time.Time) ([]*CostRank, error) {
+func GetModelCostRank(
+	group, tokenName string,
+	channelID int,
+	start, end time.Time,
+) ([]*CostRank, error) {
 	var ranks []*CostRank
 
 	var query *gorm.DB

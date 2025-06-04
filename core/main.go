@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
@@ -19,7 +20,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	_ "github.com/joho/godotenv/autoload"
+	"github.com/joho/godotenv"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/balance"
 	"github.com/labring/aiproxy/core/common/config"
@@ -42,8 +43,6 @@ func init() {
 }
 
 func initializeServices() error {
-	setLog(log.StandardLogger())
-
 	initializeNotifier()
 
 	if err := initializeBalance(); err != nil {
@@ -103,7 +102,7 @@ func setLog(l *log.Logger) {
 		FullTimestamp:    true,
 		TimestampFormat:  time.DateTime,
 		QuoteEmptyFields: true,
-		CallerPrettyfier: func(f *runtime.Frame) (function string, file string) {
+		CallerPrettyfier: func(f *runtime.Frame) (function, file string) {
 			if _, ok := logCallerIgnoreFuncs[f.Function]; ok {
 				return "", ""
 			}
@@ -171,7 +170,7 @@ func autoTestBannedModels(ctx context.Context) {
 	}
 }
 
-func detectIPGroups(ctx context.Context) {
+func detectIPGroupsTask(ctx context.Context) {
 	log.Info("detect IP groups start")
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -184,12 +183,12 @@ func detectIPGroups(ctx context.Context) {
 			if !trylock.Lock("detectIPGroups", time.Minute) {
 				continue
 			}
-			DetectIPGroups()
+			detectIPGroups()
 		}
 	}
 }
 
-func DetectIPGroups() {
+func detectIPGroups() {
 	threshold := config.GetIPGroupsThreshold()
 	if threshold < 1 {
 		return
@@ -206,18 +205,33 @@ func DetectIPGroups() {
 		slices.Sort(groups)
 		groupsJSON, err := sonic.MarshalString(groups)
 		if err != nil {
-			notify.ErrorThrottle("detectIPGroupsMarshal", time.Minute, "marshal IP groups failed", err.Error())
+			notify.ErrorThrottle(
+				"detectIPGroupsMarshal",
+				time.Minute,
+				"marshal IP groups failed",
+				err.Error(),
+			)
 			continue
 		}
 
 		if banThreshold >= threshold && len(groups) >= int(banThreshold) {
 			rowsAffected, err := model.UpdateGroupsStatus(groups, model.GroupStatusDisabled)
 			if err != nil {
-				notify.ErrorThrottle("detectIPGroupsBan", time.Minute, "update groups status failed", err.Error())
+				notify.ErrorThrottle(
+					"detectIPGroupsBan",
+					time.Minute,
+					"update groups status failed",
+					err.Error(),
+				)
 			}
 			if rowsAffected > 0 {
 				notify.Warn(
-					fmt.Sprintf("Suspicious activity: IP %s is using %d groups (exceeds ban threshold of %d). IP and all groups have been disabled.", ip, len(groups), banThreshold),
+					fmt.Sprintf(
+						"Suspicious activity: IP %s is using %d groups (exceeds ban threshold of %d). IP and all groups have been disabled.",
+						ip,
+						len(groups),
+						banThreshold,
+					),
 					groupsJSON,
 				)
 				ipblack.SetIPBlackAnyWay(ip, time.Hour*48)
@@ -233,7 +247,12 @@ func DetectIPGroups() {
 		notify.WarnThrottle(
 			hashKey,
 			time.Hour*3,
-			fmt.Sprintf("Potential abuse: IP %s is using %d groups (exceeds threshold of %d)", ip, len(groups), threshold),
+			fmt.Sprintf(
+				"Potential abuse: IP %s is using %d groups (exceeds threshold of %d)",
+				ip,
+				len(groups),
+				threshold,
+			),
 			groupsJSON,
 		)
 	}
@@ -262,6 +281,44 @@ func cleanLog(ctx context.Context) {
 	}
 }
 
+var loadedEnvFiles []string
+
+func loadEnv() {
+	envfiles := []string{
+		".env",
+		".env.local",
+	}
+	for _, envfile := range envfiles {
+		absPath, err := filepath.Abs(envfile)
+		if err != nil {
+			panic(
+				fmt.Sprintf(
+					"failed to get absolute path of env file: %s, error: %s",
+					envfile,
+					err.Error(),
+				),
+			)
+		}
+		file, err := os.Stat(absPath)
+		if err != nil {
+			continue
+		}
+		if file.IsDir() {
+			continue
+		}
+		if err := godotenv.Overload(absPath); err != nil {
+			panic(fmt.Sprintf("failed to load env file: %s, error: %s", absPath, err.Error()))
+		}
+		loadedEnvFiles = append(loadedEnvFiles, absPath)
+	}
+}
+
+func printLoadedEnvFiles() {
+	for _, envfile := range loadedEnvFiles {
+		log.Infof("loaded env file: %s", envfile)
+	}
+}
+
 // Swagger godoc
 //
 //	@title						AI Proxy Swagger API
@@ -271,6 +328,14 @@ func cleanLog(ctx context.Context) {
 //	@name						Authorization
 func main() {
 	flag.Parse()
+
+	loadEnv()
+
+	config.ReloadEnv()
+
+	setLog(log.StandardLogger())
+
+	printLoadedEnvFiles()
 
 	if err := initializeServices(); err != nil {
 		log.Fatal("failed to initialize services: " + err.Error())
@@ -301,7 +366,7 @@ func main() {
 
 	go autoTestBannedModels(ctx)
 	go cleanLog(ctx)
-	go detectIPGroups(ctx)
+	go detectIPGroupsTask(ctx)
 	go controller.UpdateChannelsBalance(time.Minute * 10)
 
 	batchProcessorCtx, batchProcessorCancel := context.WithCancel(context.Background())

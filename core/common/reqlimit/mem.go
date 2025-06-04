@@ -56,7 +56,12 @@ func (m *InMemoryRecord) cleanupAndCount(e *entry, cutoff int64) (int64, int64) 
 	return normalCount, overCount
 }
 
-func (m *InMemoryRecord) PushRequest(overed int64, duration time.Duration, n int64, keys ...string) (normalCount int64, overCount int64, secondCount int64) {
+func (m *InMemoryRecord) PushRequest(
+	overed int64,
+	duration time.Duration,
+	n int64,
+	keys ...string,
+) (normalCount, overCount, secondCount int64) {
 	e := m.getEntry(keys)
 
 	e.Lock()
@@ -87,7 +92,10 @@ func (m *InMemoryRecord) PushRequest(overed int64, duration time.Duration, n int
 	return normalCount, overCount, wc.normal + wc.over
 }
 
-func (m *InMemoryRecord) GetRequest(duration time.Duration, keys ...string) (totalCount int64, secondCount int64) {
+func (m *InMemoryRecord) GetRequest(
+	duration time.Duration,
+	keys ...string,
+) (totalCount, secondCount int64) {
 	nowSecond := time.Now().Unix()
 	cutoff := nowSecond - int64(duration.Seconds())
 
@@ -112,7 +120,7 @@ func (m *InMemoryRecord) GetRequest(duration time.Duration, keys ...string) (tot
 	return totalCount, secondCount
 }
 
-func (m *InMemoryRecord) cleanupInactiveEntries(interval time.Duration, maxInactivity time.Duration) {
+func (m *InMemoryRecord) cleanupInactiveEntries(interval, maxInactivity time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -135,7 +143,7 @@ func parseKeys(key string) []string {
 	return strings.Split(key, ":")
 }
 
-func matchKeys(pattern []string, keys []string) bool {
+func matchKeys(pattern, keys []string) bool {
 	if len(pattern) != len(keys) {
 		return false
 	}

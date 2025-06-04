@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -19,18 +20,27 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
-func GetRequestURL(meta *meta.Meta) (string, error) {
+func GetRequestURL(meta *meta.Meta) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		if strings.HasPrefix(meta.ActualModel, "bot-") {
-			return u + "/api/v3/bots/chat/completions", nil
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    u + "/api/v3/bots/chat/completions",
+			}, nil
 		}
-		return u + "/api/v3/chat/completions", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/api/v3/chat/completions",
+		}, nil
 	case mode.Embeddings:
-		return u + "/api/v3/embeddings", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/api/v3/embeddings",
+		}, nil
 	default:
-		return "", fmt.Errorf("unsupported relay mode %d for doubao", meta.Mode)
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported relay mode %d for doubao", meta.Mode)
 	}
 }
 
@@ -40,22 +50,32 @@ type Adaptor struct {
 
 const baseURL = "https://ark.cn-beijing.volces.com"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"Bot support",
+			"Network search metering support",
+		},
+		Models: ModelList,
+	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	return GetRequestURL(meta)
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
-	result, err := a.Adaptor.ConvertRequest(meta, req)
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	result, err := a.Adaptor.ConvertRequest(meta, store, req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	if meta.Mode != mode.ChatCompletions || meta.OriginModel != "deepseek-reasoner" {
 		return result, nil
@@ -64,11 +84,11 @@ func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.C
 	m := make(map[string]any)
 	err = sonic.ConfigDefault.NewDecoder(result.Body).Decode(&m)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	messages, _ := m["messages"].([]any)
 	if len(messages) == 0 {
-		return nil, errors.New("messages is empty")
+		return adaptor.ConvertResult{}, errors.New("messages is empty")
 	}
 	sysMessage := relaymodel.Message{
 		Role:    "system",
@@ -78,12 +98,14 @@ func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.C
 	m["messages"] = messages
 	newBody, err := sonic.Marshal(m)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 
-	return &adaptor.ConvertRequestResult{
-		Method: result.Method,
-		Header: result.Header,
+	header := result.Header
+	header.Set("Content-Length", strconv.Itoa(len(newBody)))
+
+	return adaptor.ConvertResult{
+		Header: header,
 		Body:   bytes.NewReader(newBody),
 	}, nil
 }
@@ -133,7 +155,12 @@ func handlerPreHandler(meta *meta.Meta, node *ast.Node, websearchCount *int64) e
 	})
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		websearchCount := int64(0)
@@ -142,11 +169,9 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 		} else {
 			usage, err = openai.Handler(meta, c, resp, newHandlerPreHandler(&websearchCount))
 		}
-		if usage != nil {
-			usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
-		}
+		usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
 	default:
-		return openai.DoResponse(meta, c, resp)
+		return openai.DoResponse(meta, store, c, resp)
 	}
 	return usage, err
 }

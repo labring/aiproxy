@@ -1,7 +1,7 @@
 package middleware
 
 const (
-	Channel            = "channel"
+	ChannelID          = "channel_id"
 	GroupModelTokenRPM = "group_model_token_rpm"
 	GroupModelTokenRPS = "group_model_token_rps"
 	GroupModelTokenTPM = "group_model_token_tpm"
@@ -17,4 +17,6 @@ const (
 	ModelCaches        = "model_caches"
 	ModelConfig        = "model_config"
 	Mode               = "mode"
+	JobID              = "job_id"
+	GenerationID       = "generation_id"
 )

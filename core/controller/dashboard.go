@@ -15,7 +15,11 @@ import (
 	"gorm.io/gorm"
 )
 
-func getDashboardTime(t string, timespan string, startTimestamp int64, endTimestamp int64, timezoneLocation *time.Location) (time.Time, time.Time, model.TimeSpanType) {
+func getDashboardTime(
+	t, timespan string,
+	startTimestamp, endTimestamp int64,
+	timezoneLocation *time.Location,
+) (time.Time, time.Time, model.TimeSpanType) {
 	end := time.Now()
 	if endTimestamp != 0 {
 		end = time.Unix(endTimestamp, 0)
@@ -54,7 +58,11 @@ func getDashboardTime(t string, timespan string, startTimestamp int64, endTimest
 	return start, end, timeSpan
 }
 
-func fillGaps(data []*model.ChartData, start, end time.Time, t model.TimeSpanType) []*model.ChartData {
+func fillGaps(
+	data []*model.ChartData,
+	start, end time.Time,
+	t model.TimeSpanType,
+) []*model.ChartData {
 	if len(data) == 0 {
 		return data
 	}
@@ -162,12 +170,25 @@ func GetDashboard(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	timespan := c.Query("timespan")
-	start, end, timeSpan := getDashboardTime(c.Query("type"), timespan, startTimestamp, endTimestamp, timezoneLocation)
+	start, end, timeSpan := getDashboardTime(
+		c.Query("type"),
+		timespan,
+		startTimestamp,
+		endTimestamp,
+		timezoneLocation,
+	)
 	modelName := c.Query("model")
 	channelStr := c.Query("channel")
 	channelID, _ := strconv.Atoi(channelStr)
 
-	dashboards, err := model.GetDashboardData(start, end, modelName, channelID, timeSpan, timezoneLocation)
+	dashboards, err := model.GetDashboardData(
+		start,
+		end,
+		modelName,
+		channelID,
+		timeSpan,
+		timezoneLocation,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -214,11 +235,25 @@ func GetGroupDashboard(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	timespan := c.Query("timespan")
-	start, end, timeSpan := getDashboardTime(c.Query("type"), timespan, startTimestamp, endTimestamp, timezoneLocation)
+	start, end, timeSpan := getDashboardTime(
+		c.Query("type"),
+		timespan,
+		startTimestamp,
+		endTimestamp,
+		timezoneLocation,
+	)
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model")
 
-	dashboards, err := model.GetGroupDashboardData(group, start, end, tokenName, modelName, timeSpan, timezoneLocation)
+	dashboards, err := model.GetGroupDashboardData(
+		group,
+		start,
+		end,
+		tokenName,
+		modelName,
+		timeSpan,
+		timezoneLocation,
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to get statistics")
 		return
@@ -226,9 +261,19 @@ func GetGroupDashboard(c *gin.Context) {
 
 	dashboards.ChartData = fillGaps(dashboards.ChartData, start, end, timeSpan)
 
-	rpm, _ := reqlimit.GetGroupModelTokennameRequest(c.Request.Context(), group, modelName, tokenName)
+	rpm, _ := reqlimit.GetGroupModelTokennameRequest(
+		c.Request.Context(),
+		group,
+		modelName,
+		tokenName,
+	)
 	dashboards.RPM = rpm
-	tpm, _ := reqlimit.GetGroupModelTokennameTokensRequest(c.Request.Context(), group, modelName, tokenName)
+	tpm, _ := reqlimit.GetGroupModelTokennameTokensRequest(
+		c.Request.Context(),
+		group,
+		modelName,
+		tokenName,
+	)
 	dashboards.TPM = tpm
 
 	middleware.SuccessResponse(c, dashboards)
@@ -253,7 +298,10 @@ func GetGroupDashboardModels(c *gin.Context) {
 	groupCache, err := model.CacheGetGroup(group)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			middleware.SuccessResponse(c, model.LoadModelCaches().EnabledModelConfigsBySet[model.ChannelDefaultSet])
+			middleware.SuccessResponse(
+				c,
+				model.LoadModelCaches().EnabledModelConfigsBySet[model.ChannelDefaultSet],
+			)
 		} else {
 			middleware.ErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
 		}
@@ -270,7 +318,10 @@ func GetGroupDashboardModels(c *gin.Context) {
 			}) {
 				continue
 			}
-			newEnabledModelConfigs = append(newEnabledModelConfigs, middleware.GetGroupAdjustedModelConfig(groupCache, mc))
+			newEnabledModelConfigs = append(
+				newEnabledModelConfigs,
+				middleware.GetGroupAdjustedModelConfig(*groupCache, mc),
+			)
 		}
 	}
 	middleware.SuccessResponse(c, newEnabledModelConfigs)

@@ -8,6 +8,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/aws"
 	"github.com/labring/aiproxy/core/relay/adaptor/azure"
+	"github.com/labring/aiproxy/core/relay/adaptor/azure2"
 	"github.com/labring/aiproxy/core/relay/adaptor/baichuan"
 	"github.com/labring/aiproxy/core/relay/adaptor/baidu"
 	"github.com/labring/aiproxy/core/relay/adaptor/baiduv2"
@@ -44,6 +45,7 @@ import (
 var ChannelAdaptor = map[model.ChannelType]adaptor.Adaptor{
 	model.ChannelTypeOpenAI:                  &openai.Adaptor{},
 	model.ChannelTypeAzure:                   &azure.Adaptor{},
+	model.ChannelTypeAzure2:                  &azure2.Adaptor{},
 	model.ChannelTypeGoogleGeminiOpenAI:      &geminiopenai.Adaptor{},
 	model.ChannelTypeBaiduV2:                 &baiduv2.Adaptor{},
 	model.ChannelTypeAnthropic:               &anthropic.Adaptor{},
@@ -85,25 +87,26 @@ func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {
 }
 
 type AdaptorMeta struct {
-	Name            string                  `json:"name"`
-	KeyHelp         string                  `json:"keyHelp"`
-	DefaultBaseURL  string                  `json:"defaultBaseUrl"`
-	Fetures         []string                `json:"fetures,omitempty"`
-	ConfigTemplates adaptor.ConfigTemplates `json:"configTemplates,omitempty"`
+	Name           string                  `json:"name"`
+	KeyHelp        string                  `json:"keyHelp"`
+	DefaultBaseURL string                  `json:"defaultBaseUrl"`
+	Fetures        []string                `json:"fetures,omitempty"`
+	Config         adaptor.ConfigTemplates `json:"config,omitempty"`
 }
 
 var ChannelMetas = map[model.ChannelType]AdaptorMeta{}
 
 func init() {
 	for i, a := range ChannelAdaptor {
+		adaptorMeta := a.Metadata()
 		meta := AdaptorMeta{
-			Name:            i.String(),
-			KeyHelp:         GetKeyValidator(a).KeyHelp(),
-			DefaultBaseURL:  a.GetBaseURL(),
-			Fetures:         getAdaptorFetures(a),
-			ConfigTemplates: GetConfigTemplates(a),
+			Name:           i.String(),
+			KeyHelp:        adaptorMeta.KeyHelp,
+			DefaultBaseURL: a.DefaultBaseURL(),
+			Fetures:        adaptorMeta.Features,
+			Config:         adaptorMeta.Config,
 		}
-		for key, template := range meta.ConfigTemplates {
+		for key, template := range meta.Config {
 			if template.Name == "" {
 				log.Fatalf("config template %s is invalid: name is empty", key)
 			}
@@ -124,27 +127,9 @@ func (a *KeyValidatorNoop) ValidateKey(_ string) error {
 	return nil
 }
 
-func (a *KeyValidatorNoop) KeyHelp() string {
-	return ""
-}
-
 func GetKeyValidator(a adaptor.Adaptor) adaptor.KeyValidator {
 	if keyValidator, ok := a.(adaptor.KeyValidator); ok {
 		return keyValidator
 	}
 	return defaultKeyValidator
-}
-
-func getAdaptorFetures(a adaptor.Adaptor) []string {
-	if fetures, ok := a.(adaptor.Features); ok {
-		return fetures.Features()
-	}
-	return nil
-}
-
-func GetConfigTemplates(a adaptor.Adaptor) adaptor.ConfigTemplates {
-	if config, ok := a.(adaptor.Config); ok {
-		return config.ConfigTemplates()
-	}
-	return nil
 }

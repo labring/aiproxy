@@ -13,7 +13,7 @@ func IsValidSubnet(subnet string) error {
 	return nil
 }
 
-func IsIPInSubnet(ip string, subnet string) (bool, error) {
+func IsIPInSubnet(ip, subnet string) (bool, error) {
 	_, ipNet, err := net.ParseCIDR(subnet)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse subnet: %w", err)

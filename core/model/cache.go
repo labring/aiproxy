@@ -148,7 +148,6 @@ func CacheDeleteToken(key string) error {
 	return common.RedisDel(fmt.Sprintf(TokenCacheKey, key))
 }
 
-//nolint:gosec
 func CacheSetToken(token *TokenCache) error {
 	if !common.RedisEnabled {
 		return nil
@@ -211,7 +210,8 @@ func CacheUpdateTokenUsedAmountOnlyIncrease(key string, amount float64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateTokenUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, amount).Err()
+	return updateTokenUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, amount).
+		Err()
 }
 
 var updateTokenNameScript = redis.NewScript(`
@@ -221,11 +221,12 @@ var updateTokenNameScript = redis.NewScript(`
 	return redis.status_reply("ok")
 `)
 
-func CacheUpdateTokenName(key string, name string) error {
+func CacheUpdateTokenName(key, name string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateTokenNameScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, name).Err()
+	return updateTokenNameScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, name).
+		Err()
 }
 
 var updateTokenStatusScript = redis.NewScript(`
@@ -239,7 +240,8 @@ func CacheUpdateTokenStatus(key string, status int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateTokenStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, status).Err()
+	return updateTokenStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(TokenCacheKey, key)}, status).
+		Err()
 }
 
 type redisMap[K comparable, V any] map[K]V
@@ -318,7 +320,8 @@ func CacheUpdateGroupRPMRatio(id string, rpmRatio float64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateGroupRPMRatioScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, rpmRatio).Err()
+	return updateGroupRPMRatioScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, rpmRatio).
+		Err()
 }
 
 var updateGroupTPMRatioScript = redis.NewScript(`
@@ -332,7 +335,8 @@ func CacheUpdateGroupTPMRatio(id string, tpmRatio float64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateGroupTPMRatioScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, tpmRatio).Err()
+	return updateGroupTPMRatioScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, tpmRatio).
+		Err()
 }
 
 var updateGroupStatusScript = redis.NewScript(`
@@ -346,10 +350,10 @@ func CacheUpdateGroupStatus(id string, status int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateGroupStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, status).Err()
+	return updateGroupStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, status).
+		Err()
 }
 
-//nolint:gosec
 func CacheSetGroup(group *GroupCache) error {
 	if !common.RedisEnabled {
 		return nil
@@ -412,7 +416,8 @@ func CacheUpdateGroupUsedAmountOnlyIncrease(id string, amount float64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateGroupUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, amount).Err()
+	return updateGroupUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupCacheKey, id)}, amount).
+		Err()
 }
 
 type GroupMCPCache struct {
@@ -446,7 +451,6 @@ func CacheDeleteGroupMCP(groupID, mcpID string) error {
 	return common.RedisDel(fmt.Sprintf(GroupMCPCacheKey, groupID, mcpID))
 }
 
-//nolint:gosec
 func CacheSetGroupMCP(groupMCP *GroupMCPCache) error {
 	if !common.RedisEnabled {
 		return nil
@@ -503,7 +507,8 @@ func CacheUpdateGroupMCPStatus(groupID, mcpID string, status GroupMCPStatus) err
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updateGroupMCPStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupMCPCacheKey, groupID, mcpID)}, status).Err()
+	return updateGroupMCPStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(GroupMCPCacheKey, groupID, mcpID)}, status).
+		Err()
 }
 
 type PublicMCPCache struct {
@@ -539,7 +544,6 @@ func CacheDeletePublicMCP(mcpID string) error {
 	return common.RedisDel(fmt.Sprintf(PublicMCPCacheKey, mcpID))
 }
 
-//nolint:gosec
 func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
 	if !common.RedisEnabled {
 		return nil
@@ -596,7 +600,8 @@ func CacheUpdatePublicMCPStatus(mcpID string, status PublicMCPStatus) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return updatePublicMCPStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(PublicMCPCacheKey, mcpID)}, status).Err()
+	return updatePublicMCPStatusScript.Run(context.Background(), common.RDB, []string{fmt.Sprintf(PublicMCPCacheKey, mcpID)}, status).
+		Err()
 }
 
 const (
@@ -624,7 +629,6 @@ func CacheDeletePublicMCPReusingParam(mcpID, groupID string) error {
 	return common.RedisDel(fmt.Sprintf(PublicMCPReusingParamCacheKey, mcpID, groupID))
 }
 
-//nolint:gosec
 func CacheSetPublicMCPReusingParam(param *PublicMCPReusingParamCache) error {
 	if !common.RedisEnabled {
 		return nil
@@ -668,6 +672,73 @@ func CacheGetPublicMCPReusingParam(mcpID, groupID string) (*PublicMCPReusingPara
 	}
 
 	return prc, nil
+}
+
+const (
+	StoreCacheKey = "store:%s" // store_id
+)
+
+type StoreCache struct {
+	ID        string    `json:"id"         redis:"i"`
+	GroupID   string    `json:"group_id"   redis:"g"`
+	TokenID   int       `json:"token_id"   redis:"t"`
+	ChannelID int       `json:"channel_id" redis:"c"`
+	Model     string    `json:"model"      redis:"m"`
+	ExpiresAt time.Time `json:"expires_at" redis:"e"`
+}
+
+func (s *Store) ToStoreCache() *StoreCache {
+	return &StoreCache{
+		ID:        s.ID,
+		GroupID:   s.GroupID,
+		TokenID:   s.TokenID,
+		ChannelID: s.ChannelID,
+		Model:     s.Model,
+		ExpiresAt: s.ExpiresAt,
+	}
+}
+
+func CacheSetStore(store *StoreCache) error {
+	if !common.RedisEnabled {
+		return nil
+	}
+	key := fmt.Sprintf(StoreCacheKey, store.ID)
+	pipe := common.RDB.Pipeline()
+	pipe.HSet(context.Background(), key, store)
+	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
+	pipe.Expire(context.Background(), key, expireTime)
+	_, err := pipe.Exec(context.Background())
+	return err
+}
+
+func CacheGetStore(id string) (*StoreCache, error) {
+	if !common.RedisEnabled {
+		store, err := GetStore(id)
+		if err != nil {
+			return nil, err
+		}
+		return store.ToStoreCache(), nil
+	}
+
+	cacheKey := fmt.Sprintf(StoreCacheKey, id)
+	storeCache := &StoreCache{}
+	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(storeCache)
+	if err == nil && storeCache.ID != "" {
+		return storeCache, nil
+	}
+
+	store, err := GetStore(id)
+	if err != nil {
+		return nil, err
+	}
+
+	sc := store.ToStoreCache()
+
+	if err := CacheSetStore(sc); err != nil {
+		log.Error("redis set store error: " + err.Error())
+	}
+
+	return sc, nil
 }
 
 //nolint:revive
@@ -724,7 +795,10 @@ func InitModelConfigAndChannelCache() error {
 	sortChannelsByPriorityBySet(enabledModel2ChannelsBySet)
 
 	// Build enabled models and configs by set
-	enabledModelsBySet, enabledModelConfigsBySet, enabledModelConfigsMap := buildEnabledModelsBySet(enabledModel2ChannelsBySet, modelConfig)
+	enabledModelsBySet, enabledModelConfigsBySet, enabledModelConfigsMap := buildEnabledModelsBySet(
+		enabledModel2ChannelsBySet,
+		modelConfig,
+	)
 
 	// Load disabled channels
 	disabledChannels, err := LoadDisabledChannels()
@@ -843,7 +917,7 @@ func initializeModelConfigCache() (ModelConfigCache, error) {
 	}
 
 	configs := &modelConfigMapCache{modelConfigMap: newModelConfigMap}
-	if config.GetDisableModelConfig() {
+	if config.DisableModelConfig {
 		return &disabledModelConfigCache{modelConfigs: configs}, nil
 	}
 	return configs, nil
@@ -903,7 +977,10 @@ func sortChannelsByPriorityBySet(modelMapBySet map[string]map[string][]*Channel)
 	}
 }
 
-func buildEnabledModelsBySet(modelMapBySet map[string]map[string][]*Channel, modelConfigCache ModelConfigCache) (
+func buildEnabledModelsBySet(
+	modelMapBySet map[string]map[string][]*Channel,
+	modelConfigCache ModelConfigCache,
+) (
 	map[string][]string,
 	map[string][]ModelConfig,
 	map[string]ModelConfig,
@@ -962,7 +1039,11 @@ func SortModelConfigsFunc(i, j ModelConfig) int {
 	return 1
 }
 
-func SyncModelConfigAndChannelCache(ctx context.Context, wg *sync.WaitGroup, frequency time.Duration) {
+func SyncModelConfigAndChannelCache(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	frequency time.Duration,
+) {
 	defer wg.Done()
 
 	ticker := time.NewTicker(frequency)
@@ -974,7 +1055,12 @@ func SyncModelConfigAndChannelCache(ctx context.Context, wg *sync.WaitGroup, fre
 		case <-ticker.C:
 			err := InitModelConfigAndChannelCache()
 			if err != nil {
-				notify.ErrorThrottle("syncModelChannel", time.Minute, "failed to sync channels", err.Error())
+				notify.ErrorThrottle(
+					"syncModelChannel",
+					time.Minute,
+					"failed to sync channels",
+					err.Error(),
+				)
 			}
 		}
 	}

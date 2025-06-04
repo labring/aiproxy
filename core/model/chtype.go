@@ -14,6 +14,7 @@ func (c ChannelType) String() string {
 const (
 	ChannelTypeOpenAI                  ChannelType = 1
 	ChannelTypeAzure                   ChannelType = 3
+	ChannelTypeAzure2                  ChannelType = 4
 	ChannelTypeGoogleGeminiOpenAI      ChannelType = 12
 	ChannelTypeBaiduV2                 ChannelType = 13
 	ChannelTypeAnthropic               ChannelType = 14
@@ -52,6 +53,7 @@ const (
 var channelTypeNames = map[ChannelType]string{
 	ChannelTypeOpenAI:                  "openai",
 	ChannelTypeAzure:                   "azure",
+	ChannelTypeAzure2:                  "azure (model name support contain '.')",
 	ChannelTypeGoogleGeminiOpenAI:      "google gemini (openai)",
 	ChannelTypeBaiduV2:                 "baidu v2",
 	ChannelTypeAnthropic:               "anthropic",

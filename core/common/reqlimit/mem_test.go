@@ -231,7 +231,11 @@ func TestEmptyQueries(t *testing.T) {
 
 	totalCount, secondCount = rl.GetRequest(60*time.Second, "nonexistent", "model")
 	if totalCount != 0 || secondCount != 0 {
-		t.Errorf("Expected empty results for nonexistent key, got total=%d, second=%d", totalCount, secondCount)
+		t.Errorf(
+			"Expected empty results for nonexistent key, got total=%d, second=%d",
+			totalCount,
+			secondCount,
+		)
 	}
 }
 

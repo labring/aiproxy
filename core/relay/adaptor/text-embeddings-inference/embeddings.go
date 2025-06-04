@@ -10,9 +10,14 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 )
 
-func EmbeddingsHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func EmbeddingsHandler(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, EmbeddingsErrorHanlder(resp)
+		return model.Usage{}, EmbeddingsErrorHanlder(resp)
 	}
-	return openai.DoResponse(meta, c, resp)
+	return openai.DoResponse(meta, store, c, resp)
 }

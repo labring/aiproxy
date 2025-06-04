@@ -18,7 +18,10 @@ var fieldsPool = sync.Pool{
 
 func NewLog(l *logrus.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fields := fieldsPool.Get().(logrus.Fields)
+		fields, ok := fieldsPool.Get().(logrus.Fields)
+		if !ok {
+			panic(fmt.Sprintf("fields pool type error: %T, %v", fields, fields))
+		}
 		defer func() {
 			clear(fields)
 			fieldsPool.Put(fields)
@@ -95,7 +98,11 @@ func formatter(param gin.LogFormatterParams) string {
 
 func GetLogger(c *gin.Context) *logrus.Entry {
 	if log, ok := c.Get("log"); ok {
-		return log.(*logrus.Entry)
+		v, ok := log.(*logrus.Entry)
+		if !ok {
+			panic(fmt.Sprintf("log type error: %T, %v", v, v))
+		}
+		return v
 	}
 	entry := NewLogger()
 	c.Set("log", entry)
@@ -103,8 +110,12 @@ func GetLogger(c *gin.Context) *logrus.Entry {
 }
 
 func NewLogger() *logrus.Entry {
+	fields, ok := fieldsPool.Get().(logrus.Fields)
+	if !ok {
+		panic(fmt.Sprintf("fields pool type error: %T, %v", fields, fields))
+	}
 	return &logrus.Entry{
 		Logger: logrus.StandardLogger(),
-		Data:   fieldsPool.Get().(logrus.Fields),
+		Data:   fields,
 	}
 }

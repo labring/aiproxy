@@ -56,6 +56,10 @@ func AdminAuth(c *gin.Context) {
 		return
 	}
 
+	c.Set(Token, &model.TokenCache{
+		Key: config.AdminKey,
+	})
+
 	group := c.Param("group")
 	if group != "" {
 		log := GetLogger(c)
@@ -76,21 +80,21 @@ func TokenAuth(c *gin.Context) {
 		"sk-",
 	)
 
-	var token *model.TokenCache
+	var token model.TokenCache
 	var useInternalToken bool
 	if config.AdminKey != "" && config.AdminKey == key ||
 		config.InternalToken != "" && config.InternalToken == key {
-		token = &model.TokenCache{
+		token = model.TokenCache{
 			Key: key,
 		}
 		useInternalToken = true
 	} else {
-		var err error
-		token, err = model.ValidateAndGetToken(key)
+		tokenCache, err := model.ValidateAndGetToken(key)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error(), "invalid_token")
 			return
 		}
+		token = *tokenCache
 	}
 
 	SetLogTokenFields(log.Data, token, useInternalToken)
@@ -114,19 +118,19 @@ func TokenAuth(c *gin.Context) {
 
 	modelCaches := model.LoadModelCaches()
 
-	var group *model.GroupCache
+	var group model.GroupCache
 	if useInternalToken {
-		group = &model.GroupCache{
+		group = model.GroupCache{
 			Status:        model.GroupStatusInternal,
 			AvailableSets: slices.Collect(maps.Keys(modelCaches.EnabledModelsBySet)),
 		}
 	} else {
-		var err error
-		group, err = model.CacheGetGroup(token.Group)
+		groupCache, err := model.CacheGetGroup(token.Group)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
 			return
 		}
+		group = *groupCache
 	}
 	SetLogGroupFields(log.Data, group)
 	if group.Status != model.GroupStatusEnabled && group.Status != model.GroupStatusInternal {
@@ -144,24 +148,28 @@ func TokenAuth(c *gin.Context) {
 	c.Next()
 }
 
-func GetGroup(c *gin.Context) *model.GroupCache {
-	return c.MustGet(Group).(*model.GroupCache)
+func GetGroup(c *gin.Context) model.GroupCache {
+	v, ok := c.MustGet(Group).(model.GroupCache)
+	if !ok {
+		panic(fmt.Sprintf("group cache type error: %T, %v", v, v))
+	}
+	return v
 }
 
-func GetToken(c *gin.Context) *model.TokenCache {
-	return c.MustGet(Token).(*model.TokenCache)
+func GetToken(c *gin.Context) model.TokenCache {
+	v, ok := c.MustGet(Token).(model.TokenCache)
+	if !ok {
+		panic(fmt.Sprintf("token cache type error: %T, %v", v, v))
+	}
+	return v
 }
 
 func GetModelCaches(c *gin.Context) *model.ModelCaches {
-	return c.MustGet(ModelCaches).(*model.ModelCaches)
-}
-
-func GetChannel(c *gin.Context) *model.Channel {
-	ch, exists := c.Get(Channel)
-	if !exists {
-		return nil
+	v, ok := c.MustGet(ModelCaches).(*model.ModelCaches)
+	if !ok {
+		panic(fmt.Sprintf("model caches type error: %T, %v", v, v))
 	}
-	return ch.(*model.Channel)
+	return v
 }
 
 func SetLogFieldsFromMeta(m *meta.Meta, fields logrus.Fields) {
@@ -205,19 +213,13 @@ func SetLogRequestIDField(fields logrus.Fields, requestID string) {
 	fields["reqid"] = requestID
 }
 
-func SetLogGroupFields(fields logrus.Fields, group *model.GroupCache) {
-	if group == nil {
-		return
-	}
+func SetLogGroupFields(fields logrus.Fields, group model.GroupCache) {
 	if group.ID != "" {
 		fields["gid"] = group.ID
 	}
 }
 
-func SetLogTokenFields(fields logrus.Fields, token *model.TokenCache, internal bool) {
-	if token == nil {
-		return
-	}
+func SetLogTokenFields(fields logrus.Fields, token model.TokenCache, internal bool) {
 	if token.ID > 0 {
 		fields["kid"] = token.ID
 	}

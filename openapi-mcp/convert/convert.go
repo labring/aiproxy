@@ -91,7 +91,7 @@ func (c *Converter) Convert() (*server.MCPServer, error) {
 	return mcpServer, nil
 }
 
-func getServerURL(from string, dir string) (string, error) {
+func getServerURL(from, dir string) (string, error) {
 	if from == "" {
 		return dir, nil
 	}
@@ -113,7 +113,10 @@ func getServerURL(from string, dir string) (string, error) {
 }
 
 // TODO: valid operation
-func newHandler(defaultServer, authorization string, path, method string, _ *openapi3.Operation) server.ToolHandlerFunc {
+func newHandler(
+	defaultServer, authorization, path, method string,
+	_ *openapi3.Operation,
+) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		arg := getArgs(request.GetArguments())
 
@@ -126,7 +129,11 @@ func newHandler(defaultServer, authorization string, path, method string, _ *ope
 		// Replace path parameters
 		finalPath := path
 		for paramName, paramValue := range arg.Path {
-			finalPath = strings.ReplaceAll(finalPath, "{"+paramName+"}", fmt.Sprintf("%v", paramValue))
+			finalPath = strings.ReplaceAll(
+				finalPath,
+				"{"+paramName+"}",
+				fmt.Sprintf("%v", paramValue),
+			)
 		}
 
 		// Build the full URL with query parameters
@@ -159,7 +166,12 @@ func newHandler(defaultServer, authorization string, path, method string, _ *ope
 		}
 
 		// Create the HTTP request
-		httpReq, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), parsedURL.String(), reqBody)
+		httpReq, err := http.NewRequestWithContext(
+			ctx,
+			strings.ToUpper(method),
+			parsedURL.String(),
+			reqBody,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 		}
@@ -437,7 +449,10 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 		if len(response.Content) > 0 {
 			for contentType, mediaType := range response.Content {
 				if mediaType.Schema != nil && mediaType.Schema.Value != nil {
-					property := c.processSchemaProperty(mediaType.Schema.Value, make(map[string]bool))
+					property := c.processSchemaProperty(
+						mediaType.Schema.Value,
+						make(map[string]bool),
+					)
 					str, err := json.Marshal(property)
 					if err != nil {
 						continue
@@ -454,7 +469,9 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 }
 
 // convertSecurityRequirements converts OpenAPI security requirements to MCP arguments
-func (c *Converter) convertSecurityRequirements(securityRequirements openapi3.SecurityRequirements) []mcp.ToolOption {
+func (c *Converter) convertSecurityRequirements(
+	securityRequirements openapi3.SecurityRequirements,
+) []mcp.ToolOption {
 	args := []mcp.ToolOption{}
 
 	var securitySchemes openapi3.SecuritySchemes
@@ -638,7 +655,10 @@ func (c *Converter) convertParameters(parameters openapi3.Parameters) []mcp.Tool
 
 			// Add example if present
 			if schema.Example != nil {
-				propertyOptions = append(propertyOptions, mcp.DefaultString(fmt.Sprintf("%v", schema.Example)))
+				propertyOptions = append(
+					propertyOptions,
+					mcp.DefaultString(fmt.Sprintf("%v", schema.Example)),
+				)
 			}
 		}
 
@@ -654,7 +674,10 @@ func (c *Converter) convertParameters(parameters openapi3.Parameters) []mcp.Tool
 }
 
 // processSchemaItems processes schema items for array types
-func (c *Converter) processSchemaItems(schema *openapi3.Schema, visited map[string]bool) map[string]any {
+func (c *Converter) processSchemaItems(
+	schema *openapi3.Schema,
+	visited map[string]bool,
+) map[string]any {
 	item := make(map[string]any)
 
 	if schema.Type != nil {
@@ -685,7 +708,10 @@ func (c *Converter) processSchemaItems(schema *openapi3.Schema, visited map[stri
 }
 
 // processSchemaProperties processes schema properties for object types
-func (c *Converter) processSchemaProperties(schema *openapi3.Schema, visited map[string]bool) map[string]any {
+func (c *Converter) processSchemaProperties(
+	schema *openapi3.Schema,
+	visited map[string]bool,
+) map[string]any {
 	obj := make(map[string]any)
 
 	for propName, propRef := range schema.Properties {
@@ -698,12 +724,16 @@ func (c *Converter) processSchemaProperties(schema *openapi3.Schema, visited map
 }
 
 // processSchemaProperty processes a single schema property
-func (c *Converter) processSchemaProperty(schema *openapi3.Schema, visited map[string]bool) map[string]any {
+func (c *Converter) processSchemaProperty(
+	schema *openapi3.Schema,
+	visited map[string]bool,
+) map[string]any {
 	// Check for circular references
 	if schema.Title != "" {
 		refKey := schema.Title
 		if visited[refKey] {
-			// We've seen this schema before, return a simplified reference to avoid circular references
+			// We've seen this schema before, return a simplified reference to avoid circular
+			// references
 			return map[string]any{
 				"type":        "reference",
 				"description": "Circular reference to " + refKey,
@@ -724,7 +754,10 @@ func (c *Converter) processSchemaProperty(schema *openapi3.Schema, visited map[s
 
 // buildPropertyMap builds the property map for a schema
 // This function was extracted to reduce cyclomatic complexity
-func (c *Converter) buildPropertyMap(schema *openapi3.Schema, visited map[string]bool) map[string]any {
+func (c *Converter) buildPropertyMap(
+	schema *openapi3.Schema,
+	visited map[string]bool,
+) map[string]any {
 	property := make(map[string]any)
 
 	// Add basic schema information
@@ -846,7 +879,11 @@ func (c *Converter) addSchemaValidations(schema *openapi3.Schema, property map[s
 }
 
 // addSchemaComposition adds schema composition to the property map
-func (c *Converter) addSchemaComposition(schema *openapi3.Schema, property map[string]any, visited map[string]bool) {
+func (c *Converter) addSchemaComposition(
+	schema *openapi3.Schema,
+	property map[string]any,
+	visited map[string]bool,
+) {
 	// Schema composition
 	if len(schema.OneOf) > 0 {
 		oneOf := make([]any, 0, len(schema.OneOf))
@@ -890,7 +927,11 @@ func (c *Converter) addSchemaComposition(schema *openapi3.Schema, property map[s
 }
 
 // addObjectProperties adds object properties to the property map
-func (c *Converter) addObjectProperties(schema *openapi3.Schema, property map[string]any, visited map[string]bool) {
+func (c *Converter) addObjectProperties(
+	schema *openapi3.Schema,
+	property map[string]any,
+	visited map[string]bool,
+) {
 	// Handle AdditionalProperties
 	if schema.AdditionalProperties.Has != nil {
 		property["additionalProperties"] = *schema.AdditionalProperties.Has
@@ -920,9 +961,14 @@ func (c *Converter) addObjectProperties(schema *openapi3.Schema, property map[st
 	}
 }
 
-func (c *Converter) addArrayItems(schema *openapi3.Schema, property map[string]any, visited map[string]bool) {
+func (c *Converter) addArrayItems(
+	schema *openapi3.Schema,
+	property map[string]any,
+	visited map[string]bool,
+) {
 	// Recursively process array items
-	if schema.Type != nil && schema.Type.Is("array") && schema.Items != nil && schema.Items.Value != nil {
+	if schema.Type != nil && schema.Type.Is("array") && schema.Items != nil &&
+		schema.Items.Value != nil {
 		property["items"] = c.processSchemaItems(schema.Items.Value, visited)
 	}
 }
@@ -959,7 +1005,11 @@ func (c *Converter) addAdditionalMetadata(schema *openapi3.Schema, property map[
 }
 
 // createToolOption creates the appropriate tool option based on property type
-func (c *Converter) createToolOption(t propertyType, name string, options ...mcp.PropertyOption) mcp.ToolOption {
+func (c *Converter) createToolOption(
+	t propertyType,
+	name string,
+	options ...mcp.PropertyOption,
+) mcp.ToolOption {
 	switch t {
 	case PropertyTypeString:
 		return mcp.WithString(name, options...)

@@ -60,5 +60,11 @@ func WarnThrottle(key string, expiration time.Duration, title, message string) {
 }
 
 func ErrorThrottle(key string, expiration time.Duration, title, message string) {
-	defaultNotifier.NotifyThrottle(LevelError, limitKey(LevelError, key), expiration, title, message)
+	defaultNotifier.NotifyThrottle(
+		LevelError,
+		limitKey(LevelError, key),
+		expiration,
+		title,
+		message,
+	)
 }

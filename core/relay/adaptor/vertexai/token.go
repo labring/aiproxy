@@ -44,14 +44,18 @@ func getToken(ctx context.Context, adcJSON string) (string, error) {
 		return "", fmt.Errorf("failed to decode credentials file: %w", err)
 	}
 
-	c, err := credentials.NewIamCredentialsClient(ctx, option.WithCredentialsJSON(conv.StringToBytes(adcJSON)))
+	c, err := credentials.NewIamCredentialsClient(
+		ctx,
+		option.WithCredentialsJSON(conv.StringToBytes(adcJSON)),
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create client: %w", err)
 	}
 	defer c.Close()
 
 	req := &credentialspb.GenerateAccessTokenRequest{
-		// See https://pkg.go.dev/cloud.google.com/go/iam/credentials/apiv1/credentialspb#GenerateAccessTokenRequest.
+		// See
+		// https://pkg.go.dev/cloud.google.com/go/iam/credentials/apiv1/credentialspb#GenerateAccessTokenRequest.
 		Name:  "projects/-/serviceAccounts/" + adc.ClientEmail,
 		Scope: []string{defaultScope},
 	}

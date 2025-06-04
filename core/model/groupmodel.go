@@ -21,8 +21,8 @@ type GroupModelConfig struct {
 	TPM           int64 `json:"tpm"`
 
 	OverridePrice bool               `json:"override_price"`
-	ImagePrices   map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"`
-	Price         Price              `gorm:"embedded"                      json:"price,omitempty"`
+	ImagePrices   map[string]float64 `json:"image_prices,omitempty" gorm:"serializer:fastjson;type:text"`
+	Price         Price              `json:"price,omitempty"        gorm:"embedded"`
 
 	OverrideRetryTimes bool  `json:"override_retry_times"`
 	RetryTimes         int64 `json:"retry_times"`
@@ -110,7 +110,9 @@ func DeleteGroupModelConfig(groupID, model string) error {
 }
 
 func DeleteGroupModelConfigs(groupID string, models []string) error {
-	return DB.Where("group_id = ? AND model IN ?", groupID, models).Delete(&GroupModelConfig{}).Error
+	return DB.Where("group_id = ? AND model IN ?", groupID, models).
+		Delete(&GroupModelConfig{}).
+		Error
 }
 
 func GetGroupModelConfigs(groupID string) ([]GroupModelConfig, error) {

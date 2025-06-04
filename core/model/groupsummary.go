@@ -91,7 +91,12 @@ func UpsertGroupSummary(unique GroupSummaryUnique, data SummaryData) error {
 func createGroupSummary(unique GroupSummaryUnique, data SummaryData) error {
 	return LogDB.
 		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "group_id"}, {Name: "token_name"}, {Name: "model"}, {Name: "hour_timestamp"}},
+			Columns: []clause.Column{
+				{Name: "group_id"},
+				{Name: "token_name"},
+				{Name: "model"},
+				{Name: "hour_timestamp"},
+			},
 			DoUpdates: clause.Assignments(data.buildUpdateData("group_summaries")),
 		}).
 		Create(&GroupSummary{
@@ -116,7 +121,7 @@ func GetGroupLastRequestTime(group string) (time.Time, error) {
 	return time.Unix(summary.Unique.HourTimestamp, 0), err
 }
 
-func GetGroupTokenLastRequestTime(group string, token string) (time.Time, error) {
+func GetGroupTokenLastRequestTime(group, token string) (time.Time, error) {
 	var summary GroupSummary
 	err := LogDB.
 		Model(&GroupSummary{}).

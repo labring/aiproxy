@@ -87,7 +87,7 @@ func init() {
 	builtinModelsMap = make(map[string]*OpenAIModels)
 	// https://platform.openai.com/docs/models/model-endpoint-compatibility
 	for i, adaptor := range adaptors.ChannelAdaptor {
-		modelNames := adaptor.GetModelList()
+		modelNames := adaptor.Metadata().Models
 		builtinChannelType2Models[i] = make([]BuiltinModelConfig, len(modelNames))
 		for idx, _model := range modelNames {
 			if _model.Owner == "" {

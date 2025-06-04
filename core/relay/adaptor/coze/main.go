@@ -3,6 +3,7 @@ package coze
 import (
 	"bufio"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,10 @@ func stopReasonCoze2OpenAI(reason *string) relaymodel.FinishReason {
 	}
 }
 
-func StreamResponse2OpenAI(meta *meta.Meta, cozeResponse *StreamResponse) *relaymodel.ChatCompletionsStreamResponse {
+func StreamResponse2OpenAI(
+	meta *meta.Meta,
+	cozeResponse *StreamResponse,
+) *relaymodel.ChatCompletionsStreamResponse {
 	var stopReason string
 	var choice relaymodel.ChatCompletionsStreamResponseChoice
 
@@ -56,7 +60,7 @@ func StreamResponse2OpenAI(meta *meta.Meta, cozeResponse *StreamResponse) *relay
 		ID:      cozeResponse.ConversationID,
 		Model:   meta.OriginModel,
 		Created: time.Now().Unix(),
-		Object:  relaymodel.ChatCompletionChunk,
+		Object:  relaymodel.ChatCompletionChunkObject,
 		Choices: []*relaymodel.ChatCompletionsStreamResponseChoice{&choice},
 	}
 	return &openaiResponse
@@ -82,16 +86,20 @@ func Response2OpenAI(meta *meta.Meta, cozeResponse *Response) *relaymodel.TextRe
 	fullTextResponse := relaymodel.TextResponse{
 		ID:      openai.ChatCompletionID(),
 		Model:   meta.OriginModel,
-		Object:  relaymodel.ChatCompletion,
+		Object:  relaymodel.ChatCompletionObject,
 		Created: time.Now().Unix(),
 		Choices: []*relaymodel.TextResponseChoice{&choice},
 	}
 	return &fullTextResponse
 }
 
-func StreamHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func StreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, openai.ErrorHanlder(resp)
+		return model.Usage{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -144,12 +152,16 @@ func StreamHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 
 	render.Done(c)
 
-	return openai.ResponseText2Usage(responseText.String(), meta.ActualModel, int64(meta.RequestUsage.InputTokens)).ToModelUsage(), nil
+	return openai.ResponseText2Usage(
+		responseText.String(),
+		meta.ActualModel,
+		int64(meta.RequestUsage.InputTokens),
+	).ToModelUsage(), nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, openai.ErrorHanlder(resp)
+		return model.Usage{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -159,18 +171,30 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage
 	var cozeResponse Response
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&cozeResponse)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 	if cozeResponse.Code != 0 {
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(cozeResponse.Msg, cozeResponse.Code, resp.StatusCode)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			cozeResponse.Msg,
+			cozeResponse.Code,
+			resp.StatusCode,
+		)
 	}
 	fullTextResponse := Response2OpenAI(meta, &cozeResponse)
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, err = c.Writer.Write(jsonResponse)
 	if err != nil {
 		log.Warnf("write response body failed: %v", err)
@@ -179,5 +203,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage
 	if len(fullTextResponse.Choices) > 0 {
 		responseText = fullTextResponse.Choices[0].Message.StringContent()
 	}
-	return openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).ToModelUsage(), nil
+	return openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).
+			ToModelUsage(),
+		nil
 }

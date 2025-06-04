@@ -148,7 +148,11 @@ func (r *redisRateRecord) buildKey(keys ...string) string {
 	return r.prefix + ":" + strings.Join(keys, ":")
 }
 
-func (r *redisRateRecord) GetRequest(ctx context.Context, duration time.Duration, keys ...string) (totalCount int64, secondCount int64, err error) {
+func (r *redisRateRecord) GetRequest(
+	ctx context.Context,
+	duration time.Duration,
+	keys ...string,
+) (totalCount, secondCount int64, err error) {
 	if !common.RedisEnabled {
 		return 0, 0, nil
 	}
@@ -184,7 +188,13 @@ func (r *redisRateRecord) GetRequest(ctx context.Context, duration time.Duration
 	return totalCountInt, secondCountInt, nil
 }
 
-func (r *redisRateRecord) PushRequest(ctx context.Context, overed int64, duration time.Duration, n int64, keys ...string) (normalCount int64, overCount int64, secondCount int64, err error) {
+func (r *redisRateRecord) PushRequest(
+	ctx context.Context,
+	overed int64,
+	duration time.Duration,
+	n int64,
+	keys ...string,
+) (normalCount, overCount, secondCount int64, err error) {
 	key := r.buildKey(keys...)
 
 	result, err := pushRequestScript.Run(

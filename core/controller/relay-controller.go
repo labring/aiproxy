@@ -106,21 +106,28 @@ func updateChannelModelTokensRequestRate(c *gin.Context, meta *meta.Meta, tpm, t
 	log.Data["ch_tps"] = tps
 }
 
-func (w *wrapAdaptor) DoRequest(meta *meta.Meta, c *gin.Context, req *http.Request) (*http.Response, error) {
+func (w *wrapAdaptor) DoRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	count, overLimitCount, secondCount := reqlimit.PushChannelModelRequest(
 		context.Background(),
 		strconv.Itoa(meta.Channel.ID),
 		meta.OriginModel,
 	)
 	updateChannelModelRequestRate(c, meta, count+overLimitCount, secondCount)
-	return w.Adaptor.DoRequest(meta, c, req)
+	return w.Adaptor.DoRequest(meta, store, c, req)
 }
 
-func (w *wrapAdaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
-	usage, relayErr := w.Adaptor.DoResponse(meta, c, resp)
-	if usage == nil {
-		return nil, relayErr
-	}
+func (w *wrapAdaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
+	usage, relayErr := w.Adaptor.DoResponse(meta, store, c, resp)
 
 	if usage.TotalTokens > 0 {
 		count, overLimitCount, secondCount := reqlimit.PushChannelModelTokensRequest(
@@ -153,6 +160,37 @@ func (w *wrapAdaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Res
 	return usage, relayErr
 }
 
+var adaptorStore adaptor.Store = &storeImpl{}
+
+type storeImpl struct{}
+
+func (s *storeImpl) GetStore(id string) (adaptor.StoreCache, error) {
+	store, err := model.CacheGetStore(id)
+	if err != nil {
+		return adaptor.StoreCache{}, err
+	}
+	return adaptor.StoreCache{
+		ID:        store.ID,
+		GroupID:   store.GroupID,
+		TokenID:   store.TokenID,
+		ChannelID: store.ChannelID,
+		Model:     store.Model,
+		ExpiresAt: store.ExpiresAt,
+	}, nil
+}
+
+func (s *storeImpl) SaveStore(store adaptor.StoreCache) error {
+	_, err := model.SaveStore(&model.Store{
+		ID:        store.ID,
+		GroupID:   store.GroupID,
+		TokenID:   store.TokenID,
+		ChannelID: store.ChannelID,
+		Model:     store.Model,
+		ExpiresAt: store.ExpiresAt,
+	})
+	return err
+}
+
 func relayHandler(c *gin.Context, meta *meta.Meta) *controller.HandleResult {
 	log := middleware.GetLogger(c)
 	middleware.SetLogFieldsFromMeta(meta, log.Data)
@@ -176,7 +214,7 @@ func relayHandler(c *gin.Context, meta *meta.Meta) *controller.HandleResult {
 		thinksplit.NewThinkPlugin(),
 	)
 
-	return controller.Handle(a, c, meta)
+	return controller.Handle(a, c, meta, adaptorStore)
 }
 
 func relayController(m mode.Mode) RelayController {
@@ -214,11 +252,100 @@ func relayController(m mode.Mode) RelayController {
 	case mode.Completions:
 		c.GetRequestPrice = controller.GetCompletionsRequestPrice
 		c.GetRequestUsage = controller.GetCompletionsRequestUsage
+	case mode.VideoGenerationsJobs:
+		c.GetRequestPrice = controller.GetVideoGenerationJobRequestPrice
+		c.GetRequestUsage = controller.GetVideoGenerationJobRequestUsage
 	}
 	return c
 }
 
-func RelayHelper(c *gin.Context, meta *meta.Meta, handel RelayHandler) (*controller.HandleResult, bool) {
+const (
+	AIProxyChannelHeader = "Aiproxy-Channel"
+)
+
+func GetChannelFromHeader(
+	header string,
+	mc *model.ModelCaches,
+	availableSet []string,
+	model string,
+) (*model.Channel, error) {
+	channelIDInt, err := strconv.ParseInt(header, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, set := range availableSet {
+		enabledChannels := mc.EnabledModel2ChannelsBySet[set][model]
+		if len(enabledChannels) > 0 {
+			for _, channel := range enabledChannels {
+				if int64(channel.ID) == channelIDInt {
+					return channel, nil
+				}
+			}
+		}
+
+		disabledChannels := mc.DisabledModel2ChannelsBySet[set][model]
+		if len(disabledChannels) > 0 {
+			for _, channel := range disabledChannels {
+				if int64(channel.ID) == channelIDInt {
+					return channel, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, model)
+}
+
+func GetChannelFromRequest(
+	c *gin.Context,
+	mc *model.ModelCaches,
+	availableSet []string,
+	modelName string,
+	m mode.Mode,
+) (*model.Channel, error) {
+	switch m {
+	case mode.VideoGenerationsGetJobs,
+		mode.VideoGenerationsContent:
+		channelID := middleware.GetChannelID(c)
+		if channelID == 0 {
+			return nil, errors.New("channel id is required")
+		}
+		for _, set := range availableSet {
+			enabledChannels := mc.EnabledModel2ChannelsBySet[set][modelName]
+			if len(enabledChannels) > 0 {
+				for _, channel := range enabledChannels {
+					if channel.ID == channelID {
+						return channel, nil
+					}
+				}
+			}
+		}
+		return nil, fmt.Errorf("channel %d not found for model `%s`", channelID, modelName)
+	default:
+		channelID := middleware.GetChannelID(c)
+		if channelID == 0 {
+			return nil, nil
+		}
+		for _, set := range availableSet {
+			enabledChannels := mc.EnabledModel2ChannelsBySet[set][modelName]
+			if len(enabledChannels) > 0 {
+				for _, channel := range enabledChannels {
+					if channel.ID == channelID {
+						return channel, nil
+					}
+				}
+			}
+		}
+	}
+	return nil, nil
+}
+
+func RelayHelper(
+	c *gin.Context,
+	meta *meta.Meta,
+	handel RelayHandler,
+) (*controller.HandleResult, bool) {
 	result := handel(c, meta)
 	if result.Error == nil {
 		if _, _, err := monitor.AddRequest(
@@ -251,7 +378,13 @@ func RelayHelper(c *gin.Context, meta *meta.Meta, handel RelayHandler) (*control
 		case banExecution:
 			notifyChannelIssue(c, meta, "autoBanned", "Auto Banned", result.Error)
 		case beyondThreshold:
-			notifyChannelIssue(c, meta, "beyondThreshold", "Error Rate Beyond Threshold", result.Error)
+			notifyChannelIssue(
+				c,
+				meta,
+				"beyondThreshold",
+				"Error Rate Beyond Threshold",
+				result.Error,
+			)
 		case !hasPermission:
 			notifyChannelIssue(c, meta, "channelHasPermission", "No Permission", result.Error)
 		}
@@ -259,17 +392,22 @@ func RelayHelper(c *gin.Context, meta *meta.Meta, handel RelayHandler) (*control
 	return result, shouldRetry
 }
 
-func notifyChannelIssue(c *gin.Context, meta *meta.Meta, issueType string, titleSuffix string, err adaptor.Error) {
-	var notifyFunc func(title string, message string)
+func notifyChannelIssue(
+	c *gin.Context,
+	meta *meta.Meta,
+	issueType, titleSuffix string,
+	err adaptor.Error,
+) {
+	var notifyFunc func(title, message string)
 
 	lockKey := fmt.Sprintf("%s:%d:%s", issueType, meta.Channel.ID, meta.OriginModel)
 	switch issueType {
 	case "beyondThreshold":
-		notifyFunc = func(title string, message string) {
+		notifyFunc = func(title, message string) {
 			notify.WarnThrottle(lockKey, time.Minute, title, message)
 		}
 	default:
-		notifyFunc = func(title string, message string) {
+		notifyFunc = func(title, message string) {
 			notify.ErrorThrottle(lockKey, time.Minute, title, message)
 		}
 	}
@@ -301,7 +439,13 @@ func notifyChannelIssue(c *gin.Context, meta *meta.Meta, issueType string, title
 		}
 
 		rate := getChannelModelRequestRate(c, meta)
-		message += fmt.Sprintf("\nrpm: %d\nrps: %d\ntpm: %d\ntps: %d", rate.RPM, rate.RPS, rate.TPM, rate.TPS)
+		message += fmt.Sprintf(
+			"\nrpm: %d\nrps: %d\ntpm: %d\ntps: %d",
+			rate.RPM,
+			rate.RPS,
+			rate.TPM,
+			rate.TPS,
+		)
 	}
 
 	notifyFunc(
@@ -329,7 +473,13 @@ var (
 	ErrChannelsExhausted = errors.New("channels exhausted")
 )
 
-func GetRandomChannel(mc *model.ModelCaches, availableSet []string, modelName string, errorRates map[int64]float64, ignoreChannel ...int64) (*model.Channel, []*model.Channel, error) {
+func GetRandomChannel(
+	mc *model.ModelCaches,
+	availableSet []string,
+	modelName string,
+	errorRates map[int64]float64,
+	ignoreChannel ...int64,
+) (*model.Channel, []*model.Channel, error) {
 	channelMap := make(map[int]*model.Channel)
 	if len(availableSet) != 0 {
 		for _, set := range availableSet {
@@ -362,8 +512,13 @@ func getPriority(channel *model.Channel, errorRate float64) int32 {
 	return int32(float64(priority) / errorRate)
 }
 
-//nolint:gosec
-func getRandomChannel(channels []*model.Channel, errorRates map[int64]float64, ignoreChannel ...int64) (*model.Channel, error) {
+//
+
+func getRandomChannel(
+	channels []*model.Channel,
+	errorRates map[int64]float64,
+	ignoreChannel ...int64,
+) (*model.Channel, error) {
 	if len(channels) == 0 {
 		return nil, ErrChannelsNotFound
 	}
@@ -400,8 +555,19 @@ func getRandomChannel(channels []*model.Channel, errorRates map[int64]float64, i
 	return channels[rand.IntN(len(channels))], nil
 }
 
-func getChannelWithFallback(cache *model.ModelCaches, availableSet []string, modelName string, errorRates map[int64]float64, ignoreChannelIDs ...int64) (*model.Channel, []*model.Channel, error) {
-	channel, migratedChannels, err := GetRandomChannel(cache, availableSet, modelName, errorRates, ignoreChannelIDs...)
+func getChannelWithFallback(
+	cache *model.ModelCaches,
+	availableSet []string,
+	modelName string,
+	errorRates map[int64]float64,
+	ignoreChannelIDs ...int64,
+) (*model.Channel, []*model.Channel, error) {
+	channel, migratedChannels, err := GetRandomChannel(
+		cache,
+		availableSet,
+		modelName,
+		errorRates,
+		ignoreChannelIDs...)
 	if err == nil {
 		return channel, migratedChannels, nil
 	}
@@ -419,7 +585,12 @@ func NewRelay(mode mode.Mode) func(c *gin.Context) {
 	}
 }
 
-func NewMetaByContext(c *gin.Context, channel *model.Channel, mode mode.Mode, opts ...meta.Option) *meta.Meta {
+func NewMetaByContext(
+	c *gin.Context,
+	channel *model.Channel,
+	mode mode.Mode,
+	opts ...meta.Option,
+) *meta.Meta {
 	return middleware.NewMetaByContext(c, channel, mode, opts...)
 }
 
@@ -428,7 +599,7 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	mc := middleware.GetModelConfig(c)
 
 	// Get initial channel
-	initialChannel, err := getInitialChannel(c, requestModel)
+	initialChannel, err := getInitialChannel(c, requestModel, mode)
 	if err != nil || initialChannel == nil || initialChannel.channel == nil {
 		middleware.AbortLogWithMessageWithMode(mode, c,
 			http.StatusServiceUnavailable,
@@ -437,10 +608,8 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 		return
 	}
 
-	billingEnabled := config.GetBillingEnabled()
-
 	price := model.Price{}
-	if billingEnabled && relayController.GetRequestPrice != nil {
+	if relayController.GetRequestPrice != nil {
 		price, err = relayController.GetRequestPrice(c, mc)
 		if err != nil {
 			middleware.AbortLogWithMessageWithMode(mode, c,
@@ -453,7 +622,7 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 
 	meta := NewMetaByContext(c, initialChannel.channel, mode)
 
-	if billingEnabled && relayController.GetRequestUsage != nil {
+	if relayController.GetRequestUsage != nil {
 		requestUsage, err := relayController.GetRequestUsage(c, mc)
 		if err != nil {
 			middleware.AbortLogWithMessageWithMode(mode, c,
@@ -592,10 +761,40 @@ type initialChannel struct {
 	migratedChannels  []*model.Channel
 }
 
-func getInitialChannel(c *gin.Context, modelName string) (*initialChannel, error) {
+func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialChannel, error) {
 	log := middleware.GetLogger(c)
-	if channel := middleware.GetChannel(c); channel != nil {
+
+	group := middleware.GetGroup(c)
+	availableSet := group.GetAvailableSets()
+
+	if channelHeader := c.Request.Header.Get(AIProxyChannelHeader); channelHeader != "" {
+		if group.Status != model.GroupStatusInternal {
+			return nil, errors.New("channel header is not allowed in non-internal group")
+		}
+		channel, err := GetChannelFromHeader(
+			channelHeader,
+			middleware.GetModelCaches(c),
+			availableSet,
+			modelName,
+		)
+		if err != nil {
+			return nil, err
+		}
 		log.Data["designated_channel"] = "true"
+		return &initialChannel{channel: channel, designatedChannel: true}, nil
+	}
+
+	channel, err := GetChannelFromRequest(
+		c,
+		middleware.GetModelCaches(c),
+		availableSet,
+		modelName,
+		m,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if channel != nil {
 		return &initialChannel{channel: channel, designatedChannel: true}, nil
 	}
 
@@ -612,10 +811,12 @@ func getInitialChannel(c *gin.Context, modelName string) (*initialChannel, error
 		log.Errorf("get channel model error rates failed: %+v", err)
 	}
 
-	group := middleware.GetGroup(c)
-	availableSet := group.GetAvailableSets()
-
-	channel, migratedChannels, err := getChannelWithFallback(mc, availableSet, modelName, errorRates, ids...)
+	channel, migratedChannels, err := getChannelWithFallback(
+		mc,
+		availableSet,
+		modelName,
+		errorRates,
+		ids...)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +852,12 @@ func getWebSearchChannel(c *gin.Context, modelName string) (*model.Channel, erro
 	return channel, nil
 }
 
-func handleRelayResult(c *gin.Context, bizErr adaptor.Error, retry bool, retryTimes int) (done bool) {
+func handleRelayResult(
+	c *gin.Context,
+	bizErr adaptor.Error,
+	retry bool,
+	retryTimes int,
+) (done bool) {
 	if bizErr == nil {
 		return true
 	}
@@ -664,7 +870,13 @@ func handleRelayResult(c *gin.Context, bizErr adaptor.Error, retry bool, retryTi
 	return false
 }
 
-func initRetryState(retryTimes int, channel *initialChannel, meta *meta.Meta, result *controller.HandleResult, price model.Price) *retryState {
+func initRetryState(
+	retryTimes int,
+	channel *initialChannel,
+	meta *meta.Meta,
+	result *controller.HandleResult,
+	price model.Price,
+) *retryState {
 	state := &retryState{
 		retryTimes:       retryTimes,
 		ignoreChannelIDs: channel.ignoreChannelIDs,
@@ -792,7 +1004,10 @@ func getRetryChannel(state *retryState) (*model.Channel, error) {
 		return state.lastHasPermissionChannel, nil
 	}
 
-	newChannel, err := getRandomChannel(state.migratedChannels, state.errorRates, state.ignoreChannelIDs...)
+	newChannel, err := getRandomChannel(
+		state.migratedChannels,
+		state.errorRates,
+		state.ignoreChannelIDs...)
 	if err != nil {
 		if !errors.Is(err, ErrChannelsExhausted) || state.lastHasPermissionChannel == nil {
 			return nil, err
@@ -813,7 +1028,12 @@ func prepareRetry(c *gin.Context) error {
 	return nil
 }
 
-func handleRetryResult(ctx *gin.Context, retry bool, newChannel *model.Channel, state *retryState) (done bool) {
+func handleRetryResult(
+	ctx *gin.Context,
+	retry bool,
+	newChannel *model.Channel,
+	state *retryState,
+) (done bool) {
 	if ctx.Request.Context().Err() != nil {
 		return true
 	}
@@ -866,7 +1086,7 @@ func channelHasPermission(relayErr adaptor.Error) bool {
 
 // shouldDelay checks if we need to add a delay before retrying
 // Only adds delay when retrying with the same channel for rate limiting issues
-func shouldDelay(statusCode int, lastChannelID, newChannelID int) bool {
+func shouldDelay(statusCode, lastChannelID, newChannelID int) bool {
 	if lastChannelID != newChannelID {
 		return false
 	}
@@ -877,7 +1097,6 @@ func shouldDelay(statusCode int, lastChannelID, newChannelID int) bool {
 }
 
 func relayDelay() {
-	//nolint:gosec
 	time.Sleep(time.Duration(rand.Float64()*float64(time.Second)) + time.Second)
 }
 

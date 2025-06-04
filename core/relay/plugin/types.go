@@ -11,15 +11,42 @@ import (
 
 // adaptor hook
 type Plugin interface {
-	GetRequestURL(meta *meta.Meta, do adaptor.GetRequestURL) (string, error)
+	GetRequestURL(
+		meta *meta.Meta,
+		store adaptor.Store,
+		do adaptor.GetRequestURL,
+	) (adaptor.RequestURL, error)
 
-	SetupRequestHeader(meta *meta.Meta, c *gin.Context, req *http.Request, do adaptor.SetupRequestHeader) error
+	SetupRequestHeader(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+		req *http.Request,
+		do adaptor.SetupRequestHeader,
+	) error
 
-	ConvertRequest(meta *meta.Meta, req *http.Request, do adaptor.ConvertRequest) (*adaptor.ConvertRequestResult, error)
+	ConvertRequest(
+		meta *meta.Meta,
+		store adaptor.Store,
+		req *http.Request,
+		do adaptor.ConvertRequest,
+	) (adaptor.ConvertResult, error)
 
-	DoRequest(meta *meta.Meta, c *gin.Context, req *http.Request, do adaptor.DoRequest) (*http.Response, error)
+	DoRequest(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+		req *http.Request,
+		do adaptor.DoRequest,
+	) (*http.Response, error)
 
-	DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response, do adaptor.DoResponse) (*model.Usage, adaptor.Error)
+	DoResponse(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+		resp *http.Response,
+		do adaptor.DoResponse,
+	) (model.Usage, adaptor.Error)
 }
 
 func WrapperAdaptor(adaptor adaptor.Adaptor, plugins ...Plugin) adaptor.Adaptor {
@@ -45,22 +72,44 @@ type wrappedAdaptor struct {
 	plugin Plugin
 }
 
-func (w *wrappedAdaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	return w.plugin.GetRequestURL(meta, w.Adaptor)
+func (w *wrappedAdaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+) (adaptor.RequestURL, error) {
+	return w.plugin.GetRequestURL(meta, store, w.Adaptor)
 }
 
-func (w *wrappedAdaptor) SetupRequestHeader(meta *meta.Meta, c *gin.Context, req *http.Request) error {
-	return w.plugin.SetupRequestHeader(meta, c, req, w.Adaptor)
+func (w *wrappedAdaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) error {
+	return w.plugin.SetupRequestHeader(meta, store, c, req, w.Adaptor)
 }
 
-func (w *wrappedAdaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
-	return w.plugin.ConvertRequest(meta, req, w.Adaptor)
+func (w *wrappedAdaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	return w.plugin.ConvertRequest(meta, store, req, w.Adaptor)
 }
 
-func (w *wrappedAdaptor) DoRequest(meta *meta.Meta, c *gin.Context, req *http.Request) (*http.Response, error) {
-	return w.plugin.DoRequest(meta, c, req, w.Adaptor)
+func (w *wrappedAdaptor) DoRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
+	return w.plugin.DoRequest(meta, store, c, req, w.Adaptor)
 }
 
-func (w *wrappedAdaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
-	return w.plugin.DoResponse(meta, c, resp, w.Adaptor)
+func (w *wrappedAdaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
+	return w.plugin.DoResponse(meta, store, c, resp, w.Adaptor)
 }

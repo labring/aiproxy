@@ -81,3 +81,32 @@ func ErrorHanlderWithBody(statusCode int, respBody []byte) adaptor.Error {
 	statusCode, openAIError := GetErrorWithBody(statusCode, respBody)
 	return relaymodel.NewOpenAIError(statusCode, openAIError)
 }
+
+func VideoErrorHanlder(resp *http.Response) adaptor.Error {
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return relaymodel.NewOpenAIVideoError(resp.StatusCode, relaymodel.OpenAIVideoError{
+			Detail: err.Error(),
+		})
+	}
+
+	return VideoErrorHanlderWithBody(resp.StatusCode, respBody)
+}
+
+func VideoErrorHanlderWithBody(statusCode int, respBody []byte) adaptor.Error {
+	statusCode, openAIError := GetVideoErrorWithBody(statusCode, respBody)
+	return relaymodel.NewOpenAIVideoError(statusCode, openAIError)
+}
+
+func GetVideoErrorWithBody(statusCode int, respBody []byte) (int, relaymodel.OpenAIVideoError) {
+	openAIError := relaymodel.OpenAIVideoError{}
+	err := sonic.Unmarshal(respBody, &openAIError)
+	if err != nil {
+		openAIError.Detail = string(respBody)
+		return statusCode, openAIError
+	}
+
+	return statusCode, openAIError
+}

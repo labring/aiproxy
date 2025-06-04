@@ -57,7 +57,7 @@ func Float64(env string, defaultValue float64) float64 {
 	return num
 }
 
-func String(env string, defaultValue string) string {
+func String(env, defaultValue string) string {
 	if env == "" {
 		return defaultValue
 	}

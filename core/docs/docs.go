@@ -3232,6 +3232,54 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/mcp/group/all": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get all Group MCPs with filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "Get all Group MCPs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupMCPResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/mcp/group/{group}": {
             "get": {
                 "security": [
@@ -3300,7 +3348,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/model.GroupMCP"
+                                                "$ref": "#/definitions/controller.GroupMCPResponse"
                                             }
                                         }
                                     }
@@ -3357,7 +3405,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.GroupMCP"
+                                            "$ref": "#/definitions/controller.GroupMCPResponse"
                                         }
                                     }
                                 }
@@ -3410,7 +3458,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.GroupMCP"
+                                            "$ref": "#/definitions/controller.GroupMCPResponse"
                                         }
                                     }
                                 }
@@ -3473,7 +3521,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.GroupMCP"
+                                            "$ref": "#/definitions/controller.GroupMCPResponse"
                                         }
                                     }
                                 }
@@ -3636,7 +3684,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/model.PublicMCP"
+                                                "$ref": "#/definitions/controller.PublicMCPResponse"
                                             }
                                         }
                                     }
@@ -3678,7 +3726,67 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/middleware.APIResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.PublicMCPResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/public/all": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get all MCPs with filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "Get all MCPs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.PublicMCPResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -3720,7 +3828,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.PublicMCP"
+                                            "$ref": "#/definitions/controller.PublicMCPResponse"
                                         }
                                     }
                                 }
@@ -3768,7 +3876,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/middleware.APIResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.PublicMCPResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -4619,6 +4739,7 @@ const docTemplate = `{
                         "enum": [
                             1,
                             3,
+                            4,
                             12,
                             13,
                             14,
@@ -5579,50 +5700,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/test-embedmcp/{id}/sse": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Test Embed MCP SSE Server",
-                "tags": [
-                    "embedmcp"
-                ],
-                "summary": "Test Embed MCP SSE Server",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "MCP ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Initial configuration parameters (e.g., config[host]=http://localhost:3000)",
-                        "name": "config[key]",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Reusing configuration parameters (e.g., reusing[authorization]=apikey)",
-                        "name": "reusing[key]",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    }
-                }
-            }
-        },
-        "/api/test-embedmcp/{id}/streamable": {
+        "/api/test-embedmcp/{id}": {
             "get": {
                 "security": [
                     {
@@ -5650,7 +5728,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Initial configuration parameters (e.g., config[host]=http://localhost:3000)",
+                        "description": "Initial configuration parameters (e.g. config[host]=http://localhost:3000)",
                         "name": "config[key]",
                         "in": "query"
                     },
@@ -5697,7 +5775,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Initial configuration parameters (e.g., config[host]=http://localhost:3000)",
+                        "description": "Initial configuration parameters (e.g. config[host]=http://localhost:3000)",
                         "name": "config[key]",
                         "in": "query"
                     },
@@ -5744,13 +5822,56 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Initial configuration parameters (e.g., config[host]=http://localhost:3000)",
+                        "description": "Initial configuration parameters (e.g. config[host]=http://localhost:3000)",
                         "name": "config[key]",
                         "in": "query"
                     },
                     {
                         "type": "string",
                         "description": "Reusing configuration parameters (e.g., reusing[authorization]=apikey)",
+                        "name": "reusing[key]",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/test-embedmcp/{id}/sse": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test Embed MCP SSE Server",
+                "tags": [
+                    "embedmcp"
+                ],
+                "summary": "Test Embed MCP SSE Server",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "MCP ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Initial configuration parameters (e.g. config[host]=http://localhost:3000)",
+                        "name": "config[key]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reusing configuration parameters (e.g. reusing[authorization]=apikey)",
                         "name": "reusing[key]",
                         "in": "query"
                     }
@@ -6800,6 +6921,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/mcp": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Host MCP Streamable Server",
+                "responses": {}
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Host MCP Streamable Server",
+                "responses": {}
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Host MCP Streamable Server",
+                "responses": {}
+            }
+        },
         "/mcp/group/message": {
             "post": {
                 "security": [
@@ -6808,6 +6958,35 @@ const docTemplate = `{
                     }
                 ],
                 "summary": "MCP SSE Proxy",
+                "responses": {}
+            }
+        },
+        "/mcp/group/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Group MCP Streamable Server",
+                "responses": {}
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Group MCP Streamable Server",
+                "responses": {}
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Group MCP Streamable Server",
                 "responses": {}
             }
         },
@@ -6822,35 +7001,6 @@ const docTemplate = `{
                 "responses": {}
             }
         },
-        "/mcp/group/{id}/streamable": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "summary": "Group MCP Streamable Server",
-                "responses": {}
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "summary": "Group MCP Streamable Server",
-                "responses": {}
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "summary": "Group MCP Streamable Server",
-                "responses": {}
-            }
-        },
         "/mcp/public/message": {
             "post": {
                 "security": [
@@ -6859,6 +7009,35 @@ const docTemplate = `{
                     }
                 ],
                 "summary": "Public MCP SSE Server",
+                "responses": {}
+            }
+        },
+        "/mcp/public/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Public MCP Streamable Server",
+                "responses": {}
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Public MCP Streamable Server",
+                "responses": {}
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "summary": "Public MCP Streamable Server",
                 "responses": {}
             }
         },
@@ -6873,32 +7052,25 @@ const docTemplate = `{
                 "responses": {}
             }
         },
-        "/mcp/public/{id}/streamable": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "summary": "Public MCP Streamable Server",
-                "responses": {}
-            },
+        "/message": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "summary": "Public MCP Streamable Server",
+                "summary": "Public MCP SSE Server",
                 "responses": {}
-            },
-            "delete": {
+            }
+        },
+        "/sse": {
+            "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "summary": "Public MCP Streamable Server",
+                "summary": "Public MCP SSE Server",
                 "responses": {}
             }
         },
@@ -7787,6 +7959,210 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/v1/video/generations/jobs": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "VideoGenerationsJobs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "VideoGenerationsJobs",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.VideoGenerationJobRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.VideoGenerationJob"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/generations/jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "VideoGenerationsGetJobs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "VideoGenerationsGetJobs",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.VideoGenerationJobRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.VideoGenerationJob"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/generations/{id}/content/video": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "VideoGenerationsContent",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "VideoGenerationsContent",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.VideoGenerationJobRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "video binary",
+                        "schema": {
+                            "type": "file"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -7832,7 +8208,7 @@ const docTemplate = `{
         "adaptors.AdaptorMeta": {
             "type": "object",
             "properties": {
-                "configTemplates": {
+                "config": {
                     "$ref": "#/definitions/adaptor.ConfigTemplates"
                 },
                 "defaultBaseUrl": {
@@ -8090,6 +8466,41 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.GroupMCPResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoints": {
+                    "$ref": "#/definitions/controller.MCPEndpoint"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "openapi_config": {
+                    "$ref": "#/definitions/model.MCPOpenAPIConfig"
+                },
+                "proxy_config": {
+                    "$ref": "#/definitions/model.GroupMCPProxyConfig"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.GroupMCPStatus"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.GroupMCPType"
+                },
+                "update_at": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.GroupResponse": {
             "type": "object",
             "properties": {
@@ -8135,6 +8546,20 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "dsn": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.MCPEndpoint": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "sse": {
+                    "type": "string"
+                },
+                "streamable_http": {
                     "type": "string"
                 }
             }
@@ -8205,6 +8630,62 @@ const docTemplate = `{
                     }
                 },
                 "root": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.PublicMCPResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "embed_config": {
+                    "$ref": "#/definitions/model.MCPEmbeddingConfig"
+                },
+                "endpoints": {
+                    "$ref": "#/definitions/controller.MCPEndpoint"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "openapi_config": {
+                    "$ref": "#/definitions/model.MCPOpenAPIConfig"
+                },
+                "price": {
+                    "$ref": "#/definitions/model.MCPPrice"
+                },
+                "proxy_config": {
+                    "$ref": "#/definitions/model.PublicMCPProxyConfig"
+                },
+                "readme": {
+                    "type": "string"
+                },
+                "readme_url": {
+                    "type": "string"
+                },
+                "repo_url": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.PublicMCPStatus"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "$ref": "#/definitions/model.PublicMCPType"
+                },
+                "update_at": {
                     "type": "string"
                 }
             }
@@ -8555,7 +9036,10 @@ const docTemplate = `{
                 9,
                 10,
                 11,
-                12
+                12,
+                13,
+                14,
+                15
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -8570,7 +9054,10 @@ const docTemplate = `{
                 "AudioTranslation",
                 "Rerank",
                 "ParsePdf",
-                "Anthropic"
+                "Anthropic",
+                "VideoGenerationsJobs",
+                "VideoGenerationsGetJobs",
+                "VideoGenerationsContent"
             ]
         },
         "model.AnthropicMessageRequest": {
@@ -8583,17 +9070,6 @@ const docTemplate = `{
                     }
                 },
                 "model": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.Audio": {
-            "type": "object",
-            "properties": {
-                "format": {
-                    "type": "string"
-                },
-                "voice": {
                     "type": "string"
                 }
             }
@@ -8729,6 +9205,7 @@ const docTemplate = `{
             "enum": [
                 1,
                 3,
+                4,
                 12,
                 13,
                 14,
@@ -8766,6 +9243,7 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
                 "ChannelTypeAzure",
+                "ChannelTypeAzure2",
                 "ChannelTypeGoogleGeminiOpenAI",
                 "ChannelTypeBaiduV2",
                 "ChannelTypeAnthropic",
@@ -9074,24 +9552,12 @@ const docTemplate = `{
         "model.GeneralOpenAIRequest": {
             "type": "object",
             "properties": {
-                "audio": {
-                    "$ref": "#/definitions/model.Audio"
-                },
-                "dimensions": {
-                    "type": "integer"
-                },
-                "encoding_format": {
-                    "type": "string"
-                },
                 "frequency_penalty": {
                     "type": "number"
                 },
                 "function_call": {},
                 "functions": {},
                 "input": {},
-                "instruction": {
-                    "type": "string"
-                },
                 "logit_bias": {},
                 "logprobs": {
                     "type": "boolean"
@@ -9109,56 +9575,31 @@ const docTemplate = `{
                     }
                 },
                 "metadata": {},
-                "modalities": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "model": {
                     "type": "string"
-                },
-                "n": {
-                    "type": "integer"
                 },
                 "num_ctx": {
                     "type": "integer"
                 },
-                "parallel_tool_calls": {
-                    "type": "boolean"
-                },
-                "prediction": {},
                 "presence_penalty": {
                     "type": "number"
                 },
                 "prompt": {},
-                "quality": {
-                    "type": "string"
-                },
                 "response_format": {
                     "$ref": "#/definitions/model.ResponseFormat"
                 },
                 "seed": {
                     "type": "number"
                 },
-                "service_tier": {
-                    "type": "string"
-                },
                 "size": {
                     "type": "string"
                 },
                 "stop": {},
-                "store": {
-                    "type": "boolean"
-                },
                 "stream": {
                     "type": "boolean"
                 },
                 "stream_options": {
                     "$ref": "#/definitions/model.StreamOptions"
-                },
-                "style": {
-                    "type": "string"
                 },
                 "temperature": {
                     "type": "number"
@@ -9979,7 +10420,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "thinking_mode_output_price": {
-                    "description": "when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit will be overwritten",
+                    "description": "when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit\nwill be overwritten",
                     "type": "number"
                 },
                 "thinking_mode_output_price_unit": {
@@ -10125,17 +10566,17 @@ const docTemplate = `{
             "enum": [
                 "mcp_proxy_sse",
                 "mcp_proxy_streamable",
-                "mcp_git_repo",
+                "mcp_docs",
                 "mcp_openapi",
                 "mcp_embed"
             ],
             "x-enum-comments": {
-                "PublicMCPTypeGitRepo": "read only"
+                "PublicMCPTypeDocs": "read only"
             },
             "x-enum-varnames": [
                 "PublicMCPTypeProxySSE",
                 "PublicMCPTypeProxyStreamable",
-                "PublicMCPTypeGitRepo",
+                "PublicMCPTypeDocs",
                 "PublicMCPTypeOpenAPI",
                 "PublicMCPTypeEmbed"
             ]
@@ -10368,6 +10809,123 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "model.VideoGenerationJob": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "integer"
+                },
+                "expires_at": {
+                    "type": "integer"
+                },
+                "finish_reason": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "integer"
+                },
+                "generations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.VideoGenerations"
+                    }
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "n_seconds": {
+                    "type": "integer"
+                },
+                "n_variants": {
+                    "type": "integer"
+                },
+                "object": {
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.VideoGenerationJobStatus"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.VideoGenerationJobRequest": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "n_seconds": {
+                    "type": "integer"
+                },
+                "n_variants": {
+                    "type": "integer"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.VideoGenerationJobStatus": {
+            "type": "string",
+            "enum": [
+                "queued",
+                "processing",
+                "running",
+                "succeeded"
+            ],
+            "x-enum-varnames": [
+                "VideoGenerationJobStatusQueued",
+                "VideoGenerationJobStatusProcessing",
+                "VideoGenerationJobStatusRunning",
+                "VideoGenerationJobStatusSucceeded"
+            ]
+        },
+        "model.VideoGenerations": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "integer"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "n_seconds": {
+                    "type": "integer"
+                },
+                "object": {
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },

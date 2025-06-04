@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/image"
 	intertiktoken "github.com/labring/aiproxy/core/common/tiktoken"
 	"github.com/labring/aiproxy/core/relay/model"
@@ -18,9 +17,6 @@ func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int64 {
 }
 
 func CountTokenMessages(messages []*model.Message, model string) int64 {
-	if !config.GetBillingEnabled() {
-		return 0
-	}
 	tokenEncoder := intertiktoken.GetTokenEncoder(model)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -101,11 +97,14 @@ const (
 
 // https://platform.openai.com/docs/guides/vision/calculating-costs
 // https://github.com/openai/openai-cookbook/blob/05e3f9be4c7a2ae7ecf029a7c32065b024730ebe/examples/How_to_count_tokens_with_tiktoken.ipynb
-func countImageTokens(url string, detail string, model string) (_ int64, err error) {
+func countImageTokens(url, detail, model string) (_ int64, err error) {
 	fetchSize := true
 	var width, height int
-	// Reference: https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
-	// detail == "auto" is undocumented on how it works, it just said the model will use the auto setting which will look at the image input size and decide if it should use the low or high setting.
+	// Reference:
+	// https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
+	// detail == "auto" is undocumented on how it works, it just said the model will use the auto
+	// setting which will look at the image input size and decide if it should use the low or high
+	// setting.
 	// According to the official guide, "low" disable the high-res model,
 	// and only receive low-res 512px x 512px version of the image, indicating
 	// that image is treated as low-res when size is smaller than 512px x 512px,
@@ -168,9 +167,6 @@ func countImageTokens(url string, detail string, model string) (_ int64, err err
 }
 
 func CountTokenInput(input any, model string) int64 {
-	if !config.GetBillingEnabled() {
-		return 0
-	}
 	switch v := input.(type) {
 	case string:
 		return CountTokenText(v, model)
@@ -190,9 +186,6 @@ func CountTokenInput(input any, model string) int64 {
 	return 0
 }
 
-func CountTokenText(text string, model string) int64 {
-	if !config.GetBillingEnabled() {
-		return 0
-	}
+func CountTokenText(text, model string) int64 {
 	return getTokenNum(intertiktoken.GetTokenEncoder(model), text)
 }

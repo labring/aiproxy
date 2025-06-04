@@ -7,6 +7,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -41,7 +42,7 @@ func (g *GroupResponse) MarshalJSON() ([]byte, error) {
 //	@Success		200			{object}	middleware.APIResponse{data=map[string]any{groups=[]GroupResponse,total=int}}
 //	@Router			/api/groups/ [get]
 func GetGroups(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	order := c.DefaultQuery("order", "")
 	groups, total, err := model.GetGroups(page, perPage, order, false)
 	if err != nil {
@@ -78,7 +79,7 @@ func GetGroups(c *gin.Context) {
 //	@Router			/api/groups/search [get]
 func SearchGroups(c *gin.Context) {
 	keyword := c.Query("keyword")
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 	order := c.DefaultQuery("order", "")
 	status, _ := strconv.Atoi(c.Query("status"))
 	groups, total, err := model.SearchGroup(keyword, page, perPage, order, status)

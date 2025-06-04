@@ -17,24 +17,31 @@ type Adaptor struct {
 
 const baseURL = "https://open.bigmodel.cn/api/paas/v4"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.Embeddings:
 		usage, err = EmbeddingsHandler(c, resp)
 	default:
-		usage, err = openai.DoResponse(meta, c, resp)
+		usage, err = openai.DoResponse(meta, store, c, resp)
 	}
 	return
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
-}
-
 func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 	return 0, adaptor.ErrGetBalanceNotImplemented
+}
+
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Models: ModelList,
+	}
 }

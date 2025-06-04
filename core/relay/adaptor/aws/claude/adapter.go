@@ -16,21 +16,28 @@ const (
 
 type Adaptor struct{}
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	r, err := anthropic.OpenAIConvertRequest(meta, req)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	meta.Set("stream", r.Stream)
 	meta.Set(ConvertedRequest, r)
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
+	return adaptor.ConvertResult{
 		Header: nil,
 		Body:   nil,
 	}, nil
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (usage model.Usage, err adaptor.Error) {
 	if meta.GetBool("stream") {
 		usage, err = StreamHandler(meta, c)
 	} else {

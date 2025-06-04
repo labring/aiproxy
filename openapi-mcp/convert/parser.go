@@ -129,7 +129,7 @@ func (p *Parser) GetInfo() *openapi3.Info {
 }
 
 // GetOperationID generates an operation ID if one is not provided
-func (p *Parser) GetOperationID(path string, method string, operation *openapi3.Operation) string {
+func (p *Parser) GetOperationID(path, method string, operation *openapi3.Operation) string {
 	if operation.OperationID != "" {
 		return operation.OperationID
 	}

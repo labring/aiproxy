@@ -47,7 +47,6 @@ type ChatResponse struct {
 	Model           string   `json:"model,omitempty"`
 	CreatedAt       string   `json:"created_at,omitempty"`
 	Response        string   `json:"response,omitempty"`
-	Error           string   `json:"error,omitempty"`
 	Message         *Message `json:"message,omitempty"`
 	TotalDuration   int      `json:"total_duration,omitempty"`
 	LoadDuration    int      `json:"load_duration,omitempty"`

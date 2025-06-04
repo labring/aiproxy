@@ -66,7 +66,8 @@ func GetRequestBody(req *http.Request) ([]byte, error) {
 			req.Body = io.NopCloser(bytes.NewBuffer(buf))
 		}
 	}()
-	if req.ContentLength <= 0 || req.Header.Get("Content-Type") != "application/json" {
+	if req.ContentLength <= 0 ||
+		strings.HasPrefix(contentType, "application/json") {
 		buf, err = io.ReadAll(LimitReader(req.Body, MaxRequestBodySize))
 		if err != nil {
 			if errors.Is(err, ErrLimitedReaderExceeded) {

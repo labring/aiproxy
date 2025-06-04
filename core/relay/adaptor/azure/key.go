@@ -10,23 +10,19 @@ import (
 var _ adaptor.KeyValidator = (*Adaptor)(nil)
 
 func (a *Adaptor) ValidateKey(key string) error {
-	_, _, err := getTokenAndAPIVersion(key)
+	_, _, err := GetTokenAndAPIVersion(key)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *Adaptor) KeyHelp() string {
-	return "key or key|api-version"
-}
+const DefaultAPIVersion = "2025-04-01-preview"
 
-const defaultAPIVersion = "2024-12-01-preview"
-
-func getTokenAndAPIVersion(key string) (string, string, error) {
+func GetTokenAndAPIVersion(key string) (string, string, error) {
 	split := strings.Split(key, "|")
 	if len(split) == 1 {
-		return key, defaultAPIVersion, nil
+		return key, DefaultAPIVersion, nil
 	}
 	if len(split) != 2 {
 		return "", "", errors.New("invalid key format")

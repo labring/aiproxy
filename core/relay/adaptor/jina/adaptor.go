@@ -17,28 +17,43 @@ type Adaptor struct {
 
 const baseURL = "https://api.jina.ai/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
 	case mode.Embeddings:
 		return ConvertEmbeddingsRequest(meta, req)
 	default:
-		return a.Adaptor.ConvertRequest(meta, req)
+		return a.Adaptor.ConvertRequest(meta, store, req)
 	}
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.Rerank:
 		return RerankHandler(meta, c, resp)
 	default:
-		return a.Adaptor.DoResponse(meta, c, resp)
+		return a.Adaptor.DoResponse(meta, store, c, resp)
 	}
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"https://jina.ai",
+			"Embeddings、Rerank Support",
+		},
+		Models: ModelList,
+	}
 }

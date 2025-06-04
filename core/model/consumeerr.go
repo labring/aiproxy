@@ -11,15 +11,15 @@ import (
 
 type ConsumeError struct {
 	RequestAt  time.Time       `gorm:"index;index:idx_consume_error_group_reqat,priority:2" json:"request_at"`
-	CreatedAt  time.Time       `json:"created_at"`
+	CreatedAt  time.Time       `                                                            json:"created_at"`
 	GroupID    string          `gorm:"index;index:idx_consume_error_group_reqat,priority:1" json:"group_id"`
 	RequestID  string          `gorm:"index"                                                json:"request_id"`
 	TokenName  EmptyNullString `gorm:"not null"                                             json:"token_name"`
-	Model      string          `json:"model"`
+	Model      string          `                                                            json:"model"`
 	Content    string          `gorm:"type:text"                                            json:"content"`
 	ID         int             `gorm:"primaryKey"                                           json:"id"`
-	UsedAmount float64         `json:"used_amount"`
-	TokenID    int             `json:"token_id"`
+	UsedAmount float64         `                                                            json:"used_amount"`
+	TokenID    int             `                                                            json:"token_id"`
 }
 
 func (c *ConsumeError) MarshalJSON() ([]byte, error) {
@@ -35,7 +35,13 @@ func (c *ConsumeError) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func CreateConsumeError(requestID string, requestAt time.Time, group string, tokenName string, model string, content string, usedAmount float64, tokenID int) error {
+func CreateConsumeError(
+	requestID string,
+	requestAt time.Time,
+	group, tokenName, model, content string,
+	usedAmount float64,
+	tokenID int,
+) error {
 	return LogDB.Create(&ConsumeError{
 		RequestID:  requestID,
 		RequestAt:  requestAt,
@@ -48,7 +54,11 @@ func CreateConsumeError(requestID string, requestAt time.Time, group string, tok
 	}).Error
 }
 
-func SearchConsumeError(keyword string, requestID string, group string, tokenName string, model string, tokenID int, page int, perPage int, order string) ([]*ConsumeError, int64, error) {
+func SearchConsumeError(
+	keyword, requestID, group, tokenName, model string,
+	tokenID, page, perPage int,
+	order string,
+) ([]*ConsumeError, int64, error) {
 	tx := LogDB.Model(&ConsumeError{})
 
 	// Handle exact match conditions for non-zero values

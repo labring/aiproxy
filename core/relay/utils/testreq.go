@@ -32,7 +32,11 @@ func BuildRequest(modelConfig model.ModelConfig) (io.Reader, mode.Mode, error) {
 		}
 		return body, mode.ChatCompletions, nil
 	case mode.Completions:
-		return nil, mode.Unknown, NewErrUnsupportedModelType("completions")
+		body, err := BuildCompletionsRequest(modelConfig.Model)
+		if err != nil {
+			return nil, mode.Unknown, err
+		}
+		return body, mode.Completions, nil
 	case mode.Embeddings:
 		body, err := BuildEmbeddingsRequest(modelConfig.Model)
 		if err != nil {
@@ -78,8 +82,7 @@ func BuildRequest(modelConfig model.ModelConfig) (io.Reader, mode.Mode, error) {
 
 func BuildChatCompletionRequest(model string) (io.Reader, error) {
 	testRequest := &relaymodel.GeneralOpenAIRequest{
-		MaxTokens: 2,
-		Model:     model,
+		Model: model,
 		Messages: []*relaymodel.Message{
 			{
 				Role:    "user",
@@ -88,6 +91,18 @@ func BuildChatCompletionRequest(model string) (io.Reader, error) {
 		},
 	}
 	jsonBytes, err := sonic.Marshal(testRequest)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(jsonBytes), nil
+}
+
+func BuildCompletionsRequest(model string) (io.Reader, error) {
+	completionsRequest := &relaymodel.GeneralOpenAIRequest{
+		Model:  model,
+		Prompt: "hi",
+	}
+	jsonBytes, err := sonic.Marshal(completionsRequest)
 	if err != nil {
 		return nil, err
 	}

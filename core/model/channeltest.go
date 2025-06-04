@@ -9,12 +9,12 @@ import (
 
 type ChannelTest struct {
 	TestAt      time.Time   `json:"test_at"`
-	Model       string      `gorm:"primaryKey"   json:"model"`
+	Model       string      `json:"model"        gorm:"primaryKey"`
 	ActualModel string      `json:"actual_model"`
-	Response    string      `gorm:"type:text"    json:"response"`
+	Response    string      `json:"response"     gorm:"type:text"`
 	ChannelName string      `json:"channel_name"`
 	ChannelType ChannelType `json:"channel_type"`
-	ChannelID   int         `gorm:"primaryKey"   json:"channel_id"`
+	ChannelID   int         `json:"channel_id"   gorm:"primaryKey"`
 	Took        float64     `json:"took"`
 	Success     bool        `json:"success"`
 	Mode        mode.Mode   `json:"mode"`

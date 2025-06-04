@@ -18,33 +18,51 @@ type Adaptor struct{}
 
 const baseURL = "http://localhost:11434"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
 	// https://github.com/ollama/ollama/blob/main/docs/api.md
 	u := meta.Channel.BaseURL
 	switch meta.Mode {
 	case mode.Embeddings:
-		return u + "/api/embed", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/api/embed",
+		}, nil
 	case mode.ChatCompletions:
-		return u + "/api/chat", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/api/chat",
+		}, nil
 	case mode.Completions:
-		return u + "/api/generate", nil
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u + "/api/generate",
+		}, nil
 	default:
-		return "", fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, _ *gin.Context, req *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) error {
 	req.Header.Set("Authorization", "Bearer "+meta.Channel.Key)
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, request *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	request *http.Request,
+) (adaptor.ConvertResult, error) {
 	if request == nil {
-		return nil, errors.New("request is nil")
+		return adaptor.ConvertResult{}, errors.New("request is nil")
 	}
 	switch meta.Mode {
 	case mode.Embeddings:
@@ -52,15 +70,25 @@ func (a *Adaptor) ConvertRequest(meta *meta.Meta, request *http.Request) (*adapt
 	case mode.ChatCompletions, mode.Completions:
 		return ConvertRequest(meta, request)
 	default:
-		return nil, fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, req *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	return utils.DoRequest(req)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.Embeddings:
 		usage, err = EmbeddingHandler(meta, c, resp)
@@ -71,11 +99,20 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 			usage, err = Handler(meta, c, resp)
 		}
 	default:
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(fmt.Sprintf("unsupported mode: %s", meta.Mode), "unsupported_mode", http.StatusBadRequest)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			fmt.Sprintf("unsupported mode: %s", meta.Mode),
+			"unsupported_mode",
+			http.StatusBadRequest,
+		)
 	}
 	return
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"Chat、Embeddings Support",
+		},
+		Models: ModelList,
+	}
 }

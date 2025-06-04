@@ -1,7 +1,7 @@
 package mistral
 
 import (
-	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 )
 
@@ -11,10 +11,12 @@ type Adaptor struct {
 
 const baseURL = "https://api.mistral.ai/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Models: ModelList,
+	}
 }

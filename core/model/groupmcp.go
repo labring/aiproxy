@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -42,7 +41,7 @@ type GroupMCP struct {
 	Status        GroupMCPStatus       `gorm:"index;default:1"               json:"status"`
 	CreatedAt     time.Time            `gorm:"index,autoCreateTime"          json:"created_at"`
 	UpdateAt      time.Time            `gorm:"index,autoUpdateTime"          json:"update_at"`
-	Name          string               `json:"name"`
+	Name          string               `                                     json:"name"`
 	Type          GroupMCPType         `gorm:"index"                         json:"type"`
 	ProxyConfig   *GroupMCPProxyConfig `gorm:"serializer:fastjson;type:text" json:"proxy_config,omitempty"`
 	OpenAPIConfig *MCPOpenAPIConfig    `gorm:"serializer:fastjson;type:text" json:"openapi_config,omitempty"`
@@ -52,8 +51,11 @@ func (g *GroupMCP) BeforeSave(_ *gorm.DB) (err error) {
 	if g.GroupID == "" {
 		return errors.New("group id is empty")
 	}
-	if g.ID == "" {
-		g.ID = common.ShortUUID()
+	if err := validateMCPID(g.ID); err != nil {
+		return err
+	}
+	if g.UpdateAt.IsZero() {
+		g.UpdateAt = time.Now()
 	}
 
 	if g.Status == 0 {
@@ -76,21 +78,7 @@ func (g *GroupMCP) BeforeSave(_ *gorm.DB) (err error) {
 		return validateHTTPURL(config.URL)
 	}
 
-	return
-}
-
-func (g *GroupMCP) MarshalJSON() ([]byte, error) {
-	type Alias GroupMCP
-	a := &struct {
-		*Alias
-		CreatedAt int64 `json:"created_at"`
-		UpdateAt  int64 `json:"update_at"`
-	}{
-		Alias:     (*Alias)(g),
-		CreatedAt: g.CreatedAt.UnixMilli(),
-		UpdateAt:  g.UpdateAt.UnixMilli(),
-	}
-	return sonic.Marshal(a)
+	return err
 }
 
 // CreateGroupMCP creates a new GroupMCP
@@ -130,7 +118,7 @@ func UpdateGroupMCP(mcp *GroupMCP) (err error) {
 	return HandleUpdateResult(result, ErrGroupMCPNotFound)
 }
 
-func UpdateGroupMCPStatus(id string, groupID string, status GroupMCPStatus) (err error) {
+func UpdateGroupMCPStatus(id, groupID string, status GroupMCPStatus) (err error) {
 	defer func() {
 		if err == nil {
 			if err := CacheDeleteGroupMCP(groupID, id); err != nil {
@@ -139,12 +127,24 @@ func UpdateGroupMCPStatus(id string, groupID string, status GroupMCPStatus) (err
 		}
 	}()
 
-	result := DB.Model(&GroupMCP{}).Where("id = ? AND group_id = ?", id, groupID).Update("status", status)
+	result := DB.Model(&GroupMCP{}).
+		Where("id = ? AND group_id = ?", id, groupID).
+		Update("status", status)
 	return HandleUpdateResult(result, ErrGroupMCPNotFound)
 }
 
+func GetAllGroupMCPs(status GroupMCPStatus) ([]GroupMCP, error) {
+	var mcps []GroupMCP
+	tx := DB.Model(&GroupMCP{})
+	if status != 0 {
+		tx = tx.Where("status = ?", status)
+	}
+	err := tx.Find(&mcps).Error
+	return mcps, err
+}
+
 // DeleteGroupMCP deletes a GroupMCP by ID and GroupID
-func DeleteGroupMCP(id string, groupID string) (err error) {
+func DeleteGroupMCP(id, groupID string) (err error) {
 	defer func() {
 		if err == nil {
 			if err := CacheDeleteGroupMCP(groupID, id); err != nil {
@@ -161,17 +161,23 @@ func DeleteGroupMCP(id string, groupID string) (err error) {
 }
 
 // GetGroupMCPByID retrieves a GroupMCP by ID and GroupID
-func GetGroupMCPByID(id string, groupID string) (*GroupMCP, error) {
-	if id == "" || groupID == "" {
-		return nil, errors.New("group mcp id or group id is empty")
-	}
+func GetGroupMCPByID(id, groupID string) (GroupMCP, error) {
 	var mcp GroupMCP
+	if id == "" || groupID == "" {
+		return mcp, errors.New("group mcp id or group id is empty")
+	}
 	err := DB.Where("id = ? AND group_id = ?", id, groupID).First(&mcp).Error
-	return &mcp, HandleNotFound(err, ErrGroupMCPNotFound)
+	return mcp, HandleNotFound(err, ErrGroupMCPNotFound)
 }
 
 // GetGroupMCPs retrieves GroupMCPs with pagination and filtering
-func GetGroupMCPs(groupID string, page int, perPage int, mcpType PublicMCPType, keyword string, status GroupMCPStatus) (mcps []*GroupMCP, total int64, err error) {
+func GetGroupMCPs(
+	groupID string,
+	page, perPage int,
+	mcpType PublicMCPType,
+	keyword string,
+	status GroupMCPStatus,
+) (mcps []GroupMCP, total int64, err error) {
 	if groupID == "" {
 		return nil, 0, errors.New("group id is empty")
 	}

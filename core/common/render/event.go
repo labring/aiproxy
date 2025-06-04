@@ -28,7 +28,8 @@ func (r *OpenAISSE) Render(w http.ResponseWriter) error {
 		conv.StringToBytes(r.Data),
 		nnBytes,
 	} {
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter
+		// nosemgrep:
+		// go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter
 		if _, err := w.Write(bytes); err != nil {
 			return err
 		}

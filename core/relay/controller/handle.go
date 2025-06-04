@@ -16,10 +16,15 @@ type HandleResult struct {
 	Detail *RequestDetail
 }
 
-func Handle(adaptor adaptor.Adaptor, c *gin.Context, meta *meta.Meta) *HandleResult {
+func Handle(
+	adaptor adaptor.Adaptor,
+	c *gin.Context,
+	meta *meta.Meta,
+	store adaptor.Store,
+) *HandleResult {
 	log := middleware.GetLogger(c)
 
-	usage, detail, respErr := DoHelper(adaptor, c, meta)
+	usage, detail, respErr := DoHelper(adaptor, c, meta, store)
 	if respErr != nil {
 		var logDetail *RequestDetail
 		if detail != nil && config.DebugEnabled {

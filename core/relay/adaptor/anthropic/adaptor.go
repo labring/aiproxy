@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -20,17 +21,25 @@ type Adaptor struct{}
 
 const baseURL = "https://api.anthropic.com/v1"
 
-func (a *Adaptor) GetBaseURL() string {
+func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	return meta.Channel.BaseURL + "/messages", nil
+func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+	return adaptor.RequestURL{
+		Method: http.MethodPost,
+		URL:    meta.Channel.BaseURL + "/messages",
+	}, nil
 }
 
 const AnthropicVersion = "2023-06-01"
 
-func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, c *gin.Context, req *http.Request) error {
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) error {
 	req.Header.Set("X-Api-Key", meta.Channel.Key)
 	anthropicVersion := c.Request.Header.Get("Anthropic-Version")
 	if anthropicVersion == "" {
@@ -57,35 +66,51 @@ func (a *Adaptor) SetupRequestHeader(meta *meta.Meta, c *gin.Context, req *http.
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		data, err := OpenAIConvertRequest(meta, req)
 		if err != nil {
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
 
 		data2, err := sonic.Marshal(data)
 		if err != nil {
-			return nil, err
+			return adaptor.ConvertResult{}, err
 		}
-		return &adaptor.ConvertRequestResult{
-			Method: http.MethodPost,
-			Header: nil,
-			Body:   bytes.NewReader(data2),
+		return adaptor.ConvertResult{
+			Header: http.Header{
+				"Content-Type":   {"application/json"},
+				"Content-Length": {strconv.Itoa(len(data2))},
+			},
+			Body: bytes.NewReader(data2),
 		}, nil
 	case mode.Anthropic:
 		return ConvertRequest(meta, req)
 	default:
-		return nil, fmt.Errorf("unsupported mode: %s", meta.Mode)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
-func (a *Adaptor) DoRequest(_ *meta.Meta, _ *gin.Context, req *http.Request) (*http.Response, error) {
+func (a *Adaptor) DoRequest(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
 	return utils.DoRequest(req)
 }
 
-func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response) (usage *model.Usage, err adaptor.Error) {
+func (a *Adaptor) DoResponse(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
@@ -100,11 +125,20 @@ func (a *Adaptor) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Respons
 			usage, err = Handler(meta, c, resp)
 		}
 	default:
-		return nil, relaymodel.WrapperOpenAIErrorWithMessage(fmt.Sprintf("unsupported mode: %s", meta.Mode), "unsupported_mode", http.StatusBadRequest)
+		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			fmt.Sprintf("unsupported mode: %s", meta.Mode),
+			"unsupported_mode",
+			http.StatusBadRequest,
+		)
 	}
 	return
 }
 
-func (a *Adaptor) GetModelList() []model.ModelConfig {
-	return ModelList
+func (a *Adaptor) Metadata() adaptor.Metadata {
+	return adaptor.Metadata{
+		Features: []string{
+			"Support native Endpoint: /v1/messages",
+		},
+		Models: ModelList,
+	}
 }

@@ -41,7 +41,7 @@ func InitRedisClient() (err error) {
 	return nil
 }
 
-func RedisSet(key string, value string, expiration time.Duration) error {
+func RedisSet(key, value string, expiration time.Duration) error {
 	ctx := context.Background()
 	return RDB.Set(ctx, key, value, expiration).Err()
 }

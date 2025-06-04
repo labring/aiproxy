@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -16,7 +17,11 @@ import (
 )
 
 func SetStaticFileRouter(router *gin.Engine) {
-	router.SetHTMLTemplate(template.Must(template.New("").Funcs(router.FuncMap).ParseFS(public.Templates, "templates/*")))
+	router.SetHTMLTemplate(
+		template.Must(
+			template.New("").Funcs(router.FuncMap).ParseFS(public.Templates, "templates/*"),
+		),
+	)
 
 	if config.DisableWeb {
 		router.GET("/", func(ctx *gin.Context) {
@@ -29,7 +34,11 @@ func SetStaticFileRouter(router *gin.Engine) {
 	}
 
 	if config.WebPath == "" {
-		err := initFSRouter(router, public.Public.(fs.ReadDirFS), ".")
+		routerFs, ok := public.Public.(fs.ReadDirFS)
+		if !ok {
+			panic(fmt.Sprintf("public fs type error: %T, %v", public.Public, public.Public))
+		}
+		err := initFSRouter(router, routerFs, ".")
 		if err != nil {
 			panic(err)
 		}
@@ -41,7 +50,11 @@ func SetStaticFileRouter(router *gin.Engine) {
 			panic(err)
 		}
 		logrus.Infof("frontend file path: %s", absPath)
-		err = initFSRouter(router, os.DirFS(absPath).(fs.ReadDirFS), ".")
+		routerFs, ok := os.DirFS(absPath).(fs.ReadDirFS)
+		if !ok {
+			panic(fmt.Sprintf("public fs type error: %T, %v", public.Public, public.Public))
+		}
+		err = initFSRouter(router, routerFs, ".")
 		if err != nil {
 			panic(err)
 		}
@@ -61,7 +74,7 @@ func checkNoRouteNotFound(path string) bool {
 func newIndexNoRouteHandler(fs http.FileSystem) func(ctx *gin.Context) {
 	return func(ctx *gin.Context) {
 		if checkNoRouteNotFound(ctx.Request.URL.Path) {
-			ctx.String(http.StatusNotFound, "404 page not found")
+			http.NotFound(ctx.Writer, ctx.Request)
 			return
 		}
 		ctx.FileFromFS("", fs)
@@ -72,7 +85,7 @@ func newDynamicNoRouteHandler(fs http.FileSystem) func(ctx *gin.Context) {
 	fileServer := http.StripPrefix("/", http.FileServer(fs))
 	return func(c *gin.Context) {
 		if checkNoRouteNotFound(c.Request.URL.Path) {
-			c.String(http.StatusNotFound, "404 page not found")
+			http.NotFound(c.Writer, c.Request)
 			return
 		}
 
@@ -88,7 +101,7 @@ func newDynamicNoRouteHandler(fs http.FileSystem) func(ctx *gin.Context) {
 }
 
 type staticFileFS interface {
-	StaticFileFS(relativePath string, filepath string, fs http.FileSystem) gin.IRoutes
+	StaticFileFS(relativePath, filepath string, fs http.FileSystem) gin.IRoutes
 }
 
 func initFSRouter(e staticFileFS, f fs.ReadDirFS, path string) error {

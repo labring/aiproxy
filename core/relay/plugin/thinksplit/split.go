@@ -2,17 +2,18 @@ package thinksplit
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/common/splitter"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/plugin/thinksplit/splitter"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -38,23 +39,35 @@ func (p *ThinkPlugin) getConfig(meta *meta.Meta) (*Config, error) {
 }
 
 // DoResponse handles the response processing to split think content
-func (p *ThinkPlugin) DoResponse(meta *meta.Meta, c *gin.Context, resp *http.Response, do adaptor.DoResponse) (*model.Usage, adaptor.Error) {
+func (p *ThinkPlugin) DoResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+	do adaptor.DoResponse,
+) (model.Usage, adaptor.Error) {
 	// Only process chat completions
 	if meta.Mode != mode.ChatCompletions {
-		return do.DoResponse(meta, c, resp)
+		return do.DoResponse(meta, store, c, resp)
 	}
 
 	// Check if think splitting is enabled
 	pluginConfig, err := p.getConfig(meta)
 	if err != nil || !pluginConfig.Enable {
-		return do.DoResponse(meta, c, resp)
+		return do.DoResponse(meta, store, c, resp)
 	}
 
-	return p.handleResponse(meta, c, resp, do)
+	return p.handleResponse(meta, store, c, resp, do)
 }
 
 // handleResponse processes streaming responses
-func (p *ThinkPlugin) handleResponse(meta *meta.Meta, c *gin.Context, resp *http.Response, do adaptor.DoResponse) (*model.Usage, adaptor.Error) {
+func (p *ThinkPlugin) handleResponse(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+	do adaptor.DoResponse,
+) (model.Usage, adaptor.Error) {
 	// Create a custom response writer
 	rw := &thinkResponseWriter{
 		ResponseWriter: c.Writer,
@@ -64,7 +77,7 @@ func (p *ThinkPlugin) handleResponse(meta *meta.Meta, c *gin.Context, resp *http
 		c.Writer = rw.ResponseWriter
 	}()
 
-	return do.DoResponse(meta, c, resp)
+	return do.DoResponse(meta, store, c, resp)
 }
 
 // thinkResponseWriter wraps the response writer for streaming responses
@@ -99,7 +112,7 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 	}
 
 	// Check if this is a streaming response chunk
-	if rw.isStream || utils.IsStreamResponseWithHeader(rw.ResponseWriter.Header()) {
+	if rw.isStream || utils.IsStreamResponseWithHeader(rw.Header()) {
 		rw.isStream = true
 
 		rw.done = StreamSplitThink(respMap, rw.getThinkSplitter())
@@ -115,6 +128,9 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 	jsonData, err := sonic.Marshal(respMap)
 	if err != nil {
 		return rw.ResponseWriter.Write(b)
+	}
+	if rw.ResponseWriter.Header().Get("Content-Length") != "" {
+		rw.ResponseWriter.Header().Set("Content-Length", strconv.Itoa(len(jsonData)))
 	}
 	return rw.ResponseWriter.Write(jsonData)
 }

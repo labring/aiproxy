@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
@@ -28,11 +29,14 @@ type RerankUsage struct {
 	TotalTokens int64 `json:"total_tokens"`
 }
 
-func ConvertRerankRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertRequestResult, error) {
+func ConvertRerankRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
 	reqMap := make(map[string]any)
 	err := common.UnmarshalBodyReusable(req, &reqMap)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
 	reqMap["model"] = meta.ActualModel
 	reqMap["input"] = map[string]any{
@@ -52,18 +56,24 @@ func ConvertRerankRequest(meta *meta.Meta, req *http.Request) (*adaptor.ConvertR
 	reqMap["parameters"] = parameters
 	jsonData, err := sonic.Marshal(reqMap)
 	if err != nil {
-		return nil, err
+		return adaptor.ConvertResult{}, err
 	}
-	return &adaptor.ConvertRequestResult{
-		Method: http.MethodPost,
-		Header: nil,
-		Body:   bytes.NewReader(jsonData),
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(jsonData))},
+		},
+		Body: bytes.NewReader(jsonData),
 	}, nil
 }
 
-func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model.Usage, adaptor.Error) {
+func RerankHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return nil, openai.ErrorHanlder(resp)
+		return model.Usage{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -72,15 +82,21 @@ func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 	var rerankResponse RerankResponse
 	err = sonic.Unmarshal(responseBody, &rerankResponse)
 	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
-
-	c.Writer.WriteHeader(resp.StatusCode)
 
 	rerankResp := relaymodel.RerankResponse{
 		Meta: relaymodel.RerankMeta{
@@ -93,14 +109,14 @@ func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 		ID:      rerankResponse.RequestID,
 	}
 
-	var usage *model.Usage
+	var usage model.Usage
 	if rerankResponse.Usage == nil {
-		usage = &model.Usage{
+		usage = model.Usage{
 			InputTokens: meta.RequestUsage.InputTokens,
 			TotalTokens: meta.RequestUsage.InputTokens,
 		}
 	} else {
-		usage = &model.Usage{
+		usage = model.Usage{
 			InputTokens: model.ZeroNullInt64(rerankResponse.Usage.TotalTokens),
 			TotalTokens: model.ZeroNullInt64(rerankResponse.Usage.TotalTokens),
 		}
@@ -108,8 +124,14 @@ func RerankHandler(meta *meta.Meta, c *gin.Context, resp *http.Response) (*model
 
 	jsonResponse, err := sonic.Marshal(&rerankResp)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(err, "marshal_response_body_failed", http.StatusInternalServerError)
+		return usage, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, err = c.Writer.Write(jsonResponse)
 	if err != nil {
 		log.Warnf("write response body failed: %v", err)

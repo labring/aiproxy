@@ -17,10 +17,6 @@ func (a *Adaptor) ValidateKey(key string) error {
 	return nil
 }
 
-func (a *Adaptor) KeyHelp() string {
-	return "api_key|group_id"
-}
-
 func GetAPIKeyAndGroupID(key string) (string, string, error) {
 	keys := strings.Split(key, "|")
 	if len(keys) != 2 {

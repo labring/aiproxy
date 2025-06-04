@@ -67,9 +67,21 @@ func GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
 }
 
 // AddRequest adds a request record and checks if channel should be banned
-func AddRequest(ctx context.Context, model string, channelID int64, isError, tryBan bool, maxErrorRate float64) (beyondThreshold bool, banExecution bool, err error) {
+func AddRequest(
+	ctx context.Context,
+	model string,
+	channelID int64,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (beyondThreshold, banExecution bool, err error) {
 	if !common.RedisEnabled {
-		beyondThreshold, banExecution = memModelMonitor.AddRequest(model, channelID, isError, tryBan, maxErrorRate)
+		beyondThreshold, banExecution = memModelMonitor.AddRequest(
+			model,
+			channelID,
+			isError,
+			tryBan,
+			maxErrorRate,
+		)
 		return beyondThreshold, banExecution, nil
 	}
 
@@ -98,8 +110,15 @@ func AddRequest(ctx context.Context, model string, channelID int64, isError, try
 	return val == 3, val == 1, nil
 }
 
-func buildStatsKey(model string, channelID string) string {
-	return fmt.Sprintf("%s%s%s%v%s", modelKeyPrefix, model, channelKeyPart, channelID, statsKeySuffix)
+func buildStatsKey(model, channelID string) string {
+	return fmt.Sprintf(
+		"%s%s%s%v%s",
+		modelKeyPrefix,
+		model,
+		channelKeyPart,
+		channelID,
+		statsKeySuffix,
+	)
 }
 
 func getModelChannelID(key string) (string, int64, bool) {
