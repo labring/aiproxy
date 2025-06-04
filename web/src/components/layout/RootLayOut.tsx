@@ -10,7 +10,7 @@ export function RootLayout() {
     <div className="flex h-screen bg-background">
       <Sidebar
         displayConfig={{
-          monitor: false,
+          monitor: true,
           key: true,
           channel: true,
           model: true,

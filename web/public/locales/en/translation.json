@@ -12,7 +12,44 @@
   "common": {
     "noResult": "No Data",
     "copied": "Copied to clipboard",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "validation": {
+      "error": {
+        "title": "Form Validation Error"
+      }
+    },
+    "global": "Global",
+    "loading": "Loading...",
+    "selectDateRange": "Select date range"
+  },
+  "monitor": {
+    "filters": {
+      "title": "Filters",
+      "key": "API Key",
+      "keyPlaceholder": "Enter API Key to filter",
+      "model": "Model",
+      "modelPlaceholder": "Enter model name",
+      "dateRange": "Date Range",
+      "dateRangePlaceholder": "Select date range",
+      "timespan": "Time Granularity",
+      "timespanPlaceholder": "Select time granularity",
+      "timespanHour": "Hour",
+      "timespanDay": "Day",
+      "apply": "Apply",
+      "reset": "Reset"
+    },
+    "metrics": {
+      "totalRequests": "Total Requests",
+      "totalRequestsTooltip": "Total number of requests in the time range",
+      "errorCount": "Error Count",
+      "errorCountTooltip": "Number of exception requests in the time range",
+      "currentRpm": "Current RPM",
+      "currentRpmTooltip": "Requests Per Minute",
+      "currentTpm": "Current TPM",
+      "currentTpmTooltip": "Tokens Per Minute",
+      "outputTokens": "Output Tokens",
+      "outputTokensTooltip": "Total output tokens in the time range"
+    }
   },
   "table": {
     "selected": "{{selected}} of {{total}} row(s) selected",
@@ -82,6 +119,13 @@
     "refresh": "Refresh",
     "noResults": "No models found",
     "apiDetails": "API Detail",
+    "pluginInfo": "Plugin Info",
+    "noPluginConfigured": "No plugins configured",
+    "pluginEnabled": "Enabled",
+    "pluginDisabled": "Disabled",
+    "cachePlugin": "Cache",
+    "webSearchPlugin": "Web Search",
+    "thinkSplitPlugin": "Think Split",
     "dialog": {
       "createTitle": "Create Model",
       "updateTitle": "Update Model",
@@ -93,7 +137,65 @@
       "selectType": "Select model type",
       "create": "Create",
       "update": "Update",
-      "submitting": "Submitting..."
+      "submitting": "Submitting...",
+      "modelNameUpdateDisabled": "Model name cannot be modified in update mode",
+      "noSearchEngineConfigured": "Click \"Add Search Engine\" to configure search engines",
+      "pluginConfiguration": "Plugin Configuration",
+      "pluginConfigurationDescription": "Configure optional plugins for this model",
+      "cachePlugin": {
+        "title": "Cache Plugin",
+        "description": "Enable response caching to improve performance",
+        "enable": "Enable Cache",
+        "ttl": "Time to Live (seconds)",
+        "ttlPlaceholder": "Enter cache TTL",
+        "itemMaxSize": "Max Cache Item Size (bytes)",
+        "itemMaxSizePlaceholder": "Enter max item size",
+        "addCacheHitHeader": "Add cache hit header",
+        "cacheHitHeader": "Cache hit header name",
+        "cacheHitHeaderPlaceholder": "Enter header name"
+      },
+      "webSearchPlugin": {
+        "title": "Web Search Plugin",
+        "description": "Enable web search capabilities for enhanced responses",
+        "enable": "Enable Web Search",
+        "searchFrom": "Search Engines",
+        "searchFromPlaceholder": "Select search engines",
+        "addEngine": "Add Search Engine",
+        "removeEngine": "Remove",
+        "engineType": "Engine Type",
+        "engineConfig": "Engine Configuration",
+        "maxResults": "Maximum Results",
+        "maxResultsPlaceholder": "Enter max results",
+        "searchEngines": {
+          "bing": "Bing",
+          "google": "Google",
+          "arxiv": "ArXiv",
+          "searchxng": "SearchXNG"
+        },
+        "engineSpec": {
+          "apiKey": "API Key",
+          "apiKeyPlaceholder": "Enter API key",
+          "cx": "Custom Search Engine ID",
+          "cxPlaceholder": "Enter search engine ID",
+          "baseUrl": "Base URL",
+          "baseUrlPlaceholder": "Enter base URL"
+        },
+        "forceSearch": "Force search on every request",
+        "needReference": "Include references in response",
+        "referenceLocation": "Reference location",
+        "referenceLocationPlaceholder": "Enter reference location",
+        "referenceFormat": "Reference format",
+        "referenceFormatPlaceholder": "Enter reference format",
+        "defaultLanguage": "Default language",
+        "defaultLanguagePlaceholder": "Enter default language",
+        "promptTemplate": "Search prompt template",
+        "promptTemplatePlaceholder": "Enter prompt template"
+      },
+      "thinkSplitPlugin": {
+        "title": "Think Split Plugin",
+        "description": "Split complex thinking into structured responses",
+        "enable": "Enable Think Split"
+      }
     },
     "deleteDialog": {
       "confirmTitle": "Delete Model",

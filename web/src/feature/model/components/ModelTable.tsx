@@ -1,11 +1,9 @@
 // src/feature/model/components/ModelTable.tsx
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useModels } from '../hooks'
 import { ModelConfig } from '@/types/model'
 import { Button } from '@/components/ui/button'
 import {
-    // @ts-expect-error 忽略未使用参数
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil, FileText,
 } from 'lucide-react'
 import {
@@ -18,11 +16,12 @@ import { DeleteModelDialog } from './DeleteModelDialog'
 import { useTranslation } from 'react-i18next'
 import { DataTable } from '@/components/table/motion-data-table'
 import { ColumnDef } from '@tanstack/react-table'
-import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
+import { useReactTable, getCoreRowModel, getSortedRowModel } from '@tanstack/react-table'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import ApiDocDrawer from './api-doc/ApiDoc'
+import { Badge } from '@/components/ui/badge'
 
 export function ModelTable() {
     const { t } = useTranslation()
@@ -47,6 +46,18 @@ export function ModelTable() {
         refetch
     } = useModels()
 
+    // Sort models by type for stable sorting
+    const sortedModels = useMemo(() => {
+        if (!models) return []
+        return [...models].sort((a, b) => {
+            if (a.type === b.type) {
+                // Secondary sort by model name for stability
+                return a.model.localeCompare(b.model)
+            }
+            return a.type - b.type
+        })
+    }, [models])
+
     // Create table columns
     const columns: ColumnDef<ModelConfig>[] = [
         {
@@ -63,6 +74,56 @@ export function ModelTable() {
                     {t(`modeType.${row.original.type}`)}
                 </div>
             ),
+        },
+        {
+            accessorKey: 'plugin',
+            header: () => <div className="font-medium py-3.5">{t("model.pluginInfo")}</div>,
+            cell: ({ row }) => {
+                const plugin = row.original.plugin
+                if (!plugin) {
+                    return (
+                        <div className="text-muted-foreground text-sm">
+                            {t("model.noPluginConfigured")}
+                        </div>
+                    )
+                }
+
+                const enabledPlugins = []
+                
+                if (plugin.cache?.enable) {
+                    enabledPlugins.push(t("model.cachePlugin"))
+                }
+                
+                if (plugin["web-search"]?.enable) {
+                    enabledPlugins.push(t("model.webSearchPlugin"))
+                }
+                
+                if (plugin["think-split"]?.enable) {
+                    enabledPlugins.push(t("model.thinkSplitPlugin"))
+                }
+
+                if (enabledPlugins.length === 0) {
+                    return (
+                        <div className="text-muted-foreground text-sm">
+                            {t("model.noPluginConfigured")}
+                        </div>
+                    )
+                }
+
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        {enabledPlugins.map((pluginName) => (
+                            <Badge
+                                key={pluginName}
+                                variant="outline"
+                                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                            >
+                                {pluginName}
+                            </Badge>
+                        ))}
+                    </div>
+                )
+            },
         },
         // {
         //     accessorKey: 'owner',
@@ -90,12 +151,12 @@ export function ModelTable() {
                             <FileText className="mr-2 h-4 w-4" />
                             {t("model.apiDetails")}
                         </DropdownMenuItem>
-                        {/* <DropdownMenuItem
+                        <DropdownMenuItem
                             onClick={() => openUpdateDialog(row.original)}
                         >
                             <Pencil className="mr-2 h-4 w-4" />
                             {t("model.edit")}
-                        </DropdownMenuItem> */}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => openDeleteDialog(row.original.model)}
                         >
@@ -110,9 +171,18 @@ export function ModelTable() {
 
     // Initialize table
     const table = useReactTable({
-        data: models || [],
+        data: sortedModels,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        initialState: {
+            sorting: [
+                {
+                    id: 'type',
+                    desc: false,
+                },
+            ],
+        },
     })
 
     // Open create model dialog
@@ -123,11 +193,11 @@ export function ModelTable() {
     }
 
     // Open update model dialog
-    // const openUpdateDialog = (model: ModelConfig) => {
-    //     setDialogMode('update')
-    //     setSelectedModel(model)
-    //     setModelDialogOpen(true)
-    // }
+    const openUpdateDialog = (model: ModelConfig) => {
+        setDialogMode('update')
+        setSelectedModel(model)
+        setModelDialogOpen(true)
+    }
 
     // Open delete dialog
     const openDeleteDialog = (id: string) => {

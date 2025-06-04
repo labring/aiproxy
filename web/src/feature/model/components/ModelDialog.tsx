@@ -42,7 +42,8 @@ export function ModelDialog({
     const defaultValues = mode === 'update' && model
         ? {
             model: model.model,
-            type: model.type
+            type: model.type,
+            plugin: model.plugin
         }
         : {
             model: '',
@@ -69,7 +70,6 @@ export function ModelDialog({
                                 >
                                     <ModelForm
                                         mode={mode}
-                                        modelId={model?.model}
                                         defaultValues={defaultValues}
                                         onSuccess={() => onOpenChange(false)}
                                     />
