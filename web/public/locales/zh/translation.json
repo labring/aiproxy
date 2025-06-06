@@ -22,11 +22,37 @@
     "loading": "加载中...",
     "selectDateRange": "选择日期范围"
   },
+  "error": {
+    "loading": "数据加载失败",
+    "loadingLogs": "日志加载失败",
+    "retry": "重试",
+    "viewDetails": "查看详情",
+    "hideDetails": "隐藏详情",
+    "message": "错误信息",
+    "code": "错误代码",
+    "network": "网络错误",
+    "networkDescription": "请检查您的网络连接并重试",
+    "server": "服务器错误",
+    "serverDescription": "服务器在处理您的请求时遇到了错误",
+    "client": "客户端错误",
+    "clientDescription": "您的请求存在问题",
+    "validation": "验证错误",
+    "validationDescription": "请检查您的输入并重试",
+    "unauthorized": "未授权",
+    "unauthorizedDescription": "您没有权限访问此资源",
+    "notFound": "未找到",
+    "notFoundDescription": "未找到请求的资源",
+    "unknown": "未知错误",
+    "unknownDescription": "发生了意外错误"
+  },
   "monitor": {
+    "title": "监控仪表盘",
+    "noData": "暂无数据",
+    "noDataDescription": "当前时间范围内没有找到任何数据。请尝试调整过滤条件或选择不同的时间范围。",
     "filters": {
       "title": "过滤条件",
       "key": "API Key",
-      "keyPlaceholder": "输入 API Key 进行过滤",
+      "keyPlaceholder": "输入 API Key 名称进行过滤",
       "model": "模型",
       "modelPlaceholder": "输入模型名称",
       "dateRange": "日期范围",
@@ -35,7 +61,7 @@
       "timespanPlaceholder": "选择时间粒度",
       "timespanHour": "小时",
       "timespanDay": "天",
-      "apply": "应用",
+      "search": "搜索",
       "reset": "重置"
     },
     "metrics": {
@@ -48,7 +74,22 @@
       "currentTpm": "当前 TPM",
       "currentTpmTooltip": "每分钟 Token 数（Tokens Per Minute）",
       "outputTokens": "输出 Token 数",
-      "outputTokensTooltip": "统计时间范围内的输出 Token 总数"
+      "outputTokensTooltip": "统计时间范围内的输出 Token 总数",
+      "fullValue": "完整值"
+    },
+    "charts": {
+      "tokensChart": {
+        "cacheCreationTokens": "缓存创建 Tokens",
+        "cachedTokens": "缓存 Tokens",
+        "inputTokens": "输入 Tokens",
+        "outputTokens": "输出 Tokens",
+        "totalTokens": "总 Tokens",
+        "webSearchCount": "搜索次数"
+      },
+      "requestsChart": {
+        "requestCount": "请求数量",
+        "exceptionCount": "异常数量"
+      }
     }
   },
   "table": {
@@ -205,6 +246,54 @@
       "deleting": "删除中..."
     }
   },
+  "log": {
+    "title": "日志列表",
+    "keyName": "密钥名称",
+    "model": "模型",
+    "inputTokens": "输入Tokens",
+    "outputTokens": "输出Tokens",
+    "duration": "持续时间(秒)",
+    "state": "状态",
+    "time": "时间",
+    "details": "详情",
+    "success": "成功",
+    "failed": "失败",
+    "basicInfo": "基本信息",
+    "tokenInfo": "Token信息",
+    "timeInfo": "时间信息",
+    "requestBody": "请求内容",
+    "responseBody": "响应内容",
+    "noRequestBody": "无可用的请求内容",
+    "noResponseBody": "无可用的响应内容",
+    "contentTruncated": "内容已截断",
+    "id": "ID",
+    "requestId": "请求ID",
+    "channel": "渠道",
+    "user": "用户",
+    "ip": "IP地址",
+    "endpoint": "端点",
+    "cacheCreation": "缓存创建",
+    "cached": "已缓存",
+    "imageInput": "图像输入",
+    "reasoning": "推理",
+    "total": "总计",
+    "webSearchCount": "网络搜索次数",
+    "created": "创建时间",
+    "request": "请求时间",
+    "retry": "重试时间",
+    "retryTimes": "重试次数",
+    "ttfb": "首字节时间",
+    "filters": {
+      "keyPlaceholder": "输入密钥名称进行筛选",
+      "modelPlaceholder": "输入模型名称进行筛选",
+      "statusAll": "全部",
+      "statusSuccess": "成功",
+      "statusError": "错误",
+      "dateRangePlaceholder": "选择日期范围",
+      "search": "搜索",
+      "reset": "重置"
+    }
+  },
   "apiDoc": {
     "requestExample": "请求示例",
     "voice": "必填",
@@ -270,6 +359,7 @@
     "8": "语音转录",
     "9": "音频翻译",
     "10": "重排序",
-    "11": "pdf解析"
+    "11": "pdf解析",
+    "13": "视频生成"
   }
 }

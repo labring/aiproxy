@@ -22,11 +22,37 @@
     "loading": "Loading...",
     "selectDateRange": "Select date range"
   },
+  "error": {
+    "loading": "Failed to load data",
+    "loadingLogs": "Failed to load logs",
+    "retry": "Retry",
+    "viewDetails": "View Details",
+    "hideDetails": "Hide Details",
+    "message": "Error Message",
+    "code": "Error Code",
+    "network": "Network Error",
+    "networkDescription": "Please check your network connection and try again",
+    "server": "Server Error",
+    "serverDescription": "The server encountered an error while processing your request",
+    "client": "Client Error",
+    "clientDescription": "There was an issue with your request",
+    "validation": "Validation Error",
+    "validationDescription": "Please check your input and try again",
+    "unauthorized": "Unauthorized",
+    "unauthorizedDescription": "You don't have permission to access this resource",
+    "notFound": "Not Found",
+    "notFoundDescription": "The requested resource was not found",
+    "unknown": "Unknown Error",
+    "unknownDescription": "An unexpected error occurred"
+  },
   "monitor": {
+    "title": "Monitor Dashboard",
+    "noData": "No Data",
+    "noDataDescription": "No data found for the current time range. Please try adjusting the filter conditions or selecting a different time range.",
     "filters": {
       "title": "Filters",
       "key": "API Key",
-      "keyPlaceholder": "Enter API Key to filter",
+      "keyPlaceholder": "Enter API Key name to filter",
       "model": "Model",
       "modelPlaceholder": "Enter model name",
       "dateRange": "Date Range",
@@ -35,7 +61,7 @@
       "timespanPlaceholder": "Select time granularity",
       "timespanHour": "Hour",
       "timespanDay": "Day",
-      "apply": "Apply",
+      "search": "Search",
       "reset": "Reset"
     },
     "metrics": {
@@ -48,7 +74,22 @@
       "currentTpm": "Current TPM",
       "currentTpmTooltip": "Tokens Per Minute",
       "outputTokens": "Output Tokens",
-      "outputTokensTooltip": "Total output tokens in the time range"
+      "outputTokensTooltip": "Total output tokens in the time range",
+      "fullValue": "Full Value"
+    },
+    "charts": {
+      "tokensChart": {
+        "cacheCreationTokens": "Cache Creation Tokens",
+        "cachedTokens": "Cached Tokens",
+        "inputTokens": "Input Tokens",
+        "outputTokens": "Output Tokens",
+        "totalTokens": "Total Tokens",
+        "webSearchCount": "Web Search Count"
+      },
+      "requestsChart": {
+        "requestCount": "Request Count",
+        "exceptionCount": "Exception Count"
+      }
     }
   },
   "table": {
@@ -205,6 +246,54 @@
       "deleting": "Deleting..."
     }
   },
+  "log": {
+    "title": "Log List",
+    "keyName": "Key Name",
+    "model": "Model",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "duration": "Duration(s)",
+    "state": "State",
+    "time": "Time",
+    "details": "Details",
+    "success": "Success",
+    "failed": "Failed",
+    "basicInfo": "Basic Info",
+    "tokenInfo": "Token Info",
+    "timeInfo": "Time Info",
+    "requestBody": "Request Body",
+    "responseBody": "Response Body",
+    "noRequestBody": "No request body available",
+    "noResponseBody": "No response body available",
+    "contentTruncated": "Content truncated",
+    "id": "ID",
+    "requestId": "Request ID",
+    "channel": "Channel",
+    "user": "User",
+    "ip": "IP",
+    "endpoint": "Endpoint",
+    "cacheCreation": "Cache Creation",
+    "cached": "Cached",
+    "imageInput": "Image Input",
+    "reasoning": "Reasoning",
+    "total": "Total",
+    "webSearchCount": "Web Search Count",
+    "created": "Created",
+    "request": "Request",
+    "retry": "Retry",
+    "retryTimes": "Retry Times",
+    "ttfb": "TTFB",
+    "filters": {
+      "keyPlaceholder": "Enter key name to filter",
+      "modelPlaceholder": "Enter model name to filter",
+      "statusAll": "All",
+      "statusSuccess": "Success",
+      "statusError": "Error",
+      "dateRangePlaceholder": "Select date range",
+      "search": "Search",
+      "reset": "Reset"
+    }
+  },
   "apiDoc": {
     "requestExample": "Request Example",
     "voice": "required",
@@ -270,6 +359,7 @@
     "8": "STT",
     "9": "Audio",
     "10": "Rerank",
-    "11": "PDF Parsing"
+    "11": "PDF Parsing",
+    "13": "Video Generation"
   }
 }

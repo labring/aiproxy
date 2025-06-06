@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { KeyRound } from 'lucide-react'
+import { KeyRound, Github, FileText } from 'lucide-react'
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -58,6 +58,28 @@ export default function LoginPage() {
 
             {/* Language Selector and Theme Toggle */}
             <div className="absolute top-4 right-4 z-10 flex items-center gap-4">
+                {/* Github Icon */}
+                <a
+                    href="https://github.com/labring/aiproxy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+                    title="GitHub"
+                >
+                    <Github className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </a>
+                
+                {/* Swagger Icon */}
+                <a
+                    href={`${window.location.origin}/swagger/index.html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+                    title="API Documentation"
+                >
+                    <FileText className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </a>
+                
                 <ThemeToggle />
                 <LanguageSelector variant="minimal" />
             </div>

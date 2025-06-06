@@ -330,7 +330,7 @@ export function ModelForm({
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {Array.from({ length: 11 }, (_, i) => i + 1).map((type) => (
+                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13].map((type) => (
                                             <SelectItem key={type} value={String(type)}>
                                                 {t(`modeType.${type}` as never)}
                                             </SelectItem>

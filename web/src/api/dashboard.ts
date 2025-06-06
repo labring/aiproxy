@@ -31,8 +31,8 @@ export const dashboardApi = {
     getDashboardByGroup: async (group: string, filters?: DashboardFilters): Promise<DashboardData> => {
         const params = new URLSearchParams()
         
-        if (filters?.key) {
-            params.append('token_name', filters.key)
+        if (filters?.keyName) {
+            params.append('token_name', filters.keyName)
         }
         if (filters?.model) {
             params.append('model', filters.model)
@@ -58,8 +58,8 @@ export const dashboardApi = {
     },
 
     getDashboardData: async (filters?: DashboardFilters): Promise<DashboardData> => {
-        if (filters?.key) {
-            return dashboardApi.getDashboardByGroup(filters.key, filters)
+        if (filters?.keyName) {
+            return dashboardApi.getDashboardByGroup(filters.keyName, filters)
         } else {
             return dashboardApi.getDashboard(filters)
         }

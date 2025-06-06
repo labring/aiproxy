@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { EChartsOption } from 'echarts'
 
 import { EChart } from '@/components/ui/echarts'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useTheme } from '@/handler/ThemeContext'
 import { ChartDataPoint } from '@/types/dashboard'
 
 interface MonitorChartsProps {
@@ -10,7 +13,10 @@ interface MonitorChartsProps {
 }
 
 export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps) {
-    // 清新现代的颜色配置
+    const { t } = useTranslation()
+    const { theme } = useTheme()
+
+    // 清新现代的颜色配置 - 适配暗色模式
     const colorPalette = [
         '#3b82f6',  // 蓝色 - 缓存创建 Tokens
         '#8b5cf6',  // 紫色 - 缓存 Tokens  
@@ -19,6 +25,27 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
         '#f59e0b',  // 橙色 - 总 Tokens
         '#ec4899'   // 粉色 - 搜索次数
     ]
+
+    // 检测暗色模式 - 基于主题设置或系统偏好
+    const isDarkMode = useMemo(() => {
+        if (theme === 'dark') return true
+        if (theme === 'light') return false
+        // 如果是 system，检查系统偏好
+        return window.matchMedia('(prefers-color-scheme: dark)').matches
+    }, [theme])
+
+    // 根据主题模式调整颜色
+    const getThemeColors = () => ({
+        textColor: isDarkMode ? '#e5e7eb' : '#666',
+        axisLineColor: isDarkMode ? '#374151' : '#e1e4e8',
+        splitLineColor: isDarkMode ? '#374151' : '#f0f0f0',
+        tooltipBg: isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        tooltipBorder: isDarkMode ? '#4b5563' : '#e1e4e8',
+        tooltipTextColor: isDarkMode ? '#f3f4f6' : '#333',
+        crossLabelBg: isDarkMode ? '#4b5563' : '#283042'
+    })
+
+    const themeColors = getThemeColors()
 
     // Tokens 相关图表配置
     const tokensChartOption: EChartsOption = useMemo(() => {
@@ -31,31 +58,38 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 axisPointer: {
                     type: 'cross',
                     label: {
-                        backgroundColor: '#283042',
-                        borderColor: '#283042',
+                        backgroundColor: themeColors.crossLabelBg,
+                        borderColor: themeColors.crossLabelBg,
                         borderWidth: 1,
                         borderRadius: 4,
                         color: '#fff'
                     },
                     crossStyle: {
-                        color: '#999'
+                        color: themeColors.textColor
                     }
                 },
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                borderColor: '#e1e4e8',
+                backgroundColor: themeColors.tooltipBg,
+                borderColor: themeColors.tooltipBorder,
                 borderWidth: 1,
                 borderRadius: 8,
                 textStyle: {
-                    color: '#333',
+                    color: themeColors.tooltipTextColor,
                     fontSize: 12
                 },
-                extraCssText: 'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);'
+                extraCssText: `box-shadow: 0 4px 12px ${isDarkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};`
             },
             legend: {
                 top: '10px',
-                data: ['缓存创建 Tokens', '缓存 Tokens', '输入 Tokens', '输出 Tokens', '总 Tokens', '搜索次数'],
+                data: [
+                    t('monitor.charts.tokensChart.cacheCreationTokens'),
+                    t('monitor.charts.tokensChart.cachedTokens'),
+                    t('monitor.charts.tokensChart.inputTokens'),
+                    t('monitor.charts.tokensChart.outputTokens'),
+                    t('monitor.charts.tokensChart.totalTokens'),
+                    t('monitor.charts.tokensChart.webSearchCount')
+                ],
                 textStyle: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 12
                 },
                 itemGap: 20,
@@ -74,12 +108,12 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 data: timestamps,
                 axisLine: {
                     lineStyle: {
-                        color: '#e1e4e8',
+                        color: themeColors.axisLineColor,
                         width: 1
                     }
                 },
                 axisLabel: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 11,
                     margin: 10
                 },
@@ -96,7 +130,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     show: false
                 },
                 axisLabel: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 11,
                     margin: 10
                 },
@@ -105,7 +139,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 },
                 splitLine: {
                     lineStyle: {
-                        color: '#f0f0f0',
+                        color: themeColors.splitLineColor,
                         type: 'dashed',
                         width: 1
                     }
@@ -113,7 +147,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
             },
             series: [
                 {
-                    name: '缓存创建 Tokens',
+                    name: t('monitor.charts.tokensChart.cacheCreationTokens'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -128,7 +162,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[0],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -142,7 +176,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.cache_creation_tokens)
                 },
                 {
-                    name: '缓存 Tokens',
+                    name: t('monitor.charts.tokensChart.cachedTokens'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -157,7 +191,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[1],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -171,7 +205,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.cached_tokens)
                 },
                 {
-                    name: '输入 Tokens',
+                    name: t('monitor.charts.tokensChart.inputTokens'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -186,7 +220,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[2],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -200,7 +234,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.input_tokens)
                 },
                 {
-                    name: '输出 Tokens',
+                    name: t('monitor.charts.tokensChart.outputTokens'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -215,7 +249,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[3],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -229,7 +263,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.output_tokens)
                 },
                 {
-                    name: '总 Tokens',
+                    name: t('monitor.charts.tokensChart.totalTokens'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -244,7 +278,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[4],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -258,7 +292,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.total_tokens)
                 },
                 {
-                    name: '搜索次数',
+                    name: t('monitor.charts.tokensChart.webSearchCount'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -273,7 +307,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: colorPalette[5],
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -291,7 +325,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
             animationDuration: 1000,
             animationEasing: 'cubicOut'
         }
-    }, [chartData])
+    }, [chartData, t, isDarkMode, themeColors])
 
     // 请求和错误图表配置
     const requestsChartOption: EChartsOption = useMemo(() => {
@@ -304,31 +338,34 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 axisPointer: {
                     type: 'cross',
                     label: {
-                        backgroundColor: '#283042',
-                        borderColor: '#283042',
+                        backgroundColor: themeColors.crossLabelBg,
+                        borderColor: themeColors.crossLabelBg,
                         borderWidth: 1,
                         borderRadius: 4,
                         color: '#fff'
                     },
                     crossStyle: {
-                        color: '#999'
+                        color: themeColors.textColor
                     }
                 },
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                borderColor: '#e1e4e8',
+                backgroundColor: themeColors.tooltipBg,
+                borderColor: themeColors.tooltipBorder,
                 borderWidth: 1,
                 borderRadius: 8,
                 textStyle: {
-                    color: '#333',
+                    color: themeColors.tooltipTextColor,
                     fontSize: 12
                 },
-                extraCssText: 'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);'
+                extraCssText: `box-shadow: 0 4px 12px ${isDarkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};`
             },
             legend: {
                 top: '10px',
-                data: ['请求数量', '异常数量'],
+                data: [
+                    t('monitor.charts.requestsChart.requestCount'),
+                    t('monitor.charts.requestsChart.exceptionCount')
+                ],
                 textStyle: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 12
                 },
                 itemGap: 20,
@@ -347,12 +384,12 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 data: timestamps,
                 axisLine: {
                     lineStyle: {
-                        color: '#e1e4e8',
+                        color: themeColors.axisLineColor,
                         width: 1
                     }
                 },
                 axisLabel: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 11,
                     margin: 10
                 },
@@ -369,7 +406,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     show: false
                 },
                 axisLabel: {
-                    color: '#666',
+                    color: themeColors.textColor,
                     fontSize: 11,
                     margin: 10
                 },
@@ -378,7 +415,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                 },
                 splitLine: {
                     lineStyle: {
-                        color: '#f0f0f0',
+                        color: themeColors.splitLineColor,
                         type: 'dashed',
                         width: 1
                     }
@@ -386,7 +423,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
             },
             series: [
                 {
-                    name: '请求数量',
+                    name: t('monitor.charts.requestsChart.requestCount'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -401,7 +438,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: '#3b82f6',
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -415,7 +452,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     data: chartData.map(item => item.request_count)
                 },
                 {
-                    name: '异常数量',
+                    name: t('monitor.charts.requestsChart.exceptionCount'),
                     type: 'line',
                     smooth: true,
                     showSymbol: false,
@@ -430,7 +467,7 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
                     itemStyle: {
                         color: '#ef4444',
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: isDarkMode ? '#1f2937' : '#fff'
                     },
                     emphasis: {
                         focus: 'series',
@@ -448,13 +485,17 @@ export function MonitorCharts({ chartData, loading = false }: MonitorChartsProps
             animationDuration: 1000,
             animationEasing: 'cubicOut'
         }
-    }, [chartData])
+    }, [chartData, t, isDarkMode, themeColors])
 
     if (loading) {
         return (
             <div className="flex flex-col gap-4 h-[calc(100vh-280px)]">
-                <div className="flex-1 bg-gradient-to-r from-slate-100 to-slate-200 animate-pulse rounded-lg"></div>
-                <div className="flex-1 bg-gradient-to-r from-slate-100 to-slate-200 animate-pulse rounded-lg"></div>
+                <div className="flex-1">
+                    <Skeleton className="w-full h-full rounded-lg" />
+                </div>
+                <div className="flex-1">
+                    <Skeleton className="w-full h-full rounded-lg" />
+                </div>
             </div>
         )
     }

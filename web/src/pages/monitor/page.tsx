@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { BarChart3 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { useDashboard } from '@/feature/monitor/hooks'
 import { MonitorFilters } from '@/feature/monitor/components/MonitorFilters'
 import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
+import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { DashboardFilters } from '@/types/dashboard'
 
 export default function MonitorPage() {
+    const { t } = useTranslation()
+    
     // 计算默认日期范围（当前时间往前7天）
     const getDefaultFilters = (): DashboardFilters => {
         const today = new Date()
@@ -48,10 +52,13 @@ export default function MonitorPage() {
             {/* 过滤器 */}
             <MonitorFilters onFiltersChange={handleFiltersChange} loading={isLoading} />
 
+            {/* 错误显示 - 使用 AdvancedErrorDisplay 组件 */}
             {error && (
-                <div className="rounded-md bg-destructive/15 p-4 text-sm text-destructive">
-                    数据加载失败: {error.message}
-                </div>
+                <AdvancedErrorDisplay 
+                    error={error} 
+                    onRetry={refetch}
+                    useCardStyle={true}
+                />
             )}
 
             {/* 指标卡片 */}
@@ -69,10 +76,10 @@ export default function MonitorPage() {
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-medium text-muted-foreground mb-2">
-                        暂无数据
+                        {t('monitor.noData')}
                     </h3>
                     <p className="text-sm text-muted-foreground max-w-sm">
-                        当前时间范围内没有找到任何数据。请尝试调整过滤条件或选择不同的时间范围。
+                        {t('monitor.noDataDescription')}
                     </p>
                 </div>
             )}

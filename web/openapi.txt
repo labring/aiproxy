@@ -1,59 +1,93 @@
-/api/dashboard/{group}
-描述信息：获取 dashboard 数据
+/api/log/{group}/search
+描述信息：获取 组级别 log 数据
 方法：get
 参数：
 query
-channel  channel id number
-model  model name string
+page 页码 number
+per_page 每页条数 number
+model_name  model name string
 token_name  token name string 
-start_timestamp 开始时间 timestamp 秒级别时间戳
-end_timestamp 结束时间 timestamp 秒级别时间戳
-timezone 时区 string
-timespan  Time span type (day, hour) 聚合粒度，支持 day 和 hour
+start_timestamp 开始时间 timestamp 毫秒级别时间戳
+end_timestamp 结束时间 timestamp 毫秒级别时间戳
+code_type 状态 'all' | 'success' | 'error' string
 
 
 响应结构：
 {
   "data": {
-    "cache_creation_tokens": 0,
-    "cached_tokens": 0,
     "channels": [
       0
     ],
-    "chart_data": [
+    "logs": [
       {
-        "cache_creation_tokens": 0,
-        "cached_tokens": 0,
-        "exception_count": 0,
-        "input_tokens": 0,
-        "max_rpm": 0,
-        "max_rps": 0,
-        "max_tpm": 0,
-        "max_tps": 0,
-        "output_tokens": 0,
-        "request_count": 0,
-        "timestamp": 0,
-        "total_tokens": 0,
+        "channel": 0,
+        "code": 0,
+        "content": "string",
+        "created_at": "string",
+        "endpoint": "string",
+        "group": "string",
+        "id": 0,
+        "ip": "string",
+        "metadata": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "mode": 0,
+        "model": "string",
+        "price": {
+          "cache_creation_price": 0,
+          "cache_creation_price_unit": 0,
+          "cached_price": 0,
+          "cached_price_unit": 0,
+          "image_input_price": 0,
+          "image_input_price_unit": 0,
+          "input_price": 0,
+          "input_price_unit": 0,
+          "output_price": 0,
+          "output_price_unit": 0,
+          "per_request_price": 0,
+          "thinking_mode_output_price": 0,
+          "thinking_mode_output_price_unit": 0,
+          "web_search_price": 0,
+          "web_search_price_unit": 0
+        },
+        "request_at": "string",
+        "request_detail": {
+          "id": 0,
+          "log_id": 0,
+          "request_body": "string",
+          "request_body_truncated": true,
+          "response_body": "string",
+          "response_body_truncated": true
+        },
+        "request_id": "string",
+        "retry_at": "string",
+        "retry_times": 0,
+        "token_id": 0,
+        "token_name": "string",
+        "ttfb_milliseconds": 0,
+        "usage": {
+          "cache_creation_tokens": 0,
+          "cached_tokens": 0,
+          "image_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "total_tokens": 0,
+          "web_search_count": 0
+        },
         "used_amount": 0,
-        "web_search_count": 0
+        "user": "string"
       }
     ],
-    "exception_count": 0,
-    "input_tokens": 0,
-    "max_rpm": 0,
-    "max_rps": 0,
-    "max_tpm": 0,
-    "max_tps": 0,
     "models": [
       "string"
     ],
-    "output_tokens": 0,
-    "rpm": 0,
-    "total_count": 0,
-    "total_tokens": 0,
-    "tpm": 0,
-    "used_amount": 0,
-    "web_search_count": 0
+    "token_names": [
+      "string"
+    ],
+    "total": 0
   },
   "message": "string",
   "success": true
@@ -61,61 +95,89 @@ timespan  Time span type (day, hour) 聚合粒度，支持 day 和 hour
 
 ---
 
-/api/dashboard/
-描述信息：获取 dashboard 数据
+/api/logs/search
+描述信息：获取 全部 log 数据
 方法：get
 参数：
 query
-channel  channel id number
-model  model name string
-start_timestamp 开始时间 timestamp 秒级别时间戳
-end_timestamp 结束时间 timestamp 秒级别时间戳
-timezone 时区 string
-timespan  Time span type (day, hour) 聚合粒度，支持 day 和 hour
+page 页码 number
+per_page 每页条数 number
+model_name  model name string
+start_timestamp 开始时间 timestamp 毫秒级别时间戳
+end_timestamp 结束时间 timestamp 毫秒级别时间戳
+code_type 状态 'all' | 'success' | 'error' string
 
 
 响应结构：
 {
   "data": {
-    "cache_creation_tokens": 0,
-    "cached_tokens": 0,
     "channels": [
       0
     ],
-    "chart_data": [
+    "logs": [
       {
-        "cache_creation_tokens": 0,
-        "cached_tokens": 0,
-        "exception_count": 0,
-        "input_tokens": 0,
-        "max_rpm": 0,
-        "max_rps": 0,
-        "max_tpm": 0,
-        "max_tps": 0,
-        "output_tokens": 0,
-        "request_count": 0,
-        "timestamp": 0,
-        "total_tokens": 0,
+        "channel": 0,
+        "code": 0,
+        "content": "string",
+        "created_at": "string",
+        "endpoint": "string",
+        "group": "string",
+        "id": 0,
+        "ip": "string",
+        "metadata": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "mode": 0,
+        "model": "string",
+        "price": {
+          "cache_creation_price": 0,
+          "cache_creation_price_unit": 0,
+          "cached_price": 0,
+          "cached_price_unit": 0,
+          "image_input_price": 0,
+          "image_input_price_unit": 0,
+          "input_price": 0,
+          "input_price_unit": 0,
+          "output_price": 0,
+          "output_price_unit": 0,
+          "per_request_price": 0,
+          "thinking_mode_output_price": 0,
+          "thinking_mode_output_price_unit": 0,
+          "web_search_price": 0,
+          "web_search_price_unit": 0
+        },
+        "request_at": "string",
+        "request_detail": {
+          "id": 0,
+          "log_id": 0,
+          "request_body": "string",
+          "request_body_truncated": true,
+          "response_body": "string",
+          "response_body_truncated": true
+        },
+        "request_id": "string",
+        "retry_at": "string",
+        "retry_times": 0,
+        "token_id": 0,
+        "token_name": "string",
+        "ttfb_milliseconds": 0,
+        "usage": {
+          "cache_creation_tokens": 0,
+          "cached_tokens": 0,
+          "image_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "total_tokens": 0,
+          "web_search_count": 0
+        },
         "used_amount": 0,
-        "web_search_count": 0
+        "user": "string"
       }
     ],
-    "exception_count": 0,
-    "input_tokens": 0,
-    "max_rpm": 0,
-    "max_rps": 0,
-    "max_tpm": 0,
-    "max_tps": 0,
-    "models": [
-      "string"
-    ],
-    "output_tokens": 0,
-    "rpm": 0,
-    "total_count": 0,
-    "total_tokens": 0,
-    "tpm": 0,
-    "used_amount": 0,
-    "web_search_count": 0
+    "total": 0
   },
   "message": "string",
   "success": true

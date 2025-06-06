@@ -37,7 +37,7 @@ export interface DashboardData {
 }
 
 export interface DashboardFilters {
-    key?: string
+    keyName?: string
     model?: string
     start_timestamp?: number
     end_timestamp?: number

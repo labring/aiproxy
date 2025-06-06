@@ -14,7 +14,7 @@ export function RootLayout() {
           key: true,
           channel: true,
           model: true,
-          log: false,
+          log: true,
           doc: true,
           github: true,
         }}
