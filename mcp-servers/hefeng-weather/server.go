@@ -94,13 +94,19 @@ type HourlyResponse struct {
 }
 
 // NewServer creates a new MCP server for weather functionality
-func NewServer(config, _ map[string]string) (mcpservers.Server, error) {
+func NewServer(config, reuse map[string]string) (mcpservers.Server, error) {
 	// Get API key from config or environment
 	apiKey := config["hefeng_api_key"]
+	if apiKey == "" {
+		apiKey = reuse["hefeng_api_key"]
+	}
 	if apiKey == "" {
 		return nil, errors.New("api key is required")
 	}
 	apiBase := config["hefeng_api_base"]
+	if apiBase == "" {
+		apiBase = reuse["hefeng_api_base"]
+	}
 	if apiBase == "" {
 		return nil, errors.New("api base is required")
 	}

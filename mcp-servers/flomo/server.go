@@ -33,9 +33,12 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server for Flomo functionality
-func NewServer(config, _ map[string]string) (mcpservers.Server, error) {
+func NewServer(config, reuse map[string]string) (mcpservers.Server, error) {
 	// Get API URL from config or environment
 	apiURL := config["flomo_api_url"]
+	if apiURL == "" {
+		apiURL = reuse["flomo_api_url"]
+	}
 	if apiURL == "" {
 		return nil, errors.New(
 			"flomo API URL not set. Please provide flomo_api_url in config or FLOMO_API_URL environment variable",

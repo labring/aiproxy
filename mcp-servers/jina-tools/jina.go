@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -88,7 +87,7 @@ func NewServer(config, _ map[string]string) (mcpservers.Server, error) {
 	// Get API key from config or environment
 	apiKey := config["jina_api_key"]
 	if apiKey == "" {
-		apiKey = os.Getenv("JINA_API_KEY")
+		return nil, errors.New("jina_api_key is required")
 	}
 
 	// Set up timeout

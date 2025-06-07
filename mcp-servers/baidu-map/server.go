@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -52,14 +51,14 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server for Baidu Map
-func NewServer(config, _ map[string]string) (mcpservers.Server, error) {
+func NewServer(config, reuse map[string]string) (mcpservers.Server, error) {
 	// Get API key from config or environment
 	apiKey := config["baidu_map_api_key"]
 	if apiKey == "" {
-		apiKey = os.Getenv("BAIDU_MAP_API_KEY")
+		apiKey = reuse["baidu_map_api_key"]
 	}
 	if apiKey == "" {
-		return nil, errors.New("BAIDU_MAP_API_KEY is required")
+		return nil, errors.New("baidu_map_api_key is required")
 	}
 
 	// Set up timeout
