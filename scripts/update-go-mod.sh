@@ -66,7 +66,7 @@ for dir in "${directories[@]}"; do
         exit 1
     fi
 
-    if (cd "$dir" && go get -u); then
+    if (cd "$dir" && go get -u && go mod tidy); then
         echo "Successfully updated dependencies in '$dir'"
     else
         echo "Failed to update dependencies in '$dir'"
