@@ -157,9 +157,22 @@ var unsupportedFields = []string{
 	"$defs",
 }
 
+var supportedFormats = map[string]struct{}{
+	"enum":      {},
+	"date-time": {},
+}
+
 func cleanJSONSchema(schema map[string]any) {
 	for _, field := range unsupportedFields {
 		delete(schema, field)
+	}
+
+	if format, exists := schema["format"]; exists {
+		if formatStr, ok := format.(string); ok {
+			if _, ok := supportedFormats[formatStr]; !ok {
+				delete(schema, "format")
+			}
+		}
 	}
 
 	for _, field := range schema {
@@ -258,6 +271,7 @@ func buildContents(
 			} else {
 				contentMap = make(map[string]any)
 			}
+
 			name := ""
 			if message.Name != nil {
 				name = *message.Name
