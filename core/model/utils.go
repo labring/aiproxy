@@ -105,6 +105,13 @@ func (zni *ZeroNullInt64) Scan(value any) error {
 		*zni = ZeroNullInt64(v)
 	case int64:
 		*zni = ZeroNullInt64(v)
+	case string:
+		vf, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		*zni = ZeroNullInt64(vf)
 	default:
 		return fmt.Errorf("unsupported type: %T", v)
 	}

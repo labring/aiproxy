@@ -2,8 +2,6 @@ package model
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -16,10 +14,10 @@ type batchUpdateData struct {
 	Groups               map[string]*GroupUpdate
 	Tokens               map[int]*TokenUpdate
 	Channels             map[int]*ChannelUpdate
-	Summaries            map[string]*SummaryUpdate
-	GroupSummaries       map[string]*GroupSummaryUpdate
-	SummariesMinute      map[string]*SummaryMinuteUpdate
-	GroupSummariesMinute map[string]*GroupSummaryMinuteUpdate
+	Summaries            map[SummaryUnique]*SummaryUpdate
+	GroupSummaries       map[GroupSummaryUnique]*GroupSummaryUpdate
+	SummariesMinute      map[SummaryMinuteUnique]*SummaryMinuteUpdate
+	GroupSummariesMinute map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate
 	sync.Mutex
 }
 
@@ -65,14 +63,6 @@ type SummaryMinuteUpdate struct {
 	SummaryData
 }
 
-func summaryUniqueKey(unique SummaryUnique) string {
-	return fmt.Sprintf("%d:%s:%d", unique.ChannelID, unique.Model, unique.HourTimestamp)
-}
-
-func summaryMinuteUniqueKey(unique SummaryMinuteUnique) string {
-	return fmt.Sprintf("%d:%s:%d", unique.ChannelID, unique.Model, unique.MinuteTimestamp)
-}
-
 type GroupSummaryUpdate struct {
 	GroupSummaryUnique
 	SummaryData
@@ -83,26 +73,6 @@ type GroupSummaryMinuteUpdate struct {
 	SummaryData
 }
 
-func groupSummaryUniqueKey(unique GroupSummaryUnique) string {
-	return fmt.Sprintf(
-		"%s:%s:%s:%d",
-		unique.GroupID,
-		unique.TokenName,
-		unique.Model,
-		unique.HourTimestamp,
-	)
-}
-
-func groupSummaryMinuteUniqueKey(unique GroupSummaryMinuteUnique) string {
-	return fmt.Sprintf(
-		"%s:%s:%s:%d",
-		unique.GroupID,
-		unique.TokenName,
-		unique.Model,
-		unique.MinuteTimestamp,
-	)
-}
-
 var batchData batchUpdateData
 
 func init() {
@@ -110,10 +80,10 @@ func init() {
 		Groups:               make(map[string]*GroupUpdate),
 		Tokens:               make(map[int]*TokenUpdate),
 		Channels:             make(map[int]*ChannelUpdate),
-		Summaries:            make(map[string]*SummaryUpdate),
-		GroupSummaries:       make(map[string]*GroupSummaryUpdate),
-		SummariesMinute:      make(map[string]*SummaryMinuteUpdate),
-		GroupSummariesMinute: make(map[string]*GroupSummaryMinuteUpdate),
+		Summaries:            make(map[SummaryUnique]*SummaryUpdate),
+		GroupSummaries:       make(map[GroupSummaryUnique]*GroupSummaryUpdate),
+		SummariesMinute:      make(map[SummaryMinuteUnique]*SummaryMinuteUpdate),
+		GroupSummariesMinute: make(map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate),
 	}
 }
 
@@ -530,17 +500,14 @@ func updateGroupSummaryData(
 		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
 	}
 
-	groupSummaryKey := groupSummaryUniqueKey(groupUnique)
-
-	groupSummary, ok := batchData.GroupSummaries[groupSummaryKey]
+	groupSummary, ok := batchData.GroupSummaries[groupUnique]
 	if !ok {
 		groupSummary = &GroupSummaryUpdate{
 			GroupSummaryUnique: groupUnique,
 		}
-		batchData.GroupSummaries[groupSummaryKey] = groupSummary
+		batchData.GroupSummaries[groupUnique] = groupSummary
 	}
 
-	groupSummary.RequestCount++
 	groupSummary.UsedAmount = amountDecimal.
 		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
 		InexactFloat64()
@@ -549,10 +516,7 @@ func updateGroupSummaryData(
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
-
-	if code != http.StatusOK {
-		groupSummary.ExceptionCount++
-	}
+	groupSummary.AddRequest(code)
 }
 
 func updateGroupSummaryDataMinute(
@@ -583,17 +547,14 @@ func updateGroupSummaryDataMinute(
 		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
 	}
 
-	groupSummaryKey := groupSummaryMinuteUniqueKey(groupUnique)
-
-	groupSummary, ok := batchData.GroupSummariesMinute[groupSummaryKey]
+	groupSummary, ok := batchData.GroupSummariesMinute[groupUnique]
 	if !ok {
 		groupSummary = &GroupSummaryMinuteUpdate{
 			GroupSummaryMinuteUnique: groupUnique,
 		}
-		batchData.GroupSummariesMinute[groupSummaryKey] = groupSummary
+		batchData.GroupSummariesMinute[groupUnique] = groupSummary
 	}
 
-	groupSummary.RequestCount++
 	groupSummary.UsedAmount = amountDecimal.
 		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
 		InexactFloat64()
@@ -602,10 +563,7 @@ func updateGroupSummaryDataMinute(
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
-
-	if code != http.StatusOK {
-		groupSummary.ExceptionCount++
-	}
+	groupSummary.AddRequest(code)
 }
 
 func updateSummaryData(
@@ -636,17 +594,14 @@ func updateSummaryData(
 		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
 	}
 
-	summaryKey := summaryUniqueKey(summaryUnique)
-
-	summary, ok := batchData.Summaries[summaryKey]
+	summary, ok := batchData.Summaries[summaryUnique]
 	if !ok {
 		summary = &SummaryUpdate{
 			SummaryUnique: summaryUnique,
 		}
-		batchData.Summaries[summaryKey] = summary
+		batchData.Summaries[summaryUnique] = summary
 	}
 
-	summary.RequestCount++
 	summary.UsedAmount = amountDecimal.
 		Add(decimal.NewFromFloat(summary.UsedAmount)).
 		InexactFloat64()
@@ -655,10 +610,7 @@ func updateSummaryData(
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
-
-	if code != http.StatusOK {
-		summary.ExceptionCount++
-	}
+	summary.AddRequest(code)
 }
 
 func updateSummaryDataMinute(
@@ -689,17 +641,14 @@ func updateSummaryDataMinute(
 		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
 	}
 
-	summaryKey := summaryMinuteUniqueKey(summaryUnique)
-
-	summary, ok := batchData.SummariesMinute[summaryKey]
+	summary, ok := batchData.SummariesMinute[summaryUnique]
 	if !ok {
 		summary = &SummaryMinuteUpdate{
 			SummaryMinuteUnique: summaryUnique,
 		}
-		batchData.SummariesMinute[summaryKey] = summary
+		batchData.SummariesMinute[summaryUnique] = summary
 	}
 
-	summary.RequestCount++
 	summary.UsedAmount = amountDecimal.
 		Add(decimal.NewFromFloat(summary.UsedAmount)).
 		InexactFloat64()
@@ -708,8 +657,5 @@ func updateSummaryDataMinute(
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
-
-	if code != http.StatusOK {
-		summary.ExceptionCount++
-	}
+	summary.AddRequest(code)
 }
