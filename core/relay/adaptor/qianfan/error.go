@@ -14,5 +14,6 @@ func ErrorHandler(resp *http.Response) adaptor.Error {
 		openAIError.Type == "unsafe_request" {
 		statusCode = http.StatusBadRequest
 	}
+
 	return relaymodel.NewOpenAIError(statusCode, openAIError)
 }
