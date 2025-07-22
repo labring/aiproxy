@@ -2,6 +2,7 @@ package audio
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os/exec"
@@ -18,12 +19,13 @@ var (
 	re                  = regexp.MustCompile(`time=(\d+:\d+:\d+\.\d+)`)
 )
 
-func GetAudioDuration(audio io.Reader) (float64, error) {
+func GetAudioDuration(ctx context.Context, audio io.Reader) (float64, error) {
 	if !config.FfmpegEnabled {
 		return 0, nil
 	}
 
-	ffprobeCmd := exec.Command(
+	ffprobeCmd := exec.CommandContext(
+		ctx,
 		"ffprobe",
 		"-v", "error",
 		"-select_streams", "a:0",
@@ -51,7 +53,7 @@ func GetAudioDuration(audio io.Reader) (float64, error) {
 			return 0, ErrAudioDurationNAN
 		}
 
-		return getAudioDurationFallback(audio)
+		return getAudioDurationFallback(ctx, audio)
 	}
 
 	duration, err := strconv.ParseFloat(str, 64)
@@ -62,12 +64,13 @@ func GetAudioDuration(audio io.Reader) (float64, error) {
 	return duration, nil
 }
 
-func getAudioDurationFallback(audio io.Reader) (float64, error) {
+func getAudioDurationFallback(ctx context.Context, audio io.Reader) (float64, error) {
 	if !config.FfmpegEnabled {
 		return 0, nil
 	}
 
-	ffmpegCmd := exec.Command(
+	ffmpegCmd := exec.CommandContext(
+		ctx,
 		"ffmpeg",
 		"-i", "-",
 		"-f", "null", "-",
@@ -90,12 +93,13 @@ func getAudioDurationFallback(audio io.Reader) (float64, error) {
 	return parseTimeFromFfmpegOutput(stderr.String())
 }
 
-func GetAudioDurationFromFilePath(filePath string) (float64, error) {
+func GetAudioDurationFromFilePath(ctx context.Context, filePath string) (float64, error) {
 	if !config.FfmpegEnabled {
 		return 0, nil
 	}
 
-	ffprobeCmd := exec.Command(
+	ffprobeCmd := exec.CommandContext(
+		ctx,
 		"ffprobe",
 		"-v", "error",
 		"-select_streams", "a:0",
@@ -112,7 +116,7 @@ func GetAudioDurationFromFilePath(filePath string) (float64, error) {
 	str := strings.TrimSpace(string(output))
 
 	if str == "" || str == "N/A" {
-		return getAudioDurationFromFilePathFallback(filePath)
+		return getAudioDurationFromFilePathFallback(ctx, filePath)
 	}
 
 	duration, err := strconv.ParseFloat(str, 64)
@@ -123,12 +127,13 @@ func GetAudioDurationFromFilePath(filePath string) (float64, error) {
 	return duration, nil
 }
 
-func getAudioDurationFromFilePathFallback(filePath string) (float64, error) {
+func getAudioDurationFromFilePathFallback(ctx context.Context, filePath string) (float64, error) {
 	if !config.FfmpegEnabled {
 		return 0, nil
 	}
 
-	ffmpegCmd := exec.Command(
+	ffmpegCmd := exec.CommandContext(
+		ctx,
 		"ffmpeg",
 		"-i", filePath,
 		"-f", "null", "-",
