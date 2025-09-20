@@ -5,6 +5,8 @@ import (
 	"net/http"
 	//nolint:gosec
 	_ "net/http/pprof"
+	"os"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -14,6 +16,7 @@ var pprofMux *http.ServeMux
 func init() {
 	pprofMux = http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
+	runtime.MemProfileRate, _ = strconv.Atoi(os.Getenv("MemProfileRate"))
 }
 
 func RunPprofServer(port int) error {
