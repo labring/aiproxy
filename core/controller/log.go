@@ -37,7 +37,7 @@ func parseCommonParams(c *gin.Context) (params struct {
 	params.ip = c.Query("ip")
 	params.user = c.Query("user")
 
-	return
+	return params
 }
 
 // GetLogs godoc

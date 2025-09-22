@@ -341,8 +341,9 @@ func StreamResponse2OpenAI(
 			content = claudeResponse.ContentBlock.Text
 			if claudeResponse.ContentBlock.Type == toolUseType {
 				tools = append(tools, relaymodel.ToolCall{
-					ID:   claudeResponse.ContentBlock.ID,
-					Type: "function",
+					Index: claudeResponse.Index,
+					ID:    claudeResponse.ContentBlock.ID,
+					Type:  "function",
 					Function: relaymodel.Function{
 						Name: claudeResponse.ContentBlock.Name,
 					},
@@ -354,7 +355,8 @@ func StreamResponse2OpenAI(
 			switch claudeResponse.Delta.Type {
 			case "input_json_delta":
 				tools = append(tools, relaymodel.ToolCall{
-					Type: "function",
+					Index: claudeResponse.Index,
+					Type:  "function",
 					Function: relaymodel.Function{
 						Arguments: claudeResponse.Delta.PartialJSON,
 					},

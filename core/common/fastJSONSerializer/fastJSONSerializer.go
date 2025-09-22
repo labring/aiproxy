@@ -41,7 +41,7 @@ func (*JSONSerializer) Scan(
 
 	field.ReflectValueOf(ctx, dst).Set(fieldValue.Elem())
 
-	return
+	return err
 }
 
 func (*JSONSerializer) Value(

@@ -1,7 +1,7 @@
 version: "2"
 
 run:
-  go: "1.25.0"
+  go: "1.25"
   relative-path-mode: gomod
   modules-download-mode: readonly
 
@@ -36,6 +36,7 @@ linters:
     - govet
     - iface
     - importas
+    - iotamixing
     - inamedparam
     - ineffassign
     - intrange

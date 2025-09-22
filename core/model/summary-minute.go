@@ -41,7 +41,7 @@ func (l *SummaryMinute) BeforeCreate(_ *gorm.DB) (err error) {
 		return err
 	}
 
-	return
+	return err
 }
 
 var minuteTimestampDivisor = int64(time.Minute.Seconds())
