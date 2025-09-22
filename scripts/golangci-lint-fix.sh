@@ -46,7 +46,7 @@ if [ ${#directories[@]} -eq 0 ]; then
     exit 0
 fi
 
-echo "Found ${#directories[@]} directories to run golangci-lint-v2 --fix:"
+echo "Found ${#directories[@]} directories to run golangci-lint --fix:"
 for dir in "${directories[@]}"; do
     echo "  - $dir"
 done
@@ -69,7 +69,7 @@ for dir in "${directories[@]}"; do
     fi
 
     # --fix will ignore some issues, so we run it twice
-    if (cd "$dir" && golangci-lint-v2 run --path-mode abs --fix && golangci-lint-v2 run --path-mode abs); then
+    if (cd "$dir" && golangci-lint run --path-mode abs --fix && golangci-lint run --path-mode abs); then
         echo "Successfully fixed lint issues in '$dir'"
     else
         echo "Failed to fix lint issues in '$dir'"

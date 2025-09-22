@@ -407,7 +407,7 @@ func (t *TimeWindowStats) GetStats() (totalReq, totalErr int) {
 		totalErr += slice.errors
 	})
 
-	return
+	return totalReq, totalErr
 }
 
 func (t *TimeWindowStats) HasValidSlices() bool {

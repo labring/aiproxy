@@ -16,7 +16,7 @@ func ParsePageParams(c *gin.Context) (page, perPage int) {
 	page, _ = strconv.Atoi(pageStr)
 	perPage, _ = strconv.Atoi(c.Query("per_page"))
 
-	return
+	return page, perPage
 }
 
 const (
@@ -42,7 +42,7 @@ func ParseTimeRange(c *gin.Context, maxSpan time.Duration) (startTime, endTime t
 		}
 	}
 
-	return
+	return startTime, endTime
 }
 
 func smartParseTimestamp(timestampStr string) (time.Time, error) {

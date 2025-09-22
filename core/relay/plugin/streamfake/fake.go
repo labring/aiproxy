@@ -92,6 +92,7 @@ func (p *StreamFake) ConvertRequest(
 			if err != nil {
 				return false, err
 			}
+
 			return true, nil
 		},
 	})

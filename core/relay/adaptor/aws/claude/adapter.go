@@ -230,5 +230,5 @@ func (a *Adaptor) DoResponse(
 		}
 	}
 
-	return
+	return usage, err
 }
