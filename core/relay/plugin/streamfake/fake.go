@@ -346,9 +346,11 @@ func (rw *fakeStreamResponseWriter) buildToolCalls() []*relaymodel.ToolCall {
 	if len(rw.toolCalls) == 0 {
 		return nil
 	}
+
 	slices.SortFunc(rw.toolCalls, func(a, b *relaymodel.ToolCall) int {
 		return a.Index - b.Index
 	})
+
 	if rw.toolCalls[0].Index == 0 {
 		return rw.toolCalls
 	}
@@ -356,6 +358,7 @@ func (rw *fakeStreamResponseWriter) buildToolCalls() []*relaymodel.ToolCall {
 	for i, v := range rw.toolCalls {
 		v.Index = i
 	}
+
 	return rw.toolCalls
 }
 
