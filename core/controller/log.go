@@ -12,6 +12,7 @@ import (
 )
 
 func parseCommonParams(c *gin.Context) (params struct {
+	group     string
 	tokenName string
 	modelName string
 	channelID int
@@ -25,6 +26,7 @@ func parseCommonParams(c *gin.Context) (params struct {
 	user      string
 },
 ) {
+	params.group = c.Query("group")
 	params.tokenName = c.Query("token_name")
 	params.modelName = c.Query("model_name")
 	params.channelID, _ = strconv.Atoi(c.Query("channel"))
@@ -165,7 +167,9 @@ func GetGroupLogs(c *gin.Context) {
 //	@Param			end_timestamp	query		int		false	"End timestamp (milliseconds)"
 //	@Param			model_name		query		string	false	"Filter by model name"
 //	@Param			channel			query		int		false	"Filter by channel"
+//	@Param			group			query		string	true	"Group name"
 //	@Param			token_id		query		int		false	"Filter by token id"
+//	@Param			token_name		query		string	false	"Filter by token name"
 //	@Param			order			query		string	false	"Order"
 //	@Param			request_id		query		string	false	"Request ID"
 //	@Param			code_type		query		string	false	"Status code type"
@@ -185,7 +189,9 @@ func SearchLogs(c *gin.Context) {
 	result, err := model.SearchLogs(
 		keyword,
 		params.requestID,
+		params.group,
 		params.tokenID,
+		params.tokenName,
 		params.modelName,
 		startTime,
 		endTime,
