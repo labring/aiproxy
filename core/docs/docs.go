@@ -3224,9 +3224,22 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
                         "type": "integer",
                         "description": "Filter by token id",
                         "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by token name",
+                        "name": "token_name",
                         "in": "query"
                     },
                     {
@@ -4816,7 +4829,8 @@ const docTemplate = `{
                             46,
                             47,
                             48,
-                            49
+                            49,
+                            50
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -9345,6 +9359,21 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "period_last_update_amount": {
+                    "description": "Total usage at last period reset",
+                    "type": "number"
+                },
+                "period_last_update_time": {
+                    "description": "Last time period was reset",
+                    "type": "string"
+                },
+                "period_quota": {
+                    "type": "number"
+                },
+                "period_type": {
+                    "description": "daily, weekly, monthly, default is monthly",
+                    "type": "string"
+                },
                 "quota": {
                     "type": "number"
                 },
@@ -9783,7 +9812,8 @@ const docTemplate = `{
                 46,
                 47,
                 48,
-                49
+                49,
+                50
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -9822,7 +9852,8 @@ const docTemplate = `{
                 "ChannelTypeDoc2x",
                 "ChannelTypeJina",
                 "ChannelTypeTextEmbeddingsInference",
-                "ChannelTypeQianfan"
+                "ChannelTypeQianfan",
+                "ChannelTypeSangforAICP"
             ]
         },
         "model.ChartData": {
@@ -12067,7 +12098,17 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "period_last_update_time": {
+                    "type": "integer"
+                },
+                "period_quota": {
+                    "type": "number"
+                },
+                "period_type": {
+                    "type": "string"
+                },
                 "quota": {
+                    "description": "Quota system",
                     "type": "number"
                 },
                 "status": {

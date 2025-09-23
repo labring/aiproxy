@@ -915,7 +915,9 @@ func searchLogs(
 func SearchLogs(
 	keyword string,
 	requestID string,
+	group string,
 	tokenID int,
+	tokenName string,
 	modelName string,
 	startTimestamp time.Time,
 	endTimestamp time.Time,
@@ -941,11 +943,11 @@ func SearchLogs(
 		var err error
 
 		total, logs, err = searchLogs(
-			"",
+			group,
 			keyword,
 			requestID,
 			tokenID,
-			"",
+			tokenName,
 			modelName,
 			startTimestamp,
 			endTimestamp,
