@@ -199,12 +199,18 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 				content.ToolUseID = message.ToolCallID
 			}
 
-			claudeMessage.Content = append(claudeMessage.Content, content)
+			if !(message.Role == "assistant" && content.Text == "" && len(message.ToolCalls) > 0) {
+				claudeMessage.Content = append(claudeMessage.Content, content)
+			}
 		} else {
 			var contents []relaymodel.ClaudeContent
 
 			openaiContent := message.ParseContent()
 			for _, part := range openaiContent {
+				if message.Role == "assistant" && part.Text == "" && len(message.ToolCalls) > 0 {
+					continue
+				}
+
 				var content relaymodel.ClaudeContent
 				switch part.Type {
 				case relaymodel.ContentTypeText:
