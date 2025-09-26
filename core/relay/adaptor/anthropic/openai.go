@@ -199,6 +199,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 				content.ToolUseID = message.ToolCallID
 			}
 
+			//nolint:staticcheck
 			if !(message.Role == "assistant" && content.Text == "" && len(message.ToolCalls) > 0) {
 				claudeMessage.Content = append(claudeMessage.Content, content)
 			}
