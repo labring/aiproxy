@@ -76,7 +76,7 @@ func GetEmbeddingsUsageFromNode(
 	node *ast.Node,
 ) (*relaymodel.EmbeddingUsage, error) {
 	usageNode := node.Get("usage")
-	if usageNode.TypeSafe() == ast.V_NULL {
+	if usageNode == nil || usageNode.TypeSafe() == ast.V_NULL {
 		return nil, nil
 	}
 
