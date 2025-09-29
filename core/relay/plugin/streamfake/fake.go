@@ -251,6 +251,10 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 
 		_ = deltaNode.Get("tool_calls").
 			ForEach(func(_ ast.Sequence, toolCallNode *ast.Node) bool {
+				if toolCallNode == nil || toolCallNode.TypeSafe() == ast.V_NULL {
+					return true
+				}
+
 				toolCallRaw, err := toolCallNode.Raw()
 				if err != nil {
 					return true

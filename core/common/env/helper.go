@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common/conv"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -90,7 +89,7 @@ func JSON[T any](env string, defaultValue T) T {
 	}
 
 	var t T
-	if err := sonic.Unmarshal(conv.StringToBytes(e), &t); err != nil {
+	if err := sonic.UnmarshalString(e, &t); err != nil {
 		log.Errorf("invalid %s: %s", env, e)
 		return defaultValue
 	}
