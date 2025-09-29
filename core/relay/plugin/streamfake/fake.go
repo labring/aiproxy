@@ -254,6 +254,7 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 				if toolCallNode != nil || toolCallNode.TypeSafe() == ast.V_NULL {
 					return true
 				}
+
 				toolCallRaw, err := toolCallNode.Raw()
 				if err != nil {
 					return true
