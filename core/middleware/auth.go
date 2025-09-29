@@ -143,6 +143,8 @@ func TokenAuth(c *gin.Context) {
 		group = *groupCache
 	}
 
+	c.Header("Group", group.ID)
+
 	SetLogGroupFields(log.Data, group)
 
 	if group.Status != model.GroupStatusEnabled && group.Status != model.GroupStatusInternal {
