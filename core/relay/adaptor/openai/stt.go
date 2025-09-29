@@ -184,8 +184,9 @@ func handleSTTNonStream(
 			)
 		}
 
-		if node.Get("usage").Exists() {
-			usageStr, err := node.Get("usage").Raw()
+		usageNode := node.Get("usage")
+		if usageNode != nil && usageNode.Exists() {
+			usageStr, err := usageNode.Raw()
 			if err != nil {
 				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
 					err,

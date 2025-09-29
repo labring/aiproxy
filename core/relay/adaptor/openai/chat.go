@@ -142,7 +142,7 @@ func GetUsageOrChatChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.ChatCompletionsStreamResponseChoice, error) {
 	usageNode := node.Get("usage")
-	if usageNode.TypeSafe() != ast.V_NULL {
+	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
 		usageRaw, err := usageNode.Raw()
 		if err != nil {
 			if !errors.Is(err, ast.ErrNotExist) {
@@ -163,7 +163,7 @@ func GetUsageOrChatChoicesResponseFromNode(
 	var choices []*relaymodel.ChatCompletionsStreamResponseChoice
 
 	choicesNode := node.Get("choices")
-	if choicesNode.TypeSafe() != ast.V_NULL {
+	if choicesNode != nil && choicesNode.TypeSafe() != ast.V_NULL {
 		choicesRaw, err := choicesNode.Raw()
 		if err != nil {
 			if !errors.Is(err, ast.ErrNotExist) {
@@ -294,7 +294,7 @@ func GetUsageOrChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.TextResponseChoice, error) {
 	usageNode := node.Get("usage")
-	if usageNode.TypeSafe() != ast.V_NULL {
+	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
 		usageRaw, err := usageNode.Raw()
 		if err != nil {
 			if !errors.Is(err, ast.ErrNotExist) {
@@ -315,7 +315,7 @@ func GetUsageOrChoicesResponseFromNode(
 	var choices []*relaymodel.TextResponseChoice
 
 	choicesNode := node.Get("choices")
-	if choicesNode.TypeSafe() != ast.V_NULL {
+	if choicesNode != nil && choicesNode.TypeSafe() != ast.V_NULL {
 		choicesRaw, err := choicesNode.Raw()
 		if err != nil {
 			if !errors.Is(err, ast.ErrNotExist) {

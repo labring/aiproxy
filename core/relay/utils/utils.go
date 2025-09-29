@@ -31,7 +31,7 @@ func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinki
 	var request model.GeneralOpenAIThinkingRequest
 
 	thinkingNode := node.Get("thinking")
-	if !thinkingNode.Exists() || thinkingNode.TypeSafe() == ast.V_NULL {
+	if thinkingNode != nil || !thinkingNode.Exists() || thinkingNode.TypeSafe() == ast.V_NULL {
 		return request, nil
 	}
 
