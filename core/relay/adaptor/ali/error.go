@@ -2,6 +2,7 @@ package ali
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -21,6 +22,10 @@ func ErrorHanlder(resp *http.Response) adaptor.Error {
 	case "RequestTimeOut":
 		statusCode = http.StatusRequestTimeout
 		openAIError.Type = relaymodel.ErrorTypeUpstream
+	}
+
+	if strings.Contains(openAIError.Message, "object is not iterable") {
+		statusCode = http.StatusBadRequest
 	}
 
 	return relaymodel.NewOpenAIError(statusCode, openAIError)
