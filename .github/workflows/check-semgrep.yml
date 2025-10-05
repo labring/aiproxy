@@ -31,4 +31,11 @@ jobs:
     if: (github.actor != 'dependabot[bot]')
     steps:
       - uses: actions/checkout@v5
-      - run: semgrep ci
+      - run: |
+          semgrep ci \
+            --config p/ci \
+            --config p/security-audit \
+            --config p/golang \
+            --config p/react \
+            --config p/javascript \
+            --config p/owasp-top-ten
