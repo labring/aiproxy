@@ -7397,6 +7397,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/dashboard/billing/quota": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get quota",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Get quota",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/balance.GroupQuota"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/dashboard/billing/subscription": {
             "get": {
                 "security": [
@@ -8421,6 +8446,17 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "balance.GroupQuota": {
+            "type": "object",
+            "properties": {
+                "remain": {
+                    "type": "number"
+                },
+                "total": {
+                    "type": "number"
                 }
             }
         },
