@@ -89,9 +89,12 @@ func newSealosToken(key string) (string, error) {
 }
 
 type sealosGetGroupBalanceResp struct {
-	UserUID string `json:"userUID"`
-	Error   string `json:"error"`
-	Balance int64  `json:"balance"`
+	UserUID               string `json:"userUID"`
+	Error                 string `json:"error"`
+	Balance               int64  `json:"balance"`
+	WorkspaceSubscription bool   `json:"workspaceSubscription"`
+	TotalAIQuota          int64  `json:"totalAIQuota"`
+	RemainAIQuota         int64  `json:"remainAIQuota"`
 }
 
 type sealosPostGroupConsumeReq struct {
@@ -295,22 +298,28 @@ func (s *Sealos) getGroupRemainBalance(ctx context.Context, group string) (int64
 		log.Errorf("get group (%s) balance cache failed: %s", group, err)
 	}
 
-	balance, userUID, err := s.fetchBalanceFromAPI(ctx, group)
+	balance, err := s.fetchBalanceFromAPI(ctx, group)
 	if err != nil {
 		return 0, "", err
 	}
 
-	if err := cacheSetGroupBalance(ctx, group, balance, userUID); err != nil {
+	if err := cacheSetGroupBalance(ctx, group, balance.balance, balance.userUID); err != nil {
 		log.Errorf("set group (%s) balance cache failed: %s", group, err)
 	}
 
-	return balance, userUID, nil
+	return balance.balance, balance.userUID, nil
+}
+
+type sealosBalanceResoult struct {
+	quota   int64
+	balance int64
+	userUID string
 }
 
 func (s *Sealos) fetchBalanceFromAPI(
 	ctx context.Context,
 	group string,
-) (balance int64, userUID string, err error) {
+) (*sealosBalanceResoult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -325,35 +334,59 @@ func (s *Sealos) fetchBalanceFromAPI(
 		nil,
 	)
 	if err != nil {
-		return 0, "", err
+		return nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 
 	resp, err := sealosHTTPClient.Do(req)
 	if err != nil {
-		return 0, "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var sealosResp sealosGetGroupBalanceResp
 	if err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&sealosResp); err != nil {
-		return 0, "", err
+		return nil, err
 	}
 
 	if sealosResp.Error != "" {
-		return 0, "", errors.New(sealosResp.Error)
+		return nil, errors.New(sealosResp.Error)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, "", fmt.Errorf(
+		return nil, fmt.Errorf(
 			"get group (%s) balance failed with status code %d",
 			group,
 			resp.StatusCode,
 		)
 	}
 
-	return sealosResp.Balance, sealosResp.UserUID, nil
+	if sealosResp.WorkspaceSubscription {
+		return &sealosBalanceResoult{
+			quota:   sealosResp.TotalAIQuota,
+			balance: sealosResp.RemainAIQuota,
+			userUID: sealosResp.UserUID,
+		}, nil
+	}
+
+	return &sealosBalanceResoult{
+		quota:   sealosResp.Balance,
+		balance: sealosResp.Balance,
+		userUID: sealosResp.UserUID,
+	}, nil
+}
+
+// GetGroupQuota implements GroupBalance.
+func (s *Sealos) GetGroupQuota(ctx context.Context, group model.GroupCache) (*GroupQuota, error) {
+	balance, err := s.fetchBalanceFromAPI(ctx, group.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &GroupQuota{
+		Total:  decimal.NewFromInt(balance.quota).Div(decimalBalancePrecision).InexactFloat64(),
+		Remain: decimal.NewFromInt(balance.balance).Div(decimalBalancePrecision).InexactFloat64(),
+	}, nil
 }
 
 type SealosPostGroupConsumer struct {

@@ -12,6 +12,33 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// GetQuota godoc
+//
+//	@Summary		Get quota
+//	@Description	Get quota
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Success		200	{object}	balance.GroupQuota
+//	@Router			/v1/dashboard/billing/quota [get]
+func GetQuota(c *gin.Context) {
+	group := middleware.GetGroup(c)
+
+	groupQuota, err := balance.GetGroupQuota(c.Request.Context(), group)
+	if err != nil {
+		log.Errorf("get group (%s) balance failed: %s", group.ID, err)
+		middleware.ErrorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("get group (%s) balance failed", group.ID),
+		)
+
+		return
+	}
+
+	c.JSON(http.StatusOK, groupQuota)
+}
+
 // GetSubscription godoc
 //
 //	@Summary		Get subscription
@@ -24,7 +51,7 @@ import (
 func GetSubscription(c *gin.Context) {
 	group := middleware.GetGroup(c)
 
-	b, _, err := balance.GetGroupRemainBalance(c.Request.Context(), group)
+	groupQuota, err := balance.GetGroupQuota(c.Request.Context(), group)
 	if err != nil {
 		if errors.Is(err, balance.ErrNoRealNameUsedAmountLimit) {
 			middleware.ErrorResponse(c, http.StatusForbidden, err.Error())
@@ -45,12 +72,14 @@ func GetSubscription(c *gin.Context) {
 
 	quota := token.Quota
 	if quota <= 0 {
-		quota = b
+		quota = groupQuota.Total
+	} else {
+		quota = min(quota, groupQuota.Total)
 	}
 
 	c.JSON(http.StatusOK, openai.SubscriptionResponse{
 		HardLimitUSD:       quota + token.UsedAmount,
-		SoftLimitUSD:       b,
+		SoftLimitUSD:       groupQuota.Remain,
 		SystemHardLimitUSD: quota + token.UsedAmount,
 	})
 }
