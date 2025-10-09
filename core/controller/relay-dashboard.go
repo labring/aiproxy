@@ -9,6 +9,7 @@ import (
 	"github.com/labring/aiproxy/core/common/balance"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -34,6 +35,14 @@ func GetQuota(c *gin.Context) {
 		)
 
 		return
+	}
+
+	token := middleware.GetToken(c)
+	if token.Quota > 0 {
+		groupQuota.Total = min(groupQuota.Total, token.Quota)
+		groupQuota.Remain = min(groupQuota.Remain, decimal.NewFromFloat(token.Quota).
+			Sub(decimal.NewFromFloat(token.UsedAmount)).
+			InexactFloat64())
 	}
 
 	c.JSON(http.StatusOK, groupQuota)
@@ -77,10 +86,14 @@ func GetSubscription(c *gin.Context) {
 		quota = min(quota, groupQuota.Total)
 	}
 
+	hlimit := decimal.NewFromFloat(quota).
+		Add(decimal.NewFromFloat(token.UsedAmount)).
+		InexactFloat64()
+
 	c.JSON(http.StatusOK, openai.SubscriptionResponse{
-		HardLimitUSD:       quota + token.UsedAmount,
+		HardLimitUSD:       hlimit,
 		SoftLimitUSD:       groupQuota.Remain,
-		SystemHardLimitUSD: quota + token.UsedAmount,
+		SystemHardLimitUSD: hlimit,
 	})
 }
 
@@ -95,5 +108,12 @@ func GetSubscription(c *gin.Context) {
 //	@Router			/v1/dashboard/billing/usage [get]
 func GetUsage(c *gin.Context) {
 	token := middleware.GetToken(c)
-	c.JSON(http.StatusOK, openai.UsageResponse{TotalUsage: token.UsedAmount * 100})
+	c.JSON(
+		http.StatusOK,
+		openai.UsageResponse{
+			TotalUsage: decimal.NewFromFloat(token.UsedAmount).
+				Mul(decimal.NewFromFloat(100)).
+				InexactFloat64(),
+		},
+	)
 }

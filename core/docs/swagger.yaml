@@ -42,6 +42,13 @@ definitions:
       name:
         type: string
     type: object
+  balance.GroupQuota:
+    properties:
+      remain:
+        type: number
+      total:
+        type: number
+    type: object
   controller.AddChannelRequest:
     properties:
       base_url:
@@ -1466,6 +1473,8 @@ definitions:
         type: integer
       rpm:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1473,8 +1482,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       token_names:
         items:
@@ -2412,15 +2419,15 @@ definitions:
         type: integer
       retry_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       timestamp:
         type: integer
@@ -7174,6 +7181,21 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Completions
+      tags:
+      - relay
+  /v1/dashboard/billing/quota:
+    get:
+      description: Get quota
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/balance.GroupQuota'
+      security:
+      - ApiKeyAuth: []
+      summary: Get quota
       tags:
       - relay
   /v1/dashboard/billing/subscription:
