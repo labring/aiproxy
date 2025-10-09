@@ -383,6 +383,7 @@ func (s *Sealos) GetGroupQuota(ctx context.Context, group model.GroupCache) (*Gr
 	if err != nil {
 		return nil, err
 	}
+
 	return &GroupQuota{
 		Total:  decimal.NewFromInt(balance.quota).Div(decimalBalancePrecision).InexactFloat64(),
 		Remain: decimal.NewFromInt(balance.balance).Div(decimalBalancePrecision).InexactFloat64(),
