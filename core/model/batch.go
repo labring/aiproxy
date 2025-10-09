@@ -171,7 +171,7 @@ func processGroupUpdates(wg *sync.WaitGroup) {
 		if IgnoreNotFound(err) != nil {
 			notify.ErrorThrottle(
 				"batchUpdateGroupUsedAmountAndRequestCount",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update group",
 				err.Error(),
 			)
@@ -189,7 +189,7 @@ func processTokenUpdates(wg *sync.WaitGroup) {
 		if IgnoreNotFound(err) != nil {
 			notify.ErrorThrottle(
 				"batchUpdateTokenUsedAmount",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update token",
 				err.Error(),
 			)
@@ -212,7 +212,7 @@ func processChannelUpdates(wg *sync.WaitGroup) {
 		if IgnoreNotFound(err) != nil {
 			notify.ErrorThrottle(
 				"batchUpdateChannelUsedAmount",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update channel",
 				err.Error(),
 			)
@@ -230,7 +230,7 @@ func processGroupSummaryUpdates(wg *sync.WaitGroup) {
 		if err != nil {
 			notify.ErrorThrottle(
 				"batchUpdateGroupSummary",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update group summary",
 				err.Error(),
 			)
@@ -248,7 +248,7 @@ func processGroupSummaryMinuteUpdates(wg *sync.WaitGroup) {
 		if err != nil {
 			notify.ErrorThrottle(
 				"batchUpdateGroupSummary",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update group summary",
 				err.Error(),
 			)
@@ -266,7 +266,7 @@ func processSummaryUpdates(wg *sync.WaitGroup) {
 		if err != nil {
 			notify.ErrorThrottle(
 				"batchUpdateSummary",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update summary",
 				err.Error(),
 			)
@@ -284,7 +284,7 @@ func processSummaryMinuteUpdates(wg *sync.WaitGroup) {
 		if err != nil {
 			notify.ErrorThrottle(
 				"batchUpdateSummaryMinute",
-				time.Minute,
+				time.Minute*10,
 				"failed to batch update summary minute",
 				err.Error(),
 			)

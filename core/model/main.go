@@ -217,7 +217,7 @@ func migrateLOGDB(batchSize int) error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createLogIndexes",
-				time.Minute,
+				time.Minute*10,
 				"failed to create log indexes",
 				err.Error(),
 			)
@@ -227,7 +227,7 @@ func migrateLOGDB(batchSize int) error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create summary indexs",
 				err.Error(),
 			)
@@ -237,7 +237,7 @@ func migrateLOGDB(batchSize int) error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createGroupSummaryIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create group summary indexs",
 				err.Error(),
 			)
@@ -247,7 +247,7 @@ func migrateLOGDB(batchSize int) error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryMinuteIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create summary minute indexs",
 				err.Error(),
 			)
@@ -257,7 +257,7 @@ func migrateLOGDB(batchSize int) error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryMinuteIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create group summary minute indexs",
 				err.Error(),
 			)
