@@ -31,6 +31,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
 	"github.com/labring/aiproxy/core/relay/utils"
 	"github.com/labring/aiproxy/mcp-servers/hosted/web-search/engine"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -567,6 +568,7 @@ func (p *WebSearch) executeSearches(
 					ArxivCategory: searchCtx.ArxivCategory,
 				})
 				if err != nil {
+					logrus.Errorf("search error: %v", err)
 					return err
 				}
 
