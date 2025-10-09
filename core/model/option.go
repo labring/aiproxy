@@ -178,7 +178,7 @@ func SyncOptions(ctx context.Context, wg *sync.WaitGroup, frequency time.Duratio
 			if err := loadOptionsFromDatabase(false); err != nil {
 				notify.ErrorThrottle(
 					"syncOptions",
-					time.Minute,
+					time.Minute*5,
 					"failed to sync options",
 					err.Error(),
 				)

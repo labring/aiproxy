@@ -270,7 +270,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 
 		notify.ErrorThrottle(
 			"getGroupBalanceError",
-			time.Minute,
+			time.Minute*3,
 			fmt.Sprintf("Get group `%s` balance error", group.ID),
 			err.Error(),
 		)
@@ -288,7 +288,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 		!gbc.CheckBalance(group.BalanceAlertThreshold) {
 		notify.ErrorThrottle(
 			"groupBalanceAlert:"+group.ID,
-			time.Minute*15,
+			time.Minute*30,
 			fmt.Sprintf("Group `%s` balance below threshold", group.ID),
 			fmt.Sprintf(
 				"Group `%s` balance has fallen below the threshold\nCurrent balance: %.2f",

@@ -1154,7 +1154,7 @@ func SyncModelConfigAndChannelCache(
 			if err != nil {
 				notify.ErrorThrottle(
 					"syncModelChannel",
-					time.Minute,
+					time.Minute*5,
 					"failed to sync channels",
 					err.Error(),
 				)
