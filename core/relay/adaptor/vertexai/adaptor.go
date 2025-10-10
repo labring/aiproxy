@@ -69,7 +69,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 		Features: []string{
 			"Claude support native Endpoint: /v1/messages",
 		},
-		KeyHelp: "region|adcJSON or region|apikey",
+		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}
 }
