@@ -19,14 +19,40 @@ func (a *Adaptor) ValidateKey(key string) error {
 	return nil
 }
 
-// region|adcJSON
+// region|adcJSON or region|apikey or region|project_id|apikey
 func getConfigFromKey(key string) (Config, error) {
-	region, adcJSON, ok := strings.Cut(key, "|")
+	region, gkey, ok := strings.Cut(key, "|")
 	if !ok {
 		return Config{}, errors.New("invalid key format")
 	}
 
-	node, err := sonic.GetFromString(adcJSON, "project_id")
+	if region == gkey {
+		region = ""
+	}
+
+	if !strings.HasPrefix(gkey, "{") {
+		projectid, ngkey, ok := strings.Cut(gkey, "|")
+		if ok {
+			// region|project_id|apikey
+			if projectid == ngkey {
+				projectid = ""
+			}
+
+			return Config{
+				Region:    region,
+				Key:       ngkey,
+				ProjectID: projectid,
+			}, nil
+		}
+		// region|apikey
+		return Config{
+			Region: region,
+			Key:    gkey,
+		}, nil
+	}
+
+	// region|adcJSON
+	node, err := sonic.GetFromString(gkey, "project_id")
 	if err != nil {
 		return Config{}, err
 	}
@@ -39,6 +65,6 @@ func getConfigFromKey(key string) (Config, error) {
 	return Config{
 		Region:    region,
 		ProjectID: projectID,
-		ADCJSON:   adcJSON,
+		ADCJSON:   gkey,
 	}, nil
 }
