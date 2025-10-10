@@ -107,6 +107,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 				),
 			}, nil
 		}
+
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
@@ -164,7 +165,7 @@ func (a *Adaptor) SetupRequestHeader(
 	}
 
 	if config.Key != "" {
-		req.Header.Set("x-goog-api-key", config.Key)
+		req.Header.Set("X-Goog-Api-Key", config.Key)
 		return nil
 	}
 

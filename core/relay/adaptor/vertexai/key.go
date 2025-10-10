@@ -25,6 +25,7 @@ func getConfigFromKey(key string) (Config, error) {
 	if !ok {
 		return Config{}, errors.New("invalid key format")
 	}
+
 	if region == gkey {
 		region = ""
 	}
