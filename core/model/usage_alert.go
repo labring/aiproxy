@@ -36,6 +36,7 @@ func GetGroupUsageAlert(threshold float64, whitelist []string) ([]GroupUsageAler
 	}
 
 	var yesterdayUsages []YesterdayUsage
+
 	err := LogDB.
 		Model(&GroupSummary{}).
 		Select("group_id, SUM(used_amount) as used_amount").
@@ -53,6 +54,7 @@ func GetGroupUsageAlert(threshold float64, whitelist []string) ([]GroupUsageAler
 
 	// 提取 group_id 列表
 	groupIDs := make([]string, len(yesterdayUsages))
+
 	yesterdayUsageMap := make(map[string]float64)
 	for i, usage := range yesterdayUsages {
 		groupIDs[i] = usage.GroupID
@@ -66,6 +68,7 @@ func GetGroupUsageAlert(threshold float64, whitelist []string) ([]GroupUsageAler
 	}
 
 	var todayUsages []TodayUsage
+
 	err = LogDB.
 		Model(&GroupSummary{}).
 		Select("group_id, SUM(used_amount) as used_amount").

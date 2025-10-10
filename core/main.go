@@ -28,7 +28,6 @@ func init() {
 	flag.IntVar(&pprofPort, "pprof-port", 15000, "pport http server port")
 }
 
-
 // Swagger godoc
 //
 //	@title						AI Proxy Swagger API
@@ -66,18 +65,23 @@ func main() {
 	srv, _ := setupHTTPServer(listen)
 
 	log.Info("auto test banned models task started")
+
 	go task.AutoTestBannedModelsTask(ctx)
 
 	log.Info("clean log task started")
+
 	go task.CleanLogTask(ctx)
 
 	log.Info("detect ip groups task started")
+
 	go task.DetectIPGroupsTask(ctx)
 
 	log.Info("usage alert task started")
+
 	go task.UsageAlertTask(ctx)
 
 	log.Info("update channels balance task started")
+
 	go controller.UpdateChannelsBalance(time.Minute * 10)
 
 	batchProcessorCtx, batchProcessorCancel := context.WithCancel(context.Background())

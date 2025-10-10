@@ -166,6 +166,7 @@ func checkUsageAlert() {
 			"check usage alert failed",
 			err.Error(),
 		)
+
 		return
 	}
 
@@ -176,7 +177,7 @@ func checkUsageAlert() {
 	// 过滤掉三小时内已经告警过的 group（通过 trylock 判断）
 	var validAlerts []model.GroupUsageAlertItem
 	for _, alert := range alerts {
-		lockKey := fmt.Sprintf("usageAlert:%s", alert.GroupID)
+		lockKey := "usageAlert:" + alert.GroupID
 		// 尝试获取锁，如果获取失败说明三小时内已经告警过
 		if trylock.Lock(lockKey, time.Hour*3) {
 			validAlerts = append(validAlerts, alert)
