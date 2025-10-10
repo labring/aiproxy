@@ -37,6 +37,7 @@ func getConfigFromKey(key string) (Config, error) {
 			if projectid == ngkey {
 				projectid = ""
 			}
+
 			return Config{
 				Region:    region,
 				Key:       ngkey,
