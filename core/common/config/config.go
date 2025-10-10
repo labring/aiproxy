@@ -26,6 +26,8 @@ var (
 	defaultChannelModelMapping   atomic.Value
 	groupMaxTokenNum             atomic.Int64
 	groupConsumeLevelRatio       atomic.Value
+	usageAlertThreshold          atomic.Int64 // default 0 means disabled
+	usageAlertWhitelist          atomic.Value
 
 	defaultWarnNotifyErrorRate uint64 = math.Float64bits(0.5)
 
@@ -38,6 +40,7 @@ func init() {
 	defaultChannelModels.Store(make(map[int][]string))
 	defaultChannelModelMapping.Store(make(map[int]map[string]string))
 	groupConsumeLevelRatio.Store(make(map[float64]float64))
+	usageAlertWhitelist.Store(make([]string, 0))
 	notifyNote.Store("")
 	defaultMCPHost.Store("")
 	publicMCPHost.Store("")
@@ -246,4 +249,23 @@ func GetDefaultWarnNotifyErrorRate() float64 {
 func SetDefaultWarnNotifyErrorRate(rate float64) {
 	rate = env.Float64("DEFAULT_WARN_NOTIFY_ERROR_RATE", rate)
 	atomic.StoreUint64(&defaultWarnNotifyErrorRate, math.Float64bits(rate))
+}
+
+func GetUsageAlertThreshold() int64 {
+	return usageAlertThreshold.Load()
+}
+
+func SetUsageAlertThreshold(threshold int64) {
+	threshold = env.Int64("USAGE_ALERT_THRESHOLD", threshold)
+	usageAlertThreshold.Store(threshold)
+}
+
+func GetUsageAlertWhitelist() []string {
+	w, _ := usageAlertWhitelist.Load().([]string)
+	return w
+}
+
+func SetUsageAlertWhitelist(whitelist []string) {
+	whitelist = env.JSON("USAGE_ALERT_WHITELIST", whitelist)
+	usageAlertWhitelist.Store(whitelist)
 }
