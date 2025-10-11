@@ -56,6 +56,19 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 	}
 }
 
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	switch {
+	case meta.Mode == mode.Anthropic && isKatClaude(meta.OriginModel):
+		return anthropic.ConvertRequest(meta, req)
+	default:
+		return a.Adaptor.ConvertRequest(meta, store, req)
+	}
+}
+
 func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	store adaptor.Store,
