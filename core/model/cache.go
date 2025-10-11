@@ -134,6 +134,7 @@ func (t *TokenCache) Range(fn func(model string) bool) {
 			if model == "" {
 				continue
 			}
+
 			ranged[model] = struct{}{}
 			if !fn(model) {
 				return
