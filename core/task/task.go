@@ -132,7 +132,7 @@ func detectIPGroups() {
 
 // UsageAlertTask 用量异常告警任务
 func UsageAlertTask(ctx context.Context) {
-	ticker := time.NewTicker(time.Minute * 10)
+	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 
 	for {
@@ -140,7 +140,7 @@ func UsageAlertTask(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !trylock.Lock("runUsageAlert", time.Minute*10) {
+			if !trylock.Lock("runUsageAlert", time.Hour) {
 				continue
 			}
 
@@ -158,7 +158,10 @@ func checkUsageAlert() {
 	// 获取配置的白名单
 	whitelist := config.GetUsageAlertWhitelist()
 
-	alerts, err := model.GetGroupUsageAlert(float64(threshold), whitelist)
+	// 获取前三天平均用量最低阈值
+	minAvgThreshold := config.GetUsageAlertMinAvgThreshold()
+
+	alerts, err := model.GetGroupUsageAlert(float64(threshold), float64(minAvgThreshold), whitelist)
 	if err != nil {
 		notify.ErrorThrottle(
 			"usageAlertError",
@@ -174,12 +177,17 @@ func checkUsageAlert() {
 		return
 	}
 
-	// 过滤掉三小时内已经告警过的 group（通过 trylock 判断）
+	// 计算到明天 0 点的时间，确保每个 group 一天只告警一次
+	now := time.Now()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	lockDuration := tomorrow.Sub(now)
+
+	// 过滤掉当天已经告警过的 group（通过 trylock 判断）
 	var validAlerts []model.GroupUsageAlertItem
 	for _, alert := range alerts {
 		lockKey := "usageAlert:" + alert.GroupID
-		// 尝试获取锁，如果获取失败说明三小时内已经告警过
-		if trylock.Lock(lockKey, time.Hour*3) {
+		// 尝试获取锁，如果获取失败说明当天已经告警过
+		if trylock.Lock(lockKey, lockDuration) {
 			validAlerts = append(validAlerts, alert)
 		}
 	}
@@ -204,9 +212,9 @@ func formatGroupUsageAlerts(alerts []model.GroupUsageAlertItem) string {
 	var result string
 	for _, alert := range alerts {
 		result += fmt.Sprintf(
-			"GroupID: %s | Yesterday: %.4f | Today: %.4f | Ratio: %.2fx\n",
+			"GroupID: %s | 3-Day Avg: %.4f | Today: %.4f | Ratio: %.2fx\n",
 			alert.GroupID,
-			alert.YesterdayAmount,
+			alert.ThreeDayAvgAmount,
 			alert.TodayAmount,
 			alert.Ratio,
 		)

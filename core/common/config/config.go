@@ -28,6 +28,7 @@ var (
 	groupConsumeLevelRatio       atomic.Value
 	usageAlertThreshold          atomic.Int64 // default 0 means disabled
 	usageAlertWhitelist          atomic.Value
+	usageAlertMinAvgThreshold    atomic.Int64 // 前三天平均用量最低阈值，default 0 means no limit
 
 	defaultWarnNotifyErrorRate uint64 = math.Float64bits(0.5)
 
@@ -268,4 +269,13 @@ func GetUsageAlertWhitelist() []string {
 func SetUsageAlertWhitelist(whitelist []string) {
 	whitelist = env.JSON("USAGE_ALERT_WHITELIST", whitelist)
 	usageAlertWhitelist.Store(whitelist)
+}
+
+func GetUsageAlertMinAvgThreshold() int64 {
+	return usageAlertMinAvgThreshold.Load()
+}
+
+func SetUsageAlertMinAvgThreshold(threshold int64) {
+	threshold = env.Int64("USAGE_ALERT_MIN_AVG_THRESHOLD", threshold)
+	usageAlertMinAvgThreshold.Store(threshold)
 }

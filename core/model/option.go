@@ -111,6 +111,18 @@ func initOptionMap() error {
 		-1,
 		64,
 	)
+	optionMap["UsageAlertThreshold"] = strconv.FormatInt(config.GetUsageAlertThreshold(), 10)
+
+	usageAlertWhitelistJSON, err := sonic.Marshal(config.GetUsageAlertWhitelist())
+	if err != nil {
+		return err
+	}
+
+	optionMap["UsageAlertWhitelist"] = conv.BytesToString(usageAlertWhitelistJSON)
+	optionMap["UsageAlertMinAvgThreshold"] = strconv.FormatInt(
+		config.GetUsageAlertMinAvgThreshold(),
+		10,
+	)
 
 	optionKeys = make([]string, 0, len(optionMap))
 	for key := range optionMap {
@@ -410,6 +422,29 @@ func updateOption(key, value string, isInit bool) (err error) {
 		}
 
 		config.SetDefaultWarnNotifyErrorRate(rate)
+	case "UsageAlertThreshold":
+		threshold, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		config.SetUsageAlertThreshold(threshold)
+	case "UsageAlertWhitelist":
+		var whitelist []string
+
+		err := sonic.Unmarshal(conv.StringToBytes(value), &whitelist)
+		if err != nil {
+			return err
+		}
+
+		config.SetUsageAlertWhitelist(whitelist)
+	case "UsageAlertMinAvgThreshold":
+		threshold, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		config.SetUsageAlertMinAvgThreshold(threshold)
 	default:
 		return ErrUnknownOptionKey
 	}
