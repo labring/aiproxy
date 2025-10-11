@@ -106,6 +106,7 @@ kubectl apply -f manifests/aiproxy-config.yaml -n aiproxy-system
 kubectl apply -f manifests/deploy.yaml -n aiproxy-system
 
 # Create ingress if domain is specified
+cloudDomain=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.cloudDomain}' || echo "${cloudDomain}")
 if [[ -n "$cloudDomain" ]]; then
   kubectl create -f manifests/ingress.yaml -n aiproxy-system || true
 fi
