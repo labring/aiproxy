@@ -35,6 +35,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/sangforaicp"
 	"github.com/labring/aiproxy/core/relay/adaptor/siliconflow"
 	"github.com/labring/aiproxy/core/relay/adaptor/stepfun"
+	"github.com/labring/aiproxy/core/relay/adaptor/streamlake"
 	"github.com/labring/aiproxy/core/relay/adaptor/tencent"
 	textembeddingsinference "github.com/labring/aiproxy/core/relay/adaptor/text-embeddings-inference"
 	"github.com/labring/aiproxy/core/relay/adaptor/vertexai"
@@ -83,6 +84,7 @@ var ChannelAdaptor = map[model.ChannelType]adaptor.Adaptor{
 	model.ChannelTypeTextEmbeddingsInference: &textembeddingsinference.Adaptor{},
 	model.ChannelTypeQianfan:                 &qianfan.Adaptor{},
 	model.ChannelTypeSangforAICP:             &sangforaicp.Adaptor{},
+	model.ChannelTypeStreamlake:              &streamlake.Adaptor{},
 }
 
 func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {

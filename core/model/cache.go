@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,37 +88,57 @@ func (t *TokenCache) SetModelsBySet(modelsBySet map[string][]string) {
 	t.modelsBySet = modelsBySet
 }
 
-func (t *TokenCache) ContainsModel(model string) bool {
+func (t *TokenCache) FindModel(model string) string {
+	var findModel string
 	if len(t.Models) != 0 {
-		if !slices.Contains(t.Models, model) {
-			return false
+		if !slices.ContainsFunc(t.Models, func(e string) bool {
+			ok := strings.EqualFold(e, model)
+			if ok {
+				findModel = e
+			}
+			return ok
+		}) {
+			return findModel
 		}
 	}
 
 	return containsModel(model, t.availableSets, t.modelsBySet)
 }
 
-func containsModel(model string, sets []string, modelsBySet map[string][]string) bool {
+func containsModel(model string, sets []string, modelsBySet map[string][]string) string {
+	var findModel string
 	for _, set := range sets {
-		if slices.Contains(modelsBySet[set], model) {
-			return true
+		if slices.ContainsFunc(modelsBySet[set], func(e string) bool {
+			ok := strings.EqualFold(e, model)
+			if ok {
+				findModel = e
+			}
+			return ok
+		}) {
+			return findModel
 		}
 	}
 
-	return false
+	return findModel
 }
 
 func (t *TokenCache) Range(fn func(model string) bool) {
 	ranged := make(map[string]struct{})
 	if len(t.Models) != 0 {
 		for _, model := range t.Models {
-			if _, ok := ranged[model]; !ok && containsModel(model, t.availableSets, t.modelsBySet) {
-				if !fn(model) {
-					return
-				}
+			if _, ok := ranged[model]; ok {
+				continue
+			}
+
+			model = containsModel(model, t.availableSets, t.modelsBySet)
+			if model == "" {
+				continue
 			}
 
 			ranged[model] = struct{}{}
+			if !fn(model) {
+				return
+			}
 		}
 
 		return
