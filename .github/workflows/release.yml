@@ -332,7 +332,7 @@ jobs:
         working-directory: core/deploy
         run: |
           sudo sealos login -u "${{ github.repository_owner }}" -p "${{ secrets.GITHUB_TOKEN }}" ghcr.io
-          sed -i "s#${{ env.GHCR_REPO }}:latest#${{ env.GHCR_REPO }}:${{ steps.meta.outputs.version }}#g" manifests/deploy.yaml.tmpl
+          sed -i "s#image: ${{ env.GHCR_REPO }}:latest#image: ${{ env.GHCR_REPO }}:${{ steps.meta.outputs.version }}#g" charts/aiproxy/values.yaml
           sudo sealos registry save --registry-dir=registry_amd64 --arch amd64 .
           sudo sealos registry save --registry-dir=registry_arm64 --arch arm64 .
       - name: Login to GitHub Container Registry
@@ -373,6 +373,8 @@ jobs:
             echo "images<<EOF"
             printf '%s\n' "${images[@]}"
             echo "EOF"
+            csv=$(IFS=','; printf '%s' "${images[*]}")
+            echo "names=${csv}"
           } >> "${GITHUB_OUTPUT}"
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -394,6 +396,5 @@ jobs:
           file: ./core/deploy/Kubefile
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-          outputs: type=image,"name=${{ env.GHCR_REPO }}${{ env.DOCKERHUB_REPO && format(',{0}', env.DOCKERHUB_REPO) }}${{ env.ALIYUN_REPO && format(',{0}', env.ALIYUN_REPO) }}",name-canonical=true,push-by-digest=${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' }},push=${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

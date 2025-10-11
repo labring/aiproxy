@@ -1,24 +1,8 @@
 FROM --platform=$BUILDPLATFORM scratch
 ARG TARGETARCH
 COPY registry_${TARGETARCH} registry
-COPY manifests manifests
-COPY scripts scripts
 
-ENV cloudDomain="127.0.0.1.nip.io"
-ENV cloudPort=""
-ENV certSecretName="wildcard-cert"
+COPY install.sh install.sh
+COPY charts charts
 
-ENV ADMIN_KEY=""
-ENV SEALOS_JWT_KEY="<sealos-jwt-key-placeholder>"
-ENV SQL_DSN="<sql-placeholder>"
-ENV LOG_SQL_DSN="<sql-log-placeholder>"
-ENV REDIS="<redis-placeholder>"
-
-ENV BALANCE_SEALOS_CHECK_REAL_NAME_ENABLE="false"
-ENV BALANCE_SEALOS_NO_REAL_NAME_USED_AMOUNT_LIMIT="1"
-
-ENV SAVE_ALL_LOG_DETAIL="false"
-ENV LOG_DETAIL_REQUEST_BODY_MAX_SIZE="128"
-ENV LOG_DETAIL_RESPONSE_BODY_MAX_SIZE="128"
-
-CMD ["bash scripts/init.sh"]
+CMD ["bash install.sh"]

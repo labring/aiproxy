@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://{{.Values.cloudDomain}}:{{.Values.cloudPort}}, https://*.{{.Values.cloudDomain}}:{{.Values.cloudPort}}"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-max-age: "600"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "X-Frame-Options:";
+      more_set_headers "Content-Security-Policy: default-src * blob: data: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}}; img-src * data: blob: resource: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}}; connect-src * wss: blob: resource:; style-src 'self' 'unsafe-inline' blob: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} resource:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} resource: *.baidu.com *.bdstatic.com https://js.stripe.com; frame-src 'self' *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} mailto: tel: weixin: mtt: *.baidu.com https://js.stripe.com; frame-ancestors 'self' https://{{.Values.cloudDomain}}:{{.Values.cloudPort}} https://*.{{.Values.cloudDomain}}:{{.Values.cloudPort}}";
+      more_set_headers "X-Xss-Protection: 1; mode=block";
+    higress.io/response-header-control-remove: X-Frame-Options
+    higress.io/response-header-control-update: |
+      Content-Security-Policy "default-src * blob: data: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}}; img-src * data: blob: resource: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}}; connect-src * wss: blob: resource:; style-src 'self' 'unsafe-inline' blob: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} resource:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} resource: *.baidu.com *.bdstatic.com https://js.stripe.com; frame-src 'self' *.{{.Values.cloudDomain}}:{{.Values.cloudPort}} {{.Values.cloudDomain}}:{{.Values.cloudPort}} mailto: tel: weixin: mtt: *.baidu.com https://js.stripe.com; frame-ancestors 'self' https://{{.Values.cloudDomain}}:{{.Values.cloudPort}} https://*.{{.Values.cloudDomain}}:{{.Values.cloudPort}}"
+      X-Xss-Protection "1; mode=block"
+  namespace: {{.Release.Namespace}}
+  name: {{ include "aiproxy.fullname" . }}
+  labels:
+    {{ include "aiproxy.labels" . | nindent 4 }}
+spec:
+  rules:
+    - host: aiproxy.{{.Values.cloudDomain}}
+      http:
+        paths:
+          - pathType: Prefix
+            path: /v1
+            backend:
+              service:
+                name: aiproxy
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - 'aiproxy.{{.Values.cloudDomain}}'
+      secretName: wildcard-cert
