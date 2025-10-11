@@ -1,0 +1,55 @@
+pgsql:
+  name: aiproxy
+  backup:
+    cron: "0 7 * * *"
+    retentionPeriod: 7d
+  version: "postgresql-14.8.0"
+  replicas: 2
+  storage: 3Gi
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 10m
+      memory: 50Mi
+
+pgsqlLog:
+  name: aiproxy-log
+  backup:
+    cron: "0 7 * * *"
+    retentionPeriod: 7d
+  version: "postgresql-14.8.0"
+  replicas: 2
+  storage: 3Gi
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 10m
+      memory: 50Mi
+
+redis:
+  name: aiproxy-redis
+  backup:
+    cron: "0 7 * * *"
+    retentionPeriod: 7d
+  version: "redis-7.0.6"
+  replicas: 3
+  sentinelReplicas: 3
+  storage: 3Gi
+  sentinelResources:
+    limits:
+      cpu: 100m
+      memory: 100Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 10m
+      memory: 52Mi
