@@ -14,6 +14,8 @@ image: ghcr.io/labring/aiproxy:latest
 cloudDomain: 127.0.0.1.nip.io
 cloudPort: 443
 
+sealos: true
+
 aiproxy:
   DEBUG: "false"
   DEBUG_SQL: "false"
