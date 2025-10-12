@@ -27,7 +27,7 @@ spec:
       http:
         paths:
           - pathType: Prefix
-            path: /v1
+            path: /
             backend:
               service:
                 name: aiproxy
