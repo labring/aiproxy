@@ -33,15 +33,16 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.Anthropic
 }
 
-func isKatClaude(modelName string) bool {
-	return strings.Contains(strings.ToLower(modelName), "kat")
+func supportClaudeCodeProxy(modelName string) bool {
+	return strings.Contains(strings.ToLower(modelName), "kat") &&
+		strings.Contains(strings.ToLower(modelName), "coder")
 }
 
 func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch {
-	case meta.Mode == mode.Anthropic && isKatClaude(meta.OriginModel):
+	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):
 		url, err := url.JoinPath(u, meta.ActualModel, "/claude-code-proxy/v1/messages")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -62,7 +63,7 @@ func (a *Adaptor) ConvertRequest(
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	switch {
-	case meta.Mode == mode.Anthropic && isKatClaude(meta.OriginModel):
+	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):
 		return anthropic.ConvertRequest(meta, req)
 	default:
 		return a.Adaptor.ConvertRequest(meta, store, req)
@@ -76,7 +77,7 @@ func (a *Adaptor) DoResponse(
 	resp *http.Response,
 ) (usage model.Usage, err adaptor.Error) {
 	switch {
-	case meta.Mode == mode.Anthropic && isKatClaude(meta.OriginModel):
+	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):
 		if utils.IsStreamResponse(resp) {
 			usage, err = anthropic.StreamHandler(meta, c, resp)
 		} else {
