@@ -63,16 +63,16 @@ REDIS_HOST=$(kubectl get secret -n aiproxy-system aiproxy-redis-conn-credential 
 REDIS_URI="redis://${REDIS_USER}:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}"
 
 varJwtInternal=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.jwtInternal}')
-kubectl delete configmap aiproxy-env -n aiproxy-system --ignore-not-found
-kubectl delete ingress -n aiproxy-system aiproxy --ignore-not-found
-kubectl delete deployment -n aiproxy-system aiproxy --ignore-not-found
-kubectl delete service -n aiproxy-system aiproxy --ignore-not-found
-
 adminKey=$(kubectl get configmap aiproxy-env -n aiproxy-system -o jsonpath='{.data.ADMIN_KEY}' )
 if [ -z "$adminKey" ]; then
   print "adminKey is empty, generating new credentials."
   adminKey=$(openssl rand -hex 64 | head -c 32)
 fi
+kubectl delete configmap aiproxy-env -n aiproxy-system --ignore-not-found
+kubectl delete ingress -n aiproxy-system aiproxy --ignore-not-found
+kubectl delete deployment -n aiproxy-system aiproxy --ignore-not-found
+kubectl delete service -n aiproxy-system aiproxy --ignore-not-found
+
 SEALOS_CLOUD_DOMAIN=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.cloudDomain}')
 SEALOS_CLOUD_PORT=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.cloudPort}')
 helm upgrade -i aiproxy -n aiproxy-system charts/aiproxy  ${HELM_OPTS} --set aiproxy.SQL_DSN=${AIPROXY_URI} --set aiproxy.LOG_SQL_DSN=${LOG_URI}  --set aiproxy.REDIS=${REDIS_URI} \
