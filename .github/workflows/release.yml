@@ -181,29 +181,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Prepare image list
-        id: image_targets
-        run: |
-          set -euo pipefail
-          images=("${GHCR_REPO}")
-          if [ -n "${DOCKERHUB_REPO}" ]; then
-            images+=("${DOCKERHUB_REPO}")
-          fi
-          if [ -n "${ALIYUN_REPO}" ]; then
-            images+=("${ALIYUN_REPO}")
-          fi
-
-          {
-            echo "images<<EOF"
-            printf '%s\n' "${images[@]}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
-
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.image_targets.outputs.images }}
+          images: |
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.GHCR_REPO }}
+            ${{ env.ALIYUN_REPO }}
 
       - name: Build for ${{ matrix.arch }}
         id: build
@@ -269,29 +254,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Prepare image list
-        id: image_targets
-        run: |
-          set -euo pipefail
-          images=("${GHCR_REPO}")
-          if [ -n "${DOCKERHUB_REPO}" ]; then
-            images+=("${DOCKERHUB_REPO}")
-          fi
-          if [ -n "${ALIYUN_REPO}" ]; then
-            images+=("${ALIYUN_REPO}")
-          fi
-
-          {
-            echo "images<<EOF"
-            printf '%s\n' "${images[@]}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
-
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.image_targets.outputs.images }}
+          images: |
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.GHCR_REPO }}
+            ${{ env.ALIYUN_REPO }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
