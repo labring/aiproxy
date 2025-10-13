@@ -69,7 +69,7 @@ kubectl delete deployment -n aiproxy-system aiproxy --ignore-not-found
 kubectl delete service -n aiproxy-system aiproxy --ignore-not-found
 
 adminKey=$(kubectl get configmap aiproxy-env -n aiproxy-system -o jsonpath='{.data.ADMIN_KEY}' )
-if [ -z "$MINIO_CONSOLE_USER" ] || [ -z "$MINIO_CONSOLE_PASSWORD" ]; then
+if [ -z "$adminKey" ]; then
   print "adminKey is empty, generating new credentials."
   adminKey=$(openssl rand -hex 64 | head -c 32)
 fi
