@@ -21,6 +21,7 @@ func SetRelayRouter(router *gin.Engine) {
 	{
 		dashboardRouter.GET("/billing/subscription", controller.GetSubscription)
 		dashboardRouter.GET("/billing/usage", controller.GetUsage)
+		dashboardRouter.GET("/billing/quota", controller.GetQuota)
 	}
 
 	relayRouter := v1Router.Group("")

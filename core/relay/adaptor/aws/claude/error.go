@@ -3,6 +3,7 @@ package aws
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/smithy-go"
@@ -23,5 +24,12 @@ func UnwrapInvokeError(err error) (int, string) {
 		return http.StatusInternalServerError, err.Error()
 	}
 
-	return awshttpErr.HTTPStatusCode(), awshttpErr.Err.Error()
+	code := awshttpErr.HTTPStatusCode()
+	message := awshttpErr.Err.Error()
+
+	if strings.Contains(message, "Operation not allowed") {
+		code = http.StatusForbidden
+	}
+
+	return code, message
 }

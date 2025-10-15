@@ -102,6 +102,13 @@ var AwsModelIDMap = map[string]awsModelItem{
 		},
 		ID: "anthropic.claude-opus-4-1-20250805-v1:0",
 	},
+	"claude-sonnet-4-5-20250929": {
+		ModelConfig: model.ModelConfig{
+			Type:  mode.ChatCompletions,
+			Owner: model.ModelOwnerAnthropic,
+		},
+		ID: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+	},
 }
 
 // https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
@@ -146,6 +153,11 @@ var awsModelCanCrossRegionMap = map[string]map[string]bool{
 	},
 	"anthropic.claude-opus-4-1-20250805-v1:0": {
 		"us": true,
+	},
+	"anthropic.claude-sonnet-4-5-20250929-v1:0": {
+		"us": true,
+		"ap": true,
+		"eu": true,
 	},
 }
 

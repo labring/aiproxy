@@ -35,7 +35,7 @@ func (l *GroupSummaryMinute) BeforeCreate(_ *gorm.DB) (err error) {
 		return err
 	}
 
-	return
+	return err
 }
 
 func CreateGroupSummaryMinuteIndexs(db *gorm.DB) error {

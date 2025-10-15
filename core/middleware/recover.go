@@ -48,17 +48,17 @@ func GinRecoveryHandler(c *gin.Context) {
 			switch {
 			case brokenPipe:
 				notify.ErrorThrottle("ginPanicRecovery:"+fileLine,
-					time.Minute, "Panic Detected",
+					time.Minute*5, "Panic Detected",
 					fmt.Sprintf("%s\n%s", err, headersToStr))
 			case gin.IsDebugging():
 				notify.ErrorThrottle("ginPanicRecovery:"+fileLine,
-					time.Minute, "Panic Detected",
+					time.Minute*5, "Panic Detected",
 					fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s\n%s",
 						headersToStr, err, stack),
 				)
 			default:
 				notify.ErrorThrottle("ginPanicRecovery:"+fileLine,
-					time.Minute, "Panic Detected",
+					time.Minute*5, "Panic Detected",
 					fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s",
 						err, stack),
 				)

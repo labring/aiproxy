@@ -113,7 +113,7 @@ func Consume(
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())
-		notify.ErrorThrottle("recordConsume", time.Minute, "record consume failed", err.Error())
+		notify.ErrorThrottle("recordConsume", time.Minute*5, "record consume failed", err.Error())
 	}
 }
 

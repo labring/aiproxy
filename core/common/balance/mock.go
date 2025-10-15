@@ -25,6 +25,16 @@ func (q *MockGroupBalance) GetGroupRemainBalance(
 	return mockBalance, q, nil
 }
 
+func (q *MockGroupBalance) GetGroupQuota(
+	_ context.Context,
+	_ model.GroupCache,
+) (*GroupQuota, error) {
+	return &GroupQuota{
+		Total:  mockBalance,
+		Remain: mockBalance,
+	}, nil
+}
+
 func (q *MockGroupBalance) PostGroupConsume(
 	_ context.Context,
 	_ string,

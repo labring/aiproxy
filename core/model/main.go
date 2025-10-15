@@ -112,29 +112,30 @@ func OpenSQLite(sqlitePath string) (*gorm.DB, error) {
 	})
 }
 
-func InitDB() {
+func InitDB() error {
 	var err error
 
 	DB, err = chooseDB("SQL_DSN")
 	if err != nil {
-		log.Fatal("failed to initialize database: " + err.Error())
-		return
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
 	setDBConns(DB)
 
 	if config.DisableAutoMigrateDB {
-		return
+		return nil
 	}
 
 	log.Info("database migration started")
 
 	if err = migrateDB(); err != nil {
 		log.Fatal("failed to migrate database: " + err.Error())
-		return
+		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
 	log.Info("database migrated")
+
+	return nil
 }
 
 func migrateDB() error {
@@ -157,7 +158,7 @@ func migrateDB() error {
 	return nil
 }
 
-func InitLogDB() {
+func InitLogDB(batchSize int) error {
 	if os.Getenv("LOG_SQL_DSN") == "" {
 		LogDB = DB
 	} else {
@@ -167,30 +168,36 @@ func InitLogDB() {
 
 		LogDB, err = chooseDB("LOG_SQL_DSN")
 		if err != nil {
-			log.Fatal("failed to initialize log database: " + err.Error())
-			return
+			return fmt.Errorf("failed to initialize log database: %w", err)
 		}
 
 		setDBConns(LogDB)
 	}
 
 	if config.DisableAutoMigrateDB {
-		return
+		return nil
 	}
 
 	log.Info("log database migration started")
 
-	err := migrateLOGDB()
+	err := migrateLOGDB(batchSize)
 	if err != nil {
-		log.Fatal("failed to migrate log database: " + err.Error())
-		return
+		return fmt.Errorf("failed to migrate log database: %w", err)
 	}
 
 	log.Info("log database migrated")
+
+	return nil
 }
 
-func migrateLOGDB() error {
-	err := LogDB.AutoMigrate(
+func migrateLOGDB(batchSize int) error {
+	// Pre-migration cleanup to remove expired data
+	err := preMigrationCleanup(batchSize)
+	if err != nil {
+		log.Warn("failed to perform pre-migration cleanup: ", err.Error())
+	}
+
+	err = LogDB.AutoMigrate(
 		&Log{},
 		&RequestDetail{},
 		&RetryLog{},
@@ -210,7 +217,7 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createLogIndexes",
-				time.Minute,
+				time.Minute*10,
 				"failed to create log indexes",
 				err.Error(),
 			)
@@ -220,7 +227,7 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create summary indexs",
 				err.Error(),
 			)
@@ -230,7 +237,7 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createGroupSummaryIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create group summary indexs",
 				err.Error(),
 			)
@@ -240,7 +247,7 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryMinuteIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create summary minute indexs",
 				err.Error(),
 			)
@@ -250,7 +257,7 @@ func migrateLOGDB() error {
 		if err != nil {
 			notify.ErrorThrottle(
 				"createSummaryMinuteIndexs",
-				time.Minute,
+				time.Minute*10,
 				"failed to create group summary minute indexs",
 				err.Error(),
 			)
@@ -296,4 +303,142 @@ func CloseDB() error {
 	}
 
 	return closeDB(DB)
+}
+
+func ignoreNoSuchTable(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "no such table") ||
+		strings.Contains(message, "does not exist")
+}
+
+// preMigrationCleanup cleans up expired logs and request details before migration
+// to reduce database size and improve migration performance
+func preMigrationCleanup(batchSize int) error {
+	log.Info("starting pre-migration cleanup of expired data")
+
+	// Clean up logs
+	err := preMigrationCleanupLogs(batchSize)
+	if err != nil {
+		if ignoreNoSuchTable(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to cleanup logs: %w", err)
+	}
+
+	// Clean up request details
+	err = preMigrationCleanupRequestDetails(batchSize)
+	if err != nil {
+		if ignoreNoSuchTable(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to cleanup request details: %w", err)
+	}
+
+	log.Info("pre-migration cleanup completed")
+
+	return nil
+}
+
+// preMigrationCleanupLogs cleans up expired logs using ID-based batch deletion
+func preMigrationCleanupLogs(batchSize int) error {
+	logStorageHours := config.GetLogStorageHours()
+	if logStorageHours <= 0 {
+		return nil
+	}
+
+	if batchSize <= 0 {
+		batchSize = defaultCleanLogBatchSize
+	}
+
+	cutoffTime := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
+
+	// First, get the IDs to delete
+	ids := make([]int, 0, batchSize)
+
+	for {
+		ids = ids[:0]
+
+		err := LogDB.Model(&Log{}).
+			Select("id").
+			Where("created_at < ?", cutoffTime).
+			Limit(batchSize).
+			Find(&ids).Error
+		if err != nil {
+			return err
+		}
+
+		// If no IDs found, we're done
+		if len(ids) == 0 {
+			break
+		}
+
+		// Delete by IDs
+		err = LogDB.Where("id IN (?)", ids).
+			Session(&gorm.Session{SkipDefaultTransaction: true}).
+			Delete(&Log{}).Error
+		if err != nil {
+			return err
+		}
+
+		log.Infof("deleted %d expired log records", len(ids))
+
+		// If we got less than batchSize, we're done
+		if len(ids) < batchSize {
+			break
+		}
+	}
+
+	return nil
+}
+
+// preMigrationCleanupRequestDetails cleans up expired request details using ID-based batch deletion
+func preMigrationCleanupRequestDetails(batchSize int) error {
+	detailStorageHours := config.GetLogDetailStorageHours()
+	if detailStorageHours <= 0 {
+		return nil
+	}
+
+	if batchSize <= 0 {
+		batchSize = defaultCleanLogBatchSize
+	}
+
+	cutoffTime := time.Now().Add(-time.Duration(detailStorageHours) * time.Hour)
+
+	// First, get the IDs to delete
+	ids := make([]int, 0, batchSize)
+
+	for {
+		ids = ids[:0]
+
+		err := LogDB.Model(&RequestDetail{}).
+			Select("id").
+			Where("created_at < ?", cutoffTime).
+			Limit(batchSize).
+			Find(&ids).Error
+		if err != nil {
+			return err
+		}
+
+		// If no IDs found, we're done
+		if len(ids) == 0 {
+			break
+		}
+
+		// Delete by IDs
+		err = LogDB.Where("id IN (?)", ids).
+			Session(&gorm.Session{SkipDefaultTransaction: true}).
+			Delete(&RequestDetail{}).Error
+		if err != nil {
+			return err
+		}
+
+		log.Infof("deleted %d expired request detail records", len(ids))
+
+		// If we got less than batchSize, we're done
+		if len(ids) < batchSize {
+			break
+		}
+	}
+
+	return nil
 }

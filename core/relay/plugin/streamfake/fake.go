@@ -21,6 +21,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
 	"github.com/labring/aiproxy/core/relay/plugin/patch"
+	"github.com/labring/aiproxy/core/relay/render"
 )
 
 var _ plugin.Plugin = (*StreamFake)(nil)
@@ -91,6 +92,7 @@ func (p *StreamFake) ConvertRequest(
 			if err != nil {
 				return false, err
 			}
+
 			return true, nil
 		},
 	})
@@ -206,6 +208,10 @@ func (rw *fakeStreamResponseWriter) WriteString(s string) (int, error) {
 
 // parseStreamingData extracts individual chunks from streaming response
 func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
+	if render.IsValidSSEData(data) {
+		return nil
+	}
+
 	node, err := sonic.Get(data)
 	if err != nil {
 		return err
@@ -245,6 +251,10 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 
 		_ = deltaNode.Get("tool_calls").
 			ForEach(func(_ ast.Sequence, toolCallNode *ast.Node) bool {
+				if toolCallNode == nil || toolCallNode.TypeSafe() == ast.V_NULL {
+					return true
+				}
+
 				toolCallRaw, err := toolCallNode.Raw()
 				if err != nil {
 					return true
@@ -314,10 +324,7 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 	}
 
 	if len(rw.toolCalls) > 0 {
-		slices.SortFunc(rw.toolCalls, func(a, b *relaymodel.ToolCall) int {
-			return a.Index - b.Index
-		})
-		message["tool_calls"] = rw.toolCalls
+		message["tool_calls"] = rw.buildToolCalls()
 	}
 
 	if len(rw.logprobsContent) > 0 {
@@ -338,6 +345,26 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 	}
 
 	return lastChunk.MarshalJSON()
+}
+
+func (rw *fakeStreamResponseWriter) buildToolCalls() []*relaymodel.ToolCall {
+	if len(rw.toolCalls) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(rw.toolCalls, func(a, b *relaymodel.ToolCall) int {
+		return a.Index - b.Index
+	})
+
+	if rw.toolCalls[0].Index == 0 {
+		return rw.toolCalls
+	}
+	// fix tool call index start with 0
+	for i, v := range rw.toolCalls {
+		v.Index = i
+	}
+
+	return rw.toolCalls
 }
 
 func mergeToolCalls(
@@ -373,7 +400,20 @@ func mergeToolCall(oldToolCall, newToolCall *relaymodel.ToolCall) *relaymodel.To
 		Function: oldToolCall.Function,
 	}
 
-	merged.Function.Arguments += newToolCall.Function.Arguments
+	// Update ID if new one is provided and old one is empty
+	if newToolCall.ID != "" && oldToolCall.ID == "" {
+		merged.ID = newToolCall.ID
+	}
+
+	// Update function name if new one is provided and old one is empty
+	if newToolCall.Function.Name != "" && oldToolCall.Function.Name == "" {
+		merged.Function.Name = newToolCall.Function.Name
+	}
+
+	// Only append arguments if they're not empty
+	if newToolCall.Function.Arguments != "" {
+		merged.Function.Arguments += newToolCall.Function.Arguments
+	}
 
 	return merged
 }

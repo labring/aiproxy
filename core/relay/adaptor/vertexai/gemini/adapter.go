@@ -19,7 +19,12 @@ func (a *Adaptor) ConvertRequest(
 	_ adaptor.Store,
 	request *http.Request,
 ) (adaptor.ConvertResult, error) {
-	return gemini.ConvertRequest(meta, request)
+	switch meta.Mode {
+	case mode.Anthropic:
+		return gemini.ConvertClaudeRequest(meta, request)
+	default:
+		return gemini.ConvertRequest(meta, request)
+	}
 }
 
 func (a *Adaptor) DoResponse(
@@ -29,8 +34,12 @@ func (a *Adaptor) DoResponse(
 	resp *http.Response,
 ) (usage model.Usage, err adaptor.Error) {
 	switch meta.Mode {
-	case mode.Embeddings:
-		usage, err = gemini.EmbeddingHandler(meta, c, resp)
+	case mode.Anthropic:
+		if utils.IsStreamResponse(resp) {
+			usage, err = gemini.ClaudeStreamHandler(meta, c, resp)
+		} else {
+			usage, err = gemini.ClaudeHandler(meta, c, resp)
+		}
 	default:
 		if utils.IsStreamResponse(resp) {
 			usage, err = gemini.StreamHandler(meta, c, resp)
@@ -39,5 +48,5 @@ func (a *Adaptor) DoResponse(
 		}
 	}
 
-	return
+	return usage, err
 }

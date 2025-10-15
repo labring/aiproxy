@@ -87,7 +87,7 @@ func (p *PublicMCPReusingParam) BeforeCreate(_ *gorm.DB) (err error) {
 		return errors.New("group is empty")
 	}
 
-	return
+	return err
 }
 
 func (p *PublicMCPReusingParam) MarshalJSON() ([]byte, error) {

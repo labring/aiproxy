@@ -270,7 +270,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 
 		notify.ErrorThrottle(
 			"getGroupBalanceError",
-			time.Minute,
+			time.Minute*3,
 			fmt.Sprintf("Get group `%s` balance error", group.ID),
 			err.Error(),
 		)
@@ -288,7 +288,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 		!gbc.CheckBalance(group.BalanceAlertThreshold) {
 		notify.ErrorThrottle(
 			"groupBalanceAlert:"+group.ID,
-			time.Minute*15,
+			time.Minute*30,
 			fmt.Sprintf("Group `%s` balance below threshold", group.ID),
 			fmt.Sprintf(
 				"Group `%s` balance has fallen below the threshold\nCurrent balance: %.2f",
@@ -379,12 +379,9 @@ func distribute(c *gin.Context, mode mode.Mode) {
 		return
 	}
 
-	c.Set(RequestModel, requestModel)
+	findModel := token.FindModel(requestModel)
 
-	SetLogModelFields(log.Data, requestModel)
-
-	mc, ok := GetModelCaches(c).ModelConfig.GetModelConfig(requestModel)
-	if !ok || !token.ContainsModel(requestModel) {
+	if findModel == "" {
 		AbortLogWithMessage(
 			c,
 			http.StatusNotFound,
@@ -397,6 +394,23 @@ func distribute(c *gin.Context, mode mode.Mode) {
 		return
 	}
 
+	SetLogModelFields(log.Data, findModel)
+
+	mc, ok := GetModelCaches(c).ModelConfig.GetModelConfig(findModel)
+	if !ok {
+		AbortLogWithMessage(
+			c,
+			http.StatusNotFound,
+			fmt.Sprintf(
+				"The model `%s` does not exist or you do not have access to it.",
+				findModel,
+			),
+		)
+
+		return
+	}
+
+	c.Set(RequestModel, findModel)
 	c.Set(ModelConfig, mc)
 
 	if !CheckRelayMode(mode, mc.Type) {
@@ -405,7 +419,7 @@ func distribute(c *gin.Context, mode mode.Mode) {
 			http.StatusNotFound,
 			fmt.Sprintf(
 				"The model `%s` does not exist on this endpoint.",
-				requestModel,
+				findModel,
 			),
 		)
 

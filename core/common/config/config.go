@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"sync/atomic"
@@ -16,7 +17,7 @@ var (
 	logDetailRequestBodyMaxSize  int64 = 128 * 1024 // 128KB
 	logDetailResponseBodyMaxSize int64 = 128 * 1024 // 128KB
 	logDetailStorageHours        int64 = 3 * 24     // 3 days
-	cleanLogBatchSize            int64 = 2000
+	cleanLogBatchSize            int64 = 5000
 	notifyNote                   atomic.Value
 	ipGroupsThreshold            int64
 	ipGroupsBanThreshold         int64
@@ -25,6 +26,11 @@ var (
 	defaultChannelModelMapping   atomic.Value
 	groupMaxTokenNum             atomic.Int64
 	groupConsumeLevelRatio       atomic.Value
+	usageAlertThreshold          atomic.Int64 // default 0 means disabled
+	usageAlertWhitelist          atomic.Value
+	usageAlertMinAvgThreshold    atomic.Int64 // 前三天平均用量最低阈值，default 0 means no limit
+
+	defaultWarnNotifyErrorRate uint64 = math.Float64bits(0.5)
 
 	defaultMCPHost atomic.Value
 	publicMCPHost  atomic.Value
@@ -35,6 +41,7 @@ func init() {
 	defaultChannelModels.Store(make(map[int][]string))
 	defaultChannelModelMapping.Store(make(map[int]map[string]string))
 	groupConsumeLevelRatio.Store(make(map[float64]float64))
+	usageAlertWhitelist.Store(make([]string, 0))
 	notifyNote.Store("")
 	defaultMCPHost.Store("")
 	publicMCPHost.Store("")
@@ -234,4 +241,41 @@ func GetGroupMCPHost() string {
 func SetGroupMCPHost(host string) {
 	host = env.String("GROUP_MCP_HOST", host)
 	groupMCPHost.Store(host)
+}
+
+func GetDefaultWarnNotifyErrorRate() float64 {
+	return math.Float64frombits(atomic.LoadUint64(&defaultWarnNotifyErrorRate))
+}
+
+func SetDefaultWarnNotifyErrorRate(rate float64) {
+	rate = env.Float64("DEFAULT_WARN_NOTIFY_ERROR_RATE", rate)
+	atomic.StoreUint64(&defaultWarnNotifyErrorRate, math.Float64bits(rate))
+}
+
+func GetUsageAlertThreshold() int64 {
+	return usageAlertThreshold.Load()
+}
+
+func SetUsageAlertThreshold(threshold int64) {
+	threshold = env.Int64("USAGE_ALERT_THRESHOLD", threshold)
+	usageAlertThreshold.Store(threshold)
+}
+
+func GetUsageAlertWhitelist() []string {
+	w, _ := usageAlertWhitelist.Load().([]string)
+	return w
+}
+
+func SetUsageAlertWhitelist(whitelist []string) {
+	whitelist = env.JSON("USAGE_ALERT_WHITELIST", whitelist)
+	usageAlertWhitelist.Store(whitelist)
+}
+
+func GetUsageAlertMinAvgThreshold() int64 {
+	return usageAlertMinAvgThreshold.Load()
+}
+
+func SetUsageAlertMinAvgThreshold(threshold int64) {
+	threshold = env.Int64("USAGE_ALERT_MIN_AVG_THRESHOLD", threshold)
+	usageAlertMinAvgThreshold.Store(threshold)
 }

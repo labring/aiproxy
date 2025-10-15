@@ -36,7 +36,7 @@ func (d *RequestDetail) BeforeSave(_ *gorm.DB) (err error) {
 		d.ResponseBodyTruncated = true
 	}
 
-	return
+	return err
 }
 
 type Log struct {
@@ -133,7 +133,7 @@ func (l *Log) BeforeCreate(_ *gorm.DB) (err error) {
 		l.RequestAt = l.CreatedAt
 	}
 
-	return
+	return err
 }
 
 func (l *Log) MarshalJSON() ([]byte, error) {
@@ -915,7 +915,9 @@ func searchLogs(
 func SearchLogs(
 	keyword string,
 	requestID string,
+	group string,
 	tokenID int,
+	tokenName string,
 	modelName string,
 	startTimestamp time.Time,
 	endTimestamp time.Time,
@@ -941,11 +943,11 @@ func SearchLogs(
 		var err error
 
 		total, logs, err = searchLogs(
-			"",
+			group,
 			keyword,
 			requestID,
 			tokenID,
-			"",
+			tokenName,
 			modelName,
 			startTimestamp,
 			endTimestamp,

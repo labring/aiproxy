@@ -173,7 +173,7 @@ GROUP_MAX_TOKEN_NUM=100        # 每组最大令牌数
 ```bash
 LOG_STORAGE_HOURS=168          # 日志保留时间（0 = 无限制）
 LOG_DETAIL_STORAGE_HOURS=72    # 详细日志保留时间
-CLEAN_LOG_BATCH_SIZE=2000      # 日志清理批次大小
+CLEAN_LOG_BATCH_SIZE=5000      # 日志清理批次大小
 ```
 
 #### **安全与访问控制**

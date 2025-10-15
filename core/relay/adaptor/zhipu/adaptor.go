@@ -34,7 +34,7 @@ func (a *Adaptor) DoResponse(
 		usage, err = openai.DoResponse(meta, store, c, resp)
 	}
 
-	return
+	return usage, err
 }
 
 func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {

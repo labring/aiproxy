@@ -102,7 +102,7 @@ func (a *Adaptor) DoResponse(
 		usage, err = Handler(meta, c, resp)
 	}
 
-	return
+	return usage, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

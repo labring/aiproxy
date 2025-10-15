@@ -199,12 +199,19 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 				content.ToolUseID = message.ToolCallID
 			}
 
-			claudeMessage.Content = append(claudeMessage.Content, content)
+			//nolint:staticcheck
+			if !(message.Role == "assistant" && content.Text == "" && len(message.ToolCalls) > 0) {
+				claudeMessage.Content = append(claudeMessage.Content, content)
+			}
 		} else {
 			var contents []relaymodel.ClaudeContent
 
 			openaiContent := message.ParseContent()
 			for _, part := range openaiContent {
+				if message.Role == "assistant" && part.Text == "" && len(message.ToolCalls) > 0 {
+					continue
+				}
+
 				var content relaymodel.ClaudeContent
 				switch part.Type {
 				case relaymodel.ContentTypeText:
@@ -341,8 +348,9 @@ func StreamResponse2OpenAI(
 			content = claudeResponse.ContentBlock.Text
 			if claudeResponse.ContentBlock.Type == toolUseType {
 				tools = append(tools, relaymodel.ToolCall{
-					ID:   claudeResponse.ContentBlock.ID,
-					Type: "function",
+					Index: claudeResponse.Index,
+					ID:    claudeResponse.ContentBlock.ID,
+					Type:  "function",
 					Function: relaymodel.Function{
 						Name: claudeResponse.ContentBlock.Name,
 					},
@@ -354,7 +362,8 @@ func StreamResponse2OpenAI(
 			switch claudeResponse.Delta.Type {
 			case "input_json_delta":
 				tools = append(tools, relaymodel.ToolCall{
-					Type: "function",
+					Index: claudeResponse.Index,
+					Type:  "function",
 					Function: relaymodel.Function{
 						Arguments: claudeResponse.Delta.PartialJSON,
 					},

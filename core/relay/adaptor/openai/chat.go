@@ -162,33 +162,39 @@ func patchStreamOptions(node *ast.Node) error {
 func GetUsageOrChatChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.ChatCompletionsStreamResponseChoice, error) {
-	usageNode, err := node.Get("usage").Raw()
-	if err != nil {
-		if !errors.Is(err, ast.ErrNotExist) {
-			return nil, nil, err
-		}
-	} else {
-		var usage relaymodel.ChatUsage
-
-		err = sonic.UnmarshalString(usageNode, &usage)
+	usageNode := node.Get("usage")
+	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
+		usageRaw, err := usageNode.Raw()
 		if err != nil {
-			return nil, nil, err
-		}
+			if !errors.Is(err, ast.ErrNotExist) {
+				return nil, nil, err
+			}
+		} else {
+			var usage relaymodel.ChatUsage
 
-		return &usage, nil, nil
+			err = sonic.UnmarshalString(usageRaw, &usage)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			return &usage, nil, nil
+		}
 	}
 
 	var choices []*relaymodel.ChatCompletionsStreamResponseChoice
 
-	choicesNode, err := node.Get("choices").Raw()
-	if err != nil {
-		if !errors.Is(err, ast.ErrNotExist) {
-			return nil, nil, err
-		}
-	} else {
-		err = sonic.UnmarshalString(choicesNode, &choices)
+	choicesNode := node.Get("choices")
+	if choicesNode != nil && choicesNode.TypeSafe() != ast.V_NULL {
+		choicesRaw, err := choicesNode.Raw()
 		if err != nil {
-			return nil, nil, err
+			if !errors.Is(err, ast.ErrNotExist) {
+				return nil, nil, err
+			}
+		} else {
+			err = sonic.UnmarshalString(choicesRaw, &choices)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -386,33 +392,39 @@ func StreamHandler(
 func GetUsageOrChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.TextResponseChoice, error) {
-	usageNode, err := node.Get("usage").Raw()
-	if err != nil {
-		if !errors.Is(err, ast.ErrNotExist) {
-			return nil, nil, err
-		}
-	} else {
-		var usage relaymodel.ChatUsage
-
-		err = sonic.UnmarshalString(usageNode, &usage)
+	usageNode := node.Get("usage")
+	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
+		usageRaw, err := usageNode.Raw()
 		if err != nil {
-			return nil, nil, err
-		}
+			if !errors.Is(err, ast.ErrNotExist) {
+				return nil, nil, err
+			}
+		} else {
+			var usage relaymodel.ChatUsage
 
-		return &usage, nil, nil
+			err = sonic.UnmarshalString(usageRaw, &usage)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			return &usage, nil, nil
+		}
 	}
 
 	var choices []*relaymodel.TextResponseChoice
 
-	choicesNode, err := node.Get("choices").Raw()
-	if err != nil {
-		if !errors.Is(err, ast.ErrNotExist) {
-			return nil, nil, err
-		}
-	} else {
-		err = sonic.UnmarshalString(choicesNode, &choices)
+	choicesNode := node.Get("choices")
+	if choicesNode != nil && choicesNode.TypeSafe() != ast.V_NULL {
+		choicesRaw, err := choicesNode.Raw()
 		if err != nil {
-			return nil, nil, err
+			if !errors.Is(err, ast.ErrNotExist) {
+				return nil, nil, err
+			}
+		} else {
+			err = sonic.UnmarshalString(choicesRaw, &choices)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 

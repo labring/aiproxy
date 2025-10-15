@@ -40,7 +40,7 @@ func (r *RetryLog) BeforeSave(_ *gorm.DB) (err error) {
 		r.ResponseBodyTruncated = true
 	}
 
-	return
+	return err
 }
 
 func (r *RetryLog) MarshalJSON() ([]byte, error) {

@@ -8,6 +8,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type Adaptor struct {
@@ -18,6 +19,13 @@ const baseURL = "https://qianfan.baidubce.com/v2"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
+}
+
+func (a *Adaptor) SupportMode(m mode.Mode) bool {
+	return m == mode.ChatCompletions ||
+		m == mode.Completions ||
+		m == mode.Anthropic ||
+		m == mode.Embeddings
 }
 
 func (a *Adaptor) DoResponse(

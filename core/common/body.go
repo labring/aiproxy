@@ -41,7 +41,7 @@ func (l *LimitedReader) Read(p []byte) (n int, err error) {
 	n, err = l.R.Read(p)
 	l.N -= int64(n)
 
-	return
+	return n, err
 }
 
 func GetBodyLimit(body io.Reader, contentLength, n int64) ([]byte, error) {

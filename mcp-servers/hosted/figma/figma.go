@@ -27,7 +27,7 @@ var configTemplates = mcpservers.ConfigTemplates{
 		Description: "Your Figma Personal Access Token or OAuth Bearer token",
 	},
 	"figma-auth-type": {
-		Name:        "Figma OAuth Token",
+		Name:        "Figma Auth Type",
 		Required:    mcpservers.ConfigRequiredTypeInitOrReusingOnly,
 		Example:     "pat",
 		Description: "Your Figma Authentication Type (pat or oauth)",

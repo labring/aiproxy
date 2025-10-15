@@ -28,6 +28,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 type Config struct {
 	Region    string
+	Key       string
 	ProjectID string
 	ADCJSON   string
 }
@@ -68,7 +69,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 		Features: []string{
 			"Claude support native Endpoint: /v1/messages",
 		},
-		KeyHelp: "region|adcJSON",
+		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}
 }
@@ -95,6 +96,18 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 	}
 
 	if meta.Channel.BaseURL != "" {
+		if config.ProjectID == "" || config.Region == "" {
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL: fmt.Sprintf(
+					"%s/v1/publishers/google/models/%s:%s",
+					meta.Channel.BaseURL,
+					meta.ActualModel,
+					suffix,
+				),
+			}, nil
+		}
+
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
@@ -108,11 +121,30 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		}, nil
 	}
 
+	var requestDoamin string
+	if config.Region == "" {
+		requestDoamin = "aiplatform.googleapis.com"
+	} else {
+		requestDoamin = config.Region + "-aiplatform.googleapis.com"
+	}
+
+	if config.ProjectID == "" || config.Region == "" {
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL: fmt.Sprintf(
+				"https://%s/v1/publishers/google/models/%s:%s",
+				requestDoamin,
+				meta.ActualModel,
+				suffix,
+			),
+		}, nil
+	}
+
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
 		URL: fmt.Sprintf(
-			"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
-			config.Region,
+			"https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+			requestDoamin,
 			config.ProjectID,
 			config.Region,
 			meta.ActualModel,
@@ -130,6 +162,11 @@ func (a *Adaptor) SetupRequestHeader(
 	config, err := getConfigFromKey(meta.Channel.Key)
 	if err != nil {
 		return err
+	}
+
+	if config.Key != "" {
+		req.Header.Set("X-Goog-Api-Key", config.Key)
+		return nil
 	}
 
 	token, err := getToken(context.Background(), config.ADCJSON)

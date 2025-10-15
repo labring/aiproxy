@@ -75,7 +75,12 @@ func ConvertEmbeddingsRequest(
 func GetEmbeddingsUsageFromNode(
 	node *ast.Node,
 ) (*relaymodel.EmbeddingUsage, error) {
-	usageNode, err := node.Get("usage").Raw()
+	usageNode := node.Get("usage")
+	if usageNode == nil || usageNode.TypeSafe() == ast.V_NULL {
+		return nil, nil
+	}
+
+	usageRaw, err := usageNode.Raw()
 	if err != nil {
 		if !errors.Is(err, ast.ErrNotExist) {
 			return nil, err
@@ -85,7 +90,7 @@ func GetEmbeddingsUsageFromNode(
 
 	var usage relaymodel.EmbeddingUsage
 
-	err = sonic.UnmarshalString(usageNode, &usage)
+	err = sonic.UnmarshalString(usageRaw, &usage)
 	if err != nil {
 		return nil, err
 	}

@@ -173,7 +173,7 @@ GROUP_MAX_TOKEN_NUM=100        # Max tokens per group
 ```bash
 LOG_STORAGE_HOURS=168          # Log retention (0 = unlimited)
 LOG_DETAIL_STORAGE_HOURS=72    # Detail log retention
-CLEAN_LOG_BATCH_SIZE=2000      # Log cleanup batch size
+CLEAN_LOG_BATCH_SIZE=5000      # Log cleanup batch size
 ```
 
 #### **Security & Access Control**

@@ -42,6 +42,13 @@ definitions:
       name:
         type: string
     type: object
+  balance.GroupQuota:
+    properties:
+      remain:
+        type: number
+      total:
+        type: number
+    type: object
   controller.AddChannelRequest:
     properties:
       base_url:
@@ -659,6 +666,17 @@ definitions:
         type: array
       name:
         type: string
+      period_last_update_amount:
+        description: Total usage at last period reset
+        type: number
+      period_last_update_time:
+        description: Last time period was reset
+        type: string
+      period_quota:
+        type: number
+      period_type:
+        description: daily, weekly, monthly, default is monthly
+        type: string
       quota:
         type: number
       request_count:
@@ -981,6 +999,7 @@ definitions:
     - 47
     - 48
     - 49
+    - 50
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1020,6 +1039,7 @@ definitions:
     - ChannelTypeJina
     - ChannelTypeTextEmbeddingsInference
     - ChannelTypeQianfan
+    - ChannelTypeSangforAICP
   model.ChartData:
     properties:
       audio_input_tokens:
@@ -1042,15 +1062,15 @@ definitions:
         type: integer
       retry_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       timestamp:
         type: integer
@@ -1453,15 +1473,15 @@ definitions:
         type: integer
       rpm:
         type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
-        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
+        type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
         type: integer
       token_names:
         items:
@@ -2399,8 +2419,6 @@ definitions:
         type: integer
       retry_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2408,6 +2426,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       timestamp:
         type: integer
@@ -2537,7 +2557,14 @@ definitions:
         type: array
       name:
         type: string
+      period_last_update_time:
+        type: integer
+      period_quota:
+        type: number
+      period_type:
+        type: string
       quota:
+        description: Quota system
         type: number
       status:
         type: integer
@@ -4617,10 +4644,19 @@ paths:
         in: query
         name: channel
         type: integer
+      - description: Group name
+        in: query
+        name: group
+        required: true
+        type: string
       - description: Filter by token id
         in: query
         name: token_id
         type: integer
+      - description: Filter by token name
+        in: query
+        name: token_name
+        type: string
       - description: Order
         in: query
         name: order
@@ -5581,6 +5617,7 @@ paths:
         - 47
         - 48
         - 49
+        - 50
         in: path
         name: type
         required: true
@@ -7144,6 +7181,21 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Completions
+      tags:
+      - relay
+  /v1/dashboard/billing/quota:
+    get:
+      description: Get quota
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/balance.GroupQuota'
+      security:
+      - ApiKeyAuth: []
+      summary: Get quota
       tags:
       - relay
   /v1/dashboard/billing/subscription:

@@ -151,7 +151,7 @@ func (a *Adaptor) DoResponse(
 		)
 	}
 
-	return
+	return usage, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

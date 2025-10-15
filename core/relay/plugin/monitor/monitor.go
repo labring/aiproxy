@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -95,6 +96,23 @@ func (m *ChannelMonitor) DoRequest(
 		return resp, nil
 	}
 
+	var adaptorErr adaptor.Error
+
+	ok := errors.As(err, &adaptorErr)
+	if ok {
+		if !ShouldRetry(adaptorErr) {
+			return resp, err
+		}
+
+		handleAdaptorError(meta, c, adaptorErr)
+	} else {
+		handleDoRequestError(meta, c, err, requestCost)
+	}
+
+	return resp, err
+}
+
+func handleDoRequestError(meta *meta.Meta, c *gin.Context, err error, requestCost time.Duration) {
 	beyondThreshold, banExecution, _err := monitor.AddRequest(
 		context.Background(),
 		meta.OriginModel,
@@ -105,7 +123,7 @@ func (m *ChannelMonitor) DoRequest(
 		meta.ModelConfig.MaxErrorRate,
 	)
 	if _err != nil {
-		log.Errorf("add request failed: %+v", _err)
+		common.GetLogger(c).Errorf("add request failed: %+v", _err)
 	}
 
 	switch {
@@ -116,6 +134,7 @@ func (m *ChannelMonitor) DoRequest(
 			"Auto Banned",
 			err,
 			requestCost,
+			time.Minute*15,
 		)
 	case beyondThreshold:
 		notifyChannelRequestIssue(
@@ -124,10 +143,9 @@ func (m *ChannelMonitor) DoRequest(
 			"Error Rate Beyond Threshold",
 			err,
 			requestCost,
+			time.Minute*15,
 		)
 	}
-
-	return resp, err
 }
 
 func notifyChannelRequestIssue(
@@ -135,6 +153,7 @@ func notifyChannelRequestIssue(
 	issueType, titleSuffix string,
 	err error,
 	requestCost time.Duration,
+	interval time.Duration,
 ) {
 	var notifyFunc func(title, message string)
 
@@ -148,11 +167,11 @@ func notifyChannelRequestIssue(
 	switch issueType {
 	case "beyondThreshold":
 		notifyFunc = func(title, message string) {
-			notify.WarnThrottle(lockKey, time.Minute, title, message)
+			notify.WarnThrottle(lockKey, interval, title, message)
 		}
 	default:
 		notifyFunc = func(title, message string) {
-			notify.ErrorThrottle(lockKey, time.Minute, title, message)
+			notify.ErrorThrottle(lockKey, interval, title, message)
 		}
 	}
 
@@ -182,8 +201,6 @@ func (m *ChannelMonitor) DoResponse(
 	resp *http.Response,
 	do adaptor.DoResponse,
 ) (model.Usage, adaptor.Error) {
-	log := common.GetLogger(c)
-
 	usage, relayErr := do.DoResponse(meta, store, c, resp)
 
 	if usage.TotalTokens > 0 {
@@ -206,7 +223,7 @@ func (m *ChannelMonitor) DoResponse(
 			meta.ModelConfig.WarnErrorRate,
 			meta.ModelConfig.MaxErrorRate,
 		); err != nil {
-			log.Errorf("add request failed: %+v", err)
+			common.GetLogger(c).Errorf("add request failed: %+v", err)
 		}
 
 		return usage, nil
@@ -216,6 +233,12 @@ func (m *ChannelMonitor) DoResponse(
 		return usage, relayErr
 	}
 
+	handleAdaptorError(meta, c, relayErr)
+
+	return usage, relayErr
+}
+
+func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error) {
 	hasPermission := ChannelHasPermission(relayErr)
 
 	beyondThreshold, banExecution, err := monitor.AddRequest(
@@ -228,12 +251,12 @@ func (m *ChannelMonitor) DoResponse(
 		meta.ModelConfig.MaxErrorRate,
 	)
 	if err != nil {
-		log.Errorf("add request failed: %+v", err)
+		common.GetLogger(c).Errorf("add request failed: %+v", err)
 	}
 
 	switch {
 	case banExecution:
-		notifyChannelResponseIssue(c, meta, "autoBanned", "Auto Banned", relayErr)
+		notifyChannelResponseIssue(c, meta, "autoBanned", "Auto Banned", relayErr, time.Minute*15)
 	case beyondThreshold:
 		notifyChannelResponseIssue(
 			c,
@@ -241,12 +264,18 @@ func (m *ChannelMonitor) DoResponse(
 			"beyondThreshold",
 			"Error Rate Beyond Threshold",
 			relayErr,
+			time.Minute*15,
 		)
 	case !hasPermission:
-		notifyChannelResponseIssue(c, meta, "channelHasPermission", "No Permission", relayErr)
+		notifyChannelResponseIssue(
+			c,
+			meta,
+			"channelHasPermission",
+			"No Permission",
+			relayErr,
+			time.Minute*15,
+		)
 	}
-
-	return usage, relayErr
 }
 
 func notifyChannelResponseIssue(
@@ -254,6 +283,7 @@ func notifyChannelResponseIssue(
 	meta *meta.Meta,
 	issueType, titleSuffix string,
 	err adaptor.Error,
+	interval time.Duration,
 ) {
 	var notifyFunc func(title, message string)
 
@@ -268,11 +298,11 @@ func notifyChannelResponseIssue(
 	switch issueType {
 	case "beyondThreshold", "requestRateLimitExceeded":
 		notifyFunc = func(title, message string) {
-			notify.WarnThrottle(lockKey, time.Minute, title, message)
+			notify.WarnThrottle(lockKey, interval, title, message)
 		}
 	default:
 		notifyFunc = func(title, message string) {
-			notify.ErrorThrottle(lockKey, time.Minute, title, message)
+			notify.ErrorThrottle(lockKey, interval, title, message)
 		}
 	}
 

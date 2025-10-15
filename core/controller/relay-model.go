@@ -56,15 +56,12 @@ func ListModels(c *gin.Context) {
 //	@Success		200	{object}	OpenAIModels
 //	@Router			/v1/models/{model} [get]
 func RetrieveModel(c *gin.Context) {
+	token := middleware.GetToken(c)
 	modelName := c.Param("model")
+	findModelName := token.FindModel(modelName)
 	enabledModelConfigsMap := middleware.GetModelCaches(c).EnabledModelConfigsMap
 
-	mc, ok := enabledModelConfigsMap[modelName]
-	if ok {
-		token := middleware.GetToken(c)
-		ok = token.ContainsModel(modelName)
-	}
-
+	mc, ok := enabledModelConfigsMap[findModelName]
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": &relaymodel.OpenAIError{

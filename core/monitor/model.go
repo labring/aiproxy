@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,9 +18,6 @@ const (
 	statsKeySuffix        = ":stats"
 	modelTotalStatsSuffix = ":total_stats"
 	channelKeyPart        = ":channel:"
-
-	// Default warning threshold
-	DefaultWarnErrorRate = 0.3 // 30%
 )
 
 func modelKeyPrefix() string {
@@ -84,7 +82,7 @@ func AddRequest(
 ) (beyondThreshold, banExecution bool, err error) {
 	// Set default warning threshold if not specified
 	if warnErrorRate <= 0 {
-		warnErrorRate = DefaultWarnErrorRate
+		warnErrorRate = config.GetDefaultWarnNotifyErrorRate()
 	}
 
 	if !common.RedisEnabled {

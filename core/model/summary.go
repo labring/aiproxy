@@ -239,7 +239,7 @@ func (l *Summary) BeforeCreate(_ *gorm.DB) (err error) {
 		return err
 	}
 
-	return
+	return err
 }
 
 var hourTimestampDivisor = int64(time.Hour.Seconds())
