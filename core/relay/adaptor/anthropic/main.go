@@ -24,7 +24,11 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
+func ConvertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	callbacks ...func(node *ast.Node) error,
+) (adaptor.ConvertResult, error) {
 	// Parse request body into AST node
 	node, err := common.UnmarshalRequest2NodeReusable(req)
 	if err != nil {
@@ -41,6 +45,16 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	err = ConvertImage2Base64(req.Context(), &node)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	for _, callback := range callbacks {
+		if callback == nil {
+			continue
+		}
+
+		if err := callback(&node); err != nil {
+			return adaptor.ConvertResult{}, err
+		}
 	}
 
 	// Serialize the modified node

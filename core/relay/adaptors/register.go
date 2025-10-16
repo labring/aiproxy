@@ -42,6 +42,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/xai"
 	"github.com/labring/aiproxy/core/relay/adaptor/xunfei"
 	"github.com/labring/aiproxy/core/relay/adaptor/zhipu"
+	"github.com/labring/aiproxy/core/relay/adaptor/zhipucoding"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -85,6 +86,7 @@ var ChannelAdaptor = map[model.ChannelType]adaptor.Adaptor{
 	model.ChannelTypeQianfan:                 &qianfan.Adaptor{},
 	model.ChannelTypeSangforAICP:             &sangforaicp.Adaptor{},
 	model.ChannelTypeStreamlake:              &streamlake.Adaptor{},
+	model.ChannelTypeZhipuCoding:             &zhipucoding.Adaptor{},
 }
 
 func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {

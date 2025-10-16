@@ -886,10 +886,86 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
+// calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
+// This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
+// This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.
+func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNullString) time.Time {
+	if lastUpdateTime.IsZero() {
+		// If never initialized, return current time
+		return time.Now()
+	}
+
+	now := time.Now()
+
+	// If we haven't passed the period yet, no reset needed
+	if !now.After(lastUpdateTime) {
+		return lastUpdateTime
+	}
+
+	switch periodType {
+	case "", PeriodTypeMonthly:
+		// Start from lastUpdateTime and keep adding months until we find the most recent period start
+		nextPeriod := lastUpdateTime
+		for {
+			// Calculate next month period
+			candidate := time.Date(
+				nextPeriod.Year(),
+				nextPeriod.Month()+1,
+				nextPeriod.Day(),
+				nextPeriod.Hour(),
+				nextPeriod.Minute(),
+				nextPeriod.Second(),
+				nextPeriod.Nanosecond(),
+				nextPeriod.Location(),
+			)
+
+			// If candidate is in the future, the current nextPeriod is the one we want
+			if candidate.After(now) {
+				return nextPeriod
+			}
+
+			nextPeriod = candidate
+		}
+
+	case PeriodTypeWeekly:
+		// Calculate how many complete weeks have passed since lastUpdateTime
+		daysSinceLastUpdate := now.Sub(lastUpdateTime).Hours() / 24
+		weeksPassed := int(daysSinceLastUpdate / 7)
+
+		if weeksPassed == 0 {
+			// Still in the same week period, no reset needed
+			return lastUpdateTime
+		}
+
+		// Return the start of the most recent week period
+		// This is lastUpdateTime + (weeksPassed * 7 days)
+		return lastUpdateTime.Add(time.Duration(weeksPassed*7*24) * time.Hour)
+
+	case PeriodTypeDaily:
+		// Calculate how many complete days have passed since lastUpdateTime
+		daysSinceLastUpdate := int(now.Sub(lastUpdateTime).Hours() / 24)
+
+		if daysSinceLastUpdate == 0 {
+			// Still in the same day period, no reset needed
+			return lastUpdateTime
+		}
+
+		// Return the start of the most recent day period
+		// This is lastUpdateTime + (daysPassed * 1 day)
+		return lastUpdateTime.Add(time.Duration(daysSinceLastUpdate*24) * time.Hour)
+
+	default:
+		// Fallback to current time for unknown period types
+		return now
+	}
+}
+
 // ResetTokenPeriodUsage resets the period usage for a token with concurrency safety
 // This updates PeriodLastUpdateTime and PeriodLastUpdateAmount to current values
 func ResetTokenPeriodUsage(id int) error {
 	token := &Token{}
+
+	var newPeriodStartTime time.Time
 
 	// Use database transaction with optimistic locking to prevent concurrent resets
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -911,6 +987,16 @@ func ResetTokenPeriodUsage(id int) error {
 			return nil
 		}
 
+		// Calculate the correct next period start time based on period type
+		newPeriodStartTime = calculateNextPeriodStartTime(
+			token.PeriodLastUpdateTime,
+			token.PeriodType,
+		)
+
+		if newPeriodStartTime.IsZero() {
+			return errors.New("next period start time is zero")
+		}
+
 		// Perform the reset with the lock held - update period last update time and amount
 		result := tx.
 			Model(token).
@@ -922,7 +1008,7 @@ func ResetTokenPeriodUsage(id int) error {
 			Where("id = ?", id).
 			Updates(
 				map[string]any{
-					"period_last_update_time": time.Now(),
+					"period_last_update_time": newPeriodStartTime,
 					"period_last_update_amount": gorm.Expr(
 						"used_amount",
 					), // Set to current total usage
@@ -933,8 +1019,8 @@ func ResetTokenPeriodUsage(id int) error {
 	})
 
 	// Update cache only if database update succeeded
-	if err == nil && token.Key != "" {
-		if cacheErr := CacheResetTokenPeriodUsage(token.Key, time.Now(), token.UsedAmount); cacheErr != nil {
+	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
+		if cacheErr := CacheResetTokenPeriodUsage(token.Key, newPeriodStartTime, token.UsedAmount); cacheErr != nil {
 			log.Error("reset token period usage in cache failed: " + cacheErr.Error())
 		}
 	}
