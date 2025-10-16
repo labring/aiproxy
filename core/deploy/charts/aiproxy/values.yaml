@@ -1,0 +1,31 @@
+fullnameOverride: aiproxy
+
+replicas: 3
+resources:
+  requests:
+    cpu: 50m
+    memory: 50Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+image: ghcr.io/labring/aiproxy:latest
+
+cloudDomain: 127.0.0.1.nip.io
+cloudPort: 443
+
+sealos: true
+
+aiproxy:
+  DEBUG: "false"
+  DEBUG_SQL: "false"
+  ADMIN_KEY: ""
+  SEALOS_JWT_KEY: ""
+  SQL_DSN: ""
+  LOG_SQL_DSN: ""
+  REDIS: ""
+  BALANCE_SEALOS_CHECK_REAL_NAME_ENABLE: "false"
+  BALANCE_SEALOS_NO_REAL_NAME_USED_AMOUNT_LIMIT: "1"
+  SAVE_ALL_LOG_DETAIL: "false"
+  LOG_DETAIL_REQUEST_BODY_MAX_SIZE: "128"
+  LOG_DETAIL_RESPONSE_BODY_MAX_SIZE: "128"
