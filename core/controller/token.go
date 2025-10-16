@@ -38,10 +38,13 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 
 type (
 	AddTokenRequest struct {
-		Name    string   `json:"name"`
-		Subnets []string `json:"subnets"`
-		Models  []string `json:"models"`
-		Quota   float64  `json:"quota"`
+		Name                 string   `json:"name"`
+		Subnets              []string `json:"subnets"`
+		Models               []string `json:"models"`
+		Quota                float64  `json:"quota"`
+		PeriodQuota          float64  `json:"period_quota"`
+		PeriodType           string   `json:"period_type"`
+		PeriodLastUpdateTime int64    `json:"period_last_update_time"`
 	}
 
 	UpdateTokenStatusRequest struct {
@@ -54,12 +57,20 @@ type (
 )
 
 func (at *AddTokenRequest) ToToken() *model.Token {
-	return &model.Token{
-		Name:    model.EmptyNullString(at.Name),
-		Subnets: at.Subnets,
-		Models:  at.Models,
-		Quota:   at.Quota,
+	token := &model.Token{
+		Name:        model.EmptyNullString(at.Name),
+		Subnets:     at.Subnets,
+		Models:      at.Models,
+		Quota:       at.Quota,
+		PeriodQuota: at.PeriodQuota,
+		PeriodType:  model.EmptyNullString(at.PeriodType),
 	}
+
+	if at.PeriodLastUpdateTime > 0 {
+		token.PeriodLastUpdateTime = time.UnixMilli(at.PeriodLastUpdateTime)
+	}
+
+	return token
 }
 
 func validateToken(token AddTokenRequest) error {

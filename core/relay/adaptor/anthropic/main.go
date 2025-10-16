@@ -51,6 +51,7 @@ func ConvertRequest(
 		if callback == nil {
 			continue
 		}
+
 		if err := callback(&node); err != nil {
 			return adaptor.ConvertResult{}, err
 		}

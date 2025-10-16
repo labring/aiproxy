@@ -37,8 +37,8 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
-	switch {
-	case meta.Mode == mode.Anthropic:
+	switch meta.Mode {
+	case mode.Anthropic:
 		url, err := url.JoinPath(u, "/api/anthropic/v1/messages")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -53,6 +53,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 		defer func() {
 			meta.Channel.BaseURL = u
 		}()
+
 		return a.Adaptor.GetRequestURL(meta, store)
 	}
 }
@@ -62,13 +63,14 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	switch {
-	case meta.Mode == mode.Anthropic:
+	switch meta.Mode {
+	case mode.Anthropic:
 		return anthropic.ConvertRequest(meta, req, func(node *ast.Node) error {
 			if !node.Get("max_tokens").Exists() {
 				_, err := node.Set("max_tokens", ast.NewNumber("4096"))
 				return err
 			}
+
 			return nil
 		})
 	default:
@@ -82,8 +84,8 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (usage model.Usage, err adaptor.Error) {
-	switch {
-	case meta.Mode == mode.Anthropic:
+	switch meta.Mode {
+	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
 			usage, err = anthropic.StreamHandler(meta, c, resp)
 		} else {
