@@ -93,7 +93,7 @@ func ConvertImagesEditsRequest(
 		}
 	}
 
-	for key, files := range request.MultipartForm.File {
+	for _, files := range request.MultipartForm.File {
 		if len(files) == 0 {
 			continue
 		}
@@ -105,7 +105,7 @@ func ConvertImagesEditsRequest(
 			return adaptor.ConvertResult{}, err
 		}
 
-		w, err := multipartWriter.CreateFormFile(key, fileHeader.Filename)
+		w, err := multipartWriter.CreatePart(fileHeader.Header)
 		if err != nil {
 			file.Close()
 			return adaptor.ConvertResult{}, err
@@ -119,12 +119,13 @@ func ConvertImagesEditsRequest(
 		}
 	}
 
-	multipartWriter.Close()
-	ContentType := multipartWriter.FormDataContentType()
+	if err := multipartWriter.Close(); err != nil {
+		return adaptor.ConvertResult{}, err
+	}
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
-			"Content-Type": {ContentType},
+			"Content-Type": {multipartWriter.FormDataContentType()},
 		},
 		Body: multipartBody,
 	}, nil

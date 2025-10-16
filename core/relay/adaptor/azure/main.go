@@ -57,6 +57,21 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 			Method: http.MethodPost,
 			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
 		}, nil
+	case mode.ImagesEdits:
+		url, err := url.JoinPath(
+			meta.Channel.BaseURL,
+			"/openai/deployments",
+			model,
+			"/images/edits",
+		)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
+		}, nil
 	case mode.AudioTranscription:
 		// https://learn.microsoft.com/en-us/azure/ai-services/openai/whisper-quickstart?tabs=command-line#rest-api
 		url, err := url.JoinPath(
