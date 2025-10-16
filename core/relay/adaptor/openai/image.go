@@ -3,13 +3,10 @@ package openai
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"strconv"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -96,7 +93,7 @@ func ConvertImagesEditsRequest(
 		}
 	}
 
-	for key, files := range request.MultipartForm.File {
+	for _, files := range request.MultipartForm.File {
 		if len(files) == 0 {
 			continue
 		}
@@ -108,19 +105,7 @@ func ConvertImagesEditsRequest(
 			return adaptor.ConvertResult{}, err
 		}
 
-		h := make(textproto.MIMEHeader)
-		h.Set("Content-Disposition",
-			fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
-				escapeQuotes(key),
-				escapeQuotes(fileHeader.Filename),
-			))
-		if fileHeader.Header.Get("Content-Type") != "" {
-			h.Set("Content-Type", fileHeader.Header.Get("Content-Type"))
-		} else {
-			h.Set("Content-Type", "application/octet-stream")
-		}
-
-		w, err := multipartWriter.CreatePart(h)
+		w, err := multipartWriter.CreatePart(fileHeader.Header)
 		if err != nil {
 			file.Close()
 			return adaptor.ConvertResult{}, err
@@ -144,11 +129,6 @@ func ConvertImagesEditsRequest(
 		},
 		Body: multipartBody,
 	}, nil
-}
-
-// escapeQuotes 转义引号以符合MIME规范
-func escapeQuotes(s string) string {
-	return strings.ReplaceAll(s, `"`, `\"`)
 }
 
 func ImagesHandler(
