@@ -3,10 +3,13 @@ package openai
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strconv"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -105,7 +108,19 @@ func ConvertImagesEditsRequest(
 			return adaptor.ConvertResult{}, err
 		}
 
-		w, err := multipartWriter.CreateFormFile(key, fileHeader.Filename)
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition",
+			fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
+				escapeQuotes(key),
+				escapeQuotes(fileHeader.Filename),
+			))
+		if fileHeader.Header.Get("Content-Type") != "" {
+			h.Set("Content-Type", fileHeader.Header.Get("Content-Type"))
+		} else {
+			h.Set("Content-Type", "application/octet-stream")
+		}
+
+		w, err := multipartWriter.CreatePart(h)
 		if err != nil {
 			file.Close()
 			return adaptor.ConvertResult{}, err
@@ -119,15 +134,21 @@ func ConvertImagesEditsRequest(
 		}
 	}
 
-	multipartWriter.Close()
-	ContentType := multipartWriter.FormDataContentType()
+	if err := multipartWriter.Close(); err != nil {
+		return adaptor.ConvertResult{}, err
+	}
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
-			"Content-Type": {ContentType},
+			"Content-Type": {multipartWriter.FormDataContentType()},
 		},
 		Body: multipartBody,
 	}, nil
+}
+
+// escapeQuotes 转义引号以符合MIME规范
+func escapeQuotes(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
 
 func ImagesHandler(
