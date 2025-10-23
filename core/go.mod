@@ -25,7 +25,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/shopspring/decimal v1.4.0
 	github.com/sirupsen/logrus v1.9.3
@@ -36,6 +35,7 @@ require (
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.6
+	github.com/tiktoken-go/tokenizer v0.7.0
 	golang.org/x/image v0.30.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/api v0.248.0

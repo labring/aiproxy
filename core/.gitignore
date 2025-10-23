@@ -1,7 +1,6 @@
 aiproxy.db*
 core
 core.exe
-common/tiktoken/assets/*
 /public/dist/*
 !*.gitkeep
 .env.local

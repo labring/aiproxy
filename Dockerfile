@@ -10,15 +10,11 @@ RUN pnpm install && pnpm run build
 
 FROM golang:1.25.2-alpine AS builder
 
-RUN apk add --no-cache curl
-
 WORKDIR /aiproxy/core
 
 COPY ./ /aiproxy
 
 COPY --from=frontend-builder /aiproxy/web/dist/ /aiproxy/core/public/dist/
-
-RUN sh scripts/tiktoken.sh
 
 RUN go install github.com/swaggo/swag/cmd/swag@latest
 

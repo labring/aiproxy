@@ -5,22 +5,39 @@ import (
 	"math"
 	"strings"
 
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/image"
 	intertiktoken "github.com/labring/aiproxy/core/common/tiktoken"
 	"github.com/labring/aiproxy/core/relay/model"
-	"github.com/pkoukk/tiktoken-go"
 	log "github.com/sirupsen/logrus"
+	"github.com/tiktoken-go/tokenizer"
 )
 
-func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int64 {
-	return int64(len(tokenEncoder.Encode(text, nil, nil)))
+func getTokenNum(tokenEncoder tokenizer.Codec, text string) int64 {
+	// Check fuzzy token threshold
+	threshold := config.GetFuzzyTokenThreshold()
+	textLen := len(text)
+
+	// If threshold is set and text length exceeds it, use fuzzy calculation
+	if threshold > 0 && int64(textLen) >= threshold {
+		return int64(textLen / 4)
+	}
+
+	// Otherwise, use precise token counting
+	count, err := tokenEncoder.Count(text)
+	if err != nil {
+		log.Warnf("failed to count tokens: %v, fallback to length/4", err)
+		// Fallback to rough estimation if counting fails
+		return int64(textLen / 4)
+	}
+
+	return int64(count)
 }
 
 func CountTokenMessages(messages []model.Message, model string) int64 {
 	tokenEncoder := intertiktoken.GetTokenEncoder(model)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-	// https://github.com/pkoukk/tiktoken-go/issues/6
 	//
 	// Every message follows <|start|>{role/name}\n{content}<|end|>\n
 	var (

@@ -35,6 +35,12 @@ var (
 	defaultMCPHost atomic.Value
 	publicMCPHost  atomic.Value
 	groupMCPHost   atomic.Value
+
+	// fuzzyTokenThreshold is the text length threshold for fuzzy token calculation.
+	// If text length is below this threshold, precise token counting is used.
+	// If text length is at or above this threshold, approximate counting (length/4) is used.
+	// Set to 0 to always use precise counting (default behavior).
+	fuzzyTokenThreshold atomic.Int64
 )
 
 func init() {
@@ -278,4 +284,13 @@ func GetUsageAlertMinAvgThreshold() int64 {
 func SetUsageAlertMinAvgThreshold(threshold int64) {
 	threshold = env.Int64("USAGE_ALERT_MIN_AVG_THRESHOLD", threshold)
 	usageAlertMinAvgThreshold.Store(threshold)
+}
+
+func GetFuzzyTokenThreshold() int64 {
+	return fuzzyTokenThreshold.Load()
+}
+
+func SetFuzzyTokenThreshold(threshold int64) {
+	threshold = env.Int64("FUZZY_TOKEN_THRESHOLD", threshold)
+	fuzzyTokenThreshold.Store(threshold)
 }
