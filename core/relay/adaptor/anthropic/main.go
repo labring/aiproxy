@@ -29,36 +29,7 @@ func ConvertRequest(
 	req *http.Request,
 	callbacks ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
-	// Parse request body into AST node
-	node, err := common.UnmarshalRequest2NodeReusable(req)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	// Set the actual model in the request
-	_, err = node.Set("model", ast.NewString(meta.ActualModel))
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	// Process image content if present
-	err = ConvertImage2Base64(req.Context(), &node)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	for _, callback := range callbacks {
-		if callback == nil {
-			continue
-		}
-
-		if err := callback(&node); err != nil {
-			return adaptor.ConvertResult{}, err
-		}
-	}
-
-	// Serialize the modified node
-	newBody, err := node.MarshalJSON()
+	newBody, err := ConvertRequestToBytes(meta, req, callbacks...)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
@@ -70,6 +41,68 @@ func ConvertRequest(
 		},
 		Body: bytes.NewReader(newBody),
 	}, nil
+}
+
+func ConvertRequestToBytes(
+	meta *meta.Meta,
+	req *http.Request,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) {
+	// Parse request body into AST node
+	node, err := common.UnmarshalRequest2NodeReusable(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process image content if present
+	err = ConvertImage2Base64(req.Context(), &node)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the actual model in the request
+	_, err = node.Set("model", ast.NewString(meta.ActualModel))
+	if err != nil {
+		return nil, err
+	}
+
+	maxTokensNode := node.Get("max_tokens")
+	if maxTokensNode == nil || !maxTokensNode.Exists() {
+		_, _ = node.Set("max_tokens", ast.NewNumber("4096"))
+	}
+
+	// Handle thinking budget tokens adjustment
+	thinkingNode := node.Get("thinking")
+
+	maxTokens, err := node.Get("max_tokens").Int64()
+	if (thinkingNode != nil && thinkingNode.Exists()) && err == nil {
+		budgetTokens, _ := thinkingNode.Get("budget_tokens").Int64()
+		maxTokensInt := int(maxTokens)
+		budgetTokensInt := int(budgetTokens)
+		adjustThinkingBudgetTokens(&maxTokensInt, &budgetTokensInt)
+
+		// Update the nodes with adjusted values
+		_, _ = node.Set("max_tokens", ast.NewNumber(strconv.Itoa(maxTokensInt)))
+		_, _ = thinkingNode.Set(
+			"budget_tokens",
+			ast.NewNumber(strconv.Itoa(budgetTokensInt)),
+		)
+
+		// Remove temperature when thinking is enabled
+		_, _ = node.Unset("temperature")
+	}
+
+	for _, callback := range callbacks {
+		if callback == nil {
+			continue
+		}
+
+		if err := callback(&node); err != nil {
+			return nil, err
+		}
+	}
+
+	return node.MarshalJSON()
 }
 
 // ConvertImage2Base64 handles converting image URLs to base64 encoded data

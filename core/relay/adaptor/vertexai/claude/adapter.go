@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
@@ -79,32 +77,20 @@ func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byt
 }
 
 func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
-	reqBody, err := common.GetRequestBodyReusable(request)
-	if err != nil {
-		return nil, err
-	}
+	return anthropic.ConvertRequestToBytes(meta, request, func(node *ast.Node) error {
+		stream, _ := node.Get("stream").Bool()
+		meta.Set("stream", stream)
 
-	node, err := sonic.Get(reqBody)
-	if err != nil {
-		return nil, err
-	}
+		if _, err := node.Unset("model"); err != nil {
+			return err
+		}
 
-	if err = anthropic.ConvertImage2Base64(context.Background(), &node); err != nil {
-		return nil, err
-	}
+		if _, err := node.Set("anthropic_version", ast.NewString(anthropicVersion)); err != nil {
+			return err
+		}
 
-	stream, _ := node.Get("stream").Bool()
-	meta.Set("stream", stream)
-
-	if _, err = node.Unset("model"); err != nil {
-		return nil, err
-	}
-
-	if _, err = node.Set("anthropic_version", ast.NewString(anthropicVersion)); err != nil {
-		return nil, err
-	}
-
-	return node.MarshalJSON()
+		return nil
+	})
 }
 
 func (a *Adaptor) DoResponse(

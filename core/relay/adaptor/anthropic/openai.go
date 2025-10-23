@@ -133,14 +133,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 	}
 
 	if claudeRequest.Thinking != nil {
-		if claudeRequest.Thinking.BudgetTokens == 0 ||
-			claudeRequest.Thinking.BudgetTokens >= claudeRequest.MaxTokens {
-			claudeRequest.Thinking.BudgetTokens = claudeRequest.MaxTokens / 2
-		}
-
-		if claudeRequest.Thinking.BudgetTokens < 1024 {
-			claudeRequest.Thinking.BudgetTokens = 1024
-		}
+		adjustThinkingBudgetTokens(&claudeRequest.MaxTokens, &claudeRequest.Thinking.BudgetTokens)
 
 		claudeRequest.Temperature = nil
 	}
