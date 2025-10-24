@@ -90,12 +90,14 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 		writed bool
 	)
 
+	streamState := anthropic.NewStreamState()
+
 	log := common.GetLogger(c)
 
 	for event := range stream.Events() {
 		switch v := event.(type) {
 		case *types.ResponseStreamMemberChunk:
-			response, err := anthropic.StreamResponse2OpenAI(meta, v.Value.Bytes)
+			response, err := streamState.StreamResponse2OpenAI(meta, v.Value.Bytes)
 			if err != nil {
 				if writed {
 					log.Errorf("response error: %+v", err)

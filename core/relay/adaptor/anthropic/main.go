@@ -242,6 +242,8 @@ func StreamHandler(
 		writed bool
 	)
 
+	streamState := NewStreamState()
+
 	for scanner.Scan() {
 		data := scanner.Bytes()
 		if !render.IsValidSSEData(data) {
@@ -253,7 +255,7 @@ func StreamHandler(
 			break
 		}
 
-		response, err := StreamResponse2OpenAI(m, data)
+		response, err := streamState.StreamResponse2OpenAI(m, data)
 		if err != nil {
 			if writed {
 				log.Errorf("response error: %+v", err)
