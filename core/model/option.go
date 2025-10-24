@@ -123,6 +123,7 @@ func initOptionMap() error {
 		config.GetUsageAlertMinAvgThreshold(),
 		10,
 	)
+	optionMap["FuzzyTokenThreshold"] = strconv.FormatInt(config.GetFuzzyTokenThreshold(), 10)
 
 	optionKeys = make([]string, 0, len(optionMap))
 	for key := range optionMap {
@@ -445,6 +446,17 @@ func updateOption(key, value string, isInit bool) (err error) {
 		}
 
 		config.SetUsageAlertMinAvgThreshold(threshold)
+	case "FuzzyTokenThreshold":
+		threshold, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if threshold < 0 {
+			return errors.New("fuzzy token threshold must be greater than or equal to 0")
+		}
+
+		config.SetFuzzyTokenThreshold(threshold)
 	default:
 		return ErrUnknownOptionKey
 	}

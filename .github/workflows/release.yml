@@ -79,11 +79,6 @@ jobs:
           name: web
           path: core/public/dist
 
-      - name: Download tiktoken
-        working-directory: core
-        run: |
-          bash scripts/tiktoken.sh
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
