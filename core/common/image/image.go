@@ -49,11 +49,15 @@ func GetImageSizeFromURL(url string) (width, height int, err error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, 0, fmt.Errorf("status code: %d", resp.StatusCode)
+		return 0, 0, fmt.Errorf("download image error: status code: %d", resp.StatusCode)
 	}
 
 	if resp.ContentLength > MaxImageSize {
-		return 0, 0, fmt.Errorf("image too large: %d, max: %d", resp.ContentLength, MaxImageSize)
+		return 0, 0, fmt.Errorf(
+			"download image error: image too large: %d, max: %d",
+			resp.ContentLength,
+			MaxImageSize,
+		)
 	}
 
 	var reader io.Reader
@@ -84,7 +88,7 @@ func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 			return "image/" + matches[1], matches[2], nil
 		}
 
-		return "", "", errors.New("not an image url")
+		return "", "", errors.New("download image error: not an image url")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -99,7 +103,7 @@ func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("status code: %d", resp.StatusCode)
+		return "", "", fmt.Errorf("download image error: status code: %d", resp.StatusCode)
 	}
 
 	buf, err := common.GetResponseBodyLimit(resp, MaxImageSize)
@@ -111,7 +115,7 @@ func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 	if !IsImageURL(contentType) {
 		contentType = http.DetectContentType(buf)
 		if !IsImageURL(contentType) {
-			return "", "", errors.New("not an image")
+			return "", "", errors.New("download iamge error: not an image")
 		}
 	}
 
