@@ -74,7 +74,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           name: web
           path: core/public/dist
@@ -240,7 +240,7 @@ jobs:
           password: ${{ secrets.ALIYUN_PASSWORD }}
 
       - name: Download digests
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
