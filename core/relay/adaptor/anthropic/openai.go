@@ -429,6 +429,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 			ToolCalls:        tools,
 			Role:             "assistant",
 		},
+		Index:        0,
 		FinishReason: stopReasonClaude2OpenAI(stopReason),
 	}
 
@@ -481,8 +482,9 @@ func Response2OpenAI(
 		case toolUseType:
 			args, _ := sonic.MarshalString(v.Input)
 			tools = append(tools, relaymodel.ToolCall{
-				ID:   v.ID,
-				Type: "function",
+				Index: len(tools),
+				ID:    v.ID,
+				Type:  "function",
 				Function: relaymodel.Function{
 					Name:      v.Name,
 					Arguments: args,
