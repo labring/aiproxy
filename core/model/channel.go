@@ -536,6 +536,7 @@ func DeleteChannelsByIDs(ids []int) (err error) {
 	defer func() {
 		if err == nil {
 			_ = InitModelConfigAndChannelCache()
+
 			for _, id := range ids {
 				_ = monitor.ClearChannelAllModelErrors(context.Background(), id)
 			}

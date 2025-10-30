@@ -29,8 +29,7 @@ func ParseEnabledTools(enabledToolsStr string) map[string]bool {
 		return enabledToolsSet
 	}
 
-	tools := strings.Split(enabledToolsStr, ",")
-	for _, tool := range tools {
+	for tool := range strings.SplitSeq(enabledToolsStr, ",") {
 		tool = strings.TrimSpace(tool)
 		if tool != "" {
 			enabledToolsSet[tool] = true

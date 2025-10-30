@@ -50,10 +50,8 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 		Description: "Default search engine to use (google, bing, arxiv)",
 		Validator: func(value string) error {
 			validEngines := []string{"google", "bing", "arxiv", "searchxng", "bingcn"}
-			for _, e := range validEngines {
-				if value == e {
-					return nil
-				}
+			if slices.Contains(validEngines, value) {
+				return nil
 			}
 			return fmt.Errorf(
 				"invalid engine: %s, must be one of: %s",

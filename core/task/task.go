@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -209,18 +210,18 @@ func formatGroupUsageAlerts(alerts []model.GroupUsageAlertItem) string {
 		return ""
 	}
 
-	var result string
+	var result strings.Builder
 	for _, alert := range alerts {
-		result += fmt.Sprintf(
+		result.WriteString(fmt.Sprintf(
 			"GroupID: %s | 3-Day Avg: %.4f | Today: %.4f | Ratio: %.2fx\n",
 			alert.GroupID,
 			alert.ThreeDayAvgAmount,
 			alert.TodayAmount,
 			alert.Ratio,
-		)
+		))
 	}
 
-	return result
+	return result.String()
 }
 
 // CleanLogTask 清理日志任务

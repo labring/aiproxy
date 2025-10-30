@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -135,12 +136,7 @@ func ListTools(ctx context.Context) ([]mcp.Tool, error) {
 
 // createHeaders creates HTTP headers with optional API key
 func (s *JinaServer) createHeaders(baseHeaders map[string]string) map[string]string {
-	headers := make(map[string]string)
-
-	// Copy base headers
-	for k, v := range baseHeaders {
-		headers[k] = v
-	}
+	headers := maps.Clone(baseHeaders)
 
 	// Add authorization if API key is available
 	if s.apiKey != "" {

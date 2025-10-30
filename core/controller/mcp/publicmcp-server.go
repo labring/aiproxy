@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 
@@ -192,9 +193,7 @@ func prepareProxyConfig(
 		}
 	}
 
-	for k, v := range publicMcp.ProxyConfig.Headers {
-		headers[k] = v
-	}
+	maps.Copy(headers, publicMcp.ProxyConfig.Headers)
 
 	url.RawQuery = backendQuery.Encode()
 
@@ -398,9 +397,7 @@ func handlePublicProxyStreamable(
 		return
 	}
 
-	for k, v := range config.Headers {
-		headers[k] = v
-	}
+	maps.Copy(headers, config.Headers)
 
 	for k, v := range config.Querys {
 		backendQuery.Set(k, v)

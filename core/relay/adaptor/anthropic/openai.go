@@ -268,11 +268,7 @@ func batchPatchImage2Base64(ctx context.Context, imageTasks []*relaymodel.Claude
 			continue
 		}
 
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_ = sem.Acquire(ctx, 1)
 			defer sem.Release(1)
 
@@ -291,7 +287,7 @@ func batchPatchImage2Base64(ctx context.Context, imageTasks []*relaymodel.Claude
 			task.Source.URL = ""
 			task.Source.MediaType = mimeType
 			task.Source.Data = data
-		}()
+		})
 	}
 
 	wg.Wait()

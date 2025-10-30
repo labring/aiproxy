@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -780,13 +781,7 @@ func (s *Server) processRecipeIngredients(recipe Recipe, ingredientMap map[strin
 			existingItem.RecipeCount++
 
 			// Add recipe name if not already present
-			found := false
-			for _, recipeName := range existingItem.Recipes {
-				if recipeName == recipe.Name {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(existingItem.Recipes, recipe.Name)
 
 			if !found {
 				existingItem.Recipes = append(existingItem.Recipes, recipe.Name)
