@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -298,6 +299,30 @@ func StreamHandler(
 			}
 		}
 
+		node, parseErr := sonic.Get(data)
+		if parseErr != nil {
+			log.Error("error unmarshalling stream response: " + parseErr.Error())
+		} else {
+			// Check if model field exists in message.model (for message_start events)
+			messageNode := node.Get("message")
+			if messageNode != nil && messageNode.Exists() {
+				modelNode := messageNode.Get("model")
+				if modelNode != nil && modelNode.Exists() {
+					_, setErr := messageNode.Set("model", ast.NewString(m.OriginModel))
+					if setErr != nil {
+						log.Error("error set response model in message: " + setErr.Error())
+					} else {
+						newData, marshalErr := node.MarshalJSON()
+						if marshalErr != nil {
+							log.Error("error marshalling stream response: " + marshalErr.Error())
+						} else {
+							data = newData
+						}
+					}
+				}
+			}
+		}
+
 		render.ClaudeData(c, data)
 
 		writed = true
@@ -342,6 +367,26 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 	fullTextResponse, adaptorErr := Response2OpenAI(meta, respBody)
 	if adaptorErr != nil {
 		return model.Usage{}, adaptorErr
+	}
+
+	log := common.GetLogger(c)
+
+	// Set model to OriginModel in response body
+	node, err := sonic.Get(respBody)
+	if err != nil {
+		log.Error("error unmarshalling stream response: " + err.Error())
+	} else {
+		_, err = node.Set("model", ast.NewString(meta.OriginModel))
+		if err != nil {
+			log.Error("error set response model: " + err.Error())
+		} else {
+			newRespBody, err := node.MarshalJSON()
+			if err != nil {
+				log.Error("error marshalling response: " + err.Error())
+			} else {
+				respBody = newRespBody
+			}
+		}
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
