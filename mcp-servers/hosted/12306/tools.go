@@ -103,7 +103,7 @@ func (s *Server) addGetStationCodeOfCitysTool() {
 			}
 
 			result := make(map[string]any)
-			for _, city := range strings.Split(citys, "|") {
+			for city := range strings.SplitSeq(citys, "|") {
 				if station, exists := s.cityStationCodes[city]; exists {
 					result[city] = station
 				} else {
@@ -147,7 +147,7 @@ func (s *Server) addGetStationCodeByNamesTool() {
 			}
 
 			result := make(map[string]any)
-			for _, stationName := range strings.Split(stationNames, "|") {
+			for stationName := range strings.SplitSeq(stationNames, "|") {
 				cleanName := strings.TrimSuffix(stationName, "站")
 
 				if station, exists := s.nameStations[cleanName]; exists {

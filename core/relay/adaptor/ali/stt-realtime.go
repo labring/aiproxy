@@ -223,10 +223,7 @@ func STTDoResponse(
 		case "task-started":
 			chunkSize := 3 * 1024
 			for i := 0; i < len(audioData); i += chunkSize {
-				end := i + chunkSize
-				if end > len(audioData) {
-					end = len(audioData)
-				}
+				end := min(i+chunkSize, len(audioData))
 
 				chunk := audioData[i:end]
 

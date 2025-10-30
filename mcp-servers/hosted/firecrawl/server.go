@@ -132,11 +132,8 @@ func (s *Server) withRetry(
 				strings.Contains(err.Error(), "429")
 
 			if isRateLimit && attempt < s.config.MaxAttempts {
-				delay := time.Duration(float64(s.config.InitialDelay) *
-					float64(int(1)<<(attempt-1)) * s.config.BackoffFactor)
-				if delay > s.config.MaxDelay {
-					delay = s.config.MaxDelay
-				}
+				delay := min(time.Duration(float64(s.config.InitialDelay)*
+					float64(int(1)<<(attempt-1))*s.config.BackoffFactor), s.config.MaxDelay)
 
 				select {
 				case <-time.After(delay):

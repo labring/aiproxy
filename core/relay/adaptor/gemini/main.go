@@ -380,11 +380,7 @@ func processImageTasks(ctx context.Context, imageTasks []*Part) error {
 			continue
 		}
 
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_ = sem.Acquire(ctx, 1)
 			defer sem.Release(1)
 
@@ -401,7 +397,7 @@ func processImageTasks(ctx context.Context, imageTasks []*Part) error {
 
 			task.InlineData.MimeType = mimeType
 			task.InlineData.Data = data
-		}()
+		})
 	}
 
 	wg.Wait()

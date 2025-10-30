@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"sync"
@@ -388,10 +389,7 @@ func (c *Cache) DoResponse(
 		}
 
 		// Convert http.Header to map[string][]string for JSON serialization
-		headerMap := make(map[string][]string)
-		for k, v := range rw.Header() {
-			headerMap[k] = v
-		}
+		headerMap := maps.Clone(rw.Header())
 
 		// Store in cache
 		item := Item{

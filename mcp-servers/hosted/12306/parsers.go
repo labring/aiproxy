@@ -3,6 +3,7 @@ package train12306
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -178,9 +179,12 @@ func (s *Server) formatTicketsInfo(ticketsInfo []TicketInfo) string {
 		return "没有查询到相关车次信息"
 	}
 
-	result := "车次 | 出发站 -> 到达站 | 出发时间 -> 到达时间 | 历时\n"
+	var result strings.Builder
+	result.WriteString("车次 | 出发站 -> 到达站 | 出发时间 -> 到达时间 | 历时\n")
+
 	for _, ticketInfo := range ticketsInfo {
-		infoStr := fmt.Sprintf(
+		var infoStr strings.Builder
+		infoStr.WriteString(fmt.Sprintf(
 			"%s(实际车次train_no: %s) %s(telecode: %s) -> %s(telecode: %s) %s -> %s 历时：%s",
 			ticketInfo.StartTrainCode,
 			ticketInfo.TrainNo,
@@ -191,17 +195,19 @@ func (s *Server) formatTicketsInfo(ticketsInfo []TicketInfo) string {
 			ticketInfo.StartTime,
 			ticketInfo.ArriveTime,
 			ticketInfo.Lishi,
-		)
+		))
 
 		for _, price := range ticketInfo.Prices {
 			ticketStatus := s.formatTicketStatus(price.Num)
-			infoStr += fmt.Sprintf("\n- %s: %s %.1f元", price.SeatName, ticketStatus, price.Price)
+			infoStr.WriteString(
+				fmt.Sprintf("\n- %s: %s %.1f元", price.SeatName, ticketStatus, price.Price),
+			)
 		}
 
-		result += infoStr + "\n"
+		result.WriteString(infoStr.String() + "\n")
 	}
 
-	return result
+	return result.String()
 }
 
 // filterTicketsInfo filters and sorts ticket information
@@ -271,13 +277,7 @@ func (s *Server) matchesTrainFilter(ticketInfo TicketInfo, filter string) bool {
 
 // containsFlag checks if the flag list contains a specific flag
 func (s *Server) containsFlag(flags []string, flag string) bool {
-	for _, f := range flags {
-		if f == flag {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(flags, flag)
 }
 
 // sortTicketsInfo sorts ticket information
@@ -855,40 +855,43 @@ func (s *Server) compareInterlineDuration(a, b InterlineInfo) int {
 
 // formatInterlinesInfo formats interline information for display
 func (s *Server) formatInterlinesInfo(interlinesInfo []InterlineInfo) string {
-	result := "出发时间 -> 到达时间 | 出发车站 -> 中转车站 -> 到达车站 | 换乘标志 |换乘等待时间| 总历时\n\n"
+	var result strings.Builder
+	result.WriteString("出发时间 -> 到达时间 | 出发车站 -> 中转车站 -> 到达车站 | 换乘标志 |换乘等待时间| 总历时\n\n")
 
 	for _, interlineInfo := range interlinesInfo {
-		result += fmt.Sprintf(
+		result.WriteString(fmt.Sprintf(
 			"%s %s -> %s %s | ",
 			interlineInfo.StartDate,
 			interlineInfo.StartTime,
 			interlineInfo.ArriveDate,
 			interlineInfo.ArriveTime,
-		)
-		result += fmt.Sprintf(
+		))
+		result.WriteString(fmt.Sprintf(
 			"%s -> %s -> %s | ",
 			interlineInfo.FromStationName,
 			interlineInfo.MiddleStationName,
 			interlineInfo.EndStationName,
-		)
+		))
 
 		switch {
 		case interlineInfo.SameStation:
-			result += "同站换乘"
+			result.WriteString("同站换乘")
 		case interlineInfo.SameTrain:
-			result += "同车换乘"
+			result.WriteString("同车换乘")
 		default:
-			result += "换站换乘"
+			result.WriteString("换站换乘")
 		}
 
-		result += fmt.Sprintf(" | %s | %s\n\n", interlineInfo.WaitTime, interlineInfo.Lishi)
-		result += "\t" + strings.ReplaceAll(
+		result.WriteString(
+			fmt.Sprintf(" | %s | %s\n\n", interlineInfo.WaitTime, interlineInfo.Lishi),
+		)
+		result.WriteString("\t" + strings.ReplaceAll(
 			s.formatTicketsInfo(interlineInfo.TicketList),
 			"\n",
 			"\n\t",
-		)
-		result += "\n"
+		))
+		result.WriteString("\n")
 	}
 
-	return result
+	return result.String()
 }

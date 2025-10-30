@@ -159,10 +159,7 @@ func (s *Splitter) processSeekTail() ([]byte, []byte) {
 			if data[i] == tail[j] {
 				j++
 				if j == tailLen {
-					end := i - tailLen + 1
-					if end < 0 {
-						end = 0
-					}
+					end := max(i-tailLen+1, 0)
 
 					result := data[:end]
 					remaining := data[i+1:]

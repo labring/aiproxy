@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -451,7 +452,9 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 		}
 
 		response := responseRef.Value
-		desc := fmt.Sprintf("- status: %s, description: %s", code, *response.Description)
+
+		var desc strings.Builder
+		desc.WriteString(fmt.Sprintf("- status: %s, description: %s", code, *response.Description))
 
 		rawSchema, ok := response.Extensions["schema"].(map[string]any)
 		if ok && len(rawSchema) > 0 {
@@ -474,7 +477,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 				continue
 			}
 
-			desc += fmt.Sprintf(", schema: %s", str)
+			desc.WriteString(fmt.Sprintf(", schema: %s", str))
 		}
 
 		if len(response.Content) > 0 {
@@ -490,12 +493,14 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 						continue
 					}
 
-					desc += fmt.Sprintf(", content type: %s, schema: %s", contentType, str)
+					desc.WriteString(
+						fmt.Sprintf(", content type: %s, schema: %s", contentType, str),
+					)
 				}
 			}
 		}
 
-		responseDescriptions = append(responseDescriptions, desc)
+		responseDescriptions = append(responseDescriptions, desc.String())
 	}
 
 	return strings.Join(responseDescriptions, "\n\n")
@@ -779,10 +784,7 @@ func (c *Converter) processSchemaProperty(
 
 		visited[refKey] = true
 		// Create a copy of the visited map to avoid cross-contamination between different branches
-		visitedCopy := make(map[string]bool)
-		for k, v := range visited {
-			visitedCopy[k] = v
-		}
+		visitedCopy := maps.Clone(visited)
 
 		visited = visitedCopy
 	}

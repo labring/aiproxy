@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -228,9 +229,7 @@ func setupRequestHeader(
 	req *http.Request,
 	header http.Header,
 ) adaptor.Error {
-	for key, value := range header {
-		req.Header[key] = value
-	}
+	maps.Copy(req.Header, header)
 
 	if err := a.SetupRequestHeader(meta, store, c, req); err != nil {
 		return relaymodel.WrapperErrorWithMessage(

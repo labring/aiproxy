@@ -52,8 +52,8 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 		cohereRequest.Model = "command-r"
 	}
 
-	if strings.HasSuffix(cohereRequest.Model, "-internet") {
-		cohereRequest.Model = strings.TrimSuffix(cohereRequest.Model, "-internet")
+	if before, ok := strings.CutSuffix(cohereRequest.Model, "-internet"); ok {
+		cohereRequest.Model = before
 		cohereRequest.Connectors = append(cohereRequest.Connectors, WebSearchConnector)
 	}
 

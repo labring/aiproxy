@@ -491,7 +491,7 @@ func (p *WebSearch) generateSearchContexts(
 // parseSearchContexts extracts search queries from LLM response
 func (p *WebSearch) parseSearchContexts(defaultLanguage, content string) []engine.SearchQuery {
 	var searchContexts []engine.SearchQuery
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

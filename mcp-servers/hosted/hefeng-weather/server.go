@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -154,10 +155,8 @@ func ListTools(ctx context.Context) ([]mcp.Tool, error) {
 // validateDays validates the days parameter
 func validateDays(days string) error {
 	validDays := []string{"now", "24h", "72h", "168h", "3d", "7d", "10d", "15d", "30d"}
-	for _, validDay := range validDays {
-		if days == validDay {
-			return nil
-		}
+	if slices.Contains(validDays, days) {
+		return nil
 	}
 
 	return fmt.Errorf("无效的预报天数: %s，有效值为: %s", days, strings.Join(validDays, ", "))

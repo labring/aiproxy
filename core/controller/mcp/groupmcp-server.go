@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 
@@ -167,12 +168,8 @@ func handleGroupProxyStreamable(c *gin.Context, config *model.GroupMCPProxyConfi
 		return
 	}
 
-	headers := make(map[string]string)
+	headers := maps.Clone(config.Headers)
 	backendQuery := backendURL.Query()
-
-	for k, v := range config.Headers {
-		headers[k] = v
-	}
 
 	for k, v := range config.Querys {
 		backendQuery.Set(k, v)

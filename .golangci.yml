@@ -43,6 +43,7 @@ linters:
     - loggercheck
     - mirror
     - misspell
+    - modernize
     - musttag
     - nakedret
     - noctx
@@ -97,12 +98,21 @@ linters:
     errcheck:
       check-type-assertions: true
     forbidigo:
+      forbid:
+        - pattern: ^print(ln)?$
       analyze-types: true
     prealloc:
       for-loops: true
     staticcheck:
       dot-import-whitelist: []
       http-status-code-whitelist: []
+    modernize:
+      disable:
+        - forvar
+        - omitzero
+    perfsprint:
+      # use modernize stringsbuilder
+      concat-loop: false
     usestdlibvars:
       time-date-month: true
       time-month: true
@@ -136,8 +146,6 @@ formatters:
   settings:
     gofmt:
       rewrite-rules:
-        - pattern: "interface{}"
-          replacement: "any"
         - pattern: "a[b:len(a)]"
           replacement: "a[b:]"
     gofumpt:
