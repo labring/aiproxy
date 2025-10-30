@@ -303,15 +303,22 @@ func StreamHandler(
 		if parseErr != nil {
 			log.Error("error unmarshalling stream response: " + parseErr.Error())
 		} else {
-			_, setErr := node.Set("model", ast.NewString(m.OriginModel))
-			if setErr != nil {
-				log.Error("error set response model: " + setErr.Error())
-			} else {
-				newData, marshalErr := node.MarshalJSON()
-				if marshalErr != nil {
-					log.Error("error marshalling stream response: " + marshalErr.Error())
-				} else {
-					data = newData
+			// Check if model field exists in message.model (for message_start events)
+			messageNode := node.Get("message")
+			if messageNode != nil && messageNode.Exists() {
+				modelNode := messageNode.Get("model")
+				if modelNode != nil && modelNode.Exists() {
+					_, setErr := messageNode.Set("model", ast.NewString(m.OriginModel))
+					if setErr != nil {
+						log.Error("error set response model in message: " + setErr.Error())
+					} else {
+						newData, marshalErr := node.MarshalJSON()
+						if marshalErr != nil {
+							log.Error("error marshalling stream response: " + marshalErr.Error())
+						} else {
+							data = newData
+						}
+					}
 				}
 			}
 		}
