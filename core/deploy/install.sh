@@ -38,7 +38,7 @@ if [ "$NODE_COUNT" -eq 1 ]; then
   HELM_OPTS="${HELM_OPTS} ${REPLICA_OPTIONS}"
 fi
 
-helm upgrade -i aiproxy-database -n aiproxy-system charts/aiproxy-database  ${HELM_OPTS} --wait
+helm upgrade -i aiproxy-database -n aiproxy-system --create-namespace charts/aiproxy-database  ${HELM_OPTS} --wait
 
 wait_for_secret "aiproxy-conn-credential" "aiproxy-system"
 wait_for_secret "aiproxy-log-conn-credential" "aiproxy-system"
@@ -75,5 +75,5 @@ kubectl delete service -n aiproxy-system aiproxy --ignore-not-found
 
 SEALOS_CLOUD_DOMAIN=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.cloudDomain}')
 SEALOS_CLOUD_PORT=$(kubectl get configmap sealos-config -n sealos-system -o jsonpath='{.data.cloudPort}')
-helm upgrade -i aiproxy -n aiproxy-system charts/aiproxy  ${HELM_OPTS} --set aiproxy.SQL_DSN=${AIPROXY_URI} --set aiproxy.LOG_SQL_DSN=${LOG_URI}  --set aiproxy.REDIS=${REDIS_URI} \
+helm upgrade -i aiproxy -n aiproxy-system --create-namespace charts/aiproxy  ${HELM_OPTS} --set aiproxy.SQL_DSN=${AIPROXY_URI} --set aiproxy.LOG_SQL_DSN=${LOG_URI}  --set aiproxy.REDIS=${REDIS_URI} \
   --set aiproxy.SEALOS_JWT_KEY=${varJwtInternal}  --set aiproxy.ADMIN_KEY=${adminKey} --set cloudDomain=${SEALOS_CLOUD_DOMAIN} --set cloudPort=${SEALOS_CLOUD_PORT}
