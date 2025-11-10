@@ -37,14 +37,14 @@ jobs:
           go test -v -timeout 30s -count=1 ./...
 
       - name: Run Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: core
           args: --color=always --path-mode=abs
 
       - name: Run Fix Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         if: ${{ failure() }}
         with:
           install-mode: none
@@ -79,14 +79,14 @@ jobs:
           go test -v -timeout 30s -count=1 ./...
 
       - name: Run Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: mcp-servers
           args: --color=always --path-mode=abs
 
       - name: Run Fix Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         if: ${{ failure() }}
         with:
           install-mode: none
@@ -116,14 +116,14 @@ jobs:
           go-version-file: "openapi-mcp/go.mod"
 
       - name: Run Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: openapi-mcp
           args: --color=always --path-mode=abs
 
       - name: Run Fix Linter
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         if: ${{ failure() }}
         with:
           install-mode: none
