@@ -123,7 +123,7 @@ func CreateLogIndexes(db *gorm.DB) error {
 }
 
 const (
-	contentMaxSize = 2 * 1024 // 2KB
+	contentMaxSize = 1024 // 1KB
 )
 
 func (l *Log) BeforeCreate(_ *gorm.DB) (err error) {
