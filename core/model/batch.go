@@ -355,7 +355,8 @@ func BatchRecordLogs(
 			)
 		}
 	} else {
-		if config.GetRetryLogStorageHours() >= 0 {
+		if config.GetLogStorageHours() >= 0 &&
+			config.GetRetryLogStorageHours() >= 0 {
 			err = RecordRetryLog(
 				requestID,
 				now,

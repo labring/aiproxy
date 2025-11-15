@@ -325,6 +325,15 @@ func preMigrationCleanup(batchSize int) error {
 		return fmt.Errorf("failed to cleanup logs: %w", err)
 	}
 
+	// Clean up retry logs
+	err = preMigrationCleanupRetryLogs(batchSize)
+	if err != nil {
+		if ignoreNoSuchTable(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to cleanup retry logs: %w", err)
+	}
+
 	// Clean up request details
 	err = preMigrationCleanupRequestDetails(batchSize)
 	if err != nil {
@@ -342,7 +351,7 @@ func preMigrationCleanup(batchSize int) error {
 // preMigrationCleanupLogs cleans up expired logs using ID-based batch deletion
 func preMigrationCleanupLogs(batchSize int) error {
 	logStorageHours := config.GetLogStorageHours()
-	if logStorageHours <= 0 {
+	if logStorageHours == 0 {
 		return nil
 	}
 
@@ -391,10 +400,65 @@ func preMigrationCleanupLogs(batchSize int) error {
 	return nil
 }
 
+// preMigrationCleanupRetryLogs cleans up expired logs using ID-based batch deletion
+func preMigrationCleanupRetryLogs(batchSize int) error {
+	logStorageHours := config.GetRetryLogStorageHours()
+	if logStorageHours == 0 {
+		logStorageHours = config.GetLogStorageHours()
+	}
+	if logStorageHours == 0 {
+		return nil
+	}
+
+	if batchSize <= 0 {
+		batchSize = defaultCleanLogBatchSize
+	}
+
+	cutoffTime := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
+
+	// First, get the IDs to delete
+	ids := make([]int, 0, batchSize)
+
+	for {
+		ids = ids[:0]
+
+		err := LogDB.Model(&RetryLog{}).
+			Select("id").
+			Where("created_at < ?", cutoffTime).
+			Limit(batchSize).
+			Find(&ids).Error
+		if err != nil {
+			return err
+		}
+
+		// If no IDs found, we're done
+		if len(ids) == 0 {
+			break
+		}
+
+		// Delete by IDs
+		err = LogDB.Where("id IN (?)", ids).
+			Session(&gorm.Session{SkipDefaultTransaction: true}).
+			Delete(&Log{}).Error
+		if err != nil {
+			return err
+		}
+
+		log.Infof("deleted %d expired retry log records", len(ids))
+
+		// If we got less than batchSize, we're done
+		if len(ids) < batchSize {
+			break
+		}
+	}
+
+	return nil
+}
+
 // preMigrationCleanupRequestDetails cleans up expired request details using ID-based batch deletion
 func preMigrationCleanupRequestDetails(batchSize int) error {
 	detailStorageHours := config.GetLogDetailStorageHours()
-	if detailStorageHours <= 0 {
+	if detailStorageHours == 0 {
 		return nil
 	}
 
