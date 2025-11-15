@@ -323,7 +323,8 @@ func BatchRecordLogs(
 		now = time.Now()
 	}
 
-	if config.GetLogDetailStorageHours() < 0 {
+	if config.GetLogDetailStorageHours() < 0 ||
+		config.GetLogStorageHours() < 0 {
 		requestDetail = nil
 	}
 

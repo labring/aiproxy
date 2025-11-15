@@ -282,7 +282,10 @@ func optimizeLog() error {
 
 func cleanLogDetail(batchSize int) error {
 	detailStorageHours := config.GetLogDetailStorageHours()
-	if detailStorageHours <= 0 {
+	if detailStorageHours == 0 {
+		detailStorageHours = config.GetLogStorageHours()
+	}
+	if detailStorageHours == 0 {
 		return nil
 	}
 
