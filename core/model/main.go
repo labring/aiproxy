@@ -180,17 +180,40 @@ func InitLogDB(batchSize int) error {
 
 	log.Info("log database migration started")
 
-	err := migrateLOGDB(batchSize)
+	err := migrateLogDB(batchSize)
 	if err != nil {
-		return fmt.Errorf("failed to migrate log database: %w", err)
-	}
+		// ignore migrate log error when use double database
+		if LogDB == DB {
+			return fmt.Errorf("failed to migrate log database: %w", err)
+		}
 
-	log.Info("log database migrated")
+		log.Errorf("failed to migrate log database: %v", err)
+		log.Warn("log database migration with backend started")
+
+		go migrateLogDBBackend(batchSize)
+	} else {
+		log.Info("log database migrated")
+	}
 
 	return nil
 }
 
-func migrateLOGDB(batchSize int) error {
+func migrateLogDBBackend(batchSize int) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		err := migrateLogDB(batchSize)
+		if err == nil {
+			return
+		}
+
+		log.Errorf("failed to migrate log database: %v", err)
+		ticker.Reset(time.Minute)
+	}
+}
+
+func migrateLogDB(batchSize int) error {
 	// Pre-migration cleanup to remove expired data
 	err := preMigrationCleanup(batchSize)
 	if err != nil {
