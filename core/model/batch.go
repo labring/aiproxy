@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -323,6 +324,12 @@ func BatchRecordLogs(
 		now = time.Now()
 	}
 
+	if code == http.StatusTooManyRequests ||
+		config.GetLogDetailStorageHours() < 0 ||
+		config.GetLogStorageHours() < 0 {
+		requestDetail = nil
+	}
+
 	if downstreamResult {
 		if config.GetLogStorageHours() >= 0 {
 			err = RecordConsumeLog(
@@ -351,7 +358,8 @@ func BatchRecordLogs(
 			)
 		}
 	} else {
-		if config.GetRetryLogStorageHours() >= 0 {
+		if config.GetLogStorageHours() >= 0 &&
+			config.GetRetryLogStorageHours() >= 0 {
 			err = RecordRetryLog(
 				requestID,
 				now,

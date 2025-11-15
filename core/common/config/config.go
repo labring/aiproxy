@@ -14,9 +14,9 @@ var (
 	logStorageHours              int64 // default 0 means no limit
 	retryLogStorageHours         int64 // default 0 means no limit
 	saveAllLogDetail             atomic.Bool
-	logDetailRequestBodyMaxSize  int64 = 128 * 1024 // 128KB
-	logDetailResponseBodyMaxSize int64 = 128 * 1024 // 128KB
-	logDetailStorageHours        int64 = 3 * 24     // 3 days
+	logDetailRequestBodyMaxSize  int64 = 8 * 1024 // 8KB
+	logDetailResponseBodyMaxSize int64 = 8 * 1024 // 8KB
+	logDetailStorageHours        int64 = 3 * 24   // 3 days
 	cleanLogBatchSize            int64 = 5000
 	notifyNote                   atomic.Value
 	ipGroupsThreshold            int64

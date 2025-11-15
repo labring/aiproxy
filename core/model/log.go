@@ -28,11 +28,17 @@ func (d *RequestDetail) BeforeSave(_ *gorm.DB) (err error) {
 		int64(len(d.RequestBody)) > reqMax {
 		d.RequestBody = common.TruncateByRune(d.RequestBody, int(reqMax)) + "..."
 		d.RequestBodyTruncated = true
+	} else if reqMax < 0 {
+		d.RequestBody = ""
+		d.RequestBodyTruncated = true
 	}
 
 	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
 		int64(len(d.ResponseBody)) > respMax {
 		d.ResponseBody = common.TruncateByRune(d.ResponseBody, int(respMax)) + "..."
+		d.ResponseBodyTruncated = true
+	} else if respMax < 0 {
+		d.ResponseBody = ""
 		d.ResponseBodyTruncated = true
 	}
 
@@ -117,7 +123,7 @@ func CreateLogIndexes(db *gorm.DB) error {
 }
 
 const (
-	contentMaxSize = 2 * 1024 // 2KB
+	contentMaxSize = 1024 // 1KB
 )
 
 func (l *Log) BeforeCreate(_ *gorm.DB) (err error) {
@@ -236,6 +242,10 @@ func cleanLog(batchSize int) error {
 	}
 
 	retryLogStorageHours := config.GetRetryLogStorageHours()
+	if retryLogStorageHours == 0 {
+		retryLogStorageHours = logStorageHours
+	}
+
 	if retryLogStorageHours != 0 {
 		subQuery := LogDB.
 			Model(&RetryLog{}).
@@ -273,7 +283,11 @@ func optimizeLog() error {
 
 func cleanLogDetail(batchSize int) error {
 	detailStorageHours := config.GetLogDetailStorageHours()
-	if detailStorageHours <= 0 {
+	if detailStorageHours == 0 {
+		detailStorageHours = config.GetLogStorageHours()
+	}
+
+	if detailStorageHours == 0 {
 		return nil
 	}
 
