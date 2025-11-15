@@ -323,6 +323,10 @@ func BatchRecordLogs(
 		now = time.Now()
 	}
 
+	if config.GetLogDetailStorageHours() < 0 {
+		requestDetail = nil
+	}
+
 	if downstreamResult {
 		if config.GetLogStorageHours() >= 0 {
 			err = RecordConsumeLog(

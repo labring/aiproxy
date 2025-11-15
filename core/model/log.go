@@ -28,11 +28,17 @@ func (d *RequestDetail) BeforeSave(_ *gorm.DB) (err error) {
 		int64(len(d.RequestBody)) > reqMax {
 		d.RequestBody = common.TruncateByRune(d.RequestBody, int(reqMax)) + "..."
 		d.RequestBodyTruncated = true
+	} else if reqMax < 0 {
+		d.RequestBody = ""
+		d.RequestBodyTruncated = true
 	}
 
 	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
 		int64(len(d.ResponseBody)) > respMax {
 		d.ResponseBody = common.TruncateByRune(d.ResponseBody, int(respMax)) + "..."
+		d.ResponseBodyTruncated = true
+	} else if respMax < 0 {
+		d.ResponseBody = ""
 		d.ResponseBodyTruncated = true
 	}
 
