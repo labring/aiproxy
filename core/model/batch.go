@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -323,7 +324,8 @@ func BatchRecordLogs(
 		now = time.Now()
 	}
 
-	if config.GetLogDetailStorageHours() < 0 ||
+	if code == http.StatusTooManyRequests ||
+		config.GetLogDetailStorageHours() < 0 ||
 		config.GetLogStorageHours() < 0 {
 		requestDetail = nil
 	}
