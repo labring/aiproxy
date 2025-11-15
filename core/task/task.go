@@ -235,7 +235,7 @@ func CleanLogTask(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !trylock.Lock("runCleanLog", time.Second*5) {
+			if !trylock.Lock("runCleanLog", time.Second*3) {
 				continue
 			}
 
