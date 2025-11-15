@@ -245,6 +245,7 @@ func cleanLog(batchSize int) error {
 	if retryLogStorageHours == 0 {
 		retryLogStorageHours = logStorageHours
 	}
+
 	if retryLogStorageHours != 0 {
 		subQuery := LogDB.
 			Model(&RetryLog{}).
@@ -285,6 +286,7 @@ func cleanLogDetail(batchSize int) error {
 	if detailStorageHours == 0 {
 		detailStorageHours = config.GetLogStorageHours()
 	}
+
 	if detailStorageHours == 0 {
 		return nil
 	}

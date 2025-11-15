@@ -406,6 +406,7 @@ func preMigrationCleanupRetryLogs(batchSize int) error {
 	if logStorageHours == 0 {
 		logStorageHours = config.GetLogStorageHours()
 	}
+
 	if logStorageHours == 0 {
 		return nil
 	}
@@ -461,6 +462,7 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 	if detailStorageHours == 0 {
 		detailStorageHours = config.GetLogStorageHours()
 	}
+
 	if detailStorageHours == 0 {
 		return nil
 	}
