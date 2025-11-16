@@ -358,8 +358,9 @@ func BatchRecordLogs(
 			)
 		}
 	} else {
-		if config.GetLogStorageHours() >= 0 &&
-			config.GetRetryLogStorageHours() >= 0 {
+		if code != http.StatusTooManyRequests &&
+			config.GetLogStorageHours() >= 0 &&
+			config.GetRetryLogStorageHours() > 0 {
 			err = RecordRetryLog(
 				requestID,
 				now,
