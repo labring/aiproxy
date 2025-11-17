@@ -377,6 +377,42 @@ func BatchRecordLogs(
 		}
 	}
 
+	BatchUpdateSummary(
+		now,
+		requestAt,
+		firstByteAt,
+		group,
+		code,
+		channelID,
+		modelName,
+		tokenID,
+		tokenName,
+		downstreamResult,
+		usage,
+		amount,
+	)
+
+	return err
+}
+
+func BatchUpdateSummary(
+	now time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	group string,
+	code int,
+	channelID int,
+	modelName string,
+	tokenID int,
+	tokenName string,
+	downstreamResult bool,
+	usage Usage,
+	amount float64,
+) {
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	amountDecimal := decimal.NewFromFloat(amount)
 
 	batchData.Lock()
@@ -412,7 +448,7 @@ func BatchRecordLogs(
 
 	// group related data only records downstream result
 	if !downstreamResult {
-		return err
+		return
 	}
 
 	updateGroupData(group, amount, amountDecimal)
@@ -444,8 +480,6 @@ func BatchRecordLogs(
 			usage,
 		)
 	}
-
-	return err
 }
 
 func updateChannelData(

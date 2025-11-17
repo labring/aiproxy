@@ -117,6 +117,27 @@ func Consume(
 	}
 }
 
+func Summary(
+	code int,
+	firstByteAt time.Time,
+	meta *meta.Meta,
+	usage model.Usage,
+	modelPrice model.Price,
+	downstreamResult bool,
+) {
+	amount := CalculateAmount(code, usage, modelPrice)
+
+	recordSummary(
+		time.Now(),
+		meta,
+		code,
+		firstByteAt,
+		usage,
+		amount,
+		downstreamResult,
+	)
+}
+
 func checkNeedRecordConsume(code int, meta *meta.Meta) bool {
 	switch meta.Mode {
 	case mode.VideoGenerationsGetJobs,
