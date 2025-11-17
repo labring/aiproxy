@@ -126,6 +126,7 @@ func convertClaudeMessagesToOpenAI(
 		result := convertClaudeContent(msg.Content)
 		messages = append(messages, result.Messages...)
 		openAIMsg.ToolCalls = result.ToolCalls
+
 		openAIMsg.Content = result.Content
 		if openAIMsg.Content != nil {
 			messages = append(messages, openAIMsg)
@@ -161,6 +162,7 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 				if text == "" {
 					continue
 				}
+
 				parts = append(parts, relaymodel.MessageContent{
 					Type: relaymodel.ContentTypeText,
 					Text: text,
@@ -170,6 +172,7 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 				if text == "" {
 					continue
 				}
+
 				parts = append(parts, relaymodel.MessageContent{
 					Type: relaymodel.ContentTypeText,
 					Text: text,
@@ -211,6 +214,7 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 					result := convertClaudeContent(v)
 					newContent = result.Content
 				}
+
 				toolMsg := relaymodel.Message{
 					Role:       "tool",
 					Content:    newContent,
@@ -218,6 +222,7 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 				}
 
 				result.Messages = append(result.Messages, toolMsg)
+
 				continue
 			default:
 				continue
