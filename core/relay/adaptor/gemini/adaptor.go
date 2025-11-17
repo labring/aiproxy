@@ -137,6 +137,5 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 			"Chat、Embeddings、Image generation Support",
 		},
 		Models: ModelList,
-		Config: ConfigTemplates,
 	}
 }

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/reqlimit"
 	"github.com/labring/aiproxy/core/controller/utils"
@@ -317,15 +315,16 @@ type GroupModel struct {
 	EnabledPlugins []string           `json:"enabled_plugins,omitempty"`
 }
 
-func getEnabledPlugins(plugin map[string]json.RawMessage) []string {
+func getEnabledPlugins(plugin map[string]map[string]any) []string {
 	enabledPlugins := make([]string, 0, len(plugin))
 	for pluginName, pluginConfig := range plugin {
-		pluginConfigNode, err := sonic.Get(pluginConfig)
-		if err != nil {
+		enable, ok := pluginConfig["enable"]
+		if !ok {
 			continue
 		}
 
-		if enable, err := pluginConfigNode.Get("enable").Bool(); err == nil && enable {
+		e, _ := enable.(bool)
+		if e {
 			enabledPlugins = append(enabledPlugins, pluginName)
 		}
 	}

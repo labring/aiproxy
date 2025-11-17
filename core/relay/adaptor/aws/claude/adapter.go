@@ -98,7 +98,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		}
 
 		if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
-			node.SetAny("anthropic_beta", strings.Split(betas, ","))
+			_, _ = node.SetAny("anthropic_beta", strings.Split(betas, ","))
 		}
 
 		editesNode := node.GetByPath("context_management", "edits")

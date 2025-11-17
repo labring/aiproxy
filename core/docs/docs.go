@@ -4830,7 +4830,9 @@ const docTemplate = `{
                             47,
                             48,
                             49,
-                            50
+                            50,
+                            51,
+                            52
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -8393,44 +8395,25 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "example": {},
+                "example": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "required": {
                     "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/definitions/adaptor.ConfigType"
                 }
             }
-        },
-        "adaptor.ConfigTemplates": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/adaptor.ConfigTemplate"
-            }
-        },
-        "adaptor.ConfigType": {
-            "type": "string",
-            "enum": [
-                "string",
-                "number",
-                "bool",
-                "object"
-            ],
-            "x-enum-varnames": [
-                "ConfigTypeString",
-                "ConfigTypeNumber",
-                "ConfigTypeBool",
-                "ConfigTypeObject"
-            ]
         },
         "adaptors.AdaptorMeta": {
             "type": "object",
             "properties": {
-                "config": {
-                    "$ref": "#/definitions/adaptor.ConfigTemplates"
+                "configs": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/adaptor.ConfigTemplate"
+                    }
                 },
                 "defaultBaseUrl": {
                     "type": "string"
@@ -8466,8 +8449,8 @@ const docTemplate = `{
                 "base_url": {
                     "type": "string"
                 },
-                "config": {
-                    "$ref": "#/definitions/model.ChannelConfig"
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
                 },
                 "key": {
                     "type": "string"
@@ -8514,6 +8497,15 @@ const docTemplate = `{
                     }
                 },
                 "name": {
+                    "type": "string"
+                },
+                "period_last_update_time": {
+                    "type": "integer"
+                },
+                "period_quota": {
+                    "type": "number"
+                },
+                "period_type": {
                     "type": "string"
                 },
                 "quota": {
@@ -8574,10 +8566,8 @@ const docTemplate = `{
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {
@@ -9314,10 +9304,8 @@ const docTemplate = `{
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {
@@ -9555,6 +9543,14 @@ const docTemplate = `{
                 "name": {
                     "description": "The name of the tool.",
                     "type": "string"
+                },
+                "outputSchema": {
+                    "description": "A JSON Schema object defining the expected output returned by the tool .",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/mcp.ToolOutputSchema"
+                        }
+                    ]
                 }
             }
         },
@@ -9584,6 +9580,28 @@ const docTemplate = `{
             }
         },
         "mcp.ToolInputSchema": {
+            "type": "object",
+            "properties": {
+                "$defs": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "required": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "mcp.ToolOutputSchema": {
             "type": "object",
             "properties": {
                 "$defs": {
@@ -9701,8 +9719,8 @@ const docTemplate = `{
                         "$ref": "#/definitions/model.ChannelTest"
                     }
                 },
-                "config": {
-                    "$ref": "#/definitions/model.ChannelConfig"
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
                 },
                 "created_at": {
                     "type": "string"
@@ -9760,16 +9778,9 @@ const docTemplate = `{
                 }
             }
         },
-        "model.ChannelConfig": {
+        "model.ChannelConfigs": {
             "type": "object",
-            "properties": {
-                "spec": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
+            "additionalProperties": {}
         },
         "model.ChannelTest": {
             "type": "object",
@@ -9849,7 +9860,9 @@ const docTemplate = `{
                 47,
                 48,
                 49,
-                50
+                50,
+                51,
+                52
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -9889,7 +9902,9 @@ const docTemplate = `{
                 "ChannelTypeJina",
                 "ChannelTypeTextEmbeddingsInference",
                 "ChannelTypeQianfan",
-                "ChannelTypeSangforAICP"
+                "ChannelTypeSangforAICP",
+                "ChannelTypeStreamlake",
+                "ChannelTypeZhipuCoding"
             ]
         },
         "model.ChartData": {
@@ -11111,10 +11126,8 @@ const docTemplate = `{
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {

@@ -2,14 +2,12 @@ package model
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/monitor"
@@ -32,66 +30,29 @@ const (
 	ChannelDefaultSet = "default"
 )
 
-type ChannelConfig struct {
-	Spec json.RawMessage `json:"spec"`
-}
-
-// validate spec json is map[string]any
-func (c *ChannelConfig) UnmarshalJSON(data []byte) error {
-	type Alias ChannelConfig
-
-	alias := (*Alias)(c)
-	if err := sonic.Unmarshal(data, alias); err != nil {
-		return err
-	}
-
-	if len(alias.Spec) > 0 {
-		var spec map[string]any
-		if err := sonic.Unmarshal(alias.Spec, &spec); err != nil {
-			return fmt.Errorf("invalid spec json: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (c *ChannelConfig) SpecConfig(obj any) error {
-	if c == nil || len(c.Spec) == 0 {
-		return nil
-	}
-	return sonic.Unmarshal(c.Spec, obj)
-}
-
-func (c *ChannelConfig) Get(key ...any) (ast.Node, error) {
-	if c == nil || len(c.Spec) == 0 {
-		return ast.Node{}, ast.ErrNotExist
-	}
-	return sonic.Get(c.Spec, key...)
-}
-
 type Channel struct {
-	DeletedAt               gorm.DeletedAt    `gorm:"index"                              json:"-"`
-	CreatedAt               time.Time         `gorm:"index"                              json:"created_at"`
-	LastTestErrorAt         time.Time         `                                          json:"last_test_error_at"`
-	ChannelTests            []*ChannelTest    `gorm:"foreignKey:ChannelID;references:ID" json:"channel_tests,omitempty"`
-	BalanceUpdatedAt        time.Time         `                                          json:"balance_updated_at"`
-	ModelMapping            map[string]string `gorm:"serializer:fastjson;type:text"      json:"model_mapping"`
-	Key                     string            `gorm:"type:text;index:,length:191"        json:"key"`
-	Name                    string            `gorm:"size:64;index"                      json:"name"`
-	BaseURL                 string            `gorm:"size:128;index"                     json:"base_url"`
-	Models                  []string          `gorm:"serializer:fastjson;type:text"      json:"models"`
-	Balance                 float64           `                                          json:"balance"`
-	ID                      int               `gorm:"primaryKey"                         json:"id"`
-	UsedAmount              float64           `gorm:"index"                              json:"used_amount"`
-	RequestCount            int               `gorm:"index"                              json:"request_count"`
-	RetryCount              int               `gorm:"index"                              json:"retry_count"`
-	Status                  int               `gorm:"default:1;index"                    json:"status"`
-	Type                    ChannelType       `gorm:"default:0;index"                    json:"type"`
-	Priority                int32             `                                          json:"priority"`
-	EnabledAutoBalanceCheck bool              `                                          json:"enabled_auto_balance_check"`
-	BalanceThreshold        float64           `                                          json:"balance_threshold"`
-	Config                  *ChannelConfig    `gorm:"serializer:fastjson;type:text"      json:"config,omitempty"`
-	Sets                    []string          `gorm:"serializer:fastjson;type:text"      json:"sets,omitempty"`
+	DeletedAt               gorm.DeletedAt    `gorm:"index"                              json:"-"                          yaml:"-"`
+	CreatedAt               time.Time         `gorm:"index"                              json:"created_at"                 yaml:"-"`
+	LastTestErrorAt         time.Time         `                                          json:"last_test_error_at"         yaml:"-"`
+	ChannelTests            []*ChannelTest    `gorm:"foreignKey:ChannelID;references:ID" json:"channel_tests,omitempty"    yaml:"-"`
+	BalanceUpdatedAt        time.Time         `                                          json:"balance_updated_at"         yaml:"-"`
+	ModelMapping            map[string]string `gorm:"serializer:fastjson;type:text"      json:"model_mapping"              yaml:"model_mapping,omitempty"`
+	Key                     string            `gorm:"type:text;index:,length:191"        json:"key"                        yaml:"key,omitempty"`
+	Name                    string            `gorm:"size:64;index"                      json:"name"                       yaml:"name,omitempty"`
+	BaseURL                 string            `gorm:"size:128;index"                     json:"base_url"                   yaml:"base_url,omitempty"`
+	Models                  []string          `gorm:"serializer:fastjson;type:text"      json:"models"                     yaml:"models,omitempty"`
+	Balance                 float64           `                                          json:"balance"                    yaml:"balance,omitempty"`
+	ID                      int               `gorm:"primaryKey"                         json:"id"                         yaml:"id,omitempty"`
+	UsedAmount              float64           `gorm:"index"                              json:"used_amount"                yaml:"-"`
+	RequestCount            int               `gorm:"index"                              json:"request_count"              yaml:"-"`
+	RetryCount              int               `gorm:"index"                              json:"retry_count"                yaml:"-"`
+	Status                  int               `gorm:"default:1;index"                    json:"status"                     yaml:"status,omitempty"`
+	Type                    ChannelType       `gorm:"default:0;index"                    json:"type"                       yaml:"type,omitempty"`
+	Priority                int32             `                                          json:"priority"                   yaml:"priority,omitempty"`
+	EnabledAutoBalanceCheck bool              `                                          json:"enabled_auto_balance_check" yaml:"enabled_auto_balance_check,omitempty"`
+	BalanceThreshold        float64           `                                          json:"balance_threshold"          yaml:"balance_threshold,omitempty"`
+	Configs                 ChannelConfigs    `gorm:"serializer:fastjson;type:text"      json:"configs,omitempty"          yaml:"configs,omitempty"`
+	Sets                    []string          `gorm:"serializer:fastjson;type:text"      json:"sets,omitempty"             yaml:"sets,omitempty"`
 }
 
 func (c *Channel) GetSets() []string {
@@ -121,6 +82,21 @@ func (c *Channel) GetPriority() int32 {
 		return DefaultPriority
 	}
 	return c.Priority
+}
+
+type ChannelConfigs map[string]any
+
+func (c ChannelConfigs) LoadConfig(config any) error {
+	if len(c) == 0 {
+		return nil
+	}
+
+	v, err := sonic.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	return sonic.Unmarshal(v, config)
 }
 
 func GetModelConfigWithModels(models []string) ([]string, []string, error) {

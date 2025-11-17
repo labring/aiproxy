@@ -413,7 +413,7 @@ func processImageTasks(ctx context.Context, imageTasks []*Part) error {
 func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
 	adaptorConfig := Config{}
 
-	err := meta.ChannelConfig.SpecConfig(&adaptorConfig)
+	err := meta.ChannelConfigs.LoadConfig(&adaptorConfig)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

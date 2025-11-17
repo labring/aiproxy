@@ -86,9 +86,7 @@ jobs:
 
       - name: Generate Swagger
         working-directory: core
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@latest
-          bash scripts/swag.sh
+        run: bash scripts/swag.sh
 
       - name: Build
         working-directory: core

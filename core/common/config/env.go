@@ -18,6 +18,7 @@ var (
 	DisableModelConfig   bool
 	Redis                string
 	RedisKeyPrefix       string
+	ConfigFilePath       string
 )
 
 func ReloadEnv() {
@@ -32,6 +33,7 @@ func ReloadEnv() {
 	DisableModelConfig = env.Bool("DISABLE_MODEL_CONFIG", false)
 	Redis = env.String("REDIS", os.Getenv("REDIS_CONN_STRING"))
 	RedisKeyPrefix = os.Getenv("REDIS_KEY_PREFIX")
+	ConfigFilePath = env.String("CONFIG_FILE_PATH", "./config.yaml")
 }
 
 func init() {

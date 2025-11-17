@@ -145,12 +145,27 @@ func storeOptionMap() error {
 }
 
 func loadOptionsFromDatabase(isInit bool) error {
+	// First, load options from YAML config if available
+	yamlOptions := make(map[string]string)
+
+	yamlConfig := LoadYAMLConfig()
+	if yamlConfig != nil && len(yamlConfig.Options) > 0 {
+		yamlOptions = yamlConfig.Options
+	}
+
+	// Then load options from database
+	// Skip options that are already set from YAML config
 	options, err := GetAllOption()
 	if err != nil {
 		return err
 	}
 
 	for _, option := range options {
+		// Skip if already loaded from YAML
+		if v, ok := yamlOptions[option.Key]; ok {
+			option.Value = v
+		}
+
 		err := updateOption(option.Key, option.Value, isInit)
 		if err != nil {
 			if !errors.Is(err, ErrUnknownOptionKey) {
