@@ -454,20 +454,14 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	if err := checkGroupModelRPMAndTPM(c, group, mc, token.Name); err != nil {
 		errMsg := err.Error()
-		consume.AsyncConsume(
-			nil,
+
+		consume.Summary(
 			http.StatusTooManyRequests,
 			time.Time{},
 			NewMetaByContext(c, nil, mode),
 			model.Usage{},
 			model.Price{},
-			errMsg,
-			c.ClientIP(),
-			0,
-			nil,
 			true,
-			user,
-			metadata,
 		)
 		AbortLogWithMessage(c, http.StatusTooManyRequests, errMsg)
 

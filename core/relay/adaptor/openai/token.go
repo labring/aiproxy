@@ -13,9 +13,15 @@ import (
 	"github.com/tiktoken-go/tokenizer"
 )
 
+const defaultMaxFuzzyTokenThreshold = 2048000
+
 func getTokenNum(tokenEncoder tokenizer.Codec, text string) int64 {
 	// Check fuzzy token threshold
 	threshold := config.GetFuzzyTokenThreshold()
+	if threshold == 0 || threshold > defaultMaxFuzzyTokenThreshold {
+		threshold = defaultMaxFuzzyTokenThreshold
+	}
+
 	textLen := len(text)
 
 	// If threshold is set and text length exceeds it, use fuzzy calculation

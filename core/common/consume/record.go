@@ -49,3 +49,28 @@ func recordConsume(
 		metadata,
 	)
 }
+
+func recordSummary(
+	now time.Time,
+	meta *meta.Meta,
+	code int,
+	firstByteAt time.Time,
+	usage model.Usage,
+	amount float64,
+	downstreamResult bool,
+) {
+	model.BatchUpdateSummary(
+		now,
+		meta.RequestAt,
+		firstByteAt,
+		meta.Group.ID,
+		code,
+		meta.Channel.ID,
+		meta.OriginModel,
+		meta.Token.ID,
+		meta.Token.Name,
+		downstreamResult,
+		usage,
+		amount,
+	)
+}
