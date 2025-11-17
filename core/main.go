@@ -42,6 +42,10 @@ func main() {
 
 	config.ReloadEnv()
 
+	if err := ensureAdminKey(); err != nil {
+		log.Warn("failed to ensure AdminKey: " + err.Error())
+	}
+
 	common.InitLog(log.StandardLogger(), config.DebugEnabled)
 
 	printLoadedEnvFiles()

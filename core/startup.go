@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/balance"
 	"github.com/labring/aiproxy/core/common/config"
+	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/pprof"
 	"github.com/labring/aiproxy/core/middleware"
@@ -121,6 +124,7 @@ func loadEnv() {
 	envfiles := []string{
 		".env",
 		".env.local",
+		".env.aiproxy.local",
 	}
 	for _, envfile := range envfiles {
 		absPath, err := filepath.Abs(envfile)
@@ -162,4 +166,68 @@ func listenAndServe(srv *http.Server) {
 		!errors.Is(err, http.ErrServerClosed) {
 		log.Fatal("failed to start HTTP server: " + err.Error())
 	}
+}
+
+const (
+	keyChars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+
+func generateAdminKey() string {
+	key := make([]byte, 48)
+	for i := range key {
+		key[i] = keyChars[rand.IntN(len(keyChars))]
+	}
+	return conv.BytesToString(key)
+}
+
+func writeToEnvFile(envFile, key, value string) error {
+	var lines []string
+	if content, err := os.ReadFile(envFile); err == nil {
+		lines = strings.Split(string(content), "\n")
+	}
+
+	keyPrefix := key + "="
+	found := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, keyPrefix) {
+			lines[i] = key + "=" + value
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		lines = append(lines, key+"="+value)
+	}
+
+	content := strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") && content != "" {
+		content += "\n"
+	}
+
+	return os.WriteFile(envFile, []byte(content), 0o644)
+}
+
+func ensureAdminKey() error {
+	if config.AdminKey != "" {
+		log.Info("AdminKey is already set")
+		return nil
+	}
+
+	log.Info("AdminKey is not set, generating new AdminKey...")
+
+	config.AdminKey = generateAdminKey()
+
+	envFile := ".env.aiproxy.local"
+	absEnvFile, err := filepath.Abs(envFile)
+	if err == nil {
+		envFile = absEnvFile
+	}
+
+	if err := writeToEnvFile(envFile, "ADMIN_KEY", config.AdminKey); err != nil {
+		return fmt.Errorf("failed to write AdminKey to %s: %w", envFile, err)
+	}
+
+	log.Info("Generated new AdminKey and saved to " + envFile)
+	return nil
 }
