@@ -48,6 +48,7 @@ const (
 	AnthropicVersion = "2023-06-01"
 	//nolint:gosec
 	AnthropicTokenHeader = "X-Api-Key"
+	AnthropicBeta        = "Anthropic-Beta"
 )
 
 func (a *Adaptor) SetupRequestHeader(
@@ -65,21 +66,27 @@ func (a *Adaptor) SetupRequestHeader(
 
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 
-	// https://docs.anthropic.com/en/api/beta-headers
-	req.Header.Set("Anthropic-Beta", "messages-2023-12-15")
+	rawBetas := c.Request.Header.Get(AnthropicBeta)
 
-	// https://x.com/alexalbert__/status/1812921642143900036
-	// claude-3-5-sonnet can support 8k context
-	if strings.HasPrefix(meta.ActualModel, "claude-3-5-sonnet") {
-		req.Header.Set("Anthropic-Beta", "max-tokens-3-5-sonnet-2024-07-15")
+	if rawBetas != "" {
+		req.Header.Set(AnthropicBeta, rawBetas)
+	} else {
+		// https://docs.anthropic.com/en/api/beta-headers
+		req.Header.Set(AnthropicBeta, "messages-2023-12-15")
+
+		// https://x.com/alexalbert__/status/1812921642143900036
+		// claude-3-5-sonnet can support 8k context
+		if strings.HasPrefix(meta.ActualModel, "claude-3-5-sonnet") {
+			req.Header.Set(AnthropicBeta, "max-tokens-3-5-sonnet-2024-07-15")
+		}
+
+		if strings.HasPrefix(meta.ActualModel, "claude-3-7-sonnet") {
+			req.Header.Set(AnthropicBeta, "output-128k-2025-02-19")
+		}
+
+		// https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
+		// req.Header.Set(AnthropicBeta, "extended-cache-ttl-2025-04-11")
 	}
-
-	if strings.HasPrefix(meta.ActualModel, "claude-3-7-sonnet") {
-		req.Header.Set("Anthropic-Beta", "output-128k-2025-02-19")
-	}
-
-	// https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
-	// req.Header.Set("Anthropic-Beta", "extended-cache-ttl-2025-04-11")
 
 	return nil
 }

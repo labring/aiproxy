@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -156,9 +157,14 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 func (a *Adaptor) SetupRequestHeader(
 	meta *meta.Meta,
 	_ adaptor.Store,
-	_ *gin.Context,
+	c *gin.Context,
 	req *http.Request,
 ) error {
+	betas := c.Request.Header.Get(anthropic.AnthropicBeta)
+	if betas != "" {
+		req.Header.Set(anthropic.AnthropicBeta, betas)
+	}
+
 	config, err := getConfigFromKey(meta.Channel.Key)
 	if err != nil {
 		return err
