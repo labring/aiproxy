@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -27,7 +28,8 @@ const (
 type Adaptor struct{}
 
 type Request struct {
-	AnthropicVersion string `json:"anthropic_version"`
+	AnthropicBeta    []string `json:"anthropic_beta,omitempty"`
+	AnthropicVersion string   `json:"anthropic_version"`
 	*relaymodel.ClaudeRequest
 }
 
@@ -62,6 +64,10 @@ func (a *Adaptor) ConvertRequest(
 	}, nil
 }
 
+var supportedContextManagementEditsType = map[string]struct{}{
+	"clear_tool_uses_20250919": {},
+}
+
 func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
 	claudeReq, err := anthropic.OpenAIConvertRequest(meta, request)
 	if err != nil {
@@ -78,6 +84,10 @@ func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byt
 		ClaudeRequest:    claudeReq,
 	}
 
+	if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
+		req.AnthropicBeta = strings.Split(betas, ",")
+	}
+
 	return sonic.Marshal(req)
 }
 
@@ -85,6 +95,32 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 	return anthropic.ConvertRequestToBytes(meta, request, func(node *ast.Node) error {
 		if _, err := node.Unset("model"); err != nil {
 			return err
+		}
+
+		if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
+			node.SetAny("anthropic_beta", strings.Split(betas, ","))
+		}
+
+		editesNode := node.GetByPath("context_management", "edits")
+		if editesNode.Check() == nil {
+			nodeLen, _ := editesNode.Len()
+			newEdits := make([]ast.Node, 0, nodeLen)
+			_ = editesNode.
+				ForEach(func(path ast.Sequence, node *ast.Node) bool {
+					t, err := node.Get("type").String()
+					if err != nil {
+						return true
+					}
+					if _, ok := supportedContextManagementEditsType[t]; !ok {
+						return true
+					}
+
+					newEdits = append(newEdits, *node)
+
+					return true
+				})
+
+			*editesNode = ast.NewArray(newEdits)
 		}
 
 		stream, _ := node.Get("stream").Bool()
