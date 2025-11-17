@@ -111,6 +111,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 					if err != nil {
 						return true
 					}
+
 					if _, ok := supportedContextManagementEditsType[t]; !ok {
 						return true
 					}

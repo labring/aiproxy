@@ -71,7 +71,6 @@ func (a *Adaptor) SetupRequestHeader(
 	if rawBetas != "" {
 		req.Header.Set(AnthropicBeta, rawBetas)
 	} else {
-
 		// https://docs.anthropic.com/en/api/beta-headers
 		req.Header.Set(AnthropicBeta, "messages-2023-12-15")
 
@@ -87,7 +86,6 @@ func (a *Adaptor) SetupRequestHeader(
 
 		// https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
 		// req.Header.Set(AnthropicBeta, "extended-cache-ttl-2025-04-11")
-
 	}
 
 	return nil
