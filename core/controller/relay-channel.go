@@ -146,7 +146,7 @@ func GetRandomChannel(
 	mode mode.Mode,
 	errorRates map[int64]float64,
 	maxErrorRate float64,
-	ignoreChannelMap map[int64]struct{},
+	ignoreChannelMap ...map[int64]struct{},
 ) (*model.Channel, []*model.Channel, error) {
 	channelMap := make(map[int]*model.Channel)
 	if len(availableSet) != 0 {
@@ -191,7 +191,7 @@ func GetRandomChannel(
 		mode,
 		errorRates,
 		maxErrorRate,
-		ignoreChannelMap,
+		ignoreChannelMap...,
 	)
 
 	return channel, migratedChannels, err
@@ -278,17 +278,14 @@ func getChannelWithFallback(
 		return nil, migratedChannels, err
 	}
 
-	channel, migratedChannels, err = GetRandomChannel(
+	return GetRandomChannel(
 		cache,
 		availableSet,
 		modelName,
 		mode,
 		errorRates,
 		0,
-		nil,
 	)
-
-	return channel, migratedChannels, err
 }
 
 type initialChannel struct {
