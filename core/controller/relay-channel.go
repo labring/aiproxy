@@ -192,7 +192,6 @@ func GetRandomChannel(
 		errorRates,
 		maxErrorRate,
 		ignoreChannelMap,
-		nil,
 	)
 
 	return channel, migratedChannels, err
