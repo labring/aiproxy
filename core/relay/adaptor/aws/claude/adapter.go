@@ -64,6 +64,17 @@ func (a *Adaptor) ConvertRequest(
 	}, nil
 }
 
+var unsupportedBetas = map[string]struct{}{
+	"tool-examples-2025-10-29": {},
+}
+
+func fixBetas(model string, betas []string) []string {
+	return anthropic.FixBetasWithModel(model, betas, func(e string) bool {
+		_, ok := unsupportedBetas[e]
+		return ok
+	})
+}
+
 var supportedContextManagementEditsType = map[string]struct{}{
 	"clear_tool_uses_20250919": {},
 }
@@ -85,7 +96,7 @@ func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byt
 	}
 
 	if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
-		req.AnthropicBeta = strings.Split(betas, ",")
+		req.AnthropicBeta = fixBetas(meta.ActualModel, strings.Split(betas, ","))
 	}
 
 	return sonic.Marshal(req)
@@ -98,31 +109,17 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		}
 
 		if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
-			node.SetAny("anthropic_beta", strings.Split(betas, ","))
+			_, _ = node.SetAny(
+				"anthropic_beta",
+				fixBetas(meta.ActualModel, strings.Split(betas, ",")),
+			)
 		}
 
-		editesNode := node.GetByPath("context_management", "edits")
-		if editesNode.Check() == nil {
-			nodeLen, _ := editesNode.Len()
-			newEdits := make([]ast.Node, 0, nodeLen)
-			_ = editesNode.
-				ForEach(func(path ast.Sequence, node *ast.Node) bool {
-					t, err := node.Get("type").String()
-					if err != nil {
-						return true
-					}
-
-					if _, ok := supportedContextManagementEditsType[t]; !ok {
-						return true
-					}
-
-					newEdits = append(newEdits, *node)
-
-					return true
-				})
-
-			*editesNode = ast.NewArray(newEdits)
-		}
+		anthropic.RemoveContextManagenetEdits(node, func(t string) bool {
+			_, ok := supportedContextManagementEditsType[t]
+			return ok
+		})
+		anthropic.RemoveToolsExamples(node)
 
 		stream, _ := node.Get("stream").Bool()
 		meta.Set("stream", stream)

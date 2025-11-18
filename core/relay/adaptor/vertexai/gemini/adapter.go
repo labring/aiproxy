@@ -27,6 +27,15 @@ func (a *Adaptor) ConvertRequest(
 	}
 }
 
+func (a *Adaptor) SetupRequestHeader(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	_ *http.Request,
+) error {
+	return nil
+}
+
 func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	_ adaptor.Store,
