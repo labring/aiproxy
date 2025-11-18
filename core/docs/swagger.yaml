@@ -3,34 +3,19 @@ definitions:
     properties:
       description:
         type: string
-      example: {}
+      example:
+        type: string
       name:
         type: string
       required:
         type: boolean
-      type:
-        $ref: '#/definitions/adaptor.ConfigType'
     type: object
-  adaptor.ConfigTemplates:
-    additionalProperties:
-      $ref: '#/definitions/adaptor.ConfigTemplate'
-    type: object
-  adaptor.ConfigType:
-    enum:
-    - string
-    - number
-    - bool
-    - object
-    type: string
-    x-enum-varnames:
-    - ConfigTypeString
-    - ConfigTypeNumber
-    - ConfigTypeBool
-    - ConfigTypeObject
   adaptors.AdaptorMeta:
     properties:
-      config:
-        $ref: '#/definitions/adaptor.ConfigTemplates'
+      configs:
+        additionalProperties:
+          $ref: '#/definitions/adaptor.ConfigTemplate'
+        type: object
       defaultBaseUrl:
         type: string
       fetures:
@@ -53,8 +38,8 @@ definitions:
     properties:
       base_url:
         type: string
-      config:
-        $ref: '#/definitions/model.ChannelConfig'
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
       key:
         type: string
       model_mapping:
@@ -85,6 +70,12 @@ definitions:
           type: string
         type: array
       name:
+        type: string
+      period_last_update_time:
+        type: integer
+      period_quota:
+        type: number
+      period_type:
         type: string
       quota:
         type: number
@@ -126,9 +117,8 @@ definitions:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
@@ -613,9 +603,8 @@ definitions:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
@@ -778,6 +767,11 @@ definitions:
       name:
         description: The name of the tool.
         type: string
+      outputSchema:
+        allOf:
+        - $ref: '#/definitions/mcp.ToolOutputSchema'
+        description: A JSON Schema object defining the expected output returned by
+          the tool .
     type: object
   mcp.ToolAnnotation:
     properties:
@@ -798,6 +792,21 @@ definitions:
         type: string
     type: object
   mcp.ToolInputSchema:
+    properties:
+      $defs:
+        additionalProperties: {}
+        type: object
+      properties:
+        additionalProperties: {}
+        type: object
+      required:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
+    type: object
+  mcp.ToolOutputSchema:
     properties:
       $defs:
         additionalProperties: {}
@@ -889,8 +898,8 @@ definitions:
         items:
           $ref: '#/definitions/model.ChannelTest'
         type: array
-      config:
-        $ref: '#/definitions/model.ChannelConfig'
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
       created_at:
         type: string
       enabled_auto_balance_check:
@@ -928,12 +937,8 @@ definitions:
       used_amount:
         type: number
     type: object
-  model.ChannelConfig:
-    properties:
-      spec:
-        items:
-          type: integer
-        type: array
+  model.ChannelConfigs:
+    additionalProperties: {}
     type: object
   model.ChannelTest:
     properties:
@@ -1000,6 +1005,8 @@ definitions:
     - 48
     - 49
     - 50
+    - 51
+    - 52
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1040,6 +1047,8 @@ definitions:
     - ChannelTypeTextEmbeddingsInference
     - ChannelTypeQianfan
     - ChannelTypeSangforAICP
+    - ChannelTypeStreamlake
+    - ChannelTypeZhipuCoding
   model.ChartData:
     properties:
       audio_input_tokens:
@@ -1062,15 +1071,15 @@ definitions:
         type: integer
       retry_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       timestamp:
         type: integer
@@ -1473,8 +1482,6 @@ definitions:
         type: integer
       rpm:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1482,6 +1489,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       token_names:
         items:
@@ -1856,9 +1865,8 @@ definitions:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
@@ -2419,6 +2427,8 @@ definitions:
         type: integer
       retry_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2426,8 +2436,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       timestamp:
         type: integer
@@ -5618,6 +5626,8 @@ paths:
         - 48
         - 49
         - 50
+        - 51
+        - 52
         in: path
         name: type
         required: true

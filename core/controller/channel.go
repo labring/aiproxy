@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -9,13 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
-	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	log "github.com/sirupsen/logrus"
 )
@@ -218,7 +215,7 @@ func GetChannel(c *gin.Context) {
 // AddChannelRequest represents the request body for adding a channel
 type AddChannelRequest struct {
 	ModelMapping map[string]string    `json:"model_mapping"`
-	Config       *model.ChannelConfig `json:"config"`
+	Configs      model.ChannelConfigs `json:"configs"`
 	Name         string               `json:"name"`
 	Key          string               `json:"key"`
 	BaseURL      string               `json:"base_url"`
@@ -261,37 +258,10 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 		}
 	}
 
-	if r.Config != nil {
-		for key, template := range metadata.Config {
-			v, err := r.Config.Get(key)
-			if err != nil {
-				if errors.Is(err, ast.ErrNotExist) {
-					if template.Required {
-						return nil, fmt.Errorf("config %s is required: %w", key, err)
-					}
-					continue
-				}
-
-				return nil, fmt.Errorf("config %s is invalid: %w", key, err)
-			}
-
-			if !v.Exists() {
-				if template.Required {
-					return nil, fmt.Errorf("config %s is required: %w", key, err)
-				}
-				continue
-			}
-
-			if template.Validator != nil {
-				i, err := v.Interface()
-				if err != nil {
-					return nil, fmt.Errorf("config %s is invalid: %w", key, err)
-				}
-
-				err = adaptor.ValidateConfigTemplateValue(template, i)
-				if err != nil {
-					return nil, fmt.Errorf("config %s is invalid: %w", key, err)
-				}
+	if r.Configs != nil {
+		if metadata.ConfigTemplates.Validator != nil {
+			if err := metadata.ConfigTemplates.Validator(r.Configs); err != nil {
+				return nil, fmt.Errorf("config validate faild: %w", err)
 			}
 		}
 	}
@@ -305,7 +275,7 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 		ModelMapping: maps.Clone(r.ModelMapping),
 		Priority:     r.Priority,
 		Status:       r.Status,
-		Config:       r.Config,
+		Configs:      r.Configs,
 		Sets:         slices.Clone(r.Sets),
 	}, nil
 }

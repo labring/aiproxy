@@ -16,8 +16,6 @@ COPY ./ /aiproxy
 
 COPY --from=frontend-builder /aiproxy/web/dist/ /aiproxy/core/public/dist/
 
-RUN go install github.com/swaggo/swag/cmd/swag@latest
-
 RUN sh scripts/swag.sh
 
 RUN go build -trimpath -ldflags "-s -w" -o aiproxy

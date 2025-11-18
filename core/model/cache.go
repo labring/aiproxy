@@ -20,6 +20,7 @@ import (
 	"github.com/maruel/natural"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 const (
@@ -888,6 +889,9 @@ func InitModelConfigAndChannelCache() error {
 		return err
 	}
 
+	// Apply YAML config overrides to model configs
+	modelConfig = applyYAMLConfigToModelConfigCache(modelConfig)
+
 	// Load enabled channels from database
 	enabledChannels, err := LoadEnabledChannels()
 	if err != nil {
@@ -938,6 +942,12 @@ func LoadEnabledChannels() ([]*Channel, error) {
 		return nil, err
 	}
 
+	configChannels := NewConfigChannels(LoadYAMLConfig(), ChannelStatusEnabled)
+	if len(configChannels) != 0 {
+		log.Infof("added %d channels from config", len(configChannels))
+		channels = append(channels, configChannels...)
+	}
+
 	for _, channel := range channels {
 		initializeChannelModels(channel)
 		initializeChannelModelMapping(channel)
@@ -952,6 +962,12 @@ func LoadDisabledChannels() ([]*Channel, error) {
 	err := DB.Where("status = ?", ChannelStatusDisabled).Find(&channels).Error
 	if err != nil {
 		return nil, err
+	}
+
+	configChannels := NewConfigChannels(LoadYAMLConfig(), ChannelStatusDisabled)
+	if len(configChannels) != 0 {
+		log.Infof("added %d channels from config", len(configChannels))
+		channels = append(channels, configChannels...)
 	}
 
 	for _, channel := range channels {
@@ -970,6 +986,12 @@ func LoadChannels() ([]*Channel, error) {
 		return nil, err
 	}
 
+	configChannels := NewConfigChannels(LoadYAMLConfig(), 0)
+	if len(configChannels) != 0 {
+		log.Infof("added %d channels from config", len(configChannels))
+		channels = append(channels, configChannels...)
+	}
+
 	for _, channel := range channels {
 		initializeChannelModels(channel)
 		initializeChannelModelMapping(channel)
@@ -983,7 +1005,22 @@ func LoadChannelByID(id int) (*Channel, error) {
 
 	err := DB.First(&channel, id).Error
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+
+		chs, err := LoadChannels()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, c := range chs {
+			if c.ID == id {
+				return c, nil
+			}
+		}
+
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	initializeChannelModels(&channel)

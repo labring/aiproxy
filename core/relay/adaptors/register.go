@@ -95,11 +95,11 @@ func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {
 }
 
 type AdaptorMeta struct {
-	Name           string                  `json:"name"`
-	KeyHelp        string                  `json:"keyHelp"`
-	DefaultBaseURL string                  `json:"defaultBaseUrl"`
-	Fetures        []string                `json:"fetures,omitempty"`
-	Config         adaptor.ConfigTemplates `json:"config,omitempty"`
+	Name            string                            `json:"name"`
+	KeyHelp         string                            `json:"keyHelp"`
+	DefaultBaseURL  string                            `json:"defaultBaseUrl"`
+	Fetures         []string                          `json:"fetures,omitempty"`
+	ConfigTemplates map[string]adaptor.ConfigTemplate `json:"configs,omitempty"`
 }
 
 var ChannelMetas = map[model.ChannelType]AdaptorMeta{}
@@ -109,19 +109,15 @@ func init() {
 		adaptorMeta := a.Metadata()
 
 		meta := AdaptorMeta{
-			Name:           i.String(),
-			KeyHelp:        adaptorMeta.KeyHelp,
-			DefaultBaseURL: a.DefaultBaseURL(),
-			Fetures:        adaptorMeta.Features,
-			Config:         adaptorMeta.Config,
+			Name:            i.String(),
+			KeyHelp:         adaptorMeta.KeyHelp,
+			DefaultBaseURL:  a.DefaultBaseURL(),
+			Fetures:         adaptorMeta.Features,
+			ConfigTemplates: adaptorMeta.ConfigTemplates.Configs,
 		}
-		for key, template := range meta.Config {
+		for key, template := range adaptorMeta.ConfigTemplates.Configs {
 			if template.Name == "" {
 				log.Fatalf("config template %s is invalid: name is empty", key)
-			}
-
-			if err := adaptor.ValidateConfigTemplate(template); err != nil {
-				log.Fatalf("config template %s(%s) is invalid: %v", key, template.Name, err)
 			}
 		}
 

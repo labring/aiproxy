@@ -4821,7 +4821,9 @@
                             47,
                             48,
                             49,
-                            50
+                            50,
+                            51,
+                            52
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -8384,44 +8386,25 @@
                 "description": {
                     "type": "string"
                 },
-                "example": {},
+                "example": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "required": {
                     "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/definitions/adaptor.ConfigType"
                 }
             }
-        },
-        "adaptor.ConfigTemplates": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/adaptor.ConfigTemplate"
-            }
-        },
-        "adaptor.ConfigType": {
-            "type": "string",
-            "enum": [
-                "string",
-                "number",
-                "bool",
-                "object"
-            ],
-            "x-enum-varnames": [
-                "ConfigTypeString",
-                "ConfigTypeNumber",
-                "ConfigTypeBool",
-                "ConfigTypeObject"
-            ]
         },
         "adaptors.AdaptorMeta": {
             "type": "object",
             "properties": {
-                "config": {
-                    "$ref": "#/definitions/adaptor.ConfigTemplates"
+                "configs": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/adaptor.ConfigTemplate"
+                    }
                 },
                 "defaultBaseUrl": {
                     "type": "string"
@@ -8457,8 +8440,8 @@
                 "base_url": {
                     "type": "string"
                 },
-                "config": {
-                    "$ref": "#/definitions/model.ChannelConfig"
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
                 },
                 "key": {
                     "type": "string"
@@ -8505,6 +8488,15 @@
                     }
                 },
                 "name": {
+                    "type": "string"
+                },
+                "period_last_update_time": {
+                    "type": "integer"
+                },
+                "period_quota": {
+                    "type": "number"
+                },
+                "period_type": {
                     "type": "string"
                 },
                 "quota": {
@@ -8565,10 +8557,8 @@
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {
@@ -9305,10 +9295,8 @@
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {
@@ -9546,6 +9534,14 @@
                 "name": {
                     "description": "The name of the tool.",
                     "type": "string"
+                },
+                "outputSchema": {
+                    "description": "A JSON Schema object defining the expected output returned by the tool .",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/mcp.ToolOutputSchema"
+                        }
+                    ]
                 }
             }
         },
@@ -9575,6 +9571,28 @@
             }
         },
         "mcp.ToolInputSchema": {
+            "type": "object",
+            "properties": {
+                "$defs": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "required": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "mcp.ToolOutputSchema": {
             "type": "object",
             "properties": {
                 "$defs": {
@@ -9692,8 +9710,8 @@
                         "$ref": "#/definitions/model.ChannelTest"
                     }
                 },
-                "config": {
-                    "$ref": "#/definitions/model.ChannelConfig"
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
                 },
                 "created_at": {
                     "type": "string"
@@ -9751,16 +9769,9 @@
                 }
             }
         },
-        "model.ChannelConfig": {
+        "model.ChannelConfigs": {
             "type": "object",
-            "properties": {
-                "spec": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
+            "additionalProperties": {}
         },
         "model.ChannelTest": {
             "type": "object",
@@ -9840,7 +9851,9 @@
                 47,
                 48,
                 49,
-                50
+                50,
+                51,
+                52
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -9880,7 +9893,9 @@
                 "ChannelTypeJina",
                 "ChannelTypeTextEmbeddingsInference",
                 "ChannelTypeQianfan",
-                "ChannelTypeSangforAICP"
+                "ChannelTypeSangforAICP",
+                "ChannelTypeStreamlake",
+                "ChannelTypeZhipuCoding"
             ]
         },
         "model.ChartData": {
@@ -11102,10 +11117,8 @@
                 "plugin": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
                 "price": {

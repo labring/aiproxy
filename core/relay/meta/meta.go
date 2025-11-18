@@ -18,12 +18,12 @@ type ChannelMeta struct {
 }
 
 type Meta struct {
-	values        map[string]any
-	Channel       ChannelMeta
-	ChannelConfig model.ChannelConfig
-	Group         model.GroupCache
-	Token         model.TokenCache
-	ModelConfig   model.ModelConfig
+	values         map[string]any
+	Channel        ChannelMeta
+	ChannelConfigs model.ChannelConfigs
+	Group          model.GroupCache
+	Token          model.TokenCache
+	ModelConfig    model.ModelConfig
 
 	Endpoint    string
 	RequestAt   time.Time
@@ -142,16 +142,14 @@ func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.Type = channel.Type
 
 	m.Channel.ModelMapping = channel.ModelMapping
-	if channel.Config != nil {
-		m.ChannelConfig = *channel.Config
-	}
+	m.ChannelConfigs = channel.Configs
 
 	m.ActualModel, _ = GetMappedModelName(m.OriginModel, channel.ModelMapping)
 }
 
 func (m *Meta) CopyChannelFromMeta(meta *Meta) {
 	m.Channel = meta.Channel
-	m.ChannelConfig = meta.ChannelConfig
+	m.ChannelConfigs = meta.ChannelConfigs
 	m.ActualModel, _ = GetMappedModelName(meta.OriginModel, meta.Channel.ModelMapping)
 }
 

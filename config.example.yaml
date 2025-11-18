@@ -1,0 +1,186 @@
+# AIProxy Configuration File
+# Priority: Environment Variables > Config File > Database
+# This file allows you to configure channels, model configs, and options without using the database
+
+# Channels Configuration
+# Note: Channels from YAML are assigned negative IDs automatically and are not persisted to database
+# They are merged with database channels in memory
+channels:
+  - name: "openai-channel-1"
+    type_name: "openai"  # Can use type_name instead of numeric type
+    key: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    base_url: "https://api.openai.com"
+    models:
+      - "gpt-4"
+      - "gpt-3.5-turbo"
+    model_mapping:
+      "gpt-4": "gpt-4-0613"
+    status: 1  # 1=Enabled, 2=Disabled
+    priority: 0
+    balance: 100.0
+    balance_threshold: 10.0
+    enabled_auto_balance_check: true
+    sets:
+      - "default"
+    config:
+      spec:
+        organization: "org-xxxxx"
+
+  - name: "azure-channel-1"
+    type_name: "azure"  # Type name is case-insensitive
+    key: "your-azure-api-key"
+    base_url: "https://your-resource.openai.azure.com"
+    models:
+      - "gpt-4"
+    status: 1
+    priority: 1
+    sets:
+      - "default"
+
+  - name: "claude-channel-1"
+    type_name: "claude"  # "claude" is an alias for "anthropic"
+    key: "sk-ant-xxxxx"
+    base_url: "https://api.anthropic.com"
+    models:
+      - "claude-3-opus-20240229"
+      - "claude-3-sonnet-20240229"
+    status: 1
+    priority: 0
+    sets:
+      - "default"
+      - "premium"
+
+  # You can also use numeric type if preferred
+  - name: "gemini-channel-1"
+    type: 24  # Google Gemini
+    key: "your-gemini-api-key"
+    models:
+      - "gemini-pro"
+    status: 1
+
+# Model Configurations
+modelconfigs:
+  - model: "gpt-4"
+    owner: "openai"
+    type_name: "chat"  # Can use type_name instead of numeric type
+    # OR use numeric type:
+    # type: 1  # ChatCompletions
+    rpm: 3500
+    tpm: 80000
+    retry_times: 3
+    timeout_config:
+      request_timeout: 300
+      stream_request_timeout: 600
+    warn_error_rate: 0.5
+    max_error_rate: 0.8
+    price:
+      input: 0.03
+      output: 0.06
+    config:
+      max_context_tokens: 8192
+      max_output_tokens: 4096
+      vision: false
+      tool_choice: true
+
+  - model: "gpt-3.5-turbo"
+    owner: "openai"
+    type_name: "chat"
+    rpm: 3500
+    tpm: 90000
+    price:
+      input: 0.0005
+      output: 0.0015
+    config:
+      max_context_tokens: 16384
+      max_output_tokens: 4096
+
+  - model: "claude-3-opus-20240229"
+    owner: "anthropic"
+    type_name: "chat"
+    rpm: 4000
+    tpm: 400000
+    price:
+      input: 0.015
+      output: 0.075
+    config:
+      max_context_tokens: 200000
+      max_output_tokens: 4096
+      vision: true
+
+  - model: "claude-3-sonnet-20240229"
+    owner: "anthropic"
+    type_name: "chat"
+    rpm: 4000
+    tpm: 400000
+    price:
+      input: 0.003
+      output: 0.015
+    config:
+      max_context_tokens: 200000
+      max_output_tokens: 4096
+      vision: true
+
+  - model: "text-embedding-3-small"
+    owner: "openai"
+    type_name: "embedding"  # Embedding model
+    rpm: 3000
+    tpm: 1000000
+    price:
+      input: 0.00002
+      output: 0
+    config:
+      max_context_tokens: 8191
+
+  - model: "dall-e-3"
+    owner: "openai"
+    type_name: "image"  # Image generation
+    rpm: 50
+    image_quality_prices:
+      "1024x1024":
+        "standard": 0.040
+        "hd": 0.080
+      "1024x1792":
+        "standard": 0.080
+        "hd": 0.120
+      "1792x1024":
+        "standard": 0.080
+        "hd": 0.120
+
+# System Options Configuration
+options:
+  # Log retention settings (in hours)
+  LogStorageHours: "168"  # 7 days
+  RetryLogStorageHours: "72"  # 3 days
+  LogDetailStorageHours: "24"  # 1 day
+
+  # Clean log batch size
+  CleanLogBatchSize: "1000"
+
+  # IP rate limiting
+  IPGroupsThreshold: "100"  # Requests per minute
+  IPGroupsBanThreshold: "200"  # Ban threshold
+
+  # Log detail settings
+  SaveAllLogDetail: "false"
+  LogDetailRequestBodyMaxSize: "10000"
+  LogDetailResponseBodyMaxSize: "10000"
+
+  # Retry settings
+  RetryTimes: "3"
+
+  # Group settings
+  GroupMaxTokenNum: "0"  # 0 means unlimited
+  GroupConsumeLevelRatio: '{"1":1,"2":0.9,"3":0.8}'
+
+  # Error rate alerts
+  DefaultWarnNotifyErrorRate: "0.5"
+
+  # Usage alerts
+  UsageAlertThreshold: "100"
+  UsageAlertMinAvgThreshold: "10"
+
+  # Fuzzy token threshold
+  FuzzyTokenThreshold: "240000"
+
+  # Disable serve (for maintenance)
+  DisableServe: "false"
