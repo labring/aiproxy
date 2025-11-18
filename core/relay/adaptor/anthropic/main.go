@@ -44,6 +44,48 @@ func ConvertRequest(
 	}, nil
 }
 
+func RemoveToolsExamples(node *ast.Node) {
+	toolsNode := node.Get("tools")
+	if toolsNode != nil && toolsNode.Check() == nil {
+		_ = toolsNode.ForEach(func(path ast.Sequence, toolNode *ast.Node) bool {
+			_, _ = toolNode.Unset("input_examples")
+			return true
+		})
+	}
+}
+
+func RemoveContextManagenetEdits(
+	node *ast.Node,
+	isSupportedEditsType ...func(t string) bool,
+) {
+	editesNode := node.GetByPath("context_management", "edits")
+	if editesNode.Check() != nil {
+		return
+	}
+
+	nodeLen, _ := editesNode.Len()
+	newEdits := make([]ast.Node, 0, nodeLen)
+	_ = editesNode.
+		ForEach(func(path ast.Sequence, node *ast.Node) bool {
+			t, err := node.Get("type").String()
+			if err != nil {
+				return true
+			}
+
+			for _, v := range isSupportedEditsType {
+				if v != nil && !v(t) {
+					return true
+				}
+			}
+
+			newEdits = append(newEdits, *node)
+
+			return true
+		})
+
+	*editesNode = ast.NewArray(newEdits)
+}
+
 func ConvertRequestToBytes(
 	meta *meta.Meta,
 	req *http.Request,

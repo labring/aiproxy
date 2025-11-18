@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,50 @@ const (
 	AnthropicBeta        = "Anthropic-Beta"
 )
 
+func FixBetasStringWithModel(model, betas string, deleteFunc ...func(e string) bool) string {
+	return strings.Join(FixBetasWithModel(model, strings.Split(betas, ","), deleteFunc...), ",")
+}
+
+func modelBetaSupported(model, beta string) bool {
+	switch beta {
+	case "computer-use-2025-01-24":
+		return strings.Contains(model, "3-7-sonnet")
+	case "token-efficient-tools-2025-02-19":
+		return strings.Contains(model, "3-7-sonnet") ||
+			strings.Contains(model, "4-") ||
+			strings.Contains(model, "-4")
+	case "interleaved-thinking-2025-05-14":
+		return strings.Contains(model, "4-") ||
+			strings.Contains(model, "-4")
+	case "output-128k-2025-02-19":
+		return strings.Contains(model, "3-7-sonnet")
+	case "dev-full-thinking-2025-05-14":
+		return strings.Contains(model, "4-") ||
+			strings.Contains(model, "-4")
+	case "context-1m-2025-08-07":
+		return (strings.Contains(model, "4-") ||
+			strings.Contains(model, "-4")) &&
+			strings.Contains(model, "sonnet")
+	case "context-management-2025-06-27":
+		return strings.Contains(model, "4-5") ||
+			strings.Contains(model, "-4-5")
+	default:
+		return true
+	}
+}
+
+func FixBetasWithModel(model string, betas []string, deleteFunc ...func(e string) bool) []string {
+	return slices.DeleteFunc(betas, func(beta string) bool {
+		for _, v := range deleteFunc {
+			if v != nil && v(beta) {
+				return true
+			}
+		}
+
+		return !modelBetaSupported(model, beta)
+	})
+}
+
 func (a *Adaptor) SetupRequestHeader(
 	meta *meta.Meta,
 	_ adaptor.Store,
@@ -69,23 +114,7 @@ func (a *Adaptor) SetupRequestHeader(
 	rawBetas := c.Request.Header.Get(AnthropicBeta)
 
 	if rawBetas != "" {
-		req.Header.Set(AnthropicBeta, rawBetas)
-	} else {
-		// https://docs.anthropic.com/en/api/beta-headers
-		req.Header.Set(AnthropicBeta, "messages-2023-12-15")
-
-		// https://x.com/alexalbert__/status/1812921642143900036
-		// claude-3-5-sonnet can support 8k context
-		if strings.HasPrefix(meta.ActualModel, "claude-3-5-sonnet") {
-			req.Header.Set(AnthropicBeta, "max-tokens-3-5-sonnet-2024-07-15")
-		}
-
-		if strings.HasPrefix(meta.ActualModel, "claude-3-7-sonnet") {
-			req.Header.Set(AnthropicBeta, "output-128k-2025-02-19")
-		}
-
-		// https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
-		// req.Header.Set(AnthropicBeta, "extended-cache-ttl-2025-04-11")
+		req.Header.Set(AnthropicBeta, FixBetasStringWithModel(meta.ActualModel, rawBetas))
 	}
 
 	return nil
