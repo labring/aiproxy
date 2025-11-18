@@ -177,6 +177,7 @@ func generateAdminKey() string {
 	for i := range key {
 		key[i] = keyChars[rand.IntN(len(keyChars))]
 	}
+
 	return conv.BytesToString(key)
 }
 
@@ -187,6 +188,7 @@ func writeToEnvFile(envFile, key, value string) error {
 	}
 
 	keyPrefix := key + "="
+
 	found := false
 	for i, line := range lines {
 		if strings.HasPrefix(line, keyPrefix) {
@@ -219,6 +221,7 @@ func ensureAdminKey() error {
 	config.AdminKey = generateAdminKey()
 
 	envFile := ".env.aiproxy.local"
+
 	absEnvFile, err := filepath.Abs(envFile)
 	if err == nil {
 		envFile = absEnvFile
@@ -229,5 +232,6 @@ func ensureAdminKey() error {
 	}
 
 	log.Info("Generated new AdminKey and saved to " + envFile)
+
 	return nil
 }
