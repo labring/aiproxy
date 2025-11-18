@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -59,6 +60,35 @@ func (a *Adaptor) ConvertRequest(
 	}, nil
 }
 
+var unsupportedBetas = map[string]struct{}{
+	"tool-examples-2025-10-29":      {},
+	"context-management-2025-06-27": {},
+}
+
+func fixBetas(model string, betas []string) []string {
+	return anthropic.FixBetasWithModel(model, betas, func(e string) bool {
+		_, ok := unsupportedBetas[e]
+		return ok
+	})
+}
+
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) error {
+	betas := c.Request.Header.Get(anthropic.AnthropicBeta)
+	if betas != "" {
+		req.Header.Set(
+			anthropic.AnthropicBeta,
+			strings.Join(fixBetas(meta.ActualModel, strings.Split(betas, ",")), ","),
+		)
+	}
+
+	return nil
+}
+
 func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
 	claudeReq, err := anthropic.OpenAIConvertRequest(meta, request)
 	if err != nil {
@@ -84,6 +114,9 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		if _, err := node.Unset("model"); err != nil {
 			return err
 		}
+
+		_, _ = node.Unset("context_management")
+		anthropic.RemoveToolsExamples(node)
 
 		if _, err := node.Set("anthropic_version", ast.NewString(anthropicVersion)); err != nil {
 			return err
