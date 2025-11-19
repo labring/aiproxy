@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"math"
+	"time"
 )
 
 type PriceCondition struct {
@@ -10,6 +11,8 @@ type PriceCondition struct {
 	InputTokenMax  int64 `json:"input_token_max,omitempty"`
 	OutputTokenMin int64 `json:"output_token_min,omitempty"`
 	OutputTokenMax int64 `json:"output_token_max,omitempty"`
+	StartTime      int64 `json:"start_time,omitempty"` // Unix timestamp, 0 means no start limit
+	EndTime        int64 `json:"end_time,omitempty"`   // Unix timestamp, 0 means no end limit
 }
 
 type ConditionalPrice struct {
@@ -80,6 +83,18 @@ func (p *Price) ValidateConditionalPrices() error {
 			}
 		}
 
+		// Validate time range
+		if condition.StartTime > 0 && condition.EndTime > 0 {
+			if condition.StartTime >= condition.EndTime {
+				return fmt.Errorf(
+					"conditional price %d: start time (%d) must be before end time (%d)",
+					i,
+					condition.StartTime,
+					condition.EndTime,
+				)
+			}
+		}
+
 		// Check for overlaps with other conditions
 		for j := i + 1; j < len(p.ConditionalPrices); j++ {
 			otherCondition := p.ConditionalPrices[j].Condition
@@ -94,11 +109,18 @@ func (p *Price) ValidateConditionalPrices() error {
 					condition.OutputTokenMin, condition.OutputTokenMax,
 					otherCondition.OutputTokenMin, otherCondition.OutputTokenMax,
 				) {
-					return fmt.Errorf(
-						"conditional prices %d and %d have overlapping conditions",
-						i,
-						j,
-					)
+					// If both token ranges overlap, check if time ranges also overlap
+					// If time ranges don't overlap, conditions are still valid
+					if hasTimeRangeOverlap(
+						condition.StartTime, condition.EndTime,
+						otherCondition.StartTime, otherCondition.EndTime,
+					) {
+						return fmt.Errorf(
+							"conditional prices %d and %d have overlapping conditions",
+							i,
+							j,
+						)
+					}
 				}
 			}
 		}
@@ -139,6 +161,37 @@ func hasRangeOverlap(min1, max1, min2, max2 int64) bool {
 
 	// Check if ranges overlap: range1.max >= range2.min && range1.min <= range2.max
 	return actualMax1 >= actualMin2 && actualMin1 <= actualMax2
+}
+
+// hasTimeRangeOverlap checks if two time ranges overlap
+// Unlike hasRangeOverlap, this uses strict inequality to allow adjacent time ranges
+// Time range is defined by [start, end], where 0 means unbounded
+func hasTimeRangeOverlap(start1, end1, start2, end2 int64) bool {
+	// Convert 0 to appropriate bounds for comparison
+	actualStart1 := start1
+	actualEnd1 := end1
+	actualStart2 := start2
+	actualEnd2 := end2
+
+	if actualStart1 == 0 {
+		actualStart1 = 0
+	}
+
+	if actualEnd1 == 0 {
+		actualEnd1 = math.MaxInt64
+	}
+
+	if actualStart2 == 0 {
+		actualStart2 = 0
+	}
+
+	if actualEnd2 == 0 {
+		actualEnd2 = math.MaxInt64
+	}
+
+	// Check if ranges overlap with strict inequality: range1.end > range2.start && range1.start < range2.end
+	// This allows adjacent ranges like [t1, t2] and [t2, t3] to be considered non-overlapping
+	return actualEnd1 > actualStart2 && actualStart1 < actualEnd2
 }
 
 // validateConditionalPriceOrdering checks if conditional prices are properly ordered
@@ -195,10 +248,21 @@ func (p *Price) SelectConditionalPrice(usage Usage) Price {
 
 	inputTokens := int64(usage.InputTokens)
 	outputTokens := int64(usage.OutputTokens)
+	currentTime := time.Now().Unix()
 
 	for _, conditionalPrice := range p.ConditionalPrices {
 		condition := conditionalPrice.Condition
 
+		// Check time range
+		if condition.StartTime > 0 && currentTime < condition.StartTime {
+			continue
+		}
+
+		if condition.EndTime > 0 && currentTime > condition.EndTime {
+			continue
+		}
+
+		// Check token ranges
 		if condition.InputTokenMin > 0 && inputTokens < condition.InputTokenMin {
 			continue
 		}
