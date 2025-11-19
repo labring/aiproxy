@@ -61,8 +61,6 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 		return adaptor.ConvertResult{}, err
 	}
 
-	// fmt.Println(string(data))
-
 	return adaptor.ConvertResult{
 		Header: http.Header{
 			"Content-Type":   {"application/json"},
@@ -290,10 +288,11 @@ func ClaudeStreamHandler(
 					currentContentType = "tool_use"
 
 					toolContent := &relaymodel.ClaudeContent{
-						Type:  "tool_use",
-						ID:    openai.CallID(),
-						Name:  part.FunctionCall.Name,
-						Input: part.FunctionCall.Args,
+						Type:             "tool_use",
+						ID:               openai.CallID(),
+						Name:             part.FunctionCall.Name,
+						Input:            part.FunctionCall.Args,
+						ThoughtSignature: part.ThoughtSignature,
 					}
 					toolCallsBuffer[currentContentIndex] = toolContent
 
@@ -391,10 +390,11 @@ func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.
 			if part.FunctionCall != nil {
 				// Convert function call to tool use
 				claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-					Type:  "tool_use",
-					ID:    openai.CallID(),
-					Name:  part.FunctionCall.Name,
-					Input: part.FunctionCall.Args,
+					Type:             "tool_use",
+					ID:               openai.CallID(),
+					Name:             part.FunctionCall.Name,
+					Input:            part.FunctionCall.Args,
+					ThoughtSignature: part.ThoughtSignature,
 				})
 			} else if part.Text != "" {
 				if part.Thought {
