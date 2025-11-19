@@ -415,6 +415,8 @@ func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.
 	}
 
 	// If no content was added, ensure at least an empty text block
+	// This can happen when Gemini returns empty content after receiving a tool result,
+	// indicating it has nothing more to add beyond the tool's response
 	if len(claudeResponse.Content) == 0 {
 		claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
 			Type: "text",

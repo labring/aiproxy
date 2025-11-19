@@ -128,7 +128,9 @@ func convertClaudeMessagesToOpenAI(
 		openAIMsg.ToolCalls = result.ToolCalls
 
 		openAIMsg.Content = result.Content
-		if openAIMsg.Content != nil {
+		// Include the message if it has content OR tool calls
+		// This is important for function calling flow where assistant may only have tool calls
+		if openAIMsg.Content != nil || len(openAIMsg.ToolCalls) > 0 {
 			messages = append(messages, openAIMsg)
 		}
 	}

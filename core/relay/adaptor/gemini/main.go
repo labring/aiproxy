@@ -169,6 +169,8 @@ var unsupportedFields = []string{
 	"$id",
 	"$ref",
 	"$defs",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
 }
 
 var supportedFormats = map[string]struct{}{
@@ -380,7 +382,23 @@ func buildContents(
 		}
 	}
 
-	return systemContent, contents, imageTasks
+	// Merge consecutive messages with the same role to avoid Gemini API errors
+	// Gemini expects alternating user/model messages, but we might receive multiple
+	// consecutive user messages (e.g., multiple tool results)
+	mergedContents := make([]*ChatContent, 0, len(contents))
+	for i, content := range contents {
+		if i > 0 && mergedContents[len(mergedContents)-1].Role == content.Role {
+			// Merge with previous message of the same role
+			mergedContents[len(mergedContents)-1].Parts = append(
+				mergedContents[len(mergedContents)-1].Parts,
+				content.Parts...,
+			)
+		} else {
+			mergedContents = append(mergedContents, content)
+		}
+	}
+
+	return systemContent, mergedContents, imageTasks
 }
 
 func processImageTasks(ctx context.Context, imageTasks []*Part) error {
