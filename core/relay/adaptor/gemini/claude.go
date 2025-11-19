@@ -240,6 +240,17 @@ func ClaudeStreamHandler(
 								Thinking: "",
 							},
 						})
+
+						if part.ThoughtSignature != "" {
+							_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
+								Type:  "content_block_delta",
+								Index: currentContentIndex,
+								ContentBlock: &relaymodel.ClaudeContent{
+									Type:      "signature_delta",
+									Signature: part.ThoughtSignature,
+								},
+							})
+						}
 					}
 
 					thinkingText.WriteString(part.Text)
@@ -288,11 +299,11 @@ func ClaudeStreamHandler(
 					currentContentType = "tool_use"
 
 					toolContent := &relaymodel.ClaudeContent{
-						Type:             "tool_use",
-						ID:               openai.CallID(),
-						Name:             part.FunctionCall.Name,
-						Input:            part.FunctionCall.Args,
-						ThoughtSignature: part.ThoughtSignature,
+						Type:      "tool_use",
+						ID:        openai.CallID(),
+						Name:      part.FunctionCall.Name,
+						Input:     part.FunctionCall.Args,
+						Signature: part.ThoughtSignature,
 					}
 					toolCallsBuffer[currentContentIndex] = toolContent
 
@@ -390,18 +401,19 @@ func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.
 			if part.FunctionCall != nil {
 				// Convert function call to tool use
 				claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-					Type:             "tool_use",
-					ID:               openai.CallID(),
-					Name:             part.FunctionCall.Name,
-					Input:            part.FunctionCall.Args,
-					ThoughtSignature: part.ThoughtSignature,
+					Type:      "tool_use",
+					ID:        openai.CallID(),
+					Name:      part.FunctionCall.Name,
+					Input:     part.FunctionCall.Args,
+					Signature: part.ThoughtSignature,
 				})
 			} else if part.Text != "" {
 				if part.Thought {
 					// Add thinking content
 					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type:     "thinking",
-						Thinking: part.Text,
+						Type:      "thinking",
+						Thinking:  part.Text,
+						Signature: part.ThoughtSignature,
 					})
 				} else {
 					// Add text content

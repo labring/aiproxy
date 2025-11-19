@@ -680,6 +680,10 @@ func responseChat2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.Te
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Message.Signature = part.ThoughtSignature
+							}
 						} else {
 							builder.WriteString(part.Text)
 						}
@@ -778,6 +782,10 @@ func streamResponseChat2OpenAI(
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Delta.Signature = part.ThoughtSignature
+							}
 						} else {
 							builder.WriteString(part.Text)
 						}

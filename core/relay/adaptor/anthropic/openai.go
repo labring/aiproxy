@@ -342,6 +342,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 		usage      *relaymodel.ChatUsage
 		content    string
 		thinking   string
+		signature  string
 		stopReason string
 	)
 
@@ -396,6 +397,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 			case "thinking_delta":
 				thinking = claudeResponse.Delta.Thinking
 			case "signature_delta":
+				signature = claudeResponse.Delta.Signature
 			default:
 				content = claudeResponse.Delta.Text
 			}
@@ -422,6 +424,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 		Delta: relaymodel.Message{
 			Content:          content,
 			ReasoningContent: thinking,
+			Signature:        signature,
 			ToolCalls:        tools,
 			Role:             "assistant",
 		},
@@ -464,8 +467,9 @@ func Response2OpenAI(
 	}
 
 	var (
-		content  string
-		thinking string
+		content   string
+		thinking  string
+		signature string
 	)
 
 	tools := make([]relaymodel.ToolCall, 0)
@@ -475,6 +479,7 @@ func Response2OpenAI(
 			content = v.Text
 		case conetentTypeThinking:
 			thinking = v.Thinking
+			signature = v.Signature
 		case toolUseType:
 			args, _ := sonic.MarshalString(v.Input)
 			tools = append(tools, relaymodel.ToolCall{
@@ -498,6 +503,7 @@ func Response2OpenAI(
 			Role:             "assistant",
 			Content:          content,
 			ReasoningContent: thinking,
+			Signature:        signature,
 			Name:             nil,
 			ToolCalls:        tools,
 		},

@@ -207,10 +207,10 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 					},
 				}
 				// Preserve Gemini thought signature if present (OpenAI format)
-				if content.ThoughtSignature != "" {
+				if content.Signature != "" {
 					toolCall.ExtraContent = &relaymodel.ExtraContent{
 						Google: &relaymodel.GoogleExtraContent{
-							ThoughtSignature: content.ThoughtSignature,
+							ThoughtSignature: content.Signature,
 						},
 					}
 				}

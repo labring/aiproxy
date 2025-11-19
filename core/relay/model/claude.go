@@ -58,8 +58,7 @@ type ClaudeContent struct {
 	Content      any                 `json:"content,omitempty"`
 	ToolUseID    string              `json:"tool_use_id,omitempty"`
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
-	// Gemini-specific field to store thought signature for function calls
-	ThoughtSignature string `json:"thought_signature,omitempty"`
+	Signature    string              `json:"thought_signature,omitempty"`
 }
 
 type ClaudeAnyContentMessage struct {
@@ -220,6 +219,7 @@ type ClaudeDelta struct {
 	StopSequence *string `json:"stop_sequence,omitempty"`
 	Type         string  `json:"type,omitempty"`
 	Thinking     string  `json:"thinking,omitempty"`
+	Signature    string  `json:"signature,omitempty"`
 	Text         string  `json:"text,omitempty"`
 	PartialJSON  string  `json:"partial_json,omitempty"`
 }
