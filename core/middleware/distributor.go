@@ -322,11 +322,12 @@ func CheckRelayMode(requestMode, modelMode mode.Mode) bool {
 	}
 
 	switch requestMode {
-	case mode.ChatCompletions, mode.Completions, mode.Anthropic,
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini,
 		mode.Responses, mode.ResponsesGet, mode.ResponsesDelete, mode.ResponsesCancel, mode.ResponsesInputItems:
 		return modelMode == mode.ChatCompletions ||
 			modelMode == mode.Completions ||
 			modelMode == mode.Anthropic ||
+			modelMode == mode.Gemini ||
 			modelMode == mode.Responses ||
 			modelMode == mode.ResponsesGet ||
 			modelMode == mode.ResponsesDelete ||
@@ -630,6 +631,11 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		}
 
 		return modelName, nil
+	case m == mode.Gemini:
+		modelName := strings.TrimPrefix(c.Param("model"), "/")
+		modelName, _, _ = strings.Cut(modelName, ":")
+
+		return modelName, nil
 	default:
 		body, err := common.GetRequestBodyReusable(c.Request)
 		if err != nil {
@@ -673,7 +679,8 @@ func getRequestUser(c *gin.Context, m mode.Mode) (string, error) {
 		mode.ImagesGenerations,
 		mode.AudioSpeech,
 		mode.Rerank,
-		mode.Anthropic:
+		mode.Anthropic,
+		mode.Gemini:
 		body, err := common.GetRequestBodyReusable(c.Request)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
@@ -709,7 +716,8 @@ func getRequestMetadata(c *gin.Context, m mode.Mode) (map[string]string, error) 
 		mode.ImagesGenerations,
 		mode.AudioSpeech,
 		mode.Rerank,
-		mode.Anthropic:
+		mode.Anthropic,
+		mode.Gemini:
 		body, err := common.GetRequestBodyReusable(c.Request)
 		if err != nil {
 			return nil, fmt.Errorf("get request metadata failed: %w", err)

@@ -118,6 +118,17 @@ func UnmarshalTTSRequest(req *http.Request) (*model.TextToSpeechRequest, error) 
 	return &request, nil
 }
 
+func UnmarshalGeminiChatRequest(req *http.Request) (*model.GeminiChatRequest, error) {
+	var request model.GeminiChatRequest
+
+	err := common.UnmarshalRequestReusable(req, &request)
+	if err != nil {
+		return nil, err
+	}
+
+	return &request, nil
+}
+
 func UnmarshalMap(req *http.Request) (map[string]any, error) {
 	var request map[string]any
 
@@ -236,4 +247,9 @@ func PutScannerBuffer(buf *[]byte) {
 	}
 
 	scannerBufferPool.Put(buf)
+}
+
+// IsGeminiStreamRequest checks if the request path ends with :streamGenerateContent
+func IsGeminiStreamRequest(path string) bool {
+	return strings.HasSuffix(path, ":streamGenerateContent")
 }

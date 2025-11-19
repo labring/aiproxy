@@ -151,7 +151,8 @@ func GetRandomChannel(
 	channelMap := make(map[int]*model.Channel)
 	if len(availableSet) != 0 {
 		for _, set := range availableSet {
-			for _, channel := range mc.EnabledModel2ChannelsBySet[set][modelName] {
+			channels := mc.EnabledModel2ChannelsBySet[set][modelName]
+			for _, channel := range channels {
 				a, ok := adaptors.GetAdaptor(channel.Type)
 				if !ok {
 					continue

@@ -1,10 +1,13 @@
 package gemini
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -24,7 +27,8 @@ func (a *Adaptor) DefaultBaseURL() string {
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Anthropic ||
-		m == mode.Embeddings
+		m == mode.Embeddings ||
+		m == mode.Gemini
 }
 
 var v1ModelMap = map[string]struct{}{}
@@ -46,7 +50,11 @@ func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	var action string
 	switch meta.Mode {
 	case mode.Embeddings:
@@ -55,7 +63,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		action = "generateContent"
 	}
 
-	if meta.GetBool("stream") {
+	if meta.GetBool("stream") ||
+		(meta.Mode != mode.Gemini && utils.IsGeminiStreamRequest(c.Request.URL.Path)) {
 		action = "streamGenerateContent?alt=sse"
 	}
 
@@ -84,6 +93,20 @@ func (a *Adaptor) ConvertRequest(
 		return ConvertRequest(meta, req)
 	case mode.Anthropic:
 		return ConvertClaudeRequest(meta, req)
+	case mode.Gemini:
+		// For native Gemini mode, pass through the request body but set proper headers
+		body, err := common.GetRequestBodyReusable(req)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+
+		return adaptor.ConvertResult{
+			Header: http.Header{
+				"Content-Type":   {"application/json"},
+				"Content-Length": {strconv.Itoa(len(body))},
+			},
+			Body: bytes.NewReader(body),
+		}, nil
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -118,6 +141,13 @@ func (a *Adaptor) DoResponse(
 			usage, err = ClaudeStreamHandler(meta, c, resp)
 		} else {
 			usage, err = ClaudeHandler(meta, c, resp)
+		}
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			usage, err = NativeStreamHandler(meta, c, resp)
+		} else {
+			usage, err = NativeHandler(meta, c, resp)
 		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(

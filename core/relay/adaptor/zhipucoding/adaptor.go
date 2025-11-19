@@ -34,7 +34,11 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.Anthropic
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
@@ -54,7 +58,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 			meta.Channel.BaseURL = u
 		}()
 
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
 	}
 }
 

@@ -56,7 +56,11 @@ var modelEndpointMap = map[string]string{
 	"Fuyu-8B":              "fuyu_8b",
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	// Get API path suffix based on mode
 	var pathSuffix string
 	switch meta.Mode {

@@ -47,7 +47,7 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	config := buildGenerationConfig(meta, textRequest, textRequest)
 
 	// Build actual request
-	geminiRequest := ChatRequest{
+	geminiRequest := relaymodel.GeminiChatRequest{
 		Contents:          contents,
 		SystemInstruction: systemContent,
 		SafetySettings:    buildSafetySettings(adaptorConfig.Safety),
@@ -77,12 +77,12 @@ func ClaudeHandler(
 	resp *http.Response,
 ) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
-	var geminiResponse ChatResponse
+	var geminiResponse relaymodel.GeminiChatResponse
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse)
 	if err != nil {
@@ -121,7 +121,7 @@ func ClaudeStreamHandler(
 	resp *http.Response,
 ) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -174,7 +174,7 @@ func ClaudeStreamHandler(
 			break
 		}
 
-		var geminiResponse ChatResponse
+		var geminiResponse relaymodel.GeminiChatResponse
 
 		err := sonic.Unmarshal(data, &geminiResponse)
 		if err != nil {
@@ -374,7 +374,10 @@ func ClaudeStreamHandler(
 }
 
 // geminiResponse2Claude converts a Gemini response to Claude format
-func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.ClaudeResponse {
+func geminiResponse2Claude(
+	meta *meta.Meta,
+	response *relaymodel.GeminiChatResponse,
+) *relaymodel.ClaudeResponse {
 	claudeResponse := relaymodel.ClaudeResponse{
 		ID:           "msg_" + common.ShortUUID(),
 		Type:         "message",

@@ -38,7 +38,11 @@ func supportClaudeCodeProxy(modelName string) bool {
 		strings.Contains(strings.ToLower(modelName), "coder")
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch {
@@ -53,7 +57,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 			URL:    url,
 		}, nil
 	default:
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
 	}
 }
 

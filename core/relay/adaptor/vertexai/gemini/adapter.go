@@ -1,9 +1,11 @@
 package vertexai
 
 import (
+	"bytes"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/gemini"
@@ -22,6 +24,17 @@ func (a *Adaptor) ConvertRequest(
 	switch meta.Mode {
 	case mode.Anthropic:
 		return gemini.ConvertClaudeRequest(meta, request)
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the body as-is
+		// stream flag is already set in middleware from URL action
+		body, err := common.GetRequestBodyReusable(request)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+
+		return adaptor.ConvertResult{
+			Body: bytes.NewReader(body),
+		}, nil
 	default:
 		return gemini.ConvertRequest(meta, request)
 	}
@@ -48,6 +61,13 @@ func (a *Adaptor) DoResponse(
 			usage, err = gemini.ClaudeStreamHandler(meta, c, resp)
 		} else {
 			usage, err = gemini.ClaudeHandler(meta, c, resp)
+		}
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			usage, err = gemini.NativeStreamHandler(meta, c, resp)
+		} else {
+			usage, err = gemini.NativeHandler(meta, c, resp)
 		}
 	default:
 		if utils.IsStreamResponse(resp) {

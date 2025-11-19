@@ -40,7 +40,7 @@ type RequestURL struct {
 }
 
 type GetRequestURL interface {
-	GetRequestURL(meta *meta.Meta, store Store) (RequestURL, error)
+	GetRequestURL(meta *meta.Meta, store Store, c *gin.Context) (RequestURL, error)
 }
 
 type SetupRequestHeader interface {

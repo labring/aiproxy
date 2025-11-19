@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
-	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
@@ -33,8 +32,8 @@ func ConvertEmbeddingRequest(
 	for i, input := range inputs {
 		requests[i] = EmbeddingRequest{
 			Model: model,
-			Content: ChatContent{
-				Parts: []*Part{
+			Content: relaymodel.GeminiChatContent{
+				Parts: []*relaymodel.GeminiPart{
 					{
 						Text: input,
 					},
@@ -65,7 +64,7 @@ func EmbeddingHandler(
 	resp *http.Response,
 ) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()

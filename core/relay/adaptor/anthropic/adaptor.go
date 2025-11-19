@@ -28,10 +28,16 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Anthropic
+	return m == mode.ChatCompletions ||
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	url, err := url.JoinPath(u, "/messages")
@@ -146,6 +152,8 @@ func (a *Adaptor) ConvertRequest(
 		}, nil
 	case mode.Anthropic:
 		return ConvertRequest(meta, req)
+	case mode.Gemini:
+		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -178,6 +186,12 @@ func (a *Adaptor) DoResponse(
 			usage, err = StreamHandler(meta, c, resp)
 		} else {
 			usage, err = Handler(meta, c, resp)
+		}
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			usage, err = GeminiStreamHandler(meta, c, resp)
+		} else {
+			usage, err = GeminiHandler(meta, c, resp)
 		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(

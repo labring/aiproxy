@@ -451,3 +451,30 @@ func GetResponseInputItems() []gin.HandlerFunc {
 		NewRelay(mode.ResponsesInputItems),
 	}
 }
+
+// Gemini godoc
+//
+//	@Summary		Gemini Native API
+//	@Description	Gemini Native API
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			version			path		string						true	"API Version (v1 or v1beta)"
+//	@Param			model			path		string						true	"Model name with action (e.g., gemini-2.0-flash:generateContent)"
+//	@Param			request			body		object						true	"Request"
+//	@Param			Aiproxy-Channel	header		string						false	"Optional Aiproxy-Channel header"
+//	@Success		200				{object}	object
+//	@Header			all				{integer}	X-RateLimit-Limit-Requests	"X-RateLimit-Limit-Requests"
+//	@Header			all				{integer}	X-RateLimit-Limit-Tokens	"X-RateLimit-Limit-Tokens"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all				{string}	X-RateLimit-Reset-Requests	"X-RateLimit-Reset-Requests"
+//	@Header			all				{string}	X-RateLimit-Reset-Tokens	"X-RateLimit-Reset-Tokens"
+//	@Router			/{version}/models/{model} [post]
+
+func Gemini() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.Gemini),
+		NewRelay(mode.Gemini),
+	}
+}

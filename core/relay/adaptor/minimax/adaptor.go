@@ -50,7 +50,11 @@ func (a *Adaptor) SetupRequestHeader(
 	return nil
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	_, groupID, err := GetAPIKeyAndGroupID(meta.Channel.Key)
 	if err != nil {
 		return adaptor.RequestURL{}, err
@@ -88,7 +92,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 			URL:    fmt.Sprintf("%s?GroupId=%s", url, groupID),
 		}, nil
 	default:
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
 	}
 }
 

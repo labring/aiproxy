@@ -49,16 +49,16 @@ var mimeTypeMap = map[string]string{
 }
 
 type CountTokensResponse struct {
-	Error       *Error `json:"error,omitempty"`
-	TotalTokens int    `json:"totalTokens"`
+	Error       *relaymodel.GeminiError `json:"error,omitempty"`
+	TotalTokens int                     `json:"totalTokens"`
 }
 
-func buildSafetySettings(safetySetting string) []ChatSafetySettings {
+func buildSafetySettings(safetySetting string) []relaymodel.GeminiChatSafetySettings {
 	if safetySetting == "" {
 		safetySetting = "BLOCK_NONE"
 	}
 
-	return []ChatSafetySettings{
+	return []relaymodel.GeminiChatSafetySettings{
 		{Category: "HARM_CATEGORY_HARASSMENT", Threshold: safetySetting},
 		{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: safetySetting},
 		{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: safetySetting},
@@ -71,11 +71,15 @@ func buildGenerationConfig(
 	meta *meta.Meta,
 	req *relaymodel.GeneralOpenAIRequest,
 	textRequest *relaymodel.GeneralOpenAIRequest,
-) *ChatGenerationConfig {
-	config := ChatGenerationConfig{
-		Temperature:     textRequest.Temperature,
-		TopP:            textRequest.TopP,
-		MaxOutputTokens: textRequest.MaxTokens,
+) *relaymodel.GeminiChatGenerationConfig {
+	config := relaymodel.GeminiChatGenerationConfig{
+		Temperature: textRequest.Temperature,
+		TopP:        textRequest.TopP,
+	}
+
+	// Convert MaxTokens (int) to MaxOutputTokens (*int)
+	if textRequest.MaxTokens != 0 {
+		config.MaxOutputTokens = &textRequest.MaxTokens
 	}
 
 	if strings.Contains(meta.ActualModel, "image") {
@@ -97,7 +101,7 @@ func buildGenerationConfig(
 	}
 
 	if req.Thinking != nil {
-		thinkingConfig := ThinkingConfig{}
+		thinkingConfig := relaymodel.GeminiThinkingConfig{}
 		switch req.Thinking.Type {
 		case relaymodel.ClaudeThinkingTypeEnabled:
 			thinkingConfig.IncludeThoughts = true
@@ -112,7 +116,7 @@ func buildGenerationConfig(
 	// https://ai.google.dev/gemini-api/docs/thinking
 	if strings.Contains(meta.ActualModel, "2.5") {
 		if config.ThinkingConfig == nil {
-			config.ThinkingConfig = &ThinkingConfig{}
+			config.ThinkingConfig = &relaymodel.GeminiThinkingConfig{}
 		}
 
 		config.ThinkingConfig.IncludeThoughts = true
@@ -121,7 +125,7 @@ func buildGenerationConfig(
 	return &config
 }
 
-func buildTools(textRequest *relaymodel.GeneralOpenAIRequest) []ChatTools {
+func buildTools(textRequest *relaymodel.GeneralOpenAIRequest) []relaymodel.GeminiChatTools {
 	if textRequest.Tools != nil {
 		functions := make([]relaymodel.Function, 0, len(textRequest.Tools))
 		for _, tool := range textRequest.Tools {
@@ -129,11 +133,11 @@ func buildTools(textRequest *relaymodel.GeneralOpenAIRequest) []ChatTools {
 			functions = append(functions, cleanedFunction)
 		}
 
-		return []ChatTools{{FunctionDeclarations: functions}}
+		return []relaymodel.GeminiChatTools{{FunctionDeclarations: functions}}
 	}
 
 	if textRequest.Functions != nil {
-		return []ChatTools{{FunctionDeclarations: textRequest.Functions}}
+		return []relaymodel.GeminiChatTools{{FunctionDeclarations: textRequest.Functions}}
 	}
 
 	return nil
@@ -205,13 +209,13 @@ func cleanJSONSchema(schema map[string]any) {
 	}
 }
 
-func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *ToolConfig {
+func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *relaymodel.GeminiToolConfig {
 	if textRequest.ToolChoice == nil {
 		return nil
 	}
 
-	toolConfig := ToolConfig{
-		FunctionCallingConfig: FunctionCallingConfig{
+	toolConfig := relaymodel.GeminiToolConfig{
+		FunctionCallingConfig: relaymodel.GeminiFunctionCallingConfig{
 			Mode: "auto",
 		},
 	}
@@ -232,12 +236,12 @@ func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *ToolConfig {
 	return &toolConfig
 }
 
-func buildMessageParts(message relaymodel.MessageContent) *Part {
-	part := &Part{
+func buildMessageParts(message relaymodel.MessageContent) *relaymodel.GeminiPart {
+	part := &relaymodel.GeminiPart{
 		Text: message.Text,
 	}
 	if message.ImageURL != nil {
-		part.InlineData = &InlineData{
+		part.InlineData = &relaymodel.GeminiInlineData{
 			Data: message.ImageURL.URL,
 		}
 	}
@@ -248,19 +252,19 @@ func buildMessageParts(message relaymodel.MessageContent) *Part {
 // Add this helper function to track tool calls
 func buildContents(
 	textRequest *relaymodel.GeneralOpenAIRequest,
-) (*ChatContent, []*ChatContent, []*Part) {
-	contents := make([]*ChatContent, 0, len(textRequest.Messages))
+) (*relaymodel.GeminiChatContent, []*relaymodel.GeminiChatContent, []*relaymodel.GeminiPart) {
+	contents := make([]*relaymodel.GeminiChatContent, 0, len(textRequest.Messages))
 
 	var (
-		imageTasks    []*Part
-		systemContent *ChatContent
+		imageTasks    []*relaymodel.GeminiPart
+		systemContent *relaymodel.GeminiChatContent
 	)
 
 	// Track tool calls by ID to get their names for tool results
 	toolCallMap := make(map[string]string) // tool_call_id -> tool_name
 
 	for _, message := range textRequest.Messages {
-		content := ChatContent{
+		content := relaymodel.GeminiChatContent{
 			Role: message.Role,
 		}
 
@@ -279,8 +283,8 @@ func buildContents(
 					args = make(map[string]any)
 				}
 
-				part := &Part{
-					FunctionCall: &FunctionCall{
+				part := &relaymodel.GeminiPart{
+					FunctionCall: &relaymodel.GeminiFunctionCall{
 						Name: toolCall.Function.Name,
 						Args: args,
 					},
@@ -327,8 +331,8 @@ func buildContents(
 				contentMap = make(map[string]any)
 			}
 
-			content.Parts = append(content.Parts, &Part{
-				FunctionResponse: &FunctionResponse{
+			content.Parts = append(content.Parts, &relaymodel.GeminiPart{
+				FunctionResponse: &relaymodel.GeminiFunctionResponse{
 					Name: toolName, // Now properly set
 					Response: struct {
 						Name    string         `json:"name"`
@@ -340,9 +344,9 @@ func buildContents(
 				},
 			})
 		case message.Role == "system":
-			systemContent = &ChatContent{
+			systemContent = &relaymodel.GeminiChatContent{
 				Role: "user", // Gemini uses "user" for system content
-				Parts: []*Part{{
+				Parts: []*relaymodel.GeminiPart{{
 					Text: message.StringContent(),
 				}},
 			}
@@ -385,7 +389,7 @@ func buildContents(
 	// Merge consecutive messages with the same role to avoid Gemini API errors
 	// Gemini expects alternating user/model messages, but we might receive multiple
 	// consecutive user messages (e.g., multiple tool results)
-	mergedContents := make([]*ChatContent, 0, len(contents))
+	mergedContents := make([]*relaymodel.GeminiChatContent, 0, len(contents))
 	for i, content := range contents {
 		if i > 0 && mergedContents[len(mergedContents)-1].Role == content.Role {
 			// Merge with previous message of the same role
@@ -401,7 +405,7 @@ func buildContents(
 	return systemContent, mergedContents, imageTasks
 }
 
-func processImageTasks(ctx context.Context, imageTasks []*Part) error {
+func processImageTasks(ctx context.Context, imageTasks []*relaymodel.GeminiPart) error {
 	if len(imageTasks) == 0 {
 		return nil
 	}
@@ -477,7 +481,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	config := buildGenerationConfig(meta, textRequest, textRequest)
 
 	// Build actual request
-	geminiRequest := ChatRequest{
+	geminiRequest := relaymodel.GeminiChatRequest{
 		Contents:          contents,
 		SystemInstruction: systemContent,
 		SafetySettings:    buildSafetySettings(adaptorConfig.Safety),
@@ -500,71 +504,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	}, nil
 }
 
-type ChatResponse struct {
-	Candidates     []*ChatCandidate   `json:"candidates"`
-	PromptFeedback ChatPromptFeedback `json:"promptFeedback"`
-	UsageMetadata  *UsageMetadata     `json:"usageMetadata"`
-	ModelVersion   string             `json:"modelVersion"`
-}
-
-type UsageMetadata struct {
-	PromptTokenCount     int64                `json:"promptTokenCount"`
-	CandidatesTokenCount int64                `json:"candidatesTokenCount"`
-	TotalTokenCount      int64                `json:"totalTokenCount"`
-	ThoughtsTokenCount   int64                `json:"thoughtsTokenCount,omitempty"`
-	PromptTokensDetails  []PromptTokensDetail `json:"promptTokensDetails"`
-
-	// https://ai.google.dev/gemini-api/docs/caching?lang=rest
-	CachedContentTokenCount int64               `json:"cachedContentTokenCount,omitempty"`
-	CacheTokensDetails      []CacheTokensDetail `json:"cacheTokensDetails,omitempty"`
-}
-
-func (u *UsageMetadata) ToUsage() relaymodel.ChatUsage {
-	chatUsage := relaymodel.ChatUsage{
-		PromptTokens: u.PromptTokenCount,
-		CompletionTokens: u.CandidatesTokenCount +
-			u.ThoughtsTokenCount,
-		TotalTokens: u.TotalTokenCount,
-		PromptTokensDetails: &relaymodel.PromptTokensDetails{
-			CachedTokens: u.CachedContentTokenCount,
-		},
-		CompletionTokensDetails: &relaymodel.CompletionTokensDetails{
-			ReasoningTokens: u.ThoughtsTokenCount,
-		},
-	}
-
-	return chatUsage
-}
-
-type PromptTokensDetail struct {
-	Modality   string `json:"modality"`
-	TokenCount int64  `json:"tokenCount"`
-}
-
-type CacheTokensDetail struct {
-	Modality   string `json:"modality"`
-	TokenCount int64  `json:"tokenCount"`
-}
-
-func (g *ChatResponse) GetResponseText() string {
-	if g == nil {
-		return ""
-	}
-
-	builder := strings.Builder{}
-	for _, candidate := range g.Candidates {
-		for i, part := range candidate.Content.Parts {
-			if i > 0 {
-				builder.WriteString("\n")
-			}
-
-			builder.WriteString(part.Text)
-		}
-	}
-
-	return builder.String()
-}
-
+// Type aliases for usage-related types to use unified definitions from relaymodel
 var finishReason2OpenAI = map[string]string{
 	"STOP":       relaymodel.FinishReasonStop,
 	"MAX_TOKENS": relaymodel.FinishReasonLength,
@@ -577,23 +517,7 @@ func FinishReason2OpenAI(reason string) string {
 	return reason
 }
 
-type ChatCandidate struct {
-	FinishReason  string             `json:"finishReason"`
-	Content       ChatContent        `json:"content"`
-	SafetyRatings []ChatSafetyRating `json:"safetyRatings"`
-	Index         int64              `json:"index"`
-}
-
-type ChatSafetyRating struct {
-	Category    string `json:"category"`
-	Probability string `json:"probability"`
-}
-
-type ChatPromptFeedback struct {
-	SafetyRatings []ChatSafetyRating `json:"safetyRatings"`
-}
-
-func getToolCall(item *Part) (*relaymodel.ToolCall, error) {
+func getToolCall(item *relaymodel.GeminiPart) (*relaymodel.ToolCall, error) {
 	if item.FunctionCall == nil {
 		return nil, nil
 	}
@@ -624,7 +548,10 @@ func getToolCall(item *Part) (*relaymodel.ToolCall, error) {
 	return &toolCall, nil
 }
 
-func responseChat2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextResponse {
+func responseChat2OpenAI(
+	meta *meta.Meta,
+	response *relaymodel.GeminiChatResponse,
+) *relaymodel.TextResponse {
 	fullTextResponse := relaymodel.TextResponse{
 		ID:      openai.ChatCompletionID(),
 		Model:   meta.OriginModel,
@@ -720,7 +647,7 @@ func responseChat2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.Te
 
 func streamResponseChat2OpenAI(
 	meta *meta.Meta,
-	geminiResponse *ChatResponse,
+	geminiResponse *relaymodel.GeminiChatResponse,
 ) *relaymodel.ChatCompletionsStreamResponse {
 	response := &relaymodel.ChatCompletionsStreamResponse{
 		ID:      openai.ChatCompletionID(),
@@ -853,7 +780,7 @@ func StreamHandler(
 	resp *http.Response,
 ) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -890,7 +817,7 @@ func StreamHandler(
 			break
 		}
 
-		var geminiResponse ChatResponse
+		var geminiResponse relaymodel.GeminiChatResponse
 
 		err := sonic.Unmarshal(data, &geminiResponse)
 		if err != nil {
@@ -921,12 +848,12 @@ func StreamHandler(
 
 func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return model.Usage{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
-	var geminiResponse ChatResponse
+	var geminiResponse relaymodel.GeminiChatResponse
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse)
 	if err != nil {
@@ -953,4 +880,98 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 	_, _ = c.Writer.Write(jsonResponse)
 
 	return fullTextResponse.Usage.ToModelUsage(), nil
+}
+
+// NativeHandler handles non-streaming responses in native Gemini format (passthrough)
+func NativeHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return model.Usage{}, ErrorHandler(resp)
+	}
+
+	defer resp.Body.Close()
+
+	var geminiResponse relaymodel.GeminiChatResponse
+	if err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
+		return model.Usage{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	// Calculate usage
+	usage := model.Usage{}
+	if geminiResponse.UsageMetadata != nil {
+		usage = geminiResponse.UsageMetadata.ToUsage().ToModelUsage()
+	}
+
+	// Pass through the response as-is
+	jsonResponse, err := sonic.Marshal(geminiResponse)
+	if err != nil {
+		return usage, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
+	_, _ = c.Writer.Write(jsonResponse)
+
+	return usage, nil
+}
+
+// NativeStreamHandler handles streaming responses in native Gemini format (passthrough)
+func NativeStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (model.Usage, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return model.Usage{}, ErrorHandler(resp)
+	}
+
+	defer resp.Body.Close()
+
+	log := common.GetLogger(c)
+
+	scanner := bufio.NewScanner(resp.Body)
+
+	buf := utils.GetScannerBuffer()
+	defer utils.PutScannerBuffer(buf)
+
+	scanner.Buffer(*buf, cap(*buf))
+
+	usage := model.Usage{}
+
+	for scanner.Scan() {
+		data := scanner.Bytes()
+		if !render.IsValidSSEData(data) {
+			continue
+		}
+
+		data = render.ExtractSSEData(data)
+
+		// Parse to extract usage metadata
+		var geminiResp relaymodel.GeminiChatResponse
+		if err := sonic.Unmarshal(data, &geminiResp); err == nil {
+			if geminiResp.UsageMetadata != nil {
+				usage = geminiResp.UsageMetadata.ToUsage().ToModelUsage()
+			}
+		}
+
+		// Pass through the data as-is
+		render.GeminiBytesData(c, data)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("error reading stream: " + err.Error())
+	}
+
+	return usage, nil
 }

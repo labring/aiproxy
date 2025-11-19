@@ -17,9 +17,10 @@ type Noop struct{}
 func (n *Noop) GetRequestURL(
 	meta *meta.Meta,
 	store adaptor.Store,
+	c *gin.Context,
 	do adaptor.GetRequestURL,
 ) (adaptor.RequestURL, error) {
-	return do.GetRequestURL(meta, store)
+	return do.GetRequestURL(meta, store, c)
 }
 
 func (n *Noop) SetupRequestHeader(
