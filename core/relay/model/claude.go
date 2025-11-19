@@ -58,7 +58,7 @@ type ClaudeContent struct {
 	Content      any                 `json:"content,omitempty"`
 	ToolUseID    string              `json:"tool_use_id,omitempty"`
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
-	Signature    string              `json:"thought_signature,omitempty"`
+	Signature    string              `json:"signature,omitempty"`
 }
 
 type ClaudeAnyContentMessage struct {

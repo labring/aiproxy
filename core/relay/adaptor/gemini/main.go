@@ -287,10 +287,10 @@ func buildContents(
 				}
 
 				// Restore Gemini thought signature if present in extra_content (OpenAI format)
-				if toolCall.ExtraContent != nil && toolCall.ExtraContent.Google != nil {
-					if toolCall.ExtraContent.Google.ThoughtSignature != "" {
-						part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
-					}
+				if toolCall.ExtraContent != nil &&
+					toolCall.ExtraContent.Google != nil &&
+					toolCall.ExtraContent.Google.ThoughtSignature != "" {
+					part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
 				} else {
 					// If thought signature is missing (e.g., from non-Gemini sources or clients that don't preserve it),
 					// use a dummy signature to skip Gemini's validation as per their FAQ:

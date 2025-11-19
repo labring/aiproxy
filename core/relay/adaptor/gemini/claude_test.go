@@ -171,7 +171,7 @@ func TestClaudeStreamHandler(t *testing.T) {
 			convey.So(
 				body,
 				convey.ShouldContainSubstring,
-				`"thought_signature":"signature_stream_123"`,
+				`"signature":"signature_stream_123"`,
 			)
 		})
 	})
