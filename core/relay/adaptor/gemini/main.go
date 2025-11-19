@@ -287,10 +287,10 @@ func buildContents(
 				}
 
 				// Restore Gemini thought signature if present in extra_content (OpenAI format)
-				if toolCall.ExtraContent != nil && toolCall.ExtraContent.Google != nil {
-					if toolCall.ExtraContent.Google.ThoughtSignature != "" {
-						part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
-					}
+				if toolCall.ExtraContent != nil &&
+					toolCall.ExtraContent.Google != nil &&
+					toolCall.ExtraContent.Google.ThoughtSignature != "" {
+					part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
 				} else {
 					// If thought signature is missing (e.g., from non-Gemini sources or clients that don't preserve it),
 					// use a dummy signature to skip Gemini's validation as per their FAQ:
@@ -680,6 +680,10 @@ func responseChat2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.Te
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Message.Signature = part.ThoughtSignature
+							}
 						} else {
 							builder.WriteString(part.Text)
 						}
@@ -778,6 +782,10 @@ func streamResponseChat2OpenAI(
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Delta.Signature = part.ThoughtSignature
+							}
 						} else {
 							builder.WriteString(part.Text)
 						}

@@ -119,6 +119,7 @@ type TextResponse struct {
 type Message struct {
 	Content          any        `json:"content,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	Signature        string     `json:"signature,omitempty"`
 	Name             *string    `json:"name,omitempty"`
 	Role             string     `json:"role,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
