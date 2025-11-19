@@ -122,7 +122,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 	}
 
 	var requestDoamin string
-	if config.Region == "" {
+	if config.Region == "" || config.Region == "global" {
 		requestDoamin = "aiplatform.googleapis.com"
 	} else {
 		requestDoamin = config.Region + "-aiplatform.googleapis.com"
