@@ -30,6 +30,13 @@ import (
 
 // https://ai.google.dev/docs/gemini_api_overview?hl=zh-cn
 
+// Dummy thought signatures for skipping Gemini's validation when the actual signature is unavailable
+// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const (
+	ThoughtSignatureDummySkipValidator = "skip_thought_signature_validator"
+	ThoughtSignatureDummyContextEng    = "context_engineering_is_the_way_to_go"
+)
+
 var toolChoiceTypeMap = map[string]string{
 	"none":     "NONE",
 	"auto":     "AUTO",
@@ -162,6 +169,8 @@ var unsupportedFields = []string{
 	"$id",
 	"$ref",
 	"$defs",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
 }
 
 var supportedFormats = map[string]struct{}{
@@ -270,12 +279,26 @@ func buildContents(
 					args = make(map[string]any)
 				}
 
-				content.Parts = append(content.Parts, &Part{
+				part := &Part{
 					FunctionCall: &FunctionCall{
 						Name: toolCall.Function.Name,
 						Args: args,
 					},
-				})
+				}
+
+				// Restore Gemini thought signature if present in extra_content (OpenAI format)
+				if toolCall.ExtraContent != nil && toolCall.ExtraContent.Google != nil {
+					if toolCall.ExtraContent.Google.ThoughtSignature != "" {
+						part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
+					}
+				} else {
+					// If thought signature is missing (e.g., from non-Gemini sources or clients that don't preserve it),
+					// use a dummy signature to skip Gemini's validation as per their FAQ:
+					// https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+					part.ThoughtSignature = ThoughtSignatureDummySkipValidator
+				}
+
+				content.Parts = append(content.Parts, part)
 			}
 		case message.Role == "tool" && message.ToolCallID != "":
 			// Handle tool results - get the tool name from our map
@@ -359,7 +382,23 @@ func buildContents(
 		}
 	}
 
-	return systemContent, contents, imageTasks
+	// Merge consecutive messages with the same role to avoid Gemini API errors
+	// Gemini expects alternating user/model messages, but we might receive multiple
+	// consecutive user messages (e.g., multiple tool results)
+	mergedContents := make([]*ChatContent, 0, len(contents))
+	for i, content := range contents {
+		if i > 0 && mergedContents[len(mergedContents)-1].Role == content.Role {
+			// Merge with previous message of the same role
+			mergedContents[len(mergedContents)-1].Parts = append(
+				mergedContents[len(mergedContents)-1].Parts,
+				content.Parts...,
+			)
+		} else {
+			mergedContents = append(mergedContents, content)
+		}
+	}
+
+	return systemContent, mergedContents, imageTasks
 }
 
 func processImageTasks(ctx context.Context, imageTasks []*Part) error {
@@ -571,6 +610,15 @@ func getToolCall(item *Part) (*relaymodel.ToolCall, error) {
 			Arguments: conv.BytesToString(argsBytes),
 			Name:      item.FunctionCall.Name,
 		},
+	}
+
+	// Preserve Gemini thought signature if present (OpenAI format)
+	if item.ThoughtSignature != "" {
+		toolCall.ExtraContent = &relaymodel.ExtraContent{
+			Google: &relaymodel.GoogleExtraContent{
+				ThoughtSignature: item.ThoughtSignature,
+			},
+		}
 	}
 
 	return &toolCall, nil

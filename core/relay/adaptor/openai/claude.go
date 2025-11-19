@@ -128,7 +128,9 @@ func convertClaudeMessagesToOpenAI(
 		openAIMsg.ToolCalls = result.ToolCalls
 
 		openAIMsg.Content = result.Content
-		if openAIMsg.Content != nil {
+		// Include the message if it has content OR tool calls
+		// This is important for function calling flow where assistant may only have tool calls
+		if openAIMsg.Content != nil || len(openAIMsg.ToolCalls) > 0 {
 			messages = append(messages, openAIMsg)
 		}
 	}
@@ -196,14 +198,24 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 			case "tool_use":
 				// Handle tool calls
 				args, _ := sonic.MarshalString(content.Input)
-				result.ToolCalls = append(result.ToolCalls, relaymodel.ToolCall{
+				toolCall := relaymodel.ToolCall{
 					ID:   content.ID,
 					Type: "function",
 					Function: relaymodel.Function{
 						Name:      content.Name,
 						Arguments: args,
 					},
-				})
+				}
+				// Preserve Gemini thought signature if present (OpenAI format)
+				if content.ThoughtSignature != "" {
+					toolCall.ExtraContent = &relaymodel.ExtraContent{
+						Google: &relaymodel.GoogleExtraContent{
+							ThoughtSignature: content.ThoughtSignature,
+						},
+					}
+				}
+
+				result.ToolCalls = append(result.ToolCalls, toolCall)
 			case "tool_result":
 				// Create a separate tool message for each tool_result
 				var newContent any

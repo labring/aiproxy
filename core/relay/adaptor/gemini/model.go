@@ -64,6 +64,7 @@ type Part struct {
 	FunctionResponse *FunctionResponse `json:"functionResponse,omitempty"`
 	Text             string            `json:"text,omitempty"`
 	Thought          bool              `json:"thought,omitempty"`
+	ThoughtSignature string            `json:"thoughtSignature,omitempty"`
 }
 
 type ChatContent struct {
