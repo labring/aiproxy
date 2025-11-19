@@ -212,6 +212,7 @@ func convertClaudeContent(content any) convertClaudeContentResult {
 						},
 					}
 				}
+
 				result.ToolCalls = append(result.ToolCalls, toolCall)
 			case "tool_result":
 				// Create a separate tool message for each tool_result
