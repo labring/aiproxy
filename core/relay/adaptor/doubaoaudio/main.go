@@ -45,16 +45,17 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://www.volcengine.com/docs/6561/1257543",
-			"TTS support",
-		},
+		Readme:  "https://www.volcengine.com/docs/6561/1257543\nTTS support",
 		KeyHelp: "app_id|app_token",
 		Models:  ModelList,
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	return GetRequestURL(meta)
 }
 

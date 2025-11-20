@@ -11,10 +11,25 @@ func SetRelayRouter(router *gin.Engine) {
 	v1Router := router.Group("/v1")
 	v1Router.Use(middleware.IPBlock, middleware.TokenAuth)
 
+	v1betaRouter := router.Group("/v1beta")
+	v1betaRouter.Use(middleware.IPBlock, middleware.TokenAuth)
+
 	modelsRouter := v1Router.Group("/models")
 	{
 		modelsRouter.GET("", controller.ListModels)
 		modelsRouter.GET("/:model", controller.RetrieveModel)
+	}
+
+	// gemini
+	{
+		v1Router.POST(
+			"/models/*model",
+			controller.Gemini()...,
+		)
+		v1betaRouter.POST(
+			"/models/*model",
+			controller.Gemini()...,
+		)
 	}
 
 	dashboardRouter := v1Router.Group("/dashboard")

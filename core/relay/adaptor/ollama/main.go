@@ -46,11 +46,14 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		Tools:    make([]*Tool, 0, len(request.Tools)),
 	}
 
-	if request.ResponseFormat != nil &&
-		request.ResponseFormat.Type == "json_schema" &&
-		request.ResponseFormat.JSONSchema != nil &&
-		request.ResponseFormat.JSONSchema.Schema != nil {
-		ollamaRequest.Format = request.ResponseFormat.JSONSchema.Schema
+	if request.ResponseFormat != nil {
+		if request.ResponseFormat.Type == "json_schema" &&
+			request.ResponseFormat.JSONSchema != nil &&
+			request.ResponseFormat.JSONSchema.Schema != nil {
+			ollamaRequest.Format = request.ResponseFormat.JSONSchema.Schema
+		} else if request.ResponseFormat.Type == "json_object" {
+			ollamaRequest.Format = "json"
+		}
 	}
 
 	for _, message := range request.Messages {

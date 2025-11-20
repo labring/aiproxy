@@ -189,7 +189,7 @@ func prepareAndDoRequest(
 		meta.Channel.BaseURL = a.DefaultBaseURL()
 	}
 
-	fullRequestURL, err := a.GetRequestURL(meta, store)
+	fullRequestURL, err := a.GetRequestURL(meta, store, c)
 	if err != nil {
 		return nil, relaymodel.WrapperErrorWithMessage(
 			meta.Mode,

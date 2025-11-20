@@ -8418,16 +8418,13 @@ const docTemplate = `{
                 "defaultBaseUrl": {
                     "type": "string"
                 },
-                "fetures": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "keyHelp": {
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "readme": {
                     "type": "string"
                 }
             }
@@ -9658,7 +9655,8 @@ const docTemplate = `{
                 17,
                 18,
                 19,
-                20
+                20,
+                21
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -9681,7 +9679,8 @@ const docTemplate = `{
                 "ResponsesGet",
                 "ResponsesDelete",
                 "ResponsesCancel",
-                "ResponsesInputItems"
+                "ResponsesInputItems",
+                "Gemini"
             ]
         },
         "model.AnthropicMessageRequest": {
@@ -10278,6 +10277,14 @@ const docTemplate = `{
                 }
             }
         },
+        "model.ExtraContent": {
+            "type": "object",
+            "properties": {
+                "google": {
+                    "$ref": "#/definitions/model.GoogleExtraContent"
+                }
+            }
+        },
         "model.FinishReason": {
             "type": "string",
             "enum": [
@@ -10455,6 +10462,14 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.GoogleExtraContent": {
+            "type": "object",
+            "properties": {
+                "thought_signature": {
+                    "type": "string"
                 }
             }
         },
@@ -11068,6 +11083,9 @@ const docTemplate = `{
                 "role": {
                     "type": "string"
                 },
+                "signature": {
+                    "type": "string"
+                },
                 "tool_call_id": {
                     "type": "string"
                 },
@@ -11359,6 +11377,10 @@ const docTemplate = `{
         "model.PriceCondition": {
             "type": "object",
             "properties": {
+                "end_time": {
+                    "description": "Unix timestamp, 0 means no end limit",
+                    "type": "integer"
+                },
                 "input_token_max": {
                     "type": "integer"
                 },
@@ -11369,6 +11391,10 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "output_token_min": {
+                    "type": "integer"
+                },
+                "start_time": {
+                    "description": "Unix timestamp, 0 means no start limit",
                     "type": "integer"
                 }
             }
@@ -12095,6 +12121,9 @@ const docTemplate = `{
         "model.ToolCall": {
             "type": "object",
             "properties": {
+                "extra_content": {
+                    "$ref": "#/definitions/model.ExtraContent"
+                },
                 "function": {
                     "$ref": "#/definitions/model.Function"
                 },

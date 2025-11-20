@@ -22,11 +22,11 @@ func TestClaudeHandler(t *testing.T) {
 				OriginModel: "claude-3-5-sonnet-20240620",
 			}
 
-			response := &gemini.ChatResponse{
-				Candidates: []*gemini.ChatCandidate{
+			response := &relaymodel.GeminiChatResponse{
+				Candidates: []*relaymodel.GeminiChatCandidate{
 					{
-						Content: gemini.ChatContent{
-							Parts: []*gemini.Part{
+						Content: relaymodel.GeminiChatContent{
+							Parts: []*relaymodel.GeminiPart{
 								{
 									Text:             "Thinking process...",
 									Thought:          true,
@@ -78,13 +78,13 @@ func TestClaudeHandler(t *testing.T) {
 				OriginModel: "claude-3-5-sonnet-20240620",
 			}
 
-			response := &gemini.ChatResponse{
-				Candidates: []*gemini.ChatCandidate{
+			response := &relaymodel.GeminiChatResponse{
+				Candidates: []*relaymodel.GeminiChatCandidate{
 					{
-						Content: gemini.ChatContent{
-							Parts: []*gemini.Part{
+						Content: relaymodel.GeminiChatContent{
+							Parts: []*relaymodel.GeminiPart{
 								{
-									FunctionCall: &gemini.FunctionCall{
+									FunctionCall: &relaymodel.GeminiFunctionCall{
 										Name: "get_weather",
 										Args: map[string]any{"location": "London"},
 									},
@@ -134,11 +134,11 @@ func TestClaudeStreamHandler(t *testing.T) {
 			}
 
 			// Prepare SSE stream response
-			response := &gemini.ChatResponse{
-				Candidates: []*gemini.ChatCandidate{
+			response := &relaymodel.GeminiChatResponse{
+				Candidates: []*relaymodel.GeminiChatCandidate{
 					{
-						Content: gemini.ChatContent{
-							Parts: []*gemini.Part{
+						Content: relaymodel.GeminiChatContent{
+							Parts: []*relaymodel.GeminiPart{
 								{
 									Text:             "Thinking process...",
 									Thought:          true,

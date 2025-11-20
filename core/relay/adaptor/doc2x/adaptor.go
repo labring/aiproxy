@@ -28,7 +28,11 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ParsePdf
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.ParsePdf:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/api/v2/parse/pdf")

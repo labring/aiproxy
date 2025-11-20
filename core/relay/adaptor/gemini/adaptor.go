@@ -24,7 +24,8 @@ func (a *Adaptor) DefaultBaseURL() string {
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Anthropic ||
-		m == mode.Embeddings
+		m == mode.Embeddings ||
+		m == mode.Gemini
 }
 
 var v1ModelMap = map[string]struct{}{}
@@ -46,7 +47,11 @@ func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	var action string
 	switch meta.Mode {
 	case mode.Embeddings:
@@ -55,7 +60,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		action = "generateContent"
 	}
 
-	if meta.GetBool("stream") {
+	if meta.GetBool("stream") ||
+		(meta.Mode == mode.Gemini && utils.IsGeminiStreamRequest(c.Request.URL.Path)) {
 		action = "streamGenerateContent?alt=sse"
 	}
 
@@ -84,6 +90,8 @@ func (a *Adaptor) ConvertRequest(
 		return ConvertRequest(meta, req)
 	case mode.Anthropic:
 		return ConvertClaudeRequest(meta, req)
+	case mode.Gemini:
+		return NativeConvertRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -119,6 +127,13 @@ func (a *Adaptor) DoResponse(
 		} else {
 			usage, err = ClaudeHandler(meta, c, resp)
 		}
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			usage, err = NativeStreamHandler(meta, c, resp)
+		} else {
+			usage, err = NativeHandler(meta, c, resp)
+		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
@@ -132,10 +147,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://ai.google.dev",
-			"Chat、Embeddings、Image generation Support",
-		},
+		Readme: "https://ai.google.dev\nChat、Embeddings、Image generation Support",
 		Models: ModelList,
 	}
 }

@@ -139,7 +139,7 @@ var (
 	ErrChannelsExhausted = errors.New("channels exhausted")
 )
 
-func GetRandomChannel(
+func getRandomChannel(
 	mc *model.ModelCaches,
 	availableSet []string,
 	modelName string,
@@ -151,7 +151,8 @@ func GetRandomChannel(
 	channelMap := make(map[int]*model.Channel)
 	if len(availableSet) != 0 {
 		for _, set := range availableSet {
-			for _, channel := range mc.EnabledModel2ChannelsBySet[set][modelName] {
+			channels := mc.EnabledModel2ChannelsBySet[set][modelName]
+			for _, channel := range channels {
 				a, ok := adaptors.GetAdaptor(channel.Type)
 				if !ok {
 					continue
@@ -261,7 +262,7 @@ func getChannelWithFallback(
 	errorRates map[int64]float64,
 	ignoreChannelIDs map[int64]struct{},
 ) (*model.Channel, []*model.Channel, error) {
-	channel, migratedChannels, err := GetRandomChannel(
+	channel, migratedChannels, err := getRandomChannel(
 		cache,
 		availableSet,
 		modelName,
@@ -278,7 +279,7 @@ func getChannelWithFallback(
 		return nil, migratedChannels, err
 	}
 
-	return GetRandomChannel(
+	return getRandomChannel(
 		cache,
 		availableSet,
 		modelName,

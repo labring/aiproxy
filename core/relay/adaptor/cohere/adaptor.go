@@ -28,7 +28,11 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	url, err := url.JoinPath(meta.Channel.BaseURL, "/v1/chat")
 	if err != nil {
 		return adaptor.RequestURL{}, err

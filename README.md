@@ -14,7 +14,7 @@
 
 ## 🚀 Overview
 
-AI Proxy is a powerful, production-ready AI gateway that provides intelligent request routing, comprehensive monitoring, and seamless multi-tenant management. Built with OpenAI-compatible and Anthropic protocols, it serves as the perfect middleware for AI applications requiring reliability, scalability, and advanced features.
+AI Proxy is a powerful, production-ready AI gateway that provides intelligent request routing, comprehensive monitoring, and seamless multi-tenant management. Built with OpenAI-compatible, Anthropic and Gemini protocols, it serves as the perfect middleware for AI applications requiring reliability, scalability, and advanced features.
 
 ## ✨ Key Features
 
@@ -293,6 +293,15 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:3000
 export ANTHROPIC_AUTH_TOKEN=sk-xxx
 export ANTHROPIC_MODEL=gpt-5
 export ANTHROPIC_SMALL_FAST_MODEL=gpt-5-nano
+```
+
+### Gemini CLI Integration
+
+Use AI Proxy with Gemini CLI by configuring these environment variables:
+
+```bash
+export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
+export GEMINI_API_KEY=sk-xxx
 ```
 
 ### MCP (Model Context Protocol)

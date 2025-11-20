@@ -28,10 +28,16 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Anthropic
+	return m == mode.ChatCompletions ||
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	url, err := url.JoinPath(u, "/messages")
@@ -51,6 +57,23 @@ const (
 	AnthropicTokenHeader = "X-Api-Key"
 	AnthropicBeta        = "Anthropic-Beta"
 )
+
+func ModelDefaultMaxTokens(model string) int {
+	switch {
+	case strings.Contains(model, "4-5"):
+		return 200000
+	case strings.Contains(model, "4-1"):
+		return 204800
+	case strings.Contains(model, "sonnet-4-"):
+		return 65536
+	case strings.Contains(model, "opus-4-"):
+		return 32768
+	case strings.Contains(model, "3-7"):
+		return 131072
+	default:
+		return 4096
+	}
+}
 
 func FixBetasStringWithModel(model, betas string, deleteFunc ...func(e string) bool) string {
 	return strings.Join(FixBetasWithModel(model, strings.Split(betas, ","), deleteFunc...), ",")
@@ -146,6 +169,8 @@ func (a *Adaptor) ConvertRequest(
 		}, nil
 	case mode.Anthropic:
 		return ConvertRequest(meta, req)
+	case mode.Gemini:
+		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -179,6 +204,12 @@ func (a *Adaptor) DoResponse(
 		} else {
 			usage, err = Handler(meta, c, resp)
 		}
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			usage, err = GeminiStreamHandler(meta, c, resp)
+		} else {
+			usage, err = GeminiHandler(meta, c, resp)
+		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
@@ -192,9 +223,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Support native Endpoint: /v1/messages",
-		},
+		Readme: "Support native Endpoint: /v1/messages",
 		Models: ModelList,
 	}
 }

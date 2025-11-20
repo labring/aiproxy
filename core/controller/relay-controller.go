@@ -149,6 +149,8 @@ func relayController(m mode.Mode) RelayController {
 		c.GetRequestUsage = controller.GetAnthropicRequestUsage
 	case mode.ChatCompletions:
 		c.GetRequestUsage = controller.GetChatRequestUsage
+	case mode.Gemini:
+		c.GetRequestUsage = controller.GetGeminiRequestUsage
 	case mode.Embeddings:
 		c.GetRequestUsage = controller.GetEmbedRequestUsage
 	case mode.Completions:

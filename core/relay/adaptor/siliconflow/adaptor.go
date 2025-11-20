@@ -25,6 +25,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Gemini support",
 		Models: ModelList,
 	}
 }

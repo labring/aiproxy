@@ -32,15 +32,16 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://github.com/huggingface/text-embeddings-inference",
-			"Embeddings、Rerank Support",
-		},
+		Readme: "https://github.com/huggingface/text-embeddings-inference\nEmbeddings、Rerank Support",
 		Models: ModelList,
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.Rerank:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/rerank")

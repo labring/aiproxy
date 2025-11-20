@@ -41,6 +41,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.VideoGenerationsGetJobs ||
 		m == mode.VideoGenerationsContent ||
 		m == mode.Anthropic ||
+		m == mode.Gemini ||
 		m == mode.Responses ||
 		m == mode.ResponsesGet ||
 		m == mode.ResponsesDelete ||
@@ -48,8 +49,13 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.ResponsesInputItems
 }
 
+//
 //nolint:gocyclo
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
@@ -103,7 +109,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 			Method: http.MethodGet,
 			URL:    url,
 		}, nil
-	case mode.ChatCompletions, mode.Anthropic:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		url, err := url.JoinPath(u, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -297,6 +303,8 @@ func ConvertRequest(
 		return ConvertVideoGetJobsRequest(meta, req)
 	case mode.VideoGenerationsContent:
 		return ConvertVideoGetJobsContentRequest(meta, req)
+	case mode.Gemini:
+		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -353,6 +361,12 @@ func DoResponse(
 		usage, err = VideoGetJobsHandler(meta, store, c, resp)
 	case mode.VideoGenerationsContent:
 		usage, err = VideoGetJobsContentHandler(meta, store, c, resp)
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			usage, err = GeminiStreamHandler(meta, c, resp)
+		} else {
+			usage, err = GeminiHandler(meta, c, resp)
+		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
@@ -386,10 +400,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"OpenAI compatibility",
-			"Anthropic conversation",
-		},
+		Readme: "OpenAI compatibility\nAnthropic conversation",
 		Models: ModelList,
 	}
 }

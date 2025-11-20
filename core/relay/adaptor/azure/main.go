@@ -23,7 +23,11 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return "https://{resource_name}.openai.azure.com"
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	return GetRequestURL(meta, true)
 }
 
@@ -104,7 +108,7 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 			Method: http.MethodPost,
 			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
 		}, nil
-	case mode.ChatCompletions, mode.Anthropic:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
 		url, err := url.JoinPath(
 			meta.Channel.BaseURL,
@@ -298,11 +302,10 @@ func (a *Adaptor) SetupRequestHeader(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Model names do not contain '.' character, dots will be removed",
-			"For example: gpt-3.5-turbo becomes gpt-35-turbo",
-			fmt.Sprintf("API version is optional, default is '%s'", DefaultAPIVersion),
-		},
+		Readme: fmt.Sprintf(
+			"Model names do not contain '.' character, dots will be removed\nFor example: gpt-3.5-turbo becomes gpt-35-turbo\nAPI version is optional, default is '%s'\nGemini support",
+			DefaultAPIVersion,
+		),
 		KeyHelp: "key or key|api-version",
 		Models:  openai.ModelList,
 	}

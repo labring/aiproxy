@@ -23,7 +23,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Anthropic
+	return m == mode.ChatCompletions || m == mode.Anthropic || m == mode.Gemini
 }
 
 type Config struct {
@@ -66,24 +66,37 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Claude support native Endpoint: /v1/messages",
-		},
+		Readme:  "Claude support native Endpoint: /v1/messages\nGemini support",
 		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	var suffix string
+
+	// For Gemini mode, get stream flag from URL
+	var isStream bool
+	if meta.Mode == mode.Gemini && c != nil {
+		// Original URL path contains the action like :streamGenerateContent or :generateContent
+		originalPath := c.Request.URL.Path
+		isStream = strings.Contains(originalPath, ":stream")
+	} else {
+		isStream = meta.GetBool("stream")
+	}
+
 	if strings.HasPrefix(meta.ActualModel, "gemini") {
-		if meta.GetBool("stream") {
+		if isStream {
 			suffix = "streamGenerateContent?alt=sse"
 		} else {
 			suffix = "generateContent"
 		}
 	} else {
-		if meta.GetBool("stream") {
+		if isStream {
 			suffix = "streamRawPredict?alt=sse"
 		} else {
 			suffix = "rawPredict"

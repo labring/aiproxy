@@ -98,7 +98,7 @@ type AdaptorMeta struct {
 	Name            string                            `json:"name"`
 	KeyHelp         string                            `json:"keyHelp"`
 	DefaultBaseURL  string                            `json:"defaultBaseUrl"`
-	Fetures         []string                          `json:"fetures,omitempty"`
+	Readme          string                            `json:"readme"`
 	ConfigTemplates map[string]adaptor.ConfigTemplate `json:"configs,omitempty"`
 }
 
@@ -112,7 +112,7 @@ func init() {
 			Name:            i.String(),
 			KeyHelp:         adaptorMeta.KeyHelp,
 			DefaultBaseURL:  a.DefaultBaseURL(),
-			Fetures:         adaptorMeta.Features,
+			Readme:          adaptorMeta.Readme,
 			ConfigTemplates: adaptorMeta.ConfigTemplates.Configs,
 		}
 		for key, template := range adaptorMeta.ConfigTemplates.Configs {

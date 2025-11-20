@@ -14,6 +14,7 @@ type Plugin interface {
 	GetRequestURL(
 		meta *meta.Meta,
 		store adaptor.Store,
+		c *gin.Context,
 		do adaptor.GetRequestURL,
 	) (adaptor.RequestURL, error)
 
@@ -75,8 +76,9 @@ type wrappedAdaptor struct {
 func (w *wrappedAdaptor) GetRequestURL(
 	meta *meta.Meta,
 	store adaptor.Store,
+	c *gin.Context,
 ) (adaptor.RequestURL, error) {
-	return w.plugin.GetRequestURL(meta, store, w.Adaptor)
+	return w.plugin.GetRequestURL(meta, store, c, w.Adaptor)
 }
 
 func (w *wrappedAdaptor) SetupRequestHeader(

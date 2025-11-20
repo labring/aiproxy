@@ -30,7 +30,7 @@ type Store interface {
 type Metadata struct {
 	ConfigTemplates ConfigTemplates
 	KeyHelp         string
-	Features        []string
+	Readme          string
 	Models          []model.ModelConfig
 }
 
@@ -40,7 +40,7 @@ type RequestURL struct {
 }
 
 type GetRequestURL interface {
-	GetRequestURL(meta *meta.Meta, store Store) (RequestURL, error)
+	GetRequestURL(meta *meta.Meta, store Store, c *gin.Context) (RequestURL, error)
 }
 
 type SetupRequestHeader interface {

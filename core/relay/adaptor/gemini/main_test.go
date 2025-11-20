@@ -23,11 +23,11 @@ func TestHandler(t *testing.T) {
 				OriginModel: "gemini-1.5-pro",
 			}
 
-			response := &gemini.ChatResponse{
-				Candidates: []*gemini.ChatCandidate{
+			response := &relaymodel.GeminiChatResponse{
+				Candidates: []*relaymodel.GeminiChatCandidate{
 					{
-						Content: gemini.ChatContent{
-							Parts: []*gemini.Part{
+						Content: relaymodel.GeminiChatContent{
+							Parts: []*relaymodel.GeminiPart{
 								{
 									Text:             "Thinking process...",
 									Thought:          true,
@@ -88,11 +88,11 @@ func TestStreamHandler(t *testing.T) {
 			}
 
 			// Prepare SSE stream response
-			response := &gemini.ChatResponse{
-				Candidates: []*gemini.ChatCandidate{
+			response := &relaymodel.GeminiChatResponse{
+				Candidates: []*relaymodel.GeminiChatCandidate{
 					{
-						Content: gemini.ChatContent{
-							Parts: []*gemini.Part{
+						Content: relaymodel.GeminiChatContent{
+							Parts: []*relaymodel.GeminiPart{
 								{
 									Text:             "Thinking chunk...",
 									Thought:          true,

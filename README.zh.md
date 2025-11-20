@@ -14,7 +14,7 @@
 
 ## 🚀 项目概述
 
-AI Proxy 是一个强大的、生产就绪的 AI 网关，提供智能请求路由、全面监控和无缝多租户管理。基于 OpenAI、Anthropic 兼容协议构建，是需要可靠性、可扩展性和高级功能的 AI 应用的完美中间件。
+AI Proxy 是一个强大的、生产就绪的 AI 网关，提供智能请求路由、全面监控和无缝多租户管理。基于 OpenAI、Anthropic 和 Gemini 兼容协议构建，是需要可靠性、可扩展性和高级功能的 AI 应用的完美中间件。
 
 ## ✨ 核心特性
 
@@ -293,6 +293,15 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:3000
 export ANTHROPIC_AUTH_TOKEN=sk-xxx
 export ANTHROPIC_MODEL=gpt-5
 export ANTHROPIC_SMALL_FAST_MODEL=gpt-5-nano
+```
+
+### Gemini CLI 集成
+
+通过配置以下环境变量在 Gemini CLI 中使用 AI Proxy：
+
+```bash
+export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
+export GEMINI_API_KEY=sk-xxx
 ```
 
 ### MCP (模型上下文协议)

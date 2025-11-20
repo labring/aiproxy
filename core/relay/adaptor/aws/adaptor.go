@@ -23,7 +23,8 @@ func (a *Adaptor) DefaultBaseURL() string {
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
 func (a *Adaptor) ConvertRequest(
@@ -102,12 +103,17 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 	}
 
 	return adaptor.Metadata{
+		Readme:  "Gemini support",
 		Models:  models,
 		KeyHelp: "region|ak|sk or region|apikey",
 	}
 }
 
-func (a *Adaptor) GetRequestURL(_ *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
 		URL:    "",

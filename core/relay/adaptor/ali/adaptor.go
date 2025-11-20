@@ -35,10 +35,15 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.AudioSpeech ||
 		m == mode.AudioTranscription ||
 		m == mode.AudioTranslation ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
@@ -112,6 +117,16 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 			Method: http.MethodPost,
 			URL:    url,
 		}, nil
+	case mode.Gemini:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/chat/completions")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
 	default:
 		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -151,6 +166,8 @@ func (a *Adaptor) ConvertRequest(
 		return ConvertSTTRequest(meta, req)
 	case mode.Anthropic:
 		return anthropic.ConvertRequest(meta, req)
+	case mode.Gemini:
+		return openai.ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -197,6 +214,12 @@ func (a *Adaptor) DoResponse(
 		} else {
 			return anthropic.Handler(meta, c, resp)
 		}
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			return openai.GeminiStreamHandler(meta, c, resp)
+		} else {
+			return openai.GeminiHandler(meta, c, resp)
+		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
@@ -208,13 +231,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"OpenAI compatibility",
-			"Network search metering support",
-			"Rerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api",
-			"STT support: https://help.aliyun.com/zh/model-studio/sambert-speech-synthesis/",
-			"Anthropic support: /api/v2/apps/claude-code-proxy",
-		},
+		Readme: "OpenAI compatibility\nNetwork search metering support\nRerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api\nSTT support: https://help.aliyun.com/zh/model-studio/sambert-speech-synthesis/\nAnthropic support: /api/v2/apps/claude-code-proxy\nGemini support",
 		Models: ModelList,
 	}
 }

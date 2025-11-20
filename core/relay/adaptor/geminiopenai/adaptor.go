@@ -18,10 +18,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://ai.google.dev/gemini-api/docs/openai",
-			"OpenAI compatibility",
-		},
+		Readme: "https://ai.google.dev/gemini-api/docs/openai\nOpenAI compatibility",
 		Models: gemini.ModelList,
 	}
 }

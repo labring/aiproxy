@@ -26,9 +26,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Chat、Embeddings、TTS(need group id) Support",
-		},
+		Readme:  "Chat、Embeddings、TTS(need group id) Support\nGemini support",
 		KeyHelp: "api_key|group_id",
 		Models:  ModelList,
 	}
@@ -50,14 +48,18 @@ func (a *Adaptor) SetupRequestHeader(
 	return nil
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	_, groupID, err := GetAPIKeyAndGroupID(meta.Channel.Key)
 	if err != nil {
 		return adaptor.RequestURL{}, err
 	}
 
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Gemini:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/text/chatcompletion_v2")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -88,7 +90,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 			URL:    fmt.Sprintf("%s?GroupId=%s", url, groupID),
 		}, nil
 	default:
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
 	}
 }
 
@@ -100,6 +102,8 @@ func (a *Adaptor) ConvertRequest(
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		return openai.ConvertChatCompletionsRequest(meta, req, true)
+	case mode.Gemini:
+		return openai.ConvertGeminiRequest(meta, req)
 	case mode.AudioSpeech:
 		return ConvertTTSRequest(meta, req)
 	default:

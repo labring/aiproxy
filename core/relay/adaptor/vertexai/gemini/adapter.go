@@ -22,6 +22,8 @@ func (a *Adaptor) ConvertRequest(
 	switch meta.Mode {
 	case mode.Anthropic:
 		return gemini.ConvertClaudeRequest(meta, request)
+	case mode.Gemini:
+		return gemini.NativeConvertRequest(meta, request, gemini.CleanFunctionResponseID)
 	default:
 		return gemini.ConvertRequest(meta, request)
 	}
@@ -48,6 +50,13 @@ func (a *Adaptor) DoResponse(
 			usage, err = gemini.ClaudeStreamHandler(meta, c, resp)
 		} else {
 			usage, err = gemini.ClaudeHandler(meta, c, resp)
+		}
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			usage, err = gemini.NativeStreamHandler(meta, c, resp)
+		} else {
+			usage, err = gemini.NativeHandler(meta, c, resp)
 		}
 	default:
 		if utils.IsStreamResponse(resp) {
