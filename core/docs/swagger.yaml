@@ -18,13 +18,11 @@ definitions:
         type: object
       defaultBaseUrl:
         type: string
-      fetures:
-        items:
-          type: string
-        type: array
       keyHelp:
         type: string
       name:
+        type: string
+      readme:
         type: string
     type: object
   balance.GroupQuota:
@@ -852,6 +850,7 @@ definitions:
     - 18
     - 19
     - 20
+    - 21
     type: integer
     x-enum-varnames:
     - Unknown
@@ -875,6 +874,7 @@ definitions:
     - ResponsesDelete
     - ResponsesCancel
     - ResponsesInputItems
+    - Gemini
   model.AnthropicMessageRequest:
     properties:
       messages:
@@ -1071,15 +1071,15 @@ definitions:
         type: integer
       retry_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       timestamp:
         type: integer
@@ -1212,6 +1212,8 @@ definitions:
         type: integer
       rpm:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1219,8 +1221,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       total_count:
         description: use Count.RequestCount instead
@@ -1293,6 +1293,11 @@ definitions:
         $ref: '#/definitions/model.EmbeddingPromptTokensDetails'
       total_tokens:
         type: integer
+    type: object
+  model.ExtraContent:
+    properties:
+      google:
+        $ref: '#/definitions/model.GoogleExtraContent'
     type: object
   model.FinishReason:
     enum:
@@ -1417,6 +1422,11 @@ definitions:
       total:
         type: integer
     type: object
+  model.GoogleExtraContent:
+    properties:
+      thought_signature:
+        type: string
+    type: object
   model.Group:
     properties:
       available_sets:
@@ -1482,6 +1492,8 @@ definitions:
         type: integer
       rpm:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1489,8 +1501,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       token_names:
         items:
@@ -1825,6 +1835,8 @@ definitions:
         type: string
       role:
         type: string
+      signature:
+        type: string
       tool_call_id:
         type: string
       tool_calls:
@@ -2042,6 +2054,9 @@ definitions:
     type: object
   model.PriceCondition:
     properties:
+      end_time:
+        description: Unix timestamp, 0 means no end limit
+        type: integer
       input_token_max:
         type: integer
       input_token_min:
@@ -2049,6 +2064,9 @@ definitions:
       output_token_max:
         type: integer
       output_token_min:
+        type: integer
+      start_time:
+        description: Unix timestamp, 0 means no start limit
         type: integer
     type: object
   model.PromptTokensDetails:
@@ -2531,6 +2549,8 @@ definitions:
     type: object
   model.ToolCall:
     properties:
+      extra_content:
+        $ref: '#/definitions/model.ExtraContent'
       function:
         $ref: '#/definitions/model.Function'
       id:
