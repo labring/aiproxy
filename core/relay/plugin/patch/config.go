@@ -206,13 +206,13 @@ var DefaultPredefinedPatches = []PatchRule{
 		},
 	},
 	{
-		Name:        "gpt5.1_remove_top_p",
-		Description: "Remove top_p field for GPT-5.1 models",
+		Name:        "gpt5_remove_top_p",
+		Description: "Remove top_p field for GPT-5 models",
 		Conditions: []PatchCondition{
 			{
 				Key:      "model",
 				Operator: OperatorContains,
-				Value:    "gpt-5.1",
+				Value:    "gpt-5",
 			},
 			{
 				Key:      "top_p",
@@ -227,13 +227,13 @@ var DefaultPredefinedPatches = []PatchRule{
 		},
 	},
 	{
-		Name:        "gemini_gpt5.1_remove_generation_config_top_p",
-		Description: "Remove generationConfig.topP for GPT-5.1 models in Gemini format",
+		Name:        "gemini_gpt5_remove_generation_config_top_p",
+		Description: "Remove generationConfig.topP for GPT-5 models in Gemini format",
 		Conditions: []PatchCondition{
 			{
 				Key:      "model",
 				Operator: OperatorContains,
-				Value:    "gpt-5.1",
+				Value:    "gpt-5",
 			},
 			{
 				Key:      "generationConfig.topP",

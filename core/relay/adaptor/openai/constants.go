@@ -214,4 +214,51 @@ var ModelList = []model.ModelConfig{
 		Type:  mode.AudioSpeech,
 		Owner: model.ModelOwnerOpenAI,
 	},
+	{
+		Model: "gpt-5-codex",
+		Type:  mode.Responses,
+		Owner: model.ModelOwnerOpenAI,
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(200000),
+			model.WithModelConfigToolChoice(true),
+		),
+	},
+	{
+		Model: "gpt-5-pro",
+		Type:  mode.Responses,
+		Owner: model.ModelOwnerOpenAI,
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(200000),
+			model.WithModelConfigToolChoice(true),
+		),
+	},
+}
+
+var responsesOnlyModels = map[string]struct{}{
+	"gpt-5-codex": {},
+	"gpt-5-pro":   {},
+}
+
+// IsResponsesOnlyModel checks if a model only supports the Responses API
+// First parameter is the model config, used to check Type field if model name check fails
+// Second parameter is the model name, checked first for quick lookup
+func IsResponsesOnlyModel(modelConfig *model.ModelConfig, modelName string) bool {
+	// First, check model name for quick lookup
+	if _, ok := responsesOnlyModels[modelName]; ok {
+		return true
+	}
+
+	// If model config is provided, check if Type is any Responses-related mode
+	if modelConfig != nil {
+		switch modelConfig.Type {
+		case mode.Responses,
+			mode.ResponsesGet,
+			mode.ResponsesDelete,
+			mode.ResponsesCancel,
+			mode.ResponsesInputItems:
+			return true
+		}
+	}
+
+	return false
 }

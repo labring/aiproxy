@@ -143,6 +143,43 @@ func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 	return chatUsage
 }
 
+// ToResponseUsage converts GeminiUsageMetadata to ResponseUsage (OpenAI Responses API format)
+func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.PromptTokenCount,
+		OutputTokens: u.CandidatesTokenCount,
+		TotalTokens:  u.TotalTokenCount,
+	}
+
+	if u.CachedContentTokenCount > 0 {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.CachedContentTokenCount,
+		}
+	}
+
+	if u.ThoughtsTokenCount > 0 {
+		usage.OutputTokensDetails = &ResponseUsageDetails{
+			ReasoningTokens: u.ThoughtsTokenCount,
+		}
+	}
+
+	return usage
+}
+
+// ToClaudeUsage converts GeminiUsageMetadata to ClaudeUsage (Anthropic Claude format)
+func (u *GeminiUsageMetadata) ToClaudeUsage() ClaudeUsage {
+	usage := ClaudeUsage{
+		InputTokens:  u.PromptTokenCount,
+		OutputTokens: u.CandidatesTokenCount,
+	}
+
+	if u.CachedContentTokenCount > 0 {
+		usage.CacheReadInputTokens = u.CachedContentTokenCount
+	}
+
+	return usage
+}
+
 type GeminiError struct {
 	Message string `json:"message,omitempty"`
 	Status  string `json:"status,omitempty"`

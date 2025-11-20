@@ -67,6 +67,49 @@ func (u ChatUsage) ToClaudeUsage() ClaudeUsage {
 	return cu
 }
 
+// ToResponseUsage converts ChatUsage to ResponseUsage (OpenAI Responses API format)
+func (u ChatUsage) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.PromptTokens,
+		OutputTokens: u.CompletionTokens,
+		TotalTokens:  u.TotalTokens,
+	}
+
+	if u.PromptTokensDetails != nil &&
+		(u.PromptTokensDetails.CachedTokens > 0 || u.PromptTokensDetails.CacheCreationTokens > 0) {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.PromptTokensDetails.CachedTokens,
+		}
+	}
+
+	if u.CompletionTokensDetails != nil && u.CompletionTokensDetails.ReasoningTokens > 0 {
+		usage.OutputTokensDetails = &ResponseUsageDetails{
+			ReasoningTokens: u.CompletionTokensDetails.ReasoningTokens,
+		}
+	}
+
+	return usage
+}
+
+// ToGeminiUsage converts ChatUsage to GeminiUsageMetadata (Google Gemini format)
+func (u ChatUsage) ToGeminiUsage() GeminiUsageMetadata {
+	usage := GeminiUsageMetadata{
+		PromptTokenCount:     u.PromptTokens,
+		CandidatesTokenCount: u.CompletionTokens,
+		TotalTokenCount:      u.TotalTokens,
+	}
+
+	if u.PromptTokensDetails != nil && u.PromptTokensDetails.CachedTokens > 0 {
+		usage.CachedContentTokenCount = u.PromptTokensDetails.CachedTokens
+	}
+
+	if u.CompletionTokensDetails != nil && u.CompletionTokensDetails.ReasoningTokens > 0 {
+		usage.ThoughtsTokenCount = u.CompletionTokensDetails.ReasoningTokens
+	}
+
+	return usage
+}
+
 type PromptTokensDetails struct {
 	CachedTokens        int64 `json:"cached_tokens"`
 	AudioTokens         int64 `json:"audio_tokens"`

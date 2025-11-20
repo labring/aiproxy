@@ -657,16 +657,7 @@ func ClaudeHandler(
 	}
 
 	// Convert usage
-	claudeResponse.Usage = relaymodel.ClaudeUsage{
-		InputTokens:  openAIResponse.Usage.PromptTokens,
-		OutputTokens: openAIResponse.Usage.CompletionTokens,
-	}
-
-	// Add cache information if available
-	if openAIResponse.Usage.PromptTokensDetails != nil {
-		claudeResponse.Usage.CacheReadInputTokens = openAIResponse.Usage.PromptTokensDetails.CachedTokens
-		claudeResponse.Usage.CacheCreationInputTokens = openAIResponse.Usage.PromptTokensDetails.CacheCreationTokens
-	}
+	claudeResponse.Usage = openAIResponse.Usage.ToClaudeUsage()
 
 	// Add web search usage if available
 	if openAIResponse.Usage.WebSearchCount > 0 {

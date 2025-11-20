@@ -197,6 +197,39 @@ func (u *ClaudeUsage) ToOpenAIUsage() ChatUsage {
 	return usage
 }
 
+// ToResponseUsage converts ClaudeUsage to ResponseUsage (OpenAI Responses API format)
+func (u *ClaudeUsage) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+		OutputTokens: u.OutputTokens,
+	}
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+
+	if u.CacheReadInputTokens > 0 {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.CacheReadInputTokens,
+		}
+	}
+
+	return usage
+}
+
+// ToGeminiUsage converts ClaudeUsage to GeminiUsageMetadata (Google Gemini format)
+func (u *ClaudeUsage) ToGeminiUsage() GeminiUsageMetadata {
+	totalInput := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+	usage := GeminiUsageMetadata{
+		PromptTokenCount:     totalInput,
+		CandidatesTokenCount: u.OutputTokens,
+		TotalTokenCount:      totalInput + u.OutputTokens,
+	}
+
+	if u.CacheReadInputTokens > 0 {
+		usage.CachedContentTokenCount = u.CacheReadInputTokens
+	}
+
+	return usage
+}
+
 // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
 type ClaudeCacheCreation struct {
 	Ephemeral5mInputTokens int64 `json:"ephemeral_5m_input_tokens,omitempty"`

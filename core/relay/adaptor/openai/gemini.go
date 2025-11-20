@@ -96,11 +96,8 @@ func ConvertOpenAIToGeminiResponse(
 	}
 
 	if openaiResp.Usage.TotalTokens > 0 {
-		geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-			PromptTokenCount:     openaiResp.Usage.PromptTokens,
-			CandidatesTokenCount: openaiResp.Usage.CompletionTokens,
-			TotalTokenCount:      openaiResp.Usage.TotalTokens,
-		}
+		geminiUsage := openaiResp.Usage.ToGeminiUsage()
+		geminiResp.UsageMetadata = &geminiUsage
 	}
 
 	for _, choice := range openaiResp.Choices {
@@ -245,11 +242,8 @@ func (s *GeminiStreamState) ConvertOpenAIStreamToGemini(
 	}
 
 	if openaiResp.Usage != nil {
-		geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-			PromptTokenCount:     openaiResp.Usage.PromptTokens,
-			CandidatesTokenCount: openaiResp.Usage.CompletionTokens,
-			TotalTokenCount:      openaiResp.Usage.TotalTokens,
-		}
+		geminiUsage := openaiResp.Usage.ToGeminiUsage()
+		geminiResp.UsageMetadata = &geminiUsage
 	}
 
 	hasContent := geminiResp.UsageMetadata != nil

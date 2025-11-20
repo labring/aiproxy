@@ -49,7 +49,6 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.ResponsesInputItems
 }
 
-//
 //nolint:gocyclo
 func (a *Adaptor) GetRequestURL(
 	meta *meta.Meta,
@@ -110,6 +109,19 @@ func (a *Adaptor) GetRequestURL(
 			URL:    url,
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
+		// Check if model requires Responses API
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			url, err := url.JoinPath(u, "/responses")
+			if err != nil {
+				return adaptor.RequestURL{}, err
+			}
+
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    url,
+			}, nil
+		}
+
 		url, err := url.JoinPath(u, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -284,8 +296,16 @@ func ConvertRequest(
 	case mode.Completions:
 		return ConvertCompletionsRequest(meta, req)
 	case mode.ChatCompletions:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			return ConvertChatCompletionToResponsesRequest(meta, req)
+		}
 		return ConvertChatCompletionsRequest(meta, req, false)
 	case mode.Anthropic:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			return ConvertClaudeToResponsesRequest(meta, req)
+		}
 		return ConvertClaudeRequest(meta, req)
 	case mode.ImagesGenerations:
 		return ConvertImagesRequest(meta, req)
@@ -304,6 +324,10 @@ func ConvertRequest(
 	case mode.VideoGenerationsContent:
 		return ConvertVideoGetJobsContentRequest(meta, req)
 	case mode.Gemini:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			return ConvertGeminiToResponsesRequest(meta, req)
+		}
 		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
@@ -344,16 +368,36 @@ func DoResponse(
 	case mode.Embeddings:
 		usage, err = EmbeddingsHandler(meta, c, resp, nil)
 	case mode.Completions, mode.ChatCompletions:
-		if utils.IsStreamResponse(resp) {
-			usage, err = StreamHandler(meta, c, resp, nil)
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			// Convert Responses API response back to ChatCompletion format
+			if utils.IsStreamResponse(resp) {
+				usage, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
+			} else {
+				usage, err = ConvertResponsesToChatCompletionResponse(meta, c, resp)
+			}
 		} else {
-			usage, err = Handler(meta, c, resp, nil)
+			if utils.IsStreamResponse(resp) {
+				usage, err = StreamHandler(meta, c, resp, nil)
+			} else {
+				usage, err = Handler(meta, c, resp, nil)
+			}
 		}
 	case mode.Anthropic:
-		if utils.IsStreamResponse(resp) {
-			usage, err = ClaudeStreamHandler(meta, c, resp)
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			// Convert Responses API response back to Claude format
+			if utils.IsStreamResponse(resp) {
+				usage, err = ConvertResponsesToClaudeStreamResponse(meta, c, resp)
+			} else {
+				usage, err = ConvertResponsesToClaudeResponse(meta, c, resp)
+			}
 		} else {
-			usage, err = ClaudeHandler(meta, c, resp)
+			if utils.IsStreamResponse(resp) {
+				usage, err = ClaudeStreamHandler(meta, c, resp)
+			} else {
+				usage, err = ClaudeHandler(meta, c, resp)
+			}
 		}
 	case mode.VideoGenerationsJobs:
 		usage, err = VideoHandler(meta, store, c, resp)
@@ -362,10 +406,20 @@ func DoResponse(
 	case mode.VideoGenerationsContent:
 		usage, err = VideoGetJobsContentHandler(meta, store, c, resp)
 	case mode.Gemini:
-		if utils.IsStreamResponse(resp) {
-			usage, err = GeminiStreamHandler(meta, c, resp)
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			// Convert Responses API response back to Gemini format
+			if utils.IsStreamResponse(resp) {
+				usage, err = ConvertResponsesToGeminiStreamResponse(meta, c, resp)
+			} else {
+				usage, err = ConvertResponsesToGeminiResponse(meta, c, resp)
+			}
 		} else {
-			usage, err = GeminiHandler(meta, c, resp)
+			if utils.IsStreamResponse(resp) {
+				usage, err = GeminiStreamHandler(meta, c, resp)
+			} else {
+				usage, err = GeminiHandler(meta, c, resp)
+			}
 		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
