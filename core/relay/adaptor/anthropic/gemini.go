@@ -442,6 +442,10 @@ func convertGeminiContent(
 	msg := relaymodel.ClaudeMessage{}
 
 	// Map role
+	if content.Role == "" {
+		content.Role = "user"
+	}
+
 	switch content.Role {
 	case "model":
 		msg.Role = "assistant"

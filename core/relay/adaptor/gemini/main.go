@@ -90,6 +90,27 @@ func ensureThoughtSignature(node *ast.Node) error {
 	})
 }
 
+func ensureRole(node *ast.Node) error {
+	contents := node.Get("contents")
+	if !contents.Exists() {
+		return nil
+	}
+
+	return contents.ForEach(func(_ ast.Sequence, content *ast.Node) bool {
+		role := content.Get("role")
+		if !role.Exists() {
+			_, _ = content.Set("role", ast.NewString("user"))
+		} else {
+			val, _ := role.String()
+			if val == "" {
+				_, _ = content.Set("role", ast.NewString("user"))
+			}
+		}
+
+		return true
+	})
+}
+
 func NativeConvertRequest(
 	meta *meta.Meta,
 	req *http.Request,
@@ -101,6 +122,11 @@ func NativeConvertRequest(
 	}
 
 	err = ensureThoughtSignature(&node)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	err = ensureRole(&node)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

@@ -533,6 +533,10 @@ func convertGeminiContentToOpenAI(
 
 	// Map role
 	role := content.Role
+	if role == "" {
+		role = "user"
+	}
+
 	switch role {
 	case "model":
 		role = "assistant"
