@@ -304,6 +304,28 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
 export GEMINI_API_KEY=sk-xxx
 ```
 
+### Codex 集成
+
+通过配置 `~/.codex/config.toml` 在 Codex 中使用 AI Proxy：
+
+```toml
+# 请记住，在 TOML 中，根键必须列在表之前。
+model = "gpt-4o"
+model_provider = "aiproxy"
+
+[model_providers.aiproxy]
+# 提供商名称，将显示在 Codex UI 中。
+name = "AIProxy"
+# 路径 `/chat/completions` 将被追加到此 URL 以发起 POST
+# 请求进行聊天补全。
+base_url = "http://127.0.0.1:3000/v1"
+# 如果设置了 `env_key`，则标识使用此提供商时必须设置的环境变量。
+# 环境变量的值必须非空，并将用于 POST 请求的 `Bearer TOKEN` HTTP 头中。
+env_key = "AIPROXY_API_KEY"
+# wire_api 的有效值为 "chat" 和 "responses"。如果省略，默认为 "chat"。
+wire_api = "chat"
+```
+
 ### MCP (模型上下文协议)
 
 AI Proxy 提供全面的 MCP 支持，扩展 AI 能力：

@@ -304,6 +304,29 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
 export GEMINI_API_KEY=sk-xxx
 ```
 
+### Codex Integration
+
+Use AI Proxy with Codex by configuring `~/.codex/config.toml`:
+
+```toml
+# Recall that in TOML, root keys must be listed before tables.
+model = "gpt-4o"
+model_provider = "aiproxy"
+
+[model_providers.aiproxy]
+# Name of the provider that will be displayed in the Codex UI.
+name = "AIProxy"
+# The path `/chat/completions` will be amended to this URL to make the POST
+# request for the chat completions.
+base_url = "http://127.0.0.1:3000/v1"
+# If `env_key` is set, identifies an environment variable that must be set when
+# using Codex with this provider. The value of the environment variable must be
+# non-empty and will be used in the `Bearer TOKEN` HTTP header for the POST request.
+env_key = "AIPROXY_API_KEY"
+# Valid values for wire_api are "chat" and "responses". Defaults to "chat" if omitted.
+wire_api = "chat"
+```
+
 ### MCP (Model Context Protocol)
 
 AI Proxy provides comprehensive MCP support for extending AI capabilities:
