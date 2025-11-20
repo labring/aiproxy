@@ -26,7 +26,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Chat、Embeddings、TTS(need group id) Support\nGemini support",
+		Readme:  "Chat、Embeddings、TTS(need group id) Support\nGemini support",
 		KeyHelp: "api_key|group_id",
 		Models:  ModelList,
 	}

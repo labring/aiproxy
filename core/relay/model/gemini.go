@@ -55,7 +55,7 @@ type GeminiChatTools struct {
 }
 
 type GeminiChatGenerationConfig struct {
-	ResponseSchema     any                   `json:"responseSchema,omitempty"`
+	ResponseSchema     map[string]any        `json:"responseSchema,omitempty"`
 	Temperature        *float64              `json:"temperature,omitempty"`
 	TopP               *float64              `json:"topP,omitempty"`
 	ResponseMimeType   string                `json:"responseMimeType,omitempty"`

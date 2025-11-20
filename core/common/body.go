@@ -152,9 +152,6 @@ func UnmarshalRequestReusable(req *http.Request, v any) error {
 		return err
 	}
 
-	fmt.Println("raw request:")
-	fmt.Println(string(requestBody))
-
 	return sonic.Unmarshal(requestBody, &v)
 }
 

@@ -1,4 +1,4 @@
-package ollama
+package ollama_test
 
 import (
 	"bytes"
@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/ollama"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
@@ -38,16 +40,23 @@ func TestConvertRequest_JsonObject(t *testing.T) {
 		},
 	}
 
-	jsonData, _ := json.Marshal(openAIReq)
-	req, _ := http.NewRequest(http.MethodPost, "http://localhost:11434/api/chat", bytes.NewBuffer(jsonData))
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost:11434/api/chat",
+		bytes.NewBuffer(jsonData),
+	)
 
 	// Convert request
-	result, err := ConvertRequest(meta, req)
+	result, err := ollama.ConvertRequest(meta, req)
 	assert.NoError(t, err)
 
 	// Parse body to check format field
 	bodyBytes, _ := io.ReadAll(result.Body)
-	var ollamaReq ChatRequest
+
+	var ollamaReq ollama.ChatRequest
+
 	err = json.Unmarshal(bodyBytes, &ollamaReq)
 	assert.NoError(t, err)
 

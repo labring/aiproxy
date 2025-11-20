@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -75,9 +76,6 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
-
-	fmt.Println("convert request:")
-	fmt.Println(string(data))
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
@@ -186,6 +184,7 @@ func GeminiStreamHandler(
 	scanner.Buffer(*buf, cap(*buf))
 
 	usage := model.Usage{}
+	streamState := NewGeminiStreamState()
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -204,7 +203,7 @@ func GeminiStreamHandler(
 		}
 
 		// Convert to Gemini stream format
-		geminiResp := convertOpenAIStreamToGemini(meta, &openaiResp)
+		geminiResp := streamState.ConvertOpenAIStreamToGemini(meta, &openaiResp)
 		if geminiResp != nil {
 			_ = render.GeminiObjectData(c, geminiResp)
 
@@ -217,7 +216,22 @@ func GeminiStreamHandler(
 	return usage, nil
 }
 
-func convertOpenAIStreamToGemini(
+type GeminiStreamState struct {
+	ToolCallBuffer map[string]*ToolCallState
+}
+
+type ToolCallState struct {
+	Name      string
+	Arguments string
+}
+
+func NewGeminiStreamState() *GeminiStreamState {
+	return &GeminiStreamState{
+		ToolCallBuffer: make(map[string]*ToolCallState),
+	}
+}
+
+func (s *GeminiStreamState) ConvertOpenAIStreamToGemini(
 	meta *meta.Meta,
 	openaiResp *relaymodel.ChatCompletionsStreamResponse,
 ) *relaymodel.GeminiChatResponse {
@@ -238,6 +252,8 @@ func convertOpenAIStreamToGemini(
 		}
 	}
 
+	hasContent := geminiResp.UsageMetadata != nil
+
 	for _, choice := range openaiResp.Choices {
 		candidate := &relaymodel.GeminiChatCandidate{
 			Index: int64(choice.Index),
@@ -247,41 +263,106 @@ func convertOpenAIStreamToGemini(
 			},
 		}
 
-		if choice.FinishReason != "" {
-			switch choice.FinishReason {
-			case relaymodel.FinishReasonStop:
-				candidate.FinishReason = "STOP"
-			case relaymodel.FinishReasonLength:
-				candidate.FinishReason = "MAX_TOKENS"
-			default:
-				candidate.FinishReason = "STOP"
-			}
-		}
-
 		// Convert delta content
 		if choice.Delta.Content != nil {
 			if content, ok := choice.Delta.Content.(string); ok && content != "" {
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text: content,
 				})
+				hasContent = true
 			}
 		}
 
-		// Convert tool calls
+		// Buffer tool calls
 		for _, toolCall := range choice.Delta.ToolCalls {
-			var args map[string]any
+			key := fmt.Sprintf("%d-%d", choice.Index, toolCall.Index)
 
-			_ = sonic.UnmarshalString(toolCall.Function.Arguments, &args)
+			state, ok := s.ToolCallBuffer[key]
+			if !ok {
+				state = &ToolCallState{}
+				s.ToolCallBuffer[key] = state
+			}
 
-			candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
-				FunctionCall: &relaymodel.GeminiFunctionCall{
-					Name: toolCall.Function.Name,
-					Args: args,
-				},
-			})
+			if toolCall.Function.Name != "" {
+				state.Name = toolCall.Function.Name
+			}
+
+			if toolCall.Function.Arguments != "" {
+				state.Arguments += toolCall.Function.Arguments
+			}
 		}
 
-		geminiResp.Candidates = append(geminiResp.Candidates, candidate)
+		// Check if we need to flush tool calls (on finish)
+		if choice.FinishReason != "" {
+			switch choice.FinishReason {
+			case relaymodel.FinishReasonStop:
+				candidate.FinishReason = "STOP"
+			case relaymodel.FinishReasonLength:
+				candidate.FinishReason = "MAX_TOKENS"
+			case relaymodel.FinishReasonToolCalls:
+				candidate.FinishReason = "STOP"
+			default:
+				candidate.FinishReason = "STOP"
+			}
+
+			// Flush buffered tool calls for this choice
+			prefix := fmt.Sprintf("%d-", choice.Index)
+
+			// Collect matching items to sort them
+			type toolCallItem struct {
+				Index int
+				Key   string
+				State *ToolCallState
+			}
+
+			var items []toolCallItem
+
+			for key, state := range s.ToolCallBuffer {
+				if strings.HasPrefix(key, prefix) {
+					parts := strings.Split(key, "-")
+					if len(parts) == 2 {
+						idx, _ := strconv.Atoi(parts[1])
+						items = append(items, toolCallItem{
+							Index: idx,
+							Key:   key,
+							State: state,
+						})
+					}
+				}
+			}
+
+			// Sort by index
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].Index < items[j].Index
+			})
+
+			for _, item := range items {
+				var args map[string]any
+
+				_ = sonic.UnmarshalString(item.State.Arguments, &args)
+
+				candidate.Content.Parts = append(
+					candidate.Content.Parts,
+					&relaymodel.GeminiPart{
+						FunctionCall: &relaymodel.GeminiFunctionCall{
+							Name: item.State.Name,
+							Args: args,
+						},
+					},
+				)
+				hasContent = true
+				// Remove from buffer
+				delete(s.ToolCallBuffer, item.Key)
+			}
+		}
+
+		if hasContent || candidate.FinishReason != "" {
+			geminiResp.Candidates = append(geminiResp.Candidates, candidate)
+		}
+	}
+
+	if !hasContent && len(geminiResp.Candidates) == 0 {
+		return nil
 	}
 
 	return geminiResp
@@ -360,10 +441,16 @@ func convertGeminiToolsToOpenAI(geminiReq *relaymodel.GeminiChatRequest) []relay
 				if fn, ok := fnDecl.(map[string]any); ok {
 					name, _ := fn["name"].(string)
 					description, _ := fn["description"].(string)
+
+					parameters := fn["parameters"]
+					if parameters == nil {
+						parameters = fn["parametersJsonSchema"]
+					}
+
 					function := relaymodel.Function{
 						Name:        name,
 						Description: description,
-						Parameters:  fn["parameters"],
+						Parameters:  parameters,
 					}
 					tools = append(tools, relaymodel.Tool{
 						Type:     "function",
@@ -425,14 +512,13 @@ func convertGeminiGenerationConfigToOpenAI(
 			}
 
 			if geminiReq.GenerationConfig.ResponseSchema != nil {
-				if schema, ok := geminiReq.GenerationConfig.ResponseSchema.(map[string]any); ok {
-					openaiReq.ResponseFormat = &relaymodel.ResponseFormat{
-						Type: "json_schema",
-						JSONSchema: &relaymodel.JSONSchema{
-							Name:   "response",
-							Schema: schema,
-						},
-					}
+				schema := geminiReq.GenerationConfig.ResponseSchema
+				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{
+					Type: "json_schema",
+					JSONSchema: &relaymodel.JSONSchema{
+						Name:   "response",
+						Schema: schema,
+					},
 				}
 			}
 		}
@@ -468,6 +554,10 @@ func convertGeminiContentToOpenAI(
 		switch {
 		case part.FunctionCall != nil:
 			// Handle function call (Assistant)
+			if part.FunctionCall.Name == "" {
+				continue
+			}
+
 			args, _ := sonic.MarshalString(part.FunctionCall.Args)
 			toolCall := relaymodel.ToolCall{
 				ID:   CallID(),
@@ -520,10 +610,14 @@ func convertGeminiContentToOpenAI(
 				*pendingTools = append((*pendingTools)[:foundIdx], (*pendingTools)[foundIdx+1:]...)
 			} else {
 				// If not found, use provided ID or fallback
-				if part.FunctionResponse.ID != "" {
+				// OpenAI requires tool_call_id to be <= 40 characters
+				if part.FunctionResponse.ID != "" && len(part.FunctionResponse.ID) <= 40 {
 					id = part.FunctionResponse.ID
 				} else {
-					id = "call_" + name
+					// Fallback to generated ID if not provided or too long
+					// We use CallID() which generates a short ID (e.g. "call_" + uuid)
+					// to ensure it meets length requirements
+					id = CallID()
 				}
 
 				// Inject synthetic Assistant message with ToolCall to satisfy OpenAI protocol

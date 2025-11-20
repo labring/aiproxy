@@ -285,8 +285,6 @@ func GeminiStreamHandler(
 
 // GeminiStreamState maintains state during streaming response conversion
 type GeminiStreamState struct {
-	CurrentText     strings.Builder
-	CurrentThinking strings.Builder
 	CurrentToolName string
 	CurrentToolID   string
 	CurrentToolArgs strings.Builder
@@ -328,12 +326,10 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 		if claudeResp.Delta != nil {
 			switch {
 			case claudeResp.Delta.Type == "text_delta" && claudeResp.Delta.Text != "":
-				s.CurrentText.WriteString(claudeResp.Delta.Text)
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text: claudeResp.Delta.Text,
 				})
 			case claudeResp.Delta.Type == "thinking_delta" && claudeResp.Delta.Thinking != "":
-				s.CurrentThinking.WriteString(claudeResp.Delta.Thinking)
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text:    claudeResp.Delta.Thinking,
 					Thought: true,

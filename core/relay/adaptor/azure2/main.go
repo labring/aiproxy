@@ -24,7 +24,10 @@ func (a *Adaptor) GetRequestURL(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: fmt.Sprintf("Model names can contain '.' character\nAPI version is optional, default is '%s'\nGemini support", azure.DefaultAPIVersion),
+		Readme: fmt.Sprintf(
+			"Model names can contain '.' character\nAPI version is optional, default is '%s'\nGemini support",
+			azure.DefaultAPIVersion,
+		),
 		KeyHelp: "key or key|api-version",
 		Models:  openai.ModelList,
 	}

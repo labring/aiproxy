@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor/gemini"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -41,8 +42,13 @@ func TestConvertRequest_JsonObject(t *testing.T) {
 		},
 	}
 
-	jsonData, _ := json.Marshal(openAIReq)
-	req, _ := http.NewRequest(http.MethodPost, "http://localhost/v1/chat/completions", bytes.NewBuffer(jsonData))
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
 
 	// Convert request
 	result, err := gemini.ConvertRequest(meta, req)
@@ -50,7 +56,9 @@ func TestConvertRequest_JsonObject(t *testing.T) {
 
 	// Parse body to check GenerationConfig
 	bodyBytes, _ := io.ReadAll(result.Body)
+
 	var geminiReq relaymodel.GeminiChatRequest
+
 	err = json.Unmarshal(bodyBytes, &geminiReq)
 	assert.NoError(t, err)
 
@@ -98,8 +106,13 @@ func TestConvertRequest_JsonSchema(t *testing.T) {
 		},
 	}
 
-	jsonData, _ := json.Marshal(openAIReq)
-	req, _ := http.NewRequest(http.MethodPost, "http://localhost/v1/chat/completions", bytes.NewBuffer(jsonData))
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
 
 	// Convert request
 	result, err := gemini.ConvertRequest(meta, req)
@@ -107,7 +120,9 @@ func TestConvertRequest_JsonSchema(t *testing.T) {
 
 	// Parse body to check GenerationConfig
 	bodyBytes, _ := io.ReadAll(result.Body)
+
 	var geminiReq relaymodel.GeminiChatRequest
+
 	err = json.Unmarshal(bodyBytes, &geminiReq)
 	assert.NoError(t, err)
 
@@ -116,12 +131,12 @@ func TestConvertRequest_JsonSchema(t *testing.T) {
 	assert.Equal(t, "application/json", geminiReq.GenerationConfig.ResponseMimeType)
 	assert.NotNil(t, geminiReq.GenerationConfig.ResponseSchema)
 
-	schema, ok := geminiReq.GenerationConfig.ResponseSchema.(map[string]any)
-	assert.True(t, ok)
+	schema := geminiReq.GenerationConfig.ResponseSchema
 
 	// Check if unsupported fields are removed
 	_, hasSchema := schema["$schema"]
 	assert.False(t, hasSchema, "Expected $schema to be removed")
+
 	_, hasAdditionalProperties := schema["additionalProperties"]
 	assert.False(t, hasAdditionalProperties, "Expected additionalProperties to be removed")
 }

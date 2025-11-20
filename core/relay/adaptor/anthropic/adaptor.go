@@ -71,7 +71,7 @@ func ModelDefaultMaxTokens(model string) int {
 	case strings.Contains(model, "3-7"):
 		return 131072
 	default:
-		return 32768
+		return 4096
 	}
 }
 

@@ -87,7 +87,7 @@ func buildGenerationConfig(
 
 		if textRequest.ResponseFormat.JSONSchema != nil {
 			config.ResponseSchema = textRequest.ResponseFormat.JSONSchema.Schema
-			cleanJSONSchema(config.ResponseSchema.(map[string]any))
+			cleanJSONSchema(config.ResponseSchema)
 			config.ResponseMimeType = mimeTypeMap["json_object"]
 		}
 	}

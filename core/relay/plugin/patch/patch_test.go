@@ -753,3 +753,76 @@ func TestConditionNegation(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyPatches_GeminiGPT51RemoveTopP(t *testing.T) {
+	plugin := patch.NewPatchPlugin()
+	config := &patch.Config{}
+
+	testCases := []struct {
+		name           string
+		input          map[string]any
+		actualModel    string
+		shouldModify   bool
+		shouldHaveTopP bool
+	}{
+		{
+			name: "gpt-5.1 model with top_p in generationConfig",
+			input: map[string]any{
+				"generationConfig": map[string]any{
+					"topP":        0.95,
+					"temperature": 0.7,
+				},
+			},
+			actualModel:    "gpt-5.1-chat-latest",
+			shouldModify:   true,
+			shouldHaveTopP: false,
+		},
+		{
+			name: "gpt-5.1 model without top_p",
+			input: map[string]any{
+				"generationConfig": map[string]any{
+					"temperature": 0.7,
+				},
+			},
+			actualModel:    "gpt-5.1-chat-latest",
+			shouldModify:   false,
+			shouldHaveTopP: false,
+		},
+		{
+			name: "non-gpt-5.1 model",
+			input: map[string]any{
+				"generationConfig": map[string]any{
+					"topP":        0.95,
+					"temperature": 0.7,
+				},
+			},
+			actualModel:    "gpt-4o",
+			shouldModify:   false,
+			shouldHaveTopP: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			inputBytes, err := sonic.Marshal(tc.input)
+			require.NoError(t, err)
+
+			meta := &meta.Meta{ActualModel: tc.actualModel}
+			outputBytes, modified, err := plugin.ApplyPatches(inputBytes, meta, config)
+			require.NoError(t, err)
+			assert.Equal(t, tc.shouldModify, modified)
+
+			var output map[string]any
+
+			err = sonic.Unmarshal(outputBytes, &output)
+			require.NoError(t, err)
+
+			if genConfig, ok := output["generationConfig"].(map[string]any); ok {
+				_, hasTopP := genConfig["topP"]
+				assert.Equal(t, tc.shouldHaveTopP, hasTopP)
+			} else if tc.shouldHaveTopP {
+				t.Error("generationConfig missing when topP expected")
+			}
+		})
+	}
+}
