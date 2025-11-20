@@ -79,6 +79,10 @@ func TokenAuth(c *gin.Context) {
 		key = c.Request.Header.Get("X-Api-Key")
 	}
 
+	if key == "" {
+		key = c.Request.Header.Get("X-Goog-Api-Key")
+	}
+
 	key = strings.TrimPrefix(
 		strings.TrimPrefix(key, "Bearer "),
 		"sk-",

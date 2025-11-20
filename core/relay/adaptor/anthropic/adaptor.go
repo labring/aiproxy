@@ -58,6 +58,23 @@ const (
 	AnthropicBeta        = "Anthropic-Beta"
 )
 
+func ModelDefaultMaxTokens(model string) int {
+	switch {
+	case strings.Contains(model, "4-5"):
+		return 200000
+	case strings.Contains(model, "4-1"):
+		return 204800
+	case strings.Contains(model, "sonnet-4-"):
+		return 65536
+	case strings.Contains(model, "opus-4-"):
+		return 32768
+	case strings.Contains(model, "3-7"):
+		return 131072
+	default:
+		return 32768
+	}
+}
+
 func FixBetasStringWithModel(model, betas string, deleteFunc ...func(e string) bool) string {
 	return strings.Join(FixBetasWithModel(model, strings.Split(betas, ","), deleteFunc...), ",")
 }
@@ -206,9 +223,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Support native Endpoint: /v1/messages",
-		},
+		Readme: "Support native Endpoint: /v1/messages",
 		Models: ModelList,
 	}
 }

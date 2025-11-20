@@ -121,9 +121,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"The `reasoning` field is converted to `reasoning_content`",
-		},
+		Readme: "The `reasoning` field is converted to `reasoning_content`\nGemini support",
 		Models: openai.ModelList,
 	}
 }

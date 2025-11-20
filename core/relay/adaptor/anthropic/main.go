@@ -97,8 +97,16 @@ func ConvertRequestToBytes(
 		return nil, err
 	}
 
-	// Process image content if present
-	err = ConvertImage2Base64(req.Context(), &node)
+	return ConvertRequestBodyToBytes(meta, req.Context(), &node, callbacks...)
+}
+
+func ConvertRequestBodyToBytes(
+	meta *meta.Meta,
+	ctx context.Context,
+	node *ast.Node,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) { // Process image content if present
+	err := ConvertImage2Base64(ctx, node)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +119,10 @@ func ConvertRequestToBytes(
 
 	maxTokensNode := node.Get("max_tokens")
 	if maxTokensNode == nil || !maxTokensNode.Exists() {
-		_, _ = node.Set("max_tokens", ast.NewNumber("4096"))
+		_, _ = node.Set(
+			"max_tokens",
+			ast.NewNumber(strconv.Itoa(ModelDefaultMaxTokens(meta.ActualModel))),
+		)
 	}
 
 	// Handle thinking budget tokens adjustment
@@ -140,7 +151,7 @@ func ConvertRequestToBytes(
 			continue
 		}
 
-		if err := callback(&node); err != nil {
+		if err := callback(node); err != nil {
 			return nil, err
 		}
 	}

@@ -103,6 +103,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 	}
 
 	return adaptor.Metadata{
+		Readme:  "Gemini support",
 		Models:  models,
 		KeyHelp: "region|ak|sk or region|apikey",
 	}

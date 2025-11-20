@@ -50,10 +50,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://jina.ai",
-			"Embeddings、Rerank Support",
-		},
+		Readme: "https://jina.ai\nEmbeddings、Rerank Support\nGemini support",
 		Models: ModelList,
 	}
 }

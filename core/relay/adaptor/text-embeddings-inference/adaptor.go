@@ -32,10 +32,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://github.com/huggingface/text-embeddings-inference",
-			"Embeddings、Rerank Support",
-		},
+		Readme: "https://github.com/huggingface/text-embeddings-inference\nEmbeddings、Rerank Support",
 		Models: ModelList,
 	}
 }

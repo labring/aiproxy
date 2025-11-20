@@ -3,6 +3,7 @@ package anthropic
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,173 +20,13 @@ import (
 )
 
 // ConvertGeminiRequest converts a Gemini native request to Claude format
-func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	// Parse Gemini request
-	geminiReq, err := utils.UnmarshalGeminiChatRequest(req)
+func ConvertGeminiRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	claudeReq, err := ConvertGeminiRequestToStruct(meta, req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
-	}
-
-	// Convert to Claude format
-	claudeReq := relaymodel.ClaudeRequest{
-		Model:     meta.ActualModel,
-		MaxTokens: 4096,
-		Messages:  []relaymodel.ClaudeMessage{},
-		System:    []relaymodel.ClaudeContent{},
-	}
-
-	// Check if this is a streaming request by checking the URL path
-	// URL format: /v1beta/models/{model}:streamGenerateContent
-	if utils.IsGeminiStreamRequest(req.URL.Path) {
-		claudeReq.Stream = true
-	}
-
-	// Convert system instruction
-	if geminiReq.SystemInstruction != nil && len(geminiReq.SystemInstruction.Parts) > 0 {
-		for _, part := range geminiReq.SystemInstruction.Parts {
-			if part.Text != "" {
-				claudeReq.System = append(claudeReq.System, relaymodel.ClaudeContent{
-					Type: "text",
-					Text: part.Text,
-				})
-			}
-		}
-	}
-
-	// Convert contents to messages
-	for _, content := range geminiReq.Contents {
-		msg := relaymodel.ClaudeMessage{}
-
-		// Map role
-		switch content.Role {
-		case "model":
-			msg.Role = "assistant"
-		case "user":
-			msg.Role = "user"
-		default:
-			msg.Role = content.Role
-		}
-
-		// Convert parts
-		for _, part := range content.Parts {
-			switch {
-			case part.FunctionCall != nil:
-				// Handle function call - convert to tool use
-				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type:  "tool_use",
-					ID:    "toolu_" + part.FunctionCall.Name,
-					Name:  part.FunctionCall.Name,
-					Input: part.FunctionCall.Args,
-				})
-			case part.FunctionResponse != nil:
-				// Handle function response - convert to tool result
-				msg.Role = "user"
-				content, _ := sonic.MarshalString(part.FunctionResponse.Response.Content)
-				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type:      "tool_result",
-					ToolUseID: "toolu_" + part.FunctionResponse.Name,
-					Content:   content,
-				})
-			case part.Text != "":
-				if part.Thought {
-					// Handle thinking content
-					msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-						Type:     "thinking",
-						Thinking: part.Text,
-					})
-				} else {
-					// Handle text content
-					msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-						Type: "text",
-						Text: part.Text,
-					})
-				}
-			case part.InlineData != nil:
-				// Handle image
-				imageData := part.InlineData.Data
-				// If not base64, assume it's a URL (shouldn't happen in gemini native)
-				if strings.HasPrefix(imageData, "http") {
-					// Download and convert to base64
-					// For now, just skip
-					continue
-				}
-
-				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type: "image",
-					Source: &relaymodel.ClaudeImageSource{
-						Type:      "base64",
-						MediaType: part.InlineData.MimeType,
-						Data:      imageData,
-					},
-				})
-			}
-		}
-
-		claudeReq.Messages = append(claudeReq.Messages, msg)
-	}
-
-	// Convert generation config
-	if geminiReq.GenerationConfig != nil {
-		if geminiReq.GenerationConfig.Temperature != nil {
-			claudeReq.Temperature = geminiReq.GenerationConfig.Temperature
-		}
-
-		if geminiReq.GenerationConfig.TopP != nil {
-			claudeReq.TopP = geminiReq.GenerationConfig.TopP
-		}
-
-		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
-			claudeReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
-		}
-	}
-
-	// Convert tools
-	if len(geminiReq.Tools) > 0 {
-		var tools []relaymodel.ClaudeTool
-		for _, geminiTool := range geminiReq.Tools {
-			if fnDecls, ok := geminiTool.FunctionDeclarations.([]any); ok {
-				for _, fnDecl := range fnDecls {
-					if fn, ok := fnDecl.(map[string]any); ok {
-						var inputSchema *relaymodel.ClaudeInputSchema
-						if params, ok := fn["parameters"].(map[string]any); ok {
-							inputSchema = &relaymodel.ClaudeInputSchema{
-								Type:       "object",
-								Properties: params,
-							}
-						}
-
-						name, _ := fn["name"].(string)
-						description, _ := fn["description"].(string)
-						tools = append(tools, relaymodel.ClaudeTool{
-							Name:        name,
-							Description: description,
-							InputSchema: inputSchema,
-						})
-					}
-				}
-			}
-		}
-
-		if len(tools) > 0 {
-			claudeReq.Tools = tools
-		}
-	}
-
-	// Convert tool config
-	if geminiReq.ToolConfig != nil {
-		switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
-		case "AUTO":
-			claudeReq.ToolChoice = map[string]any{"type": "auto"}
-		case "ANY":
-			if len(geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0 {
-				claudeReq.ToolChoice = map[string]any{
-					"type": "tool",
-					"name": geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames[0],
-				}
-			} else {
-				claudeReq.ToolChoice = map[string]any{"type": "any"}
-			}
-		}
 	}
 
 	// Marshal to JSON
@@ -201,6 +42,69 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 		},
 		Body: bytes.NewReader(data),
 	}, nil
+}
+
+func ConvertGeminiRequestToStruct(
+	meta *meta.Meta,
+	req *http.Request,
+) (*relaymodel.ClaudeRequest, error) {
+	// Parse Gemini request
+	geminiReq, err := utils.UnmarshalGeminiChatRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to Claude format
+	claudeReq := relaymodel.ClaudeRequest{
+		Model:     meta.ActualModel,
+		MaxTokens: ModelDefaultMaxTokens(meta.ActualModel),
+		Messages:  []relaymodel.ClaudeMessage{},
+		System:    convertGeminiSystemInstruction(geminiReq),
+	}
+
+	// Check if this is a streaming request by checking the URL path
+	// URL format: /v1beta/models/{model}:streamGenerateContent
+	if utils.IsGeminiStreamRequest(req.URL.Path) {
+		claudeReq.Stream = true
+	}
+
+	// Convert contents to messages
+	toolCallMap := make(map[string][]string)
+	for i, content := range geminiReq.Contents {
+		msg := convertGeminiContent(content, i, toolCallMap)
+		if len(msg.Content) == 0 {
+			continue
+		}
+
+		if len(claudeReq.Messages) > 0 {
+			lastMsg := &claudeReq.Messages[len(claudeReq.Messages)-1]
+			if lastMsg.Role == msg.Role {
+				lastMsg.Content = append(lastMsg.Content, msg.Content...)
+				continue
+			}
+		}
+
+		claudeReq.Messages = append(claudeReq.Messages, msg)
+	}
+
+	// Convert generation config
+	if geminiReq.GenerationConfig != nil {
+		if geminiReq.GenerationConfig.Temperature != nil {
+			claudeReq.Temperature = geminiReq.GenerationConfig.Temperature
+		} else if geminiReq.GenerationConfig.TopP != nil {
+			claudeReq.TopP = geminiReq.GenerationConfig.TopP
+		}
+
+		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
+			claudeReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
+		}
+	}
+
+	// Convert tools
+	claudeReq.Tools = convertGeminiTools(geminiReq)
+	claudeReq.ToolChoice = convertGeminiToolConfig(geminiReq)
+
+	return &claudeReq, nil
 }
 
 // ConvertClaudeToGeminiResponse converts Claude response to Gemini format
@@ -339,10 +243,7 @@ func GeminiStreamHandler(
 
 	usage := model.Usage{}
 
-	var (
-		currentText     strings.Builder
-		currentThinking strings.Builder
-	)
+	streamState := NewGeminiStreamState()
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -362,7 +263,10 @@ func GeminiStreamHandler(
 		}
 
 		// Convert to Gemini stream format
-		geminiResp := ConvertClaudeStreamToGemini(meta, &claudeResp, &currentText, &currentThinking)
+		geminiResp := streamState.ConvertClaudeStreamToGemini(
+			meta,
+			&claudeResp,
+		)
 		if geminiResp != nil {
 			_ = render.GeminiObjectData(c, geminiResp)
 
@@ -379,11 +283,23 @@ func GeminiStreamHandler(
 	return usage, nil
 }
 
-func ConvertClaudeStreamToGemini(
+// GeminiStreamState maintains state during streaming response conversion
+type GeminiStreamState struct {
+	CurrentText     strings.Builder
+	CurrentThinking strings.Builder
+	CurrentToolName string
+	CurrentToolID   string
+	CurrentToolArgs strings.Builder
+}
+
+func NewGeminiStreamState() *GeminiStreamState {
+	return &GeminiStreamState{}
+}
+
+//nolint:gocyclo
+func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 	meta *meta.Meta,
 	claudeResp *relaymodel.ClaudeStreamResponse,
-	currentText *strings.Builder,
-	currentThinking *strings.Builder,
 ) *relaymodel.GeminiChatResponse {
 	geminiResp := &relaymodel.GeminiChatResponse{
 		ModelVersion: meta.ActualModel,
@@ -410,35 +326,63 @@ func ConvertClaudeStreamToGemini(
 
 	case "content_block_delta":
 		if claudeResp.Delta != nil {
-			if claudeResp.Delta.Type == "text_delta" && claudeResp.Delta.Text != "" {
-				currentText.WriteString(claudeResp.Delta.Text)
+			switch {
+			case claudeResp.Delta.Type == "text_delta" && claudeResp.Delta.Text != "":
+				s.CurrentText.WriteString(claudeResp.Delta.Text)
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text: claudeResp.Delta.Text,
 				})
-			} else if claudeResp.Delta.Type == "thinking_delta" && claudeResp.Delta.Thinking != "" {
-				currentThinking.WriteString(claudeResp.Delta.Thinking)
+			case claudeResp.Delta.Type == "thinking_delta" && claudeResp.Delta.Thinking != "":
+				s.CurrentThinking.WriteString(claudeResp.Delta.Thinking)
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text:    claudeResp.Delta.Thinking,
 					Thought: true,
 				})
+			case claudeResp.Delta.Type == "input_json_delta" && claudeResp.Delta.PartialJSON != "":
+				s.CurrentToolArgs.WriteString(claudeResp.Delta.PartialJSON)
+				return nil
 			}
 		}
 
 	case "content_block_start":
 		if claudeResp.ContentBlock != nil {
 			if claudeResp.ContentBlock.Type == "tool_use" {
-				if inputMap, ok := claudeResp.ContentBlock.Input.(map[string]any); ok {
-					candidate.Content.Parts = append(
-						candidate.Content.Parts,
-						&relaymodel.GeminiPart{
-							FunctionCall: &relaymodel.GeminiFunctionCall{
-								Name: claudeResp.ContentBlock.Name,
-								Args: inputMap,
-							},
-						},
-					)
+				s.CurrentToolName = claudeResp.ContentBlock.Name
+				s.CurrentToolID = claudeResp.ContentBlock.ID
+				s.CurrentToolArgs.Reset()
+
+				// If input is already provided (non-streaming case sometimes), use it
+				if inputMap, ok := claudeResp.ContentBlock.Input.(map[string]any); ok &&
+					len(inputMap) > 0 {
+					inputJSON, _ := sonic.MarshalString(inputMap)
+					s.CurrentToolArgs.WriteString(inputJSON)
 				}
+
+				return nil
 			}
+		}
+
+	case "content_block_stop":
+		if s.CurrentToolName != "" {
+			argsStr := s.CurrentToolArgs.String()
+
+			args := make(map[string]any)
+			if argsStr != "" {
+				_ = sonic.UnmarshalString(argsStr, &args)
+			}
+
+			candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
+				FunctionCall: &relaymodel.GeminiFunctionCall{
+					Name: s.CurrentToolName,
+					Args: args,
+				},
+			})
+
+			s.CurrentToolName = ""
+			s.CurrentToolID = ""
+			s.CurrentToolArgs.Reset()
+		} else {
+			return nil
 		}
 
 	case "message_delta":
@@ -467,9 +411,216 @@ func ConvertClaudeStreamToGemini(
 		return nil
 	}
 
-	if len(candidate.Content.Parts) > 0 {
+	if len(candidate.Content.Parts) > 0 || candidate.FinishReason != "" ||
+		geminiResp.UsageMetadata != nil {
 		geminiResp.Candidates = append(geminiResp.Candidates, candidate)
 		return geminiResp
+	}
+
+	return nil
+}
+
+func convertGeminiSystemInstruction(
+	geminiReq *relaymodel.GeminiChatRequest,
+) []relaymodel.ClaudeContent {
+	var system []relaymodel.ClaudeContent
+	if geminiReq.SystemInstruction != nil && len(geminiReq.SystemInstruction.Parts) > 0 {
+		for _, part := range geminiReq.SystemInstruction.Parts {
+			if part.Text != "" {
+				system = append(system, relaymodel.ClaudeContent{
+					Type: "text",
+					Text: part.Text,
+				})
+			}
+		}
+	}
+
+	return system
+}
+
+func convertGeminiContent(
+	content *relaymodel.GeminiChatContent,
+	msgIndex int,
+	toolCallMap map[string][]string,
+) relaymodel.ClaudeMessage {
+	msg := relaymodel.ClaudeMessage{}
+
+	// Map role
+	switch content.Role {
+	case "model":
+		msg.Role = "assistant"
+	case "user":
+		msg.Role = "user"
+	default:
+		msg.Role = content.Role
+	}
+
+	// Convert parts
+	for i, part := range content.Parts {
+		switch {
+		case part.FunctionCall != nil:
+			// Handle function call - convert to tool use
+			// Generate a deterministic ID based on message index and part index
+			id := fmt.Sprintf("toolu_%d_%d", msgIndex, i)
+			// Store ID for matching with response
+			toolCallMap[part.FunctionCall.Name] = append(toolCallMap[part.FunctionCall.Name], id)
+
+			msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+				Type:  "tool_use",
+				ID:    id,
+				Name:  part.FunctionCall.Name,
+				Input: part.FunctionCall.Args,
+			})
+		case part.FunctionResponse != nil:
+			// Handle function response - convert to tool result
+			msg.Role = "user"
+			content, _ := sonic.MarshalString(part.FunctionResponse.Response)
+
+			// Retrieve the corresponding tool call ID
+			id := ""
+			if ids, ok := toolCallMap[part.FunctionResponse.Name]; ok && len(ids) > 0 {
+				id = ids[0]
+				// Remove the used ID
+				toolCallMap[part.FunctionResponse.Name] = ids[1:]
+			}
+
+			if id != "" {
+				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+					Type:      "tool_result",
+					ToolUseID: id,
+					Content:   content,
+				})
+			} else {
+				// Orphaned result - convert to text to avoid validation error
+				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+					Type: "text",
+					Text: fmt.Sprintf("Tool result for %s: %s", part.FunctionResponse.Name, content),
+				})
+			}
+		case part.Text != "":
+			if part.Thought {
+				// Handle thinking content
+				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+					Type:     "thinking",
+					Thinking: part.Text,
+				})
+			} else {
+				// Handle text content
+				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+					Type: "text",
+					Text: part.Text,
+				})
+			}
+		case part.InlineData != nil:
+			// Handle image
+			imageData := part.InlineData.Data
+			// If not base64, assume it's a URL (shouldn't happen in gemini native)
+			if strings.HasPrefix(imageData, "http") {
+				// Download and convert to base64
+				// For now, just skip
+				continue
+			}
+
+			msg.Content = append(msg.Content, relaymodel.ClaudeContent{
+				Type: "image",
+				Source: &relaymodel.ClaudeImageSource{
+					Type:      "base64",
+					MediaType: part.InlineData.MimeType,
+					Data:      imageData,
+				},
+			})
+		}
+	}
+
+	return msg
+}
+
+func convertGeminiTools(geminiReq *relaymodel.GeminiChatRequest) []relaymodel.ClaudeTool {
+	if len(geminiReq.Tools) == 0 {
+		return nil
+	}
+
+	var tools []relaymodel.ClaudeTool
+	for _, geminiTool := range geminiReq.Tools {
+		if fnDecls, ok := geminiTool.FunctionDeclarations.([]any); ok {
+			for _, fnDecl := range fnDecls {
+				if fn, ok := fnDecl.(map[string]any); ok {
+					tools = append(tools, convertGeminiFunctionDeclaration(fn))
+				}
+			}
+		}
+	}
+
+	return tools
+}
+
+func convertGeminiFunctionDeclaration(fn map[string]any) relaymodel.ClaudeTool {
+	var (
+		inputSchema *relaymodel.ClaudeInputSchema
+		parameters  map[string]any
+	)
+
+	if params, ok := fn["parameters"].(map[string]any); ok {
+		parameters = params
+	} else if params, ok := fn["parametersJsonSchema"].(map[string]any); ok {
+		parameters = params
+	}
+
+	if parameters != nil {
+		inputSchema = &relaymodel.ClaudeInputSchema{
+			Type: "object",
+		}
+
+		// Check if parameters is a schema or just properties
+		_, hasType := parameters["type"]
+		_, hasProps := parameters["properties"]
+		_, hasRequired := parameters["required"]
+
+		if hasType || hasProps || hasRequired {
+			if t, ok := parameters["type"].(string); ok {
+				inputSchema.Type = t
+			}
+
+			if props, ok := parameters["properties"]; ok {
+				inputSchema.Properties = props
+			}
+
+			if req, ok := parameters["required"]; ok {
+				inputSchema.Required = req
+			}
+		} else {
+			// Legacy support: treat as properties map
+			inputSchema.Properties = parameters
+		}
+	}
+
+	name, _ := fn["name"].(string)
+	description, _ := fn["description"].(string)
+
+	return relaymodel.ClaudeTool{
+		Name:        name,
+		Description: description,
+		InputSchema: inputSchema,
+	}
+}
+
+func convertGeminiToolConfig(geminiReq *relaymodel.GeminiChatRequest) any {
+	if geminiReq.ToolConfig == nil {
+		return nil
+	}
+
+	switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
+	case "AUTO":
+		return map[string]any{"type": "auto"}
+	case "ANY":
+		if len(geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0 {
+			return map[string]any{
+				"type": "tool",
+				"name": geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames[0],
+			}
+		}
+
+		return map[string]any{"type": "any"}
 	}
 
 	return nil

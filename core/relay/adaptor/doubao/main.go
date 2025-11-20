@@ -85,10 +85,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Bot support",
-			"Network search metering support",
-		},
+		Readme: "Bot support\nNetwork search metering support",
 		Models: ModelList,
 	}
 }

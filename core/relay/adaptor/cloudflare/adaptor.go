@@ -47,7 +47,7 @@ func (a *Adaptor) GetRequestURL(
 	}
 
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Gemini:
 		url, err := url.JoinPath(urlPrefix, "/v1/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err

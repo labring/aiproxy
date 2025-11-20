@@ -30,7 +30,7 @@ type Store interface {
 type Metadata struct {
 	ConfigTemplates ConfigTemplates
 	KeyHelp         string
-	Features        []string
+	Readme          string
 	Models          []model.ModelConfig
 }
 

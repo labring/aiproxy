@@ -21,11 +21,13 @@ func (a *Adaptor) DefaultBaseURL() string {
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Gemini support",
 		Models: ModelList,
 	}
 }

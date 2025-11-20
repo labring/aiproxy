@@ -1,13 +1,10 @@
 package gemini
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -64,7 +61,7 @@ func (a *Adaptor) GetRequestURL(
 	}
 
 	if meta.GetBool("stream") ||
-		(meta.Mode != mode.Gemini && utils.IsGeminiStreamRequest(c.Request.URL.Path)) {
+		(meta.Mode == mode.Gemini && utils.IsGeminiStreamRequest(c.Request.URL.Path)) {
 		action = "streamGenerateContent?alt=sse"
 	}
 
@@ -94,19 +91,7 @@ func (a *Adaptor) ConvertRequest(
 	case mode.Anthropic:
 		return ConvertClaudeRequest(meta, req)
 	case mode.Gemini:
-		// For native Gemini mode, pass through the request body but set proper headers
-		body, err := common.GetRequestBodyReusable(req)
-		if err != nil {
-			return adaptor.ConvertResult{}, err
-		}
-
-		return adaptor.ConvertResult{
-			Header: http.Header{
-				"Content-Type":   {"application/json"},
-				"Content-Length": {strconv.Itoa(len(body))},
-			},
-			Body: bytes.NewReader(body),
-		}, nil
+		return NativeConvertRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -162,10 +147,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://ai.google.dev",
-			"Chat、Embeddings、Image generation Support",
-		},
+		Readme: "https://ai.google.dev\nChat、Embeddings、Image generation Support",
 		Models: ModelList,
 	}
 }

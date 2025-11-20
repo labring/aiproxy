@@ -136,9 +136,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Chat、Embeddings Support",
-		},
+		Readme: "Chat、Embeddings Support",
 		Models: ModelList,
 	}
 }

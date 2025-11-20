@@ -26,9 +26,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Chat、Embeddings、TTS(need group id) Support",
-		},
+		Readme: "Chat、Embeddings、TTS(need group id) Support\nGemini support",
 		KeyHelp: "api_key|group_id",
 		Models:  ModelList,
 	}
@@ -61,7 +59,7 @@ func (a *Adaptor) GetRequestURL(
 	}
 
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Gemini:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/text/chatcompletion_v2")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -104,6 +102,8 @@ func (a *Adaptor) ConvertRequest(
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		return openai.ConvertChatCompletionsRequest(meta, req, true)
+	case mode.Gemini:
+		return openai.ConvertGeminiRequest(meta, req)
 	case mode.AudioSpeech:
 		return ConvertTTSRequest(meta, req)
 	default:

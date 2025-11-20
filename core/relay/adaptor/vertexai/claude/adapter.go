@@ -43,6 +43,8 @@ func (a *Adaptor) ConvertRequest(
 		data, err = handleChatCompletionsRequest(meta, request)
 	case mode.Anthropic:
 		data, err = handleAnthropicRequest(meta, request)
+	case mode.Gemini:
+		data, err = handleGeminiRequest(meta, request)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -126,6 +128,24 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 	})
 }
 
+func handleGeminiRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
+	// Convert Gemini format to Claude format
+	claudeReq, err := anthropic.ConvertGeminiRequestToStruct(meta, request)
+	if err != nil {
+		return nil, err
+	}
+
+	meta.Set("stream", claudeReq.Stream)
+
+	req := Request{
+		AnthropicVersion: anthropicVersion,
+		ClaudeRequest:    claudeReq,
+	}
+	req.Model = ""
+
+	return sonic.Marshal(req)
+}
+
 func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	_ adaptor.Store,
@@ -144,6 +164,12 @@ func (a *Adaptor) DoResponse(
 			usage, err = anthropic.StreamHandler(meta, c, resp)
 		} else {
 			usage, err = anthropic.Handler(meta, c, resp)
+		}
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			usage, err = anthropic.GeminiStreamHandler(meta, c, resp)
+		} else {
+			usage, err = anthropic.GeminiHandler(meta, c, resp)
 		}
 	default:
 		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(

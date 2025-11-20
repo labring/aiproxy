@@ -266,14 +266,8 @@ func (a *Adaptor) DoResponse(
 
 func handleGeminiRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
 	// Convert Gemini format to Claude format
-	convertResult, err := anthropic.ConvertGeminiRequest(meta, request)
+	claudeReq, err := anthropic.ConvertGeminiRequestToStruct(meta, request)
 	if err != nil {
-		return nil, err
-	}
-
-	// Parse the Claude request
-	var claudeReq relaymodel.ClaudeRequest
-	if err := sonic.ConfigDefault.NewDecoder(convertResult.Body).Decode(&claudeReq); err != nil {
 		return nil, err
 	}
 
@@ -286,7 +280,7 @@ func handleGeminiRequest(meta *meta.Meta, request *http.Request) ([]byte, error)
 
 	req := Request{
 		AnthropicVersion: anthropicVersion,
-		ClaudeRequest:    &claudeReq,
+		ClaudeRequest:    claudeReq,
 	}
 
 	return sonic.Marshal(req)
@@ -369,10 +363,7 @@ func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 	log := common.GetLogger(c)
 	usage := model.Usage{}
 
-	var (
-		currentText     strings.Builder
-		currentThinking strings.Builder
-	)
+	streamState := anthropic.NewGeminiStreamState()
 
 	for event := range stream.Events() {
 		switch v := event.(type) {
@@ -385,7 +376,10 @@ func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 			}
 
 			// Convert to Gemini format
-			geminiResp := anthropic.ConvertClaudeStreamToGemini(meta, &claudeResp, &currentText, &currentThinking)
+			geminiResp := streamState.ConvertClaudeStreamToGemini(
+				meta,
+				&claudeResp,
+			)
 			if geminiResp != nil {
 				_ = render.GeminiObjectData(c, geminiResp)
 

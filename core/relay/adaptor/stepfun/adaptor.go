@@ -39,6 +39,7 @@ func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Gemini support",
 		Models: ModelList,
 	}
 }

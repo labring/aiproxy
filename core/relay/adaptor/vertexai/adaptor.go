@@ -66,9 +66,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Claude support native Endpoint: /v1/messages",
-		},
+		Readme:  "Claude support native Endpoint: /v1/messages\nGemini support",
 		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}

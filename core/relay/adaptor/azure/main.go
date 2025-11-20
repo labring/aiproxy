@@ -302,11 +302,7 @@ func (a *Adaptor) SetupRequestHeader(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Model names do not contain '.' character, dots will be removed",
-			"For example: gpt-3.5-turbo becomes gpt-35-turbo",
-			fmt.Sprintf("API version is optional, default is '%s'", DefaultAPIVersion),
-		},
+		Readme: fmt.Sprintf("Model names do not contain '.' character, dots will be removed\nFor example: gpt-3.5-turbo becomes gpt-35-turbo\nAPI version is optional, default is '%s'\nGemini support", DefaultAPIVersion),
 		KeyHelp: "key or key|api-version",
 		Models:  openai.ModelList,
 	}

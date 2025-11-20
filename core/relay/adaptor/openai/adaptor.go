@@ -400,10 +400,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"OpenAI compatibility",
-			"Anthropic conversation",
-		},
+		Readme: "OpenAI compatibility\nAnthropic conversation",
 		Models: ModelList,
 	}
 }

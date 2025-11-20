@@ -3,6 +3,7 @@ package openai
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,187 +46,38 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 
 	messages := make([]relaymodel.Message, 0, estimatedCap)
 
-	if geminiReq.SystemInstruction != nil && len(geminiReq.SystemInstruction.Parts) > 0 {
-		systemText := ""
-		for _, part := range geminiReq.SystemInstruction.Parts {
-			if part.Text != "" {
-				systemText += part.Text
-			}
-		}
-
-		if systemText != "" {
-			messages = append(messages, relaymodel.Message{
-				Role:    "system",
-				Content: systemText,
-			})
-		}
+	if systemMsgs := convertGeminiSystemToOpenAI(geminiReq); len(systemMsgs) > 0 {
+		messages = append(messages, systemMsgs...)
 	}
+
+	// Track pending tool calls to match responses
+	var pendingTools []relaymodel.ToolCall
 
 	// Convert contents to messages
 	for _, content := range geminiReq.Contents {
-		msg := relaymodel.Message{}
-
-		// Map role
-		switch content.Role {
-		case "model":
-			msg.Role = "assistant"
-		case "user":
-			msg.Role = "user"
-		default:
-			msg.Role = content.Role
-		}
-
-		// Convert parts
-		if len(content.Parts) == 1 && content.Parts[0].Text != "" &&
-			content.Parts[0].InlineData == nil {
-			// Simple text message
-			msg.Content = content.Parts[0].Text
-		} else {
-			// Complex message with multiple parts
-			var contentParts []relaymodel.MessageContent
-			for _, part := range content.Parts {
-				switch {
-				case part.FunctionCall != nil:
-					// Handle function call
-					args, _ := sonic.MarshalString(part.FunctionCall.Args)
-					toolCall := relaymodel.ToolCall{
-						ID:   CallID(),
-						Type: "function",
-						Function: relaymodel.Function{
-							Name:      part.FunctionCall.Name,
-							Arguments: args,
-						},
-					}
-					msg.ToolCalls = append(msg.ToolCalls, toolCall)
-				case part.FunctionResponse != nil:
-					// Handle function response
-					msg.Role = "tool"
-					responseContent, _ := sonic.MarshalString(part.FunctionResponse.Response.Content)
-					msg.Content = responseContent
-
-					msg.Name = &part.FunctionResponse.Name
-					if len(geminiReq.Contents) > 0 {
-						// Try to find the corresponding tool call ID
-						msg.ToolCallID = "call_" + part.FunctionResponse.Name
-					}
-				case part.Text != "":
-					contentParts = append(contentParts, relaymodel.MessageContent{
-						Type: relaymodel.ContentTypeText,
-						Text: part.Text,
-					})
-				case part.InlineData != nil:
-					// Handle image
-					imageURL := part.InlineData.Data
-					if !strings.HasPrefix(imageURL, "http") && !strings.HasPrefix(imageURL, "data:") {
-						// Base64 data
-						imageURL = "data:" + part.InlineData.MimeType + ";base64," + part.InlineData.Data
-					}
-
-					contentParts = append(contentParts, relaymodel.MessageContent{
-						Type: relaymodel.ContentTypeImageURL,
-						ImageURL: &relaymodel.ImageURL{
-							URL: imageURL,
-						},
-					})
-				}
-			}
-
-			if len(contentParts) > 0 {
-				msg.Content = contentParts
-			}
-		}
-
-		messages = append(messages, msg)
+		msgs := convertGeminiContentToOpenAI(content, &pendingTools)
+		messages = append(messages, msgs...)
 	}
 
 	openaiReq.Messages = messages
 
 	// Convert generation config
-	if geminiReq.GenerationConfig != nil {
-		openaiReq.Temperature = geminiReq.GenerationConfig.Temperature
-
-		openaiReq.TopP = geminiReq.GenerationConfig.TopP
-		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
-			openaiReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
-		}
-
-		// Handle response format
-		if geminiReq.GenerationConfig.ResponseMimeType != "" {
-			switch geminiReq.GenerationConfig.ResponseMimeType {
-			case "application/json":
-				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "json_object"}
-			case "text/plain":
-				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "text"}
-			}
-
-			if geminiReq.GenerationConfig.ResponseSchema != nil {
-				if schema, ok := geminiReq.GenerationConfig.ResponseSchema.(map[string]any); ok {
-					openaiReq.ResponseFormat = &relaymodel.ResponseFormat{
-						Type: "json_schema",
-						JSONSchema: &relaymodel.JSONSchema{
-							Name:   "response",
-							Schema: schema,
-						},
-					}
-				}
-			}
-		}
-	}
+	convertGeminiGenerationConfigToOpenAI(geminiReq, &openaiReq)
 
 	// Convert tools
-	if len(geminiReq.Tools) > 0 {
-		var tools []relaymodel.Tool
-		for _, geminiTool := range geminiReq.Tools {
-			if fnDecls, ok := geminiTool.FunctionDeclarations.([]any); ok {
-				for _, fnDecl := range fnDecls {
-					if fn, ok := fnDecl.(map[string]any); ok {
-						name, _ := fn["name"].(string)
-						description, _ := fn["description"].(string)
-						function := relaymodel.Function{
-							Name:        name,
-							Description: description,
-							Parameters:  fn["parameters"],
-						}
-						tools = append(tools, relaymodel.Tool{
-							Type:     "function",
-							Function: function,
-						})
-					}
-				}
-			}
-		}
-
-		if len(tools) > 0 {
-			openaiReq.Tools = tools
-		}
-	}
+	openaiReq.Tools = convertGeminiToolsToOpenAI(geminiReq)
 
 	// Convert tool config
-	if geminiReq.ToolConfig != nil {
-		switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
-		case "AUTO":
-			openaiReq.ToolChoice = "auto"
-		case "NONE":
-			openaiReq.ToolChoice = "none"
-		case "ANY":
-			if len(geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0 {
-				openaiReq.ToolChoice = map[string]any{
-					"type": "function",
-					"function": map[string]any{
-						"name": geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames[0],
-					},
-				}
-			} else {
-				openaiReq.ToolChoice = "required"
-			}
-		}
-	}
+	openaiReq.ToolChoice = convertGeminiToolConfigToOpenAI(geminiReq)
 
 	// Marshal to JSON
 	data, err := sonic.Marshal(openaiReq)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
+
+	fmt.Println("convert request:")
+	fmt.Println(string(data))
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
@@ -472,4 +324,276 @@ func GeminiHandler(
 	_, _ = c.Writer.Write(jsonResponse)
 
 	return openaiResp.Usage.ToModelUsage(), nil
+}
+
+func convertGeminiSystemToOpenAI(geminiReq *relaymodel.GeminiChatRequest) []relaymodel.Message {
+	if geminiReq.SystemInstruction == nil || len(geminiReq.SystemInstruction.Parts) == 0 {
+		return nil
+	}
+
+	systemText := ""
+	for _, part := range geminiReq.SystemInstruction.Parts {
+		if part.Text != "" {
+			systemText += part.Text
+		}
+	}
+
+	if systemText != "" {
+		return []relaymodel.Message{{
+			Role:    "system",
+			Content: systemText,
+		}}
+	}
+
+	return nil
+}
+
+func convertGeminiToolsToOpenAI(geminiReq *relaymodel.GeminiChatRequest) []relaymodel.Tool {
+	if len(geminiReq.Tools) == 0 {
+		return nil
+	}
+
+	var tools []relaymodel.Tool
+	for _, geminiTool := range geminiReq.Tools {
+		if fnDecls, ok := geminiTool.FunctionDeclarations.([]any); ok {
+			for _, fnDecl := range fnDecls {
+				if fn, ok := fnDecl.(map[string]any); ok {
+					name, _ := fn["name"].(string)
+					description, _ := fn["description"].(string)
+					function := relaymodel.Function{
+						Name:        name,
+						Description: description,
+						Parameters:  fn["parameters"],
+					}
+					tools = append(tools, relaymodel.Tool{
+						Type:     "function",
+						Function: function,
+					})
+				}
+			}
+		}
+	}
+
+	return tools
+}
+
+func convertGeminiToolConfigToOpenAI(geminiReq *relaymodel.GeminiChatRequest) any {
+	if geminiReq.ToolConfig == nil {
+		return nil
+	}
+
+	switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
+	case "AUTO":
+		return "auto"
+	case "NONE":
+		return "none"
+	case "ANY":
+		if len(geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0 {
+			return map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name": geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames[0],
+				},
+			}
+		}
+
+		return "required"
+	}
+
+	return nil
+}
+
+func convertGeminiGenerationConfigToOpenAI(
+	geminiReq *relaymodel.GeminiChatRequest,
+	openaiReq *relaymodel.GeneralOpenAIRequest,
+) {
+	if geminiReq.GenerationConfig != nil {
+		openaiReq.Temperature = geminiReq.GenerationConfig.Temperature
+
+		openaiReq.TopP = geminiReq.GenerationConfig.TopP
+		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
+			openaiReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
+		}
+
+		// Handle response format
+		if geminiReq.GenerationConfig.ResponseMimeType != "" {
+			switch geminiReq.GenerationConfig.ResponseMimeType {
+			case "application/json":
+				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "json_object"}
+			case "text/plain":
+				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "text"}
+			}
+
+			if geminiReq.GenerationConfig.ResponseSchema != nil {
+				if schema, ok := geminiReq.GenerationConfig.ResponseSchema.(map[string]any); ok {
+					openaiReq.ResponseFormat = &relaymodel.ResponseFormat{
+						Type: "json_schema",
+						JSONSchema: &relaymodel.JSONSchema{
+							Name:   "response",
+							Schema: schema,
+						},
+					}
+				}
+			}
+		}
+	}
+}
+
+func convertGeminiContentToOpenAI(
+	content *relaymodel.GeminiChatContent,
+	pendingTools *[]relaymodel.ToolCall,
+) []relaymodel.Message {
+	var messages []relaymodel.Message
+
+	// Map role
+	role := content.Role
+	switch role {
+	case "model":
+		role = "assistant"
+	case "user":
+		role = "user"
+	}
+
+	// Current message builder
+	currentMsg := relaymodel.Message{
+		Role: role,
+	}
+
+	var currentContentParts []relaymodel.MessageContent
+
+	hasContent := false
+
+	// Convert parts
+	for _, part := range content.Parts {
+		switch {
+		case part.FunctionCall != nil:
+			// Handle function call (Assistant)
+			args, _ := sonic.MarshalString(part.FunctionCall.Args)
+			toolCall := relaymodel.ToolCall{
+				ID:   CallID(),
+				Type: "function",
+				Function: relaymodel.Function{
+					Name:      part.FunctionCall.Name,
+					Arguments: args,
+				},
+			}
+			currentMsg.ToolCalls = append(currentMsg.ToolCalls, toolCall)
+			hasContent = true
+
+			// Track this call
+			*pendingTools = append(*pendingTools, toolCall)
+
+		case part.FunctionResponse != nil:
+			// Handle function response
+			// Flush current message if it has content
+			if hasContent {
+				if len(currentContentParts) > 0 {
+					currentMsg.Content = currentContentParts
+				}
+
+				messages = append(messages, currentMsg)
+				// Reset
+				currentMsg = relaymodel.Message{Role: role}
+				currentContentParts = nil
+				hasContent = false
+			}
+
+			// Create Tool Message
+			name := part.FunctionResponse.Name
+
+			var id string
+
+			// Try to find in pendingTools by name to ensure we match the generated ID
+			foundIdx := -1
+			if pendingTools != nil {
+				for i, tool := range *pendingTools {
+					if tool.Function.Name == name {
+						id = tool.ID
+						foundIdx = i
+						break
+					}
+				}
+			}
+
+			if foundIdx != -1 {
+				// Remove found tool from pending
+				*pendingTools = append((*pendingTools)[:foundIdx], (*pendingTools)[foundIdx+1:]...)
+			} else {
+				// If not found, use provided ID or fallback
+				if part.FunctionResponse.ID != "" {
+					id = part.FunctionResponse.ID
+				} else {
+					id = "call_" + name
+				}
+
+				// Inject synthetic Assistant message with ToolCall to satisfy OpenAI protocol
+				// This handles cases where the client omits the model's function call message
+				syntheticCall := relaymodel.ToolCall{
+					ID:   id,
+					Type: "function",
+					Function: relaymodel.Function{
+						Name:      name,
+						Arguments: "{}", // Assume empty args as we can't reconstruct them
+					},
+				}
+
+				syntheticMsg := relaymodel.Message{
+					Role:      "assistant",
+					ToolCalls: []relaymodel.ToolCall{syntheticCall},
+				}
+
+				messages = append(messages, syntheticMsg)
+			}
+
+			responseContent, _ := sonic.MarshalString(part.FunctionResponse.Response)
+
+			toolMsg := relaymodel.Message{
+				Role:       "tool",
+				Content:    responseContent,
+				ToolCallID: id,
+				Name:       &name,
+			}
+			messages = append(messages, toolMsg)
+
+		case part.Text != "":
+			currentContentParts = append(currentContentParts, relaymodel.MessageContent{
+				Type: relaymodel.ContentTypeText,
+				Text: part.Text,
+			})
+			hasContent = true
+
+		case part.InlineData != nil:
+			// Handle image
+			imageURL := part.InlineData.Data
+			if !strings.HasPrefix(imageURL, "http") && !strings.HasPrefix(imageURL, "data:") {
+				// Base64 data
+				imageURL = "data:" + part.InlineData.MimeType + ";base64," + part.InlineData.Data
+			}
+
+			currentContentParts = append(currentContentParts, relaymodel.MessageContent{
+				Type: relaymodel.ContentTypeImageURL,
+				ImageURL: &relaymodel.ImageURL{
+					URL: imageURL,
+				},
+			})
+			hasContent = true
+		}
+	}
+
+	if hasContent {
+		if len(currentContentParts) > 0 {
+			if len(currentContentParts) == 1 &&
+				currentContentParts[0].Type == relaymodel.ContentTypeText &&
+				len(currentMsg.ToolCalls) == 0 {
+				// Simple text message
+				currentMsg.Content = currentContentParts[0].Text
+			} else {
+				currentMsg.Content = currentContentParts
+			}
+		}
+
+		messages = append(messages, currentMsg)
+	}
+
+	return messages
 }

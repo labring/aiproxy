@@ -205,4 +205,25 @@ var DefaultPredefinedPatches = []PatchRule{
 			},
 		},
 	},
+	{
+		Name:        "gpt5.1_remove_top_p",
+		Description: "Remove top_p field for GPT-5.1 models",
+		Conditions: []PatchCondition{
+			{
+				Key:      "model",
+				Operator: OperatorEquals,
+				Value:    "gpt-5.1-chat-latest",
+			},
+			{
+				Key:      "top_p",
+				Operator: OperatorExists,
+			},
+		},
+		Operations: []PatchOperation{
+			{
+				Op:  OpDelete,
+				Key: "top_p",
+			},
+		},
+	},
 }

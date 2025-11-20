@@ -7,11 +7,11 @@ import "github.com/labring/aiproxy/core/relay/adaptor"
 
 type GeminiChatRequest struct {
 	Contents          []*GeminiChatContent        `json:"contents"`
-	SystemInstruction *GeminiChatContent          `json:"system_instruction,omitempty"`
-	SafetySettings    []GeminiChatSafetySettings  `json:"safety_settings,omitempty"`
-	GenerationConfig  *GeminiChatGenerationConfig `json:"generation_config,omitempty"`
+	SystemInstruction *GeminiChatContent          `json:"systemInstruction,omitempty"`
+	SafetySettings    []GeminiChatSafetySettings  `json:"safetySettings,omitempty"`
+	GenerationConfig  *GeminiChatGenerationConfig `json:"generationConfig,omitempty"`
 	Tools             []GeminiChatTools           `json:"tools,omitempty"`
-	ToolConfig        *GeminiToolConfig           `json:"tool_config,omitempty"`
+	ToolConfig        *GeminiToolConfig           `json:"toolConfig,omitempty"`
 }
 
 type GeminiChatContent struct {
@@ -39,11 +39,10 @@ type GeminiFunctionCall struct {
 }
 
 type GeminiFunctionResponse struct {
-	Name     string `json:"name"`
-	Response struct {
-		Name    string         `json:"name"`
-		Content map[string]any `json:"content"`
-	} `json:"response"`
+	Name     string         `json:"name"`
+	Response map[string]any `json:"response"`
+	// vertexai gemini not support `id` filed
+	ID string `json:"id,omitempty"`
 }
 
 type GeminiChatSafetySettings struct {
@@ -52,7 +51,7 @@ type GeminiChatSafetySettings struct {
 }
 
 type GeminiChatTools struct {
-	FunctionDeclarations any `json:"function_declarations,omitempty"`
+	FunctionDeclarations any `json:"functionDeclarations,omitempty"`
 }
 
 type GeminiChatGenerationConfig struct {
@@ -65,21 +64,21 @@ type GeminiChatGenerationConfig struct {
 	MaxOutputTokens    *int                  `json:"maxOutputTokens,omitempty"`
 	CandidateCount     int                   `json:"candidateCount,omitempty"`
 	ResponseModalities []string              `json:"responseModalities,omitempty"`
-	ThinkingConfig     *GeminiThinkingConfig `json:"thinking_config,omitempty"`
+	ThinkingConfig     *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
 }
 
 type GeminiThinkingConfig struct {
-	ThinkingBudget  int  `json:"thinking_budget,omitempty"`
+	ThinkingBudget  int  `json:"thinkingBudget,omitempty"`
 	IncludeThoughts bool `json:"includeThoughts,omitempty"`
 }
 
 type GeminiFunctionCallingConfig struct {
 	Mode                 string   `json:"mode,omitempty"`
-	AllowedFunctionNames []string `json:"allowed_function_names,omitempty"`
+	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"`
 }
 
 type GeminiToolConfig struct {
-	FunctionCallingConfig GeminiFunctionCallingConfig `json:"function_calling_config"`
+	FunctionCallingConfig GeminiFunctionCallingConfig `json:"functionCallingConfig"`
 }
 
 type GeminiChatResponse struct {
