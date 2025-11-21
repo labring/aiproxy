@@ -25,22 +25,18 @@ import (
 )
 
 const (
-	toolUseType             = "tool_use"
 	serverToolUseType       = "server_tool_use"
 	webSearchToolResult     = "web_search_tool_result"
 	codeExecutionToolResult = "code_execution_tool_result"
-	conetentTypeText        = "text"
-	conetentTypeThinking    = "thinking"
-	conetentTypeImage       = "image"
 )
 
 func stopReasonClaude2OpenAI(reason string) string {
 	switch reason {
-	case "end_turn", "stop_sequence":
+	case relaymodel.ClaudeStopReasonEndTurn, relaymodel.ClaudeStopReasonStopSequence:
 		return relaymodel.FinishReasonStop
-	case "max_tokens":
+	case relaymodel.ClaudeStopReasonMaxTokens:
 		return relaymodel.FinishReasonLength
-	case toolUseType:
+	case relaymodel.ClaudeStopReasonToolUse:
 		return relaymodel.FinishReasonToolCalls
 	case "null":
 		return ""
@@ -145,7 +141,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 		}{Type: "auto"}
 		if choice, ok := textRequest.ToolChoice.(map[string]any); ok {
 			if function, ok := choice["function"].(map[string]any); ok {
-				claudeToolChoice.Type = "tool"
+				claudeToolChoice.Type = relaymodel.RoleTool
 				name, _ := function["name"].(string)
 				claudeToolChoice.Name = name
 			}
@@ -163,9 +159,9 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 	hasToolCalls := false
 
 	for _, message := range textRequest.Messages {
-		if message.Role == "system" {
+		if message.Role == relaymodel.RoleSystem {
 			claudeRequest.System = append(claudeRequest.System, relaymodel.ClaudeContent{
-				Type:         conetentTypeText,
+				Type:         relaymodel.ClaudeContentTypeText,
 				Text:         message.StringContent(),
 				CacheControl: message.CacheControl.ResetTTL(),
 			})
@@ -181,11 +177,11 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 
 		content.CacheControl = message.CacheControl.ResetTTL()
 		if message.IsStringContent() {
-			content.Type = conetentTypeText
+			content.Type = relaymodel.ClaudeContentTypeText
 
 			content.Text = message.StringContent()
-			if message.Role == "tool" {
-				claudeMessage.Role = "user"
+			if message.Role == relaymodel.RoleTool {
+				claudeMessage.Role = relaymodel.RoleUser
 				content.Type = "tool_result"
 				content.Content = content.Text
 				content.Text = ""
@@ -193,7 +189,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 			}
 
 			//nolint:staticcheck
-			if !(message.Role == "assistant" && content.Text == "" && len(message.ToolCalls) > 0) {
+			if !(message.Role == relaymodel.RoleAssistant && content.Text == "" && len(message.ToolCalls) > 0) {
 				claudeMessage.Content = append(claudeMessage.Content, content)
 			}
 		} else {
@@ -201,19 +197,19 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 
 			openaiContent := message.ParseContent()
 			for _, part := range openaiContent {
-				if message.Role == "assistant" && part.Text == "" && len(message.ToolCalls) > 0 {
+				if message.Role == relaymodel.RoleAssistant && part.Text == "" && len(message.ToolCalls) > 0 {
 					continue
 				}
 
 				var content relaymodel.ClaudeContent
 				switch part.Type {
 				case relaymodel.ContentTypeText:
-					content.Type = conetentTypeText
+					content.Type = relaymodel.ClaudeContentTypeText
 					content.Text = part.Text
 				case relaymodel.ContentTypeImageURL:
-					content.Type = conetentTypeImage
+					content.Type = relaymodel.ClaudeContentTypeImage
 					content.Source = &relaymodel.ClaudeImageSource{
-						Type: "url",
+						Type: relaymodel.ClaudeImageSourceTypeURL,
 						URL:  part.ImageURL.URL,
 					}
 					imageTasks = append(imageTasks, &content)
@@ -230,7 +226,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 			inputParam := make(map[string]any)
 			_ = sonic.UnmarshalString(toolCall.Function.Arguments, &inputParam)
 			claudeMessage.Content = append(claudeMessage.Content, relaymodel.ClaudeContent{
-				Type:  toolUseType,
+				Type:  relaymodel.ClaudeContentTypeToolUse,
 				ID:    toolCall.ID,
 				Name:  toolCall.Function.Name,
 				Input: inputParam,
@@ -283,7 +279,7 @@ func batchPatchImage2Base64(ctx context.Context, imageTasks []*relaymodel.Claude
 				return
 			}
 
-			task.Source.Type = "base64"
+			task.Source.Type = relaymodel.ClaudeImageSourceTypeBase64
 			task.Source.URL = ""
 			task.Source.MediaType = mimeType
 			task.Source.Data = data
@@ -370,7 +366,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 	case "content_block_start":
 		if claudeResponse.ContentBlock != nil {
 			content = claudeResponse.ContentBlock.Text
-			if claudeResponse.ContentBlock.Type == toolUseType {
+			if claudeResponse.ContentBlock.Type == relaymodel.ClaudeContentTypeToolUse {
 				toolCallIndex := s.getToolCallIndex(claudeResponse.Index, true)
 				tools = append(tools, relaymodel.ToolCall{
 					Index: toolCallIndex,
@@ -426,7 +422,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 			ReasoningContent: thinking,
 			Signature:        signature,
 			ToolCalls:        tools,
-			Role:             "assistant",
+			Role:             relaymodel.RoleAssistant,
 		},
 		Index:        0,
 		FinishReason: stopReasonClaude2OpenAI(stopReason),
@@ -475,12 +471,12 @@ func Response2OpenAI(
 	tools := make([]relaymodel.ToolCall, 0)
 	for _, v := range claudeResponse.Content {
 		switch v.Type {
-		case conetentTypeText:
+		case relaymodel.ClaudeContentTypeText:
 			content = v.Text
-		case conetentTypeThinking:
+		case relaymodel.ClaudeContentTypeThinking:
 			thinking = v.Thinking
 			signature = v.Signature
-		case toolUseType:
+		case relaymodel.ClaudeContentTypeToolUse:
 			args, _ := sonic.MarshalString(v.Input)
 			tools = append(tools, relaymodel.ToolCall{
 				Index: len(tools),
@@ -500,7 +496,7 @@ func Response2OpenAI(
 	choice := relaymodel.TextResponseChoice{
 		Index: 0,
 		Message: relaymodel.Message{
-			Role:             "assistant",
+			Role:             relaymodel.RoleAssistant,
 			Content:          content,
 			ReasoningContent: thinking,
 			Signature:        signature,

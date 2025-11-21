@@ -119,7 +119,11 @@ func TestClaudeHandler(t *testing.T) {
 			convey.So(len(claudeResponse.Content), convey.ShouldEqual, 1)
 
 			// Check tool use block
-			convey.So(claudeResponse.Content[0].Type, convey.ShouldEqual, "tool_use")
+			convey.So(
+				claudeResponse.Content[0].Type,
+				convey.ShouldEqual,
+				relaymodel.ClaudeContentTypeToolUse,
+			)
 			convey.So(claudeResponse.Content[0].Name, convey.ShouldEqual, "get_weather")
 			convey.So(claudeResponse.Content[0].Signature, convey.ShouldEqual, "tool_signature_456")
 		})

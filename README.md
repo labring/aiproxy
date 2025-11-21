@@ -23,7 +23,8 @@ AI Proxy is a powerful, production-ready AI gateway that provides intelligent re
 - **Smart Retry Logic**: Intelligent retry strategies with automatic error recovery
 - **Priority-based Channel Selection**: Route requests based on channel priority and error rates
 - **Load Balancing**: Efficiently distribute traffic across multiple AI providers
-- **Protocol Conversion**: Seamless Claude to OpenAI API protocol conversion
+- **Protocol Conversion**: Seamless protocol conversion between OpenAI Chat Completions, Claude Messages, Gemini, and OpenAI Responses API
+  - Chat/Claude/Gemini → Responses API: Use responses-only models with any protocol
 
 ### 📊 **Comprehensive Monitoring & Analytics**
 
@@ -326,6 +327,11 @@ env_key = "AIPROXY_API_KEY"
 # Valid values for wire_api are "chat" and "responses". Defaults to "chat" if omitted.
 wire_api = "chat"
 ```
+
+**Protocol Conversion Support**:
+- **Responses-only models**: AI Proxy automatically converts Chat/Claude/Gemini requests to Responses API format for models that only support the Responses API
+- **Multi-protocol access**: Use any protocol (Chat Completions, Claude Messages, or Gemini) to access responses-only models
+- **Transparent conversion**: No client-side changes needed - AI Proxy handles protocol translation automatically
 
 ### MCP (Model Context Protocol)
 

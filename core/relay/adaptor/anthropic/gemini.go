@@ -130,40 +130,40 @@ func ConvertClaudeToGeminiResponse(
 	candidate := &relaymodel.GeminiChatCandidate{
 		Index: 0,
 		Content: relaymodel.GeminiChatContent{
-			Role:  "model",
+			Role:  relaymodel.GeminiRoleModel,
 			Parts: []*relaymodel.GeminiPart{},
 		},
 	}
 
 	// Convert stop reason
 	switch claudeResp.StopReason {
-	case "end_turn":
-		candidate.FinishReason = "STOP"
-	case "max_tokens":
-		candidate.FinishReason = "MAX_TOKENS"
-	case "tool_use":
-		candidate.FinishReason = "STOP"
+	case relaymodel.ClaudeStopReasonEndTurn:
+		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
+	case relaymodel.ClaudeStopReasonMaxTokens:
+		candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
+	case relaymodel.ClaudeStopReasonToolUse:
+		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 	default:
-		candidate.FinishReason = "STOP"
+		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 	}
 
 	// Convert content
 	for _, content := range claudeResp.Content {
 		switch content.Type {
-		case "text":
+		case relaymodel.ClaudeContentTypeText:
 			if content.Text != "" {
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text: content.Text,
 				})
 			}
-		case "thinking":
+		case relaymodel.ClaudeContentTypeThinking:
 			if content.Thinking != "" {
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text:    content.Thinking,
 					Thought: true,
 				})
 			}
-		case "tool_use":
+		case relaymodel.ClaudeContentTypeToolUse:
 			if inputMap, ok := content.Input.(map[string]any); ok {
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					FunctionCall: &relaymodel.GeminiFunctionCall{
@@ -307,13 +307,13 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 	candidate := &relaymodel.GeminiChatCandidate{
 		Index: 0,
 		Content: relaymodel.GeminiChatContent{
-			Role:  "model",
+			Role:  relaymodel.GeminiRoleModel,
 			Parts: []*relaymodel.GeminiPart{},
 		},
 	}
 
 	switch claudeResp.Type {
-	case "message_start":
+	case relaymodel.ClaudeStreamTypeMessageStart:
 		if claudeResp.Message != nil && claudeResp.Message.Usage.InputTokens > 0 {
 			geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
 				PromptTokenCount: claudeResp.Message.Usage.InputTokens,
@@ -322,27 +322,27 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 
 		return geminiResp
 
-	case "content_block_delta":
+	case relaymodel.ClaudeStreamTypeContentBlockDelta:
 		if claudeResp.Delta != nil {
 			switch {
-			case claudeResp.Delta.Type == "text_delta" && claudeResp.Delta.Text != "":
+			case claudeResp.Delta.Type == relaymodel.ClaudeDeltaTypeTextDelta && claudeResp.Delta.Text != "":
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text: claudeResp.Delta.Text,
 				})
-			case claudeResp.Delta.Type == "thinking_delta" && claudeResp.Delta.Thinking != "":
+			case claudeResp.Delta.Type == relaymodel.ClaudeDeltaTypeThinkingDelta && claudeResp.Delta.Thinking != "":
 				candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
 					Text:    claudeResp.Delta.Thinking,
 					Thought: true,
 				})
-			case claudeResp.Delta.Type == "input_json_delta" && claudeResp.Delta.PartialJSON != "":
+			case claudeResp.Delta.Type == relaymodel.ClaudeDeltaTypeInputJSONDelta && claudeResp.Delta.PartialJSON != "":
 				s.CurrentToolArgs.WriteString(claudeResp.Delta.PartialJSON)
 				return nil
 			}
 		}
 
-	case "content_block_start":
+	case relaymodel.ClaudeStreamTypeContentBlockStart:
 		if claudeResp.ContentBlock != nil {
-			if claudeResp.ContentBlock.Type == "tool_use" {
+			if claudeResp.ContentBlock.Type == relaymodel.ClaudeContentTypeToolUse {
 				s.CurrentToolName = claudeResp.ContentBlock.Name
 				s.CurrentToolID = claudeResp.ContentBlock.ID
 				s.CurrentToolArgs.Reset()
@@ -358,7 +358,7 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 			}
 		}
 
-	case "content_block_stop":
+	case relaymodel.ClaudeStreamTypeContentBlockStop:
 		if s.CurrentToolName != "" {
 			argsStr := s.CurrentToolArgs.String()
 
@@ -381,17 +381,17 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 			return nil
 		}
 
-	case "message_delta":
+	case relaymodel.ClaudeStreamTypeMessageDelta:
 		if claudeResp.Delta != nil && claudeResp.Delta.StopReason != nil {
 			switch *claudeResp.Delta.StopReason {
-			case "end_turn":
-				candidate.FinishReason = "STOP"
-			case "max_tokens":
-				candidate.FinishReason = "MAX_TOKENS"
-			case "tool_use":
-				candidate.FinishReason = "STOP"
+			case relaymodel.ClaudeStopReasonEndTurn:
+				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
+			case relaymodel.ClaudeStopReasonMaxTokens:
+				candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
+			case relaymodel.ClaudeStopReasonToolUse:
+				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 			default:
-				candidate.FinishReason = "STOP"
+				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 			}
 		}
 
@@ -403,7 +403,7 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 			}
 		}
 
-	case "message_stop":
+	case relaymodel.ClaudeStreamTypeMessageStop:
 		return nil
 	}
 
@@ -424,7 +424,7 @@ func convertGeminiSystemInstruction(
 		for _, part := range geminiReq.SystemInstruction.Parts {
 			if part.Text != "" {
 				system = append(system, relaymodel.ClaudeContent{
-					Type: "text",
+					Type: relaymodel.ClaudeContentTypeText,
 					Text: part.Text,
 				})
 			}
@@ -443,14 +443,14 @@ func convertGeminiContent(
 
 	// Map role
 	if content.Role == "" {
-		content.Role = "user"
+		content.Role = relaymodel.GeminiRoleUser
 	}
 
 	switch content.Role {
-	case "model":
-		msg.Role = "assistant"
-	case "user":
-		msg.Role = "user"
+	case relaymodel.GeminiRoleModel:
+		msg.Role = relaymodel.RoleAssistant
+	case relaymodel.GeminiRoleUser:
+		msg.Role = relaymodel.RoleUser
 	default:
 		msg.Role = content.Role
 	}
@@ -466,14 +466,14 @@ func convertGeminiContent(
 			toolCallMap[part.FunctionCall.Name] = append(toolCallMap[part.FunctionCall.Name], id)
 
 			msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-				Type:  "tool_use",
+				Type:  relaymodel.ClaudeContentTypeToolUse,
 				ID:    id,
 				Name:  part.FunctionCall.Name,
 				Input: part.FunctionCall.Args,
 			})
 		case part.FunctionResponse != nil:
 			// Handle function response - convert to tool result
-			msg.Role = "user"
+			msg.Role = relaymodel.RoleUser
 			content, _ := sonic.MarshalString(part.FunctionResponse.Response)
 
 			// Retrieve the corresponding tool call ID
@@ -486,14 +486,14 @@ func convertGeminiContent(
 
 			if id != "" {
 				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type:      "tool_result",
+					Type:      relaymodel.ClaudeContentTypeToolResult,
 					ToolUseID: id,
 					Content:   content,
 				})
 			} else {
 				// Orphaned result - convert to text to avoid validation error
 				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type: "text",
+					Type: relaymodel.ClaudeContentTypeText,
 					Text: fmt.Sprintf("Tool result for %s: %s", part.FunctionResponse.Name, content),
 				})
 			}
@@ -501,13 +501,13 @@ func convertGeminiContent(
 			if part.Thought {
 				// Handle thinking content
 				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type:     "thinking",
+					Type:     relaymodel.ClaudeContentTypeThinking,
 					Thinking: part.Text,
 				})
 			} else {
 				// Handle text content
 				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-					Type: "text",
+					Type: relaymodel.ClaudeContentTypeText,
 					Text: part.Text,
 				})
 			}
@@ -522,9 +522,9 @@ func convertGeminiContent(
 			}
 
 			msg.Content = append(msg.Content, relaymodel.ClaudeContent{
-				Type: "image",
+				Type: relaymodel.ClaudeContentTypeImage,
 				Source: &relaymodel.ClaudeImageSource{
-					Type:      "base64",
+					Type:      relaymodel.ClaudeImageSourceTypeBase64,
 					MediaType: part.InlineData.MimeType,
 					Data:      imageData,
 				},
@@ -610,17 +610,17 @@ func convertGeminiToolConfig(geminiReq *relaymodel.GeminiChatRequest) any {
 	}
 
 	switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
-	case "AUTO":
-		return map[string]any{"type": "auto"}
-	case "ANY":
+	case relaymodel.GeminiFunctionCallingModeAuto:
+		return map[string]any{"type": relaymodel.ToolChoiceAuto}
+	case relaymodel.GeminiFunctionCallingModeAny:
 		if len(geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0 {
 			return map[string]any{
-				"type": "tool",
+				"type": relaymodel.ToolChoiceTypeTool,
 				"name": geminiReq.ToolConfig.FunctionCallingConfig.AllowedFunctionNames[0],
 			}
 		}
 
-		return map[string]any{"type": "any"}
+		return map[string]any{"type": relaymodel.ToolChoiceAny}
 	}
 
 	return nil

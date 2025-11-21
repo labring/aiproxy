@@ -650,3 +650,160 @@ func TestConvertOpenAIStreamToGemini_MultipleToolCalls_Order(t *testing.T) {
 		t.Errorf("Expected order [func_zero, func_one], got [%s, %s]", name0, name1)
 	}
 }
+
+func TestConvertGeminiRequest_ToolsWithRequiredField(t *testing.T) {
+	tests := []struct {
+		name      string
+		request   string
+		checkFunc func(*testing.T, relaymodel.GeneralOpenAIRequest)
+	}{
+		{
+			name: "null required field should be removed",
+			request: `{
+				"tools": [{
+					"functionDeclarations": [{
+						"name": "get_weather",
+						"description": "Get weather info",
+						"parameters": {
+							"type": "object",
+							"properties": {
+								"location": {"type": "string"}
+							},
+							"required": null
+						}
+					}]
+				}],
+				"contents": [{"parts": [{"text": "Hello"}], "role": "user"}]
+			}`,
+			checkFunc: func(t *testing.T, openAIReq relaymodel.GeneralOpenAIRequest) {
+				t.Helper()
+
+				if len(openAIReq.Tools) != 1 {
+					t.Fatalf("Expected 1 tool, got %d", len(openAIReq.Tools))
+				}
+
+				// Check that required field is removed
+				if params, ok := openAIReq.Tools[0].Function.Parameters.(map[string]any); ok {
+					_, hasRequired := params["required"]
+					if hasRequired {
+						t.Errorf("required field should be removed when it's null")
+					}
+				} else {
+					t.Errorf("Parameters should be a map, got %T", openAIReq.Tools[0].Function.Parameters)
+				}
+			},
+		},
+		{
+			name: "empty required array should be removed",
+			request: `{
+				"tools": [{
+					"functionDeclarations": [{
+						"name": "get_weather",
+						"description": "Get weather info",
+						"parameters": {
+							"type": "object",
+							"properties": {
+								"location": {"type": "string"}
+							},
+							"required": []
+						}
+					}]
+				}],
+				"contents": [{"parts": [{"text": "Hello"}], "role": "user"}]
+			}`,
+			checkFunc: func(t *testing.T, openAIReq relaymodel.GeneralOpenAIRequest) {
+				t.Helper()
+
+				if len(openAIReq.Tools) != 1 {
+					t.Fatalf("Expected 1 tool, got %d", len(openAIReq.Tools))
+				}
+
+				// Check that required field is removed
+				if params, ok := openAIReq.Tools[0].Function.Parameters.(map[string]any); ok {
+					_, hasRequired := params["required"]
+					if hasRequired {
+						t.Errorf("required field should be removed when it's empty array")
+					}
+				}
+			},
+		},
+		{
+			name: "valid required array should be kept",
+			request: `{
+				"tools": [{
+					"functionDeclarations": [{
+						"name": "get_weather",
+						"description": "Get weather info",
+						"parameters": {
+							"type": "object",
+							"properties": {
+								"location": {"type": "string"}
+							},
+							"required": ["location"]
+						}
+					}]
+				}],
+				"contents": [{"parts": [{"text": "Hello"}], "role": "user"}]
+			}`,
+			checkFunc: func(t *testing.T, openAIReq relaymodel.GeneralOpenAIRequest) {
+				t.Helper()
+
+				if len(openAIReq.Tools) != 1 {
+					t.Fatalf("Expected 1 tool, got %d", len(openAIReq.Tools))
+				}
+
+				// Check that required field is kept
+				if params, ok := openAIReq.Tools[0].Function.Parameters.(map[string]any); ok {
+					required, hasRequired := params["required"]
+					if !hasRequired {
+						t.Errorf("required field should be kept when it has values")
+					}
+
+					if reqArray, ok := required.([]any); ok {
+						if len(reqArray) != 1 {
+							t.Errorf("Expected 1 required field, got %d", len(reqArray))
+						}
+
+						if reqArray[0] != "location" {
+							t.Errorf("Expected required field 'location', got %v", reqArray[0])
+						}
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/v1beta/models/gemini-pro:generateContent",
+				strings.NewReader(tt.request),
+			)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+
+			meta := &meta.Meta{
+				ActualModel: "gpt-4o",
+			}
+
+			result, err := openai.ConvertGeminiRequest(meta, req)
+			if err != nil {
+				t.Fatalf("ConvertGeminiRequest failed: %v", err)
+			}
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var openAIReq relaymodel.GeneralOpenAIRequest
+			if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
+				t.Fatalf("failed to unmarshal result body: %v", err)
+			}
+
+			tt.checkFunc(t, openAIReq)
+		})
+	}
+}

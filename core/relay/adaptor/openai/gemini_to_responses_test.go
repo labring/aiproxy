@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -347,4 +348,139 @@ func TestConvertGeminiToResponsesRequest_WithoutFunctionCalls(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "input_text", contentItem["type"])
 	assert.Equal(t, "Hello, how are you?", contentItem["text"])
+}
+
+func TestConvertResponsesToGeminiResponse(t *testing.T) {
+	tests := []struct {
+		name            string
+		responsesResp   relaymodel.Response
+		expectedContent string
+		expectedFinish  string
+		hasReasoning    bool
+	}{
+		{
+			name: "basic gemini response",
+			responsesResp: relaymodel.Response{
+				ID:        "resp_gemini_123",
+				Model:     "gpt-5-codex",
+				CreatedAt: 1234567890,
+				Status:    relaymodel.ResponseStatusCompleted,
+				Output: []relaymodel.OutputItem{
+					{
+						Role: "assistant",
+						Content: []relaymodel.OutputContent{
+							{Type: "text", Text: "Hello from Gemini!"},
+						},
+					},
+				},
+				Usage: &relaymodel.ResponseUsage{
+					InputTokens:  12,
+					OutputTokens: 18,
+					TotalTokens:  30,
+				},
+			},
+			expectedContent: "Hello from Gemini!",
+			expectedFinish:  "STOP",
+			hasReasoning:    false,
+		},
+		{
+			name: "gemini response with reasoning",
+			responsesResp: relaymodel.Response{
+				ID:        "resp_gemini_reasoning",
+				Model:     "gpt-5-codex",
+				CreatedAt: 1234567890,
+				Status:    relaymodel.ResponseStatusCompleted,
+				Output: []relaymodel.OutputItem{
+					{
+						Type: "reasoning",
+						Content: []relaymodel.OutputContent{
+							{Type: "output_text", Text: "Let me think about this..."},
+						},
+					},
+					{
+						Role: "assistant",
+						Content: []relaymodel.OutputContent{
+							{Type: "text", Text: "Here's my answer!"},
+						},
+					},
+				},
+				Usage: &relaymodel.ResponseUsage{
+					InputTokens:  12,
+					OutputTokens: 18,
+					TotalTokens:  30,
+				},
+			},
+			expectedContent: "Here's my answer!",
+			expectedFinish:  "STOP",
+			hasReasoning:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create mock response
+			respBody, err := json.Marshal(tt.responsesResp)
+			require.NoError(t, err)
+
+			httpResp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			}
+			httpResp.Body = &mockReadCloser{Reader: bytes.NewReader(respBody)}
+
+			// Create gin context
+			gin.SetMode(gin.TestMode)
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			m := &meta.Meta{
+				ActualModel: tt.responsesResp.Model,
+			}
+
+			// Convert
+			usage, err := openai.ConvertResponsesToGeminiResponse(m, c, httpResp)
+			require.Nil(t, err)
+
+			// Parse response
+			var geminiResp relaymodel.GeminiChatResponse
+
+			err = json.Unmarshal(w.Body.Bytes(), &geminiResp)
+			require.NoError(t, err)
+
+			// Verify
+			assert.Equal(t, tt.responsesResp.Model, geminiResp.ModelVersion)
+			assert.NotEmpty(t, geminiResp.Candidates)
+
+			if tt.hasReasoning {
+				// Should have multiple candidates
+				assert.GreaterOrEqual(t, len(geminiResp.Candidates), 2)
+
+				// First candidate should be reasoning (thought)
+				reasoningCandidate := geminiResp.Candidates[0]
+				assert.NotEmpty(t, reasoningCandidate.Content.Parts)
+				assert.True(t, reasoningCandidate.Content.Parts[0].Thought)
+				assert.Equal(
+					t,
+					"Let me think about this...",
+					reasoningCandidate.Content.Parts[0].Text,
+				)
+
+				// Second candidate should be the actual response
+				answerCandidate := geminiResp.Candidates[1]
+				assert.Equal(t, tt.expectedFinish, answerCandidate.FinishReason)
+				assert.NotEmpty(t, answerCandidate.Content.Parts)
+				assert.Equal(t, tt.expectedContent, answerCandidate.Content.Parts[0].Text)
+			} else {
+				candidate := geminiResp.Candidates[0]
+				assert.Equal(t, tt.expectedFinish, candidate.FinishReason)
+				assert.NotEmpty(t, candidate.Content.Parts)
+				assert.Equal(t, tt.expectedContent, candidate.Content.Parts[0].Text)
+			}
+
+			assert.NotNil(t, usage)
+			assert.Equal(t, tt.responsesResp.Usage.TotalTokens, int64(usage.TotalTokens))
+		})
+	}
 }

@@ -10039,17 +10039,27 @@ const docTemplate = `{
         "model.CreateResponseRequest": {
             "type": "object",
             "properties": {
+                "background": {
+                    "type": "boolean"
+                },
+                "conversation": {
+                    "description": "string or object"
+                },
+                "include": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "input": {},
                 "instructions": {
                     "type": "string"
                 },
                 "max_output_tokens": {
                     "type": "integer"
                 },
-                "messages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.Message"
-                    }
+                "max_tool_calls": {
+                    "type": "integer"
                 },
                 "metadata": {
                     "type": "object",
@@ -10064,6 +10074,15 @@ const docTemplate = `{
                 "previous_response_id": {
                     "type": "string"
                 },
+                "prompt_cache_key": {
+                    "type": "string"
+                },
+                "safety_identifier": {
+                    "type": "string"
+                },
+                "service_tier": {
+                    "type": "string"
+                },
                 "store": {
                     "type": "boolean"
                 },
@@ -10073,12 +10092,18 @@ const docTemplate = `{
                 "temperature": {
                     "type": "number"
                 },
+                "text": {
+                    "$ref": "#/definitions/model.ResponseText"
+                },
                 "tool_choice": {},
                 "tools": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/model.Tool"
+                        "$ref": "#/definitions/model.ResponseTool"
                     }
+                },
+                "top_logprobs": {
+                    "type": "integer"
                 },
                 "top_p": {
                     "type": "number"
@@ -10087,6 +10112,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user": {
+                    "description": "Deprecated, use prompt_cache_key",
                     "type": "string"
                 }
             }
@@ -10871,6 +10897,23 @@ const docTemplate = `{
         "model.InputContent": {
             "type": "object",
             "properties": {
+                "arguments": {
+                    "type": "string"
+                },
+                "call_id": {
+                    "description": "Fields for function_result type",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Fields for function_call type",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "output": {
+                    "type": "string"
+                },
                 "text": {
                     "type": "string"
                 },
@@ -10882,6 +10925,13 @@ const docTemplate = `{
         "model.InputItem": {
             "type": "object",
             "properties": {
+                "arguments": {
+                    "type": "string"
+                },
+                "call_id": {
+                    "description": "Fields for function_result type",
+                    "type": "string"
+                },
                 "content": {
                     "type": "array",
                     "items": {
@@ -10889,6 +10939,13 @@ const docTemplate = `{
                     }
                 },
                 "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Fields for function_call type",
+                    "type": "string"
+                },
+                "output": {
                     "type": "string"
                 },
                 "role": {
@@ -11274,6 +11331,14 @@ const docTemplate = `{
         "model.OutputItem": {
             "type": "object",
             "properties": {
+                "arguments": {
+                    "description": "For function_call type",
+                    "type": "string"
+                },
+                "call_id": {
+                    "description": "For function_call type",
+                    "type": "string"
+                },
                 "content": {
                     "type": "array",
                     "items": {
@@ -11283,11 +11348,22 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "name": {
+                    "description": "For function_call type",
+                    "type": "string"
+                },
                 "role": {
                     "type": "string"
                 },
                 "status": {
                     "$ref": "#/definitions/model.ResponseStatus"
+                },
+                "summary": {
+                    "description": "For reasoning type",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "type": {
                     "type": "string"
@@ -11770,7 +11846,7 @@ const docTemplate = `{
                 "tools": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/model.Tool"
+                        "$ref": "#/definitions/model.ResponseTool"
                     }
                 },
                 "top_p": {
@@ -11848,6 +11924,21 @@ const docTemplate = `{
         "model.ResponseTextFormat": {
             "type": "object",
             "properties": {
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.ResponseTool": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parameters": {},
                 "type": {
                     "type": "string"
                 }

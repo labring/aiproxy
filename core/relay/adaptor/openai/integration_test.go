@@ -316,8 +316,3 @@ func TestIntegrationConvertRequestWithDifferentModes(t *testing.T) {
 		})
 	}
 }
-
-// Helper function
-func floatPtr(f float64) *float64 {
-	return &f
-}

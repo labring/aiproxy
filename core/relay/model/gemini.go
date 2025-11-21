@@ -195,3 +195,44 @@ func NewGeminiError(statusCode int, err GeminiError) adaptor.Error {
 		Error: err,
 	})
 }
+
+// Gemini Role constants
+const (
+	GeminiRoleModel = "model"
+	GeminiRoleUser  = "user"
+)
+
+// Gemini Finish Reason constants
+const (
+	GeminiFinishReasonStop         = "STOP"
+	GeminiFinishReasonMaxTokens    = "MAX_TOKENS"
+	GeminiFinishReasonSafety       = "SAFETY"
+	GeminiFinishReasonRecitation   = "RECITATION"
+	GeminiFinishReasonOther        = "OTHER"
+	GeminiFinishReasonToolCalls    = "TOOL_CALLS"
+	GeminiFinishReasonFunctionCall = "FUNCTION_CALL"
+)
+
+// Gemini FunctionCallingConfig Mode constants
+const (
+	GeminiFunctionCallingModeAuto = "AUTO"
+	GeminiFunctionCallingModeAny  = "ANY"
+	GeminiFunctionCallingModeNone = "NONE"
+)
+
+// Gemini Safety Setting Category constants
+const (
+	GeminiSafetyCategoryHarassment       = "HARM_CATEGORY_HARASSMENT"
+	GeminiSafetyCategoryHateSpeech       = "HARM_CATEGORY_HATE_SPEECH"
+	GeminiSafetyCategorySexuallyExplicit = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+	GeminiSafetyCategoryDangerousContent = "HARM_CATEGORY_DANGEROUS_CONTENT"
+	GeminiSafetyCategoryCivicIntegrity   = "HARM_CATEGORY_CIVIC_INTEGRITY"
+)
+
+// Gemini Safety Setting Threshold constants
+const (
+	GeminiSafetyThresholdBlockNone           = "BLOCK_NONE"
+	GeminiSafetyThresholdBlockLowAndAbove    = "BLOCK_LOW_AND_ABOVE"
+	GeminiSafetyThresholdBlockMediumAndAbove = "BLOCK_MEDIUM_AND_ABOVE"
+	GeminiSafetyThresholdBlockOnlyHigh       = "BLOCK_ONLY_HIGH"
+)

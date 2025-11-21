@@ -28,11 +28,11 @@ func stopReasonCoze2OpenAI(reason *string) relaymodel.FinishReason {
 	}
 
 	switch *reason {
-	case "end_turn":
+	case relaymodel.ClaudeStopReasonEndTurn:
 		return relaymodel.FinishReasonLength
-	case "stop_sequence":
+	case relaymodel.ClaudeStopReasonStopSequence:
 		return relaymodel.FinishReasonStop
-	case "max_tokens":
+	case relaymodel.ClaudeStopReasonMaxTokens:
 		return relaymodel.FinishReasonLength
 	default:
 		return *reason

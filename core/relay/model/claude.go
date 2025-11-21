@@ -265,3 +265,49 @@ type ClaudeStreamResponse struct {
 	Type         string          `json:"type"`
 	Index        int             `json:"index"`
 }
+
+// Claude StopReason constants
+const (
+	ClaudeStopReasonEndTurn      = "end_turn"
+	ClaudeStopReasonMaxTokens    = "max_tokens"
+	ClaudeStopReasonToolUse      = "tool_use"
+	ClaudeStopReasonStopSequence = "stop_sequence"
+)
+
+// Claude Type constants
+const (
+	ClaudeTypeMessage = "message"
+)
+
+// Claude Content Type constants
+const (
+	ClaudeContentTypeText       = "text"
+	ClaudeContentTypeThinking   = "thinking"
+	ClaudeContentTypeToolUse    = "tool_use"
+	ClaudeContentTypeToolResult = "tool_result"
+	ClaudeContentTypeImage      = "image"
+)
+
+// Claude Stream Event Type constants
+const (
+	ClaudeStreamTypeMessageStart      = "message_start"
+	ClaudeStreamTypeMessageDelta      = "message_delta"
+	ClaudeStreamTypeMessageStop       = "message_stop"
+	ClaudeStreamTypeContentBlockStart = "content_block_start"
+	ClaudeStreamTypeContentBlockDelta = "content_block_delta"
+	ClaudeStreamTypeContentBlockStop  = "content_block_stop"
+	ClaudeStreamTypePing              = "ping"
+)
+
+// Claude Delta Type constants
+const (
+	ClaudeDeltaTypeTextDelta      = "text_delta"
+	ClaudeDeltaTypeThinkingDelta  = "thinking_delta"
+	ClaudeDeltaTypeInputJSONDelta = "input_json_delta"
+)
+
+// Claude Image Source Type constants
+const (
+	ClaudeImageSourceTypeBase64 = "base64"
+	ClaudeImageSourceTypeURL    = "url"
+)

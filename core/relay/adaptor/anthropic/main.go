@@ -176,7 +176,7 @@ func ConvertImage2Base64(ctx context.Context, node *ast.Node) error {
 
 		err := contentNode.ForEach(func(_ ast.Sequence, contentItem *ast.Node) bool {
 			contentType, err := contentItem.Get("type").String()
-			if err == nil && contentType == conetentTypeImage {
+			if err == nil && contentType == relaymodel.ClaudeContentTypeImage {
 				sourceNode := contentItem.Get("source")
 				if sourceNode != nil {
 					imageType, err := sourceNode.Get("type").String()
