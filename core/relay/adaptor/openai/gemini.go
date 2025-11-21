@@ -31,15 +31,15 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	// Convert to OpenAI format
 	openaiReq := relaymodel.GeneralOpenAIRequest{
 		Model: meta.ActualModel,
-		StreamOptions: &relaymodel.StreamOptions{
-			IncludeUsage: true,
-		},
 	}
 
 	// Check if this is a streaming request by checking the URL path
 	// URL format: /v1beta/models/{model}:streamGenerateContent
 	if utils.IsGeminiStreamRequest(req.URL.Path) {
 		openaiReq.Stream = true
+		openaiReq.StreamOptions = &relaymodel.StreamOptions{
+			IncludeUsage: true,
+		}
 	}
 
 	// Convert system instruction to system message
