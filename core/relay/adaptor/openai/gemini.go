@@ -37,6 +37,9 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	// URL format: /v1beta/models/{model}:streamGenerateContent
 	if utils.IsGeminiStreamRequest(req.URL.Path) {
 		openaiReq.Stream = true
+		openaiReq.StreamOptions = &relaymodel.StreamOptions{
+			IncludeUsage: true,
+		}
 	}
 
 	// Convert system instruction to system message
@@ -200,14 +203,14 @@ func GeminiStreamHandler(
 			continue
 		}
 
+		if openaiResp.Usage != nil {
+			usage = openaiResp.Usage.ToModelUsage()
+		}
+
 		// Convert to Gemini stream format
 		geminiResp := streamState.ConvertOpenAIStreamToGemini(meta, &openaiResp)
 		if geminiResp != nil {
 			_ = render.GeminiObjectData(c, geminiResp)
-
-			if geminiResp.UsageMetadata != nil {
-				usage = geminiResp.UsageMetadata.ToUsage().ToModelUsage()
-			}
 		}
 	}
 
@@ -233,10 +236,6 @@ func (s *GeminiStreamState) ConvertOpenAIStreamToGemini(
 	meta *meta.Meta,
 	openaiResp *relaymodel.ChatCompletionsStreamResponse,
 ) *relaymodel.GeminiChatResponse {
-	if len(openaiResp.Choices) == 0 {
-		return nil
-	}
-
 	geminiResp := &relaymodel.GeminiChatResponse{
 		ModelVersion: meta.ActualModel,
 		Candidates:   []*relaymodel.GeminiChatCandidate{},
