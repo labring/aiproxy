@@ -109,6 +109,23 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
+		// Check if model requires Responses API
+		if openai.IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+			// Azure Responses API format
+			url, err := url.JoinPath(
+				meta.Channel.BaseURL,
+				"/openai/v1/responses",
+			)
+			if err != nil {
+				return adaptor.RequestURL{}, err
+			}
+
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    fmt.Sprintf("%s?api-version=%s", url, "preview"),
+			}, nil
+		}
+
 		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
 		url, err := url.JoinPath(
 			meta.Channel.BaseURL,

@@ -29,9 +29,9 @@ import (
 )
 
 var toolChoiceTypeMap = map[string]string{
-	"none":     "NONE",
-	"auto":     "AUTO",
-	"required": "ANY",
+	relaymodel.ToolChoiceNone:     relaymodel.GeminiFunctionCallingModeNone,
+	relaymodel.ToolChoiceAuto:     relaymodel.GeminiFunctionCallingModeAuto,
+	relaymodel.ToolChoiceRequired: relaymodel.GeminiFunctionCallingModeAny,
 }
 
 var mimeTypeMap = map[string]string{
@@ -46,15 +46,15 @@ type CountTokensResponse struct {
 
 func buildSafetySettings(safetySetting string) []relaymodel.GeminiChatSafetySettings {
 	if safetySetting == "" {
-		safetySetting = "BLOCK_NONE"
+		safetySetting = relaymodel.GeminiSafetyThresholdBlockNone
 	}
 
 	return []relaymodel.GeminiChatSafetySettings{
-		{Category: "HARM_CATEGORY_HARASSMENT", Threshold: safetySetting},
-		{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: safetySetting},
-		{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: safetySetting},
-		{Category: "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold: safetySetting},
-		{Category: "HARM_CATEGORY_CIVIC_INTEGRITY", Threshold: safetySetting},
+		{Category: relaymodel.GeminiSafetyCategoryHarassment, Threshold: safetySetting},
+		{Category: relaymodel.GeminiSafetyCategoryHateSpeech, Threshold: safetySetting},
+		{Category: relaymodel.GeminiSafetyCategorySexuallyExplicit, Threshold: safetySetting},
+		{Category: relaymodel.GeminiSafetyCategoryDangerousContent, Threshold: safetySetting},
+		{Category: relaymodel.GeminiSafetyCategoryCivicIntegrity, Threshold: safetySetting},
 	}
 }
 
@@ -208,7 +208,7 @@ func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *relaymodel.G
 
 	toolConfig := relaymodel.GeminiToolConfig{
 		FunctionCallingConfig: relaymodel.GeminiFunctionCallingConfig{
-			Mode: "auto",
+			Mode: relaymodel.GeminiFunctionCallingModeAuto,
 		},
 	}
 	switch mode := textRequest.ToolChoice.(type) {
@@ -217,7 +217,7 @@ func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *relaymodel.G
 			toolConfig.FunctionCallingConfig.Mode = toolChoiceType
 		}
 	case map[string]any:
-		toolConfig.FunctionCallingConfig.Mode = "ANY"
+		toolConfig.FunctionCallingConfig.Mode = relaymodel.GeminiFunctionCallingModeAny
 		if fn, ok := mode["function"].(map[string]any); ok {
 			if fnName, ok := fn["name"].(string); ok {
 				toolConfig.FunctionCallingConfig.AllowedFunctionNames = []string{fnName}
@@ -262,7 +262,7 @@ func buildContents(
 
 		// Track tool calls from assistant messages
 		switch {
-		case message.Role == "assistant" && len(message.ToolCalls) > 0:
+		case message.Role == relaymodel.RoleAssistant && len(message.ToolCalls) > 0:
 			for _, toolCall := range message.ToolCalls {
 				toolCallMap[toolCall.ID] = toolCall.Function.Name
 
@@ -332,9 +332,9 @@ func buildContents(
 					},
 				},
 			})
-		case message.Role == "system":
+		case message.Role == relaymodel.RoleSystem:
 			systemContent = &relaymodel.GeminiChatContent{
-				Role: "user", // Gemini uses "user" for system content
+				Role: relaymodel.RoleUser, // Gemini uses "user" for system content
 				Parts: []*relaymodel.GeminiPart{{
 					Text: message.StringContent(),
 				}},
@@ -364,10 +364,10 @@ func buildContents(
 
 		// Adjust role for Gemini
 		switch content.Role {
-		case "assistant":
-			content.Role = "model"
+		case relaymodel.RoleAssistant:
+			content.Role = relaymodel.GeminiRoleModel
 		case "tool":
-			content.Role = "user"
+			content.Role = relaymodel.GeminiRoleUser
 		}
 
 		if len(content.Parts) > 0 {
@@ -495,8 +495,8 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 
 // Type aliases for usage-related types to use unified definitions from relaymodel
 var finishReason2OpenAI = map[string]string{
-	"STOP":       relaymodel.FinishReasonStop,
-	"MAX_TOKENS": relaymodel.FinishReasonLength,
+	relaymodel.GeminiFinishReasonStop:      relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonMaxTokens: relaymodel.FinishReasonLength,
 }
 
 func FinishReason2OpenAI(reason string) string {
@@ -556,7 +556,7 @@ func responseChat2OpenAI(
 		choice := relaymodel.TextResponseChoice{
 			Index: i,
 			Message: relaymodel.Message{
-				Role: "assistant",
+				Role: relaymodel.RoleAssistant,
 			},
 			FinishReason: FinishReason2OpenAI(candidate.FinishReason),
 		}

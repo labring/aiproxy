@@ -143,6 +143,43 @@ func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 	return chatUsage
 }
 
+// ToResponseUsage converts GeminiUsageMetadata to ResponseUsage (OpenAI Responses API format)
+func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.PromptTokenCount,
+		OutputTokens: u.CandidatesTokenCount,
+		TotalTokens:  u.TotalTokenCount,
+	}
+
+	if u.CachedContentTokenCount > 0 {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.CachedContentTokenCount,
+		}
+	}
+
+	if u.ThoughtsTokenCount > 0 {
+		usage.OutputTokensDetails = &ResponseUsageDetails{
+			ReasoningTokens: u.ThoughtsTokenCount,
+		}
+	}
+
+	return usage
+}
+
+// ToClaudeUsage converts GeminiUsageMetadata to ClaudeUsage (Anthropic Claude format)
+func (u *GeminiUsageMetadata) ToClaudeUsage() ClaudeUsage {
+	usage := ClaudeUsage{
+		InputTokens:  u.PromptTokenCount,
+		OutputTokens: u.CandidatesTokenCount,
+	}
+
+	if u.CachedContentTokenCount > 0 {
+		usage.CacheReadInputTokens = u.CachedContentTokenCount
+	}
+
+	return usage
+}
+
 type GeminiError struct {
 	Message string `json:"message,omitempty"`
 	Status  string `json:"status,omitempty"`
@@ -158,3 +195,44 @@ func NewGeminiError(statusCode int, err GeminiError) adaptor.Error {
 		Error: err,
 	})
 }
+
+// Gemini Role constants
+const (
+	GeminiRoleModel = "model"
+	GeminiRoleUser  = "user"
+)
+
+// Gemini Finish Reason constants
+const (
+	GeminiFinishReasonStop         = "STOP"
+	GeminiFinishReasonMaxTokens    = "MAX_TOKENS"
+	GeminiFinishReasonSafety       = "SAFETY"
+	GeminiFinishReasonRecitation   = "RECITATION"
+	GeminiFinishReasonOther        = "OTHER"
+	GeminiFinishReasonToolCalls    = "TOOL_CALLS"
+	GeminiFinishReasonFunctionCall = "FUNCTION_CALL"
+)
+
+// Gemini FunctionCallingConfig Mode constants
+const (
+	GeminiFunctionCallingModeAuto = "AUTO"
+	GeminiFunctionCallingModeAny  = "ANY"
+	GeminiFunctionCallingModeNone = "NONE"
+)
+
+// Gemini Safety Setting Category constants
+const (
+	GeminiSafetyCategoryHarassment       = "HARM_CATEGORY_HARASSMENT"
+	GeminiSafetyCategoryHateSpeech       = "HARM_CATEGORY_HATE_SPEECH"
+	GeminiSafetyCategorySexuallyExplicit = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+	GeminiSafetyCategoryDangerousContent = "HARM_CATEGORY_DANGEROUS_CONTENT"
+	GeminiSafetyCategoryCivicIntegrity   = "HARM_CATEGORY_CIVIC_INTEGRITY"
+)
+
+// Gemini Safety Setting Threshold constants
+const (
+	GeminiSafetyThresholdBlockNone           = "BLOCK_NONE"
+	GeminiSafetyThresholdBlockLowAndAbove    = "BLOCK_LOW_AND_ABOVE"
+	GeminiSafetyThresholdBlockMediumAndAbove = "BLOCK_MEDIUM_AND_ABOVE"
+	GeminiSafetyThresholdBlockOnlyHigh       = "BLOCK_ONLY_HIGH"
+)

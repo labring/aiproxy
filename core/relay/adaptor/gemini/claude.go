@@ -157,7 +157,7 @@ func ClaudeStreamHandler(
 	closeCurrentBlock := func() {
 		if currentContentIndex >= 0 {
 			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-				Type:  "content_block_stop",
+				Type:  relaymodel.ClaudeStreamTypeContentBlockStop,
 				Index: currentContentIndex,
 			})
 		}
@@ -187,11 +187,11 @@ func ClaudeStreamHandler(
 			sentMessageStart = true
 
 			messageStartResp := relaymodel.ClaudeStreamResponse{
-				Type: "message_start",
+				Type: relaymodel.ClaudeStreamTypeMessageStart,
 				Message: &relaymodel.ClaudeResponse{
 					ID:      messageID,
 					Type:    "message",
-					Role:    "assistant",
+					Role:    relaymodel.RoleAssistant,
 					Model:   meta.ActualModel,
 					Content: []relaymodel.ClaudeContent{},
 				},
@@ -226,24 +226,24 @@ func ClaudeStreamHandler(
 				switch {
 				case part.Thought:
 					// Handle thinking content
-					if currentContentType != "thinking" {
+					if currentContentType != relaymodel.ClaudeContentTypeThinking {
 						closeCurrentBlock()
 
 						currentContentIndex++
-						currentContentType = "thinking"
+						currentContentType = relaymodel.ClaudeContentTypeThinking
 
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:  "content_block_start",
+							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
 							ContentBlock: &relaymodel.ClaudeContent{
-								Type:     "thinking",
+								Type:     relaymodel.ClaudeContentTypeThinking,
 								Thinking: "",
 							},
 						})
 
 						if part.ThoughtSignature != "" {
 							_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-								Type:  "content_block_delta",
+								Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 								Index: currentContentIndex,
 								ContentBlock: &relaymodel.ClaudeContent{
 									Type:      "signature_delta",
@@ -256,7 +256,7 @@ func ClaudeStreamHandler(
 					thinkingText.WriteString(part.Text)
 
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type:     "thinking_delta",
@@ -265,17 +265,17 @@ func ClaudeStreamHandler(
 					})
 				case part.Text != "":
 					// Handle text content
-					if currentContentType != "text" {
+					if currentContentType != relaymodel.ClaudeContentTypeText {
 						closeCurrentBlock()
 
 						currentContentIndex++
-						currentContentType = "text"
+						currentContentType = relaymodel.ClaudeContentTypeText
 
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:  "content_block_start",
+							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
 							ContentBlock: &relaymodel.ClaudeContent{
-								Type: "text",
+								Type: relaymodel.ClaudeContentTypeText,
 								Text: "",
 							},
 						})
@@ -284,7 +284,7 @@ func ClaudeStreamHandler(
 					contentText.WriteString(part.Text)
 
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type: "text_delta",
@@ -296,10 +296,10 @@ func ClaudeStreamHandler(
 					closeCurrentBlock()
 
 					currentContentIndex++
-					currentContentType = "tool_use"
+					currentContentType = relaymodel.ClaudeContentTypeToolUse
 
 					toolContent := &relaymodel.ClaudeContent{
-						Type:      "tool_use",
+						Type:      relaymodel.ClaudeContentTypeToolUse,
 						ID:        openai.CallID(),
 						Name:      part.FunctionCall.Name,
 						Input:     part.FunctionCall.Args,
@@ -309,7 +309,7 @@ func ClaudeStreamHandler(
 
 					// Send content_block_start for tool use
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:         "content_block_start",
+						Type:         relaymodel.ClaudeStreamTypeContentBlockStart,
 						Index:        currentContentIndex,
 						ContentBlock: toolContent,
 					})
@@ -317,7 +317,7 @@ func ClaudeStreamHandler(
 					// Send tool arguments as delta
 					args, _ := sonic.MarshalString(part.FunctionCall.Args)
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type:        "input_json_delta",
@@ -353,12 +353,12 @@ func ClaudeStreamHandler(
 	claudeUsage := usage.ToClaudeUsage()
 
 	if stopReason == "" {
-		stopReason = "end_turn"
+		stopReason = relaymodel.ClaudeStopReasonEndTurn
 	}
 
 	// Send message_delta with final usage
 	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-		Type: "message_delta",
+		Type: relaymodel.ClaudeStreamTypeMessageDelta,
 		Delta: &relaymodel.ClaudeDelta{
 			StopReason: &stopReason,
 		},
@@ -381,7 +381,7 @@ func geminiResponse2Claude(
 	claudeResponse := relaymodel.ClaudeResponse{
 		ID:           "msg_" + common.ShortUUID(),
 		Type:         "message",
-		Role:         "assistant",
+		Role:         relaymodel.RoleAssistant,
 		Model:        meta.OriginModel,
 		Content:      []relaymodel.ClaudeContent{},
 		StopReason:   "",
@@ -404,7 +404,7 @@ func geminiResponse2Claude(
 			if part.FunctionCall != nil {
 				// Convert function call to tool use
 				claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-					Type:      "tool_use",
+					Type:      relaymodel.ClaudeContentTypeToolUse,
 					ID:        openai.CallID(),
 					Name:      part.FunctionCall.Name,
 					Input:     part.FunctionCall.Args,
@@ -414,14 +414,14 @@ func geminiResponse2Claude(
 				if part.Thought {
 					// Add thinking content
 					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type:      "thinking",
+						Type:      relaymodel.ClaudeContentTypeThinking,
 						Thinking:  part.Text,
 						Signature: part.ThoughtSignature,
 					})
 				} else {
 					// Add text content
 					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type: "text",
+						Type: relaymodel.ClaudeContentTypeText,
 						Text: part.Text,
 					})
 				}
@@ -434,7 +434,7 @@ func geminiResponse2Claude(
 	// indicating it has nothing more to add beyond the tool's response
 	if len(claudeResponse.Content) == 0 {
 		claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-			Type: "text",
+			Type: relaymodel.ClaudeContentTypeText,
 			Text: "",
 		})
 	}
@@ -445,15 +445,15 @@ func geminiResponse2Claude(
 // geminiFinishReason2Claude converts Gemini finish reason to Claude stop reason
 func geminiFinishReason2Claude(reason string) string {
 	switch reason {
-	case "STOP":
-		return "end_turn"
-	case "MAX_TOKENS":
-		return "max_tokens"
-	case "TOOL_CALLS", "FUNCTION_CALL":
-		return "tool_use"
-	case "CONTENT_FILTER":
-		return "stop_sequence"
+	case relaymodel.GeminiFinishReasonStop:
+		return relaymodel.ClaudeStopReasonEndTurn
+	case relaymodel.GeminiFinishReasonMaxTokens:
+		return relaymodel.ClaudeStopReasonMaxTokens
+	case relaymodel.GeminiFinishReasonToolCalls, relaymodel.GeminiFinishReasonFunctionCall:
+		return relaymodel.ClaudeStopReasonToolUse
+	case relaymodel.GeminiFinishReasonSafety:
+		return relaymodel.ClaudeStopReasonStopSequence
 	default:
-		return "end_turn"
+		return relaymodel.ClaudeStopReasonEndTurn
 	}
 }

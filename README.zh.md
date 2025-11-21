@@ -23,7 +23,8 @@ AI Proxy 是一个强大的、生产就绪的 AI 网关，提供智能请求路�
 - **智能重试机制**：智能重试策略与自动错误恢复
 - **基于优先级的渠道选择**：根据渠道优先级和错误率路由请求
 - **负载均衡**：高效地在多个 AI 提供商之间分配流量
-- **协议转换**：无缝的 Claude 到 OpenAI API 协议转换
+- **协议转换**：在 OpenAI Chat Completions、Claude Messages、Gemini 和 OpenAI Responses API 之间无缝转换
+  - Chat/Claude/Gemini → Responses API：使用任意协议访问仅支持 Responses 的模型
 
 ### 📊 **全面监控与分析**
 
@@ -325,6 +326,11 @@ env_key = "AIPROXY_API_KEY"
 # wire_api 的有效值为 "chat" 和 "responses"。如果省略，默认为 "chat"。
 wire_api = "chat"
 ```
+
+**协议转换支持**：
+- **仅支持 Responses 的模型**：AI Proxy 自动将 Chat/Claude/Gemini 请求转换为 Responses API 格式，支持仅提供 Responses API 的模型
+- **多协议访问**：使用任意协议（Chat Completions、Claude Messages 或 Gemini）访问仅支持 Responses 的模型
+- **透明转换**：无需客户端修改 - AI Proxy 自动处理协议转换
 
 ### MCP (模型上下文协议)
 

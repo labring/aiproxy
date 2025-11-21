@@ -1071,15 +1071,15 @@ definitions:
         type: integer
       retry_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       timestamp:
         type: integer
@@ -1137,14 +1137,21 @@ definitions:
     type: object
   model.CreateResponseRequest:
     properties:
+      background:
+        type: boolean
+      conversation:
+        description: string or object
+      include:
+        items:
+          type: string
+        type: array
+      input: {}
       instructions:
         type: string
       max_output_tokens:
         type: integer
-      messages:
-        items:
-          $ref: '#/definitions/model.Message'
-        type: array
+      max_tool_calls:
+        type: integer
       metadata:
         additionalProperties: {}
         type: object
@@ -1154,22 +1161,33 @@ definitions:
         type: boolean
       previous_response_id:
         type: string
+      prompt_cache_key:
+        type: string
+      safety_identifier:
+        type: string
+      service_tier:
+        type: string
       store:
         type: boolean
       stream:
         type: boolean
       temperature:
         type: number
+      text:
+        $ref: '#/definitions/model.ResponseText'
       tool_choice: {}
       tools:
         items:
-          $ref: '#/definitions/model.Tool'
+          $ref: '#/definitions/model.ResponseTool'
         type: array
+      top_logprobs:
+        type: integer
       top_p:
         type: number
       truncation:
         type: string
       user:
+        description: Deprecated, use prompt_cache_key
         type: string
     type: object
   model.DashboardResponse:
@@ -1492,8 +1510,6 @@ definitions:
         type: integer
       rpm:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1501,6 +1517,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       token_names:
         items:
@@ -1695,6 +1713,18 @@ definitions:
     type: object
   model.InputContent:
     properties:
+      arguments:
+        type: string
+      call_id:
+        description: Fields for function_result type
+        type: string
+      id:
+        description: Fields for function_call type
+        type: string
+      name:
+        type: string
+      output:
+        type: string
       text:
         type: string
       type:
@@ -1702,11 +1732,21 @@ definitions:
     type: object
   model.InputItem:
     properties:
+      arguments:
+        type: string
+      call_id:
+        description: Fields for function_result type
+        type: string
       content:
         items:
           $ref: '#/definitions/model.InputContent'
         type: array
       id:
+        type: string
+      name:
+        description: Fields for function_call type
+        type: string
+      output:
         type: string
       role:
         type: string
@@ -1984,16 +2024,30 @@ definitions:
     type: object
   model.OutputItem:
     properties:
+      arguments:
+        description: For function_call type
+        type: string
+      call_id:
+        description: For function_call type
+        type: string
       content:
         items:
           $ref: '#/definitions/model.OutputContent'
         type: array
       id:
         type: string
+      name:
+        description: For function_call type
+        type: string
       role:
         type: string
       status:
         $ref: '#/definitions/model.ResponseStatus'
+      summary:
+        description: For reasoning type
+        items:
+          type: string
+        type: array
       type:
         type: string
     type: object
@@ -2318,7 +2372,7 @@ definitions:
       tool_choice: {}
       tools:
         items:
-          $ref: '#/definitions/model.Tool'
+          $ref: '#/definitions/model.ResponseTool'
         type: array
       top_p:
         type: number
@@ -2371,6 +2425,16 @@ definitions:
     type: object
   model.ResponseTextFormat:
     properties:
+      type:
+        type: string
+    type: object
+  model.ResponseTool:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      parameters: {}
       type:
         type: string
     type: object
@@ -2445,8 +2509,6 @@ definitions:
         type: integer
       retry_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2454,6 +2516,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       timestamp:
         type: integer

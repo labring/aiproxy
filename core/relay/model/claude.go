@@ -197,6 +197,39 @@ func (u *ClaudeUsage) ToOpenAIUsage() ChatUsage {
 	return usage
 }
 
+// ToResponseUsage converts ClaudeUsage to ResponseUsage (OpenAI Responses API format)
+func (u *ClaudeUsage) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+		OutputTokens: u.OutputTokens,
+	}
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+
+	if u.CacheReadInputTokens > 0 {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.CacheReadInputTokens,
+		}
+	}
+
+	return usage
+}
+
+// ToGeminiUsage converts ClaudeUsage to GeminiUsageMetadata (Google Gemini format)
+func (u *ClaudeUsage) ToGeminiUsage() GeminiUsageMetadata {
+	totalInput := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+	usage := GeminiUsageMetadata{
+		PromptTokenCount:     totalInput,
+		CandidatesTokenCount: u.OutputTokens,
+		TotalTokenCount:      totalInput + u.OutputTokens,
+	}
+
+	if u.CacheReadInputTokens > 0 {
+		usage.CachedContentTokenCount = u.CacheReadInputTokens
+	}
+
+	return usage
+}
+
 // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
 type ClaudeCacheCreation struct {
 	Ephemeral5mInputTokens int64 `json:"ephemeral_5m_input_tokens,omitempty"`
@@ -232,3 +265,49 @@ type ClaudeStreamResponse struct {
 	Type         string          `json:"type"`
 	Index        int             `json:"index"`
 }
+
+// Claude StopReason constants
+const (
+	ClaudeStopReasonEndTurn      = "end_turn"
+	ClaudeStopReasonMaxTokens    = "max_tokens"
+	ClaudeStopReasonToolUse      = "tool_use"
+	ClaudeStopReasonStopSequence = "stop_sequence"
+)
+
+// Claude Type constants
+const (
+	ClaudeTypeMessage = "message"
+)
+
+// Claude Content Type constants
+const (
+	ClaudeContentTypeText       = "text"
+	ClaudeContentTypeThinking   = "thinking"
+	ClaudeContentTypeToolUse    = "tool_use"
+	ClaudeContentTypeToolResult = "tool_result"
+	ClaudeContentTypeImage      = "image"
+)
+
+// Claude Stream Event Type constants
+const (
+	ClaudeStreamTypeMessageStart      = "message_start"
+	ClaudeStreamTypeMessageDelta      = "message_delta"
+	ClaudeStreamTypeMessageStop       = "message_stop"
+	ClaudeStreamTypeContentBlockStart = "content_block_start"
+	ClaudeStreamTypeContentBlockDelta = "content_block_delta"
+	ClaudeStreamTypeContentBlockStop  = "content_block_stop"
+	ClaudeStreamTypePing              = "ping"
+)
+
+// Claude Delta Type constants
+const (
+	ClaudeDeltaTypeTextDelta      = "text_delta"
+	ClaudeDeltaTypeThinkingDelta  = "thinking_delta"
+	ClaudeDeltaTypeInputJSONDelta = "input_json_delta"
+)
+
+// Claude Image Source Type constants
+const (
+	ClaudeImageSourceTypeBase64 = "base64"
+	ClaudeImageSourceTypeURL    = "url"
+)
