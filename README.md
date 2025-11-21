@@ -305,6 +305,8 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
 export GEMINI_API_KEY=sk-xxx
 ```
 
+Alternatively, you can use the `/auth` command in the Gemini CLI to output the `GEMINI_API_KEY`.
+
 ### Codex Integration
 
 Use AI Proxy with Codex by configuring `~/.codex/config.toml`:
