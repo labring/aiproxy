@@ -6,7 +6,6 @@ import (
 
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
-	"github.com/pkg/errors"
 )
 
 type awsModelItem struct {
@@ -116,6 +115,13 @@ var AwsModelIDMap = map[string]awsModelItem{
 		},
 		ID: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 	},
+	"claude-opus-4-5-20251101": {
+		ModelConfig: model.ModelConfig{
+			Type:  mode.ChatCompletions,
+			Owner: model.ModelOwnerAnthropic,
+		},
+		ID: "anthropic.claude-opus-4-5-20251101-v1:0",
+	},
 }
 
 // https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
@@ -171,6 +177,11 @@ var awsModelCanCrossRegionMap = map[string]map[string]bool{
 		"ap": true,
 		"eu": true,
 	},
+	"anthropic.claude-opus-4-5-20251101-v1:0": {
+		"us": true,
+		"ap": true,
+		"eu": true,
+	},
 }
 
 var awsRegionCrossModelPrefixMap = map[string]string{
@@ -204,17 +215,17 @@ func awsModelCrossRegion(awsModelID, awsRegionPrefix string) string {
 	return fmt.Sprintf("%s.%s", modelPrefix, awsModelID)
 }
 
-func awsModelID(requestModel, region string) (string, error) {
-	awsModelID, ok := AwsModelIDMap[requestModel]
-	if !ok {
-		return "", errors.Errorf("model %s not found", requestModel)
+func awsModelID(requestModel, region string) string {
+	item, ok := AwsModelIDMap[requestModel]
+	if ok {
+		requestModel = item.ID
 	}
 
 	regionPrefix := awsRegionPrefix(region)
 
-	if awsModelCanCrossRegion(awsModelID.ID, regionPrefix) {
-		return awsModelCrossRegion(awsModelID.ID, regionPrefix), nil
+	if awsModelCanCrossRegion(requestModel, regionPrefix) {
+		return awsModelCrossRegion(requestModel, regionPrefix)
 	}
 
-	return awsModelID.ID, nil
+	return requestModel
 }

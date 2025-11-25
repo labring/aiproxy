@@ -32,7 +32,7 @@ func GetAdaptor(model string) utils.AwsAdapter {
 	adaptorType := adaptors[model]
 	switch {
 	case adaptorType.modelType == AwsClaude,
-		strings.HasPrefix(adaptorType.config.Model, "claude-"):
+		strings.Contains(model, "claude-"):
 		return &claude.Adaptor{}
 	default:
 		return nil

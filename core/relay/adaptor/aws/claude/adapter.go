@@ -172,14 +172,7 @@ func (a *Adaptor) DoRequest(
 		)
 	}
 
-	awsModelID, err := awsModelID(meta.ActualModel, region)
-	if err != nil {
-		return nil, relaymodel.WrapperErrorWithMessage(
-			meta.Mode,
-			http.StatusInternalServerError,
-			err.Error(),
-		)
-	}
+	awsModelID := awsModelID(meta.ActualModel, region)
 
 	awsClient, err := utils.AwsClientFromMeta(meta)
 	if err != nil {
