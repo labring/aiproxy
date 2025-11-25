@@ -215,19 +215,17 @@ func awsModelCrossRegion(awsModelID, awsRegionPrefix string) string {
 	return fmt.Sprintf("%s.%s", modelPrefix, awsModelID)
 }
 
-func awsModelID(requestModel, region string) (string, error) {
-	awsModelID, ok := AwsModelIDMap[requestModel]
-	if !ok {
-		awsModelID = awsModelItem{
-			ID: requestModel,
-		}
+func awsModelID(requestModel, region string) string {
+	item, ok := AwsModelIDMap[requestModel]
+	if ok {
+		requestModel = item.ID
 	}
 
 	regionPrefix := awsRegionPrefix(region)
 
-	if awsModelCanCrossRegion(awsModelID.ID, regionPrefix) {
-		return awsModelCrossRegion(awsModelID.ID, regionPrefix), nil
+	if awsModelCanCrossRegion(requestModel, regionPrefix) {
+		return awsModelCrossRegion(requestModel, regionPrefix)
 	}
 
-	return awsModelID.ID, nil
+	return requestModel
 }
