@@ -178,18 +178,16 @@ var awsModelCanCrossRegionMap = map[string]map[string]bool{
 		"eu": true,
 	},
 	"anthropic.claude-opus-4-5-20251101-v1:0": {
-		"us":     true,
-		"ap":     true,
-		"eu":     true,
-		"global": true,
+		"us": true,
+		"ap": true,
+		"eu": true,
 	},
 }
 
 var awsRegionCrossModelPrefixMap = map[string]string{
-	"us":     "us",
-	"eu":     "eu",
-	"ap":     "apac",
-	"global": "global",
+	"us": "us",
+	"eu": "eu",
+	"ap": "apac",
 }
 
 func awsRegionPrefix(awsRegionID string) string {
