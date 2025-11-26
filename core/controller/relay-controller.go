@@ -88,13 +88,13 @@ func wrapPlugin(ctx context.Context, mc *model.ModelCaches, a adaptor.Adaptor) a
 		monitorplugin.NewGroupMonitorPlugin(),
 		cache.NewCachePlugin(common.RDB),
 		streamfake.NewStreamFakePlugin(),
-		patch.NewPatchPlugin(),
 		timeout.NewTimeoutPlugin(),
 		websearch.NewWebSearchPlugin(func(modelName string) (*model.Channel, error) {
 			return getWebSearchChannel(ctx, mc, modelName)
 		}),
 		thinksplit.NewThinkPlugin(),
 		monitorplugin.NewChannelMonitorPlugin(),
+		patch.NewPatchPlugin(),
 	)
 }
 
