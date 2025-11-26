@@ -29,6 +29,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/plugin/patch"
 	"github.com/labring/aiproxy/core/relay/utils"
 	"github.com/labring/aiproxy/mcp-servers/hosted/web-search/engine"
 	"github.com/sirupsen/logrus"
@@ -100,6 +101,30 @@ func (p *WebSearch) getConfig(meta *meta.Meta) (Config, error) {
 	return pluginConfig, nil
 }
 
+func lazyRemoveSearchOption(meta *meta.Meta) {
+	patch.AddLazyPatch(meta, patch.PatchOperation{
+		Op: patch.OpFunction,
+		Function: func(root *ast.Node) (bool, error) {
+			ok, err := root.Unset("web_search_options")
+			if err != nil {
+				return false, err
+			}
+
+			return ok, nil
+		},
+	})
+}
+
+func fallback(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+	do adaptor.ConvertRequest,
+) (adaptor.ConvertResult, error) {
+	lazyRemoveSearchOption(meta)
+	return do.ConvertRequest(meta, store, req)
+}
+
 // ConvertRequest intercepts and modifies requests to add web search capabilities
 func (p *WebSearch) ConvertRequest(
 	meta *meta.Meta,
@@ -125,13 +150,13 @@ func (p *WebSearch) ConvertRequest(
 
 	// Apply default configuration values if needed
 	if err := p.validateAndApplyDefaults(&pluginConfig); err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Initialize search engines
 	engines, arxivExists, err := p.initializeSearchEngines(pluginConfig.SearchFrom)
 	if err != nil || len(engines) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Read and parse request body
@@ -142,29 +167,29 @@ func (p *WebSearch) ConvertRequest(
 
 	var chatRequest map[string]any
 	if err := sonic.Unmarshal(body, &chatRequest); err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Check if web search should be enabled for this request
 	webSearchOptions, hasWebSearchOptions := chatRequest["web_search_options"].(map[string]any)
 	if !pluginConfig.ForceSearch && !hasWebSearchOptions {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	webSearchEnable, ok := webSearchOptions["enable"].(bool)
 	if ok && !webSearchEnable {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Extract user query from messages
 	messages, ok := chatRequest["messages"].([]any)
 	if !ok || len(messages) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	queryIndex, query := p.extractUserQuery(messages)
 	if query == "" {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Prepare search rewrite prompt if configured
@@ -183,17 +208,17 @@ func (p *WebSearch) ConvertRequest(
 		searchRewritePrompt,
 	)
 	if err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	if len(searchContexts) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Execute searches
 	searchResult := p.executeSearches(context.Background(), engines, searchContexts)
 	if searchResult.Count == 0 || len(searchResult.Results) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	setSearchCount(meta, searchResult.Count)
@@ -206,7 +231,7 @@ func (p *WebSearch) ConvertRequest(
 	// Create new request body
 	modifiedBody, err := sonic.Marshal(chatRequest)
 	if err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(meta, store, req, do)
 	}
 
 	// Update the request
