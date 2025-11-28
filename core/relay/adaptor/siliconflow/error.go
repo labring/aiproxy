@@ -3,6 +3,7 @@ package siliconflow
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -29,6 +30,10 @@ func ErrorHandler(resp *http.Response) adaptor.Error {
 	}
 
 	statusCode := resp.StatusCode
+
+	if strings.Contains(er.Message, "System is really busy") {
+		statusCode = http.StatusTooManyRequests
+	}
 
 	return relaymodel.WrapperOpenAIErrorWithMessage(
 		er.Message,
