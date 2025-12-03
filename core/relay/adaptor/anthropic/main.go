@@ -100,6 +100,20 @@ func ConvertRequestToBytes(
 	return ConvertRequestBodyToBytes(meta, req.Context(), &node, callbacks...)
 }
 
+func resetCacheTTLWithContentsNode(contents *ast.Node) error {
+	if contents.Check() != nil {
+		return nil
+	}
+	return contents.ForEach(func(_ ast.Sequence, content *ast.Node) bool {
+		cacheControl := content.Get("cache_control")
+		if cacheControl.Check() != nil {
+			return true
+		}
+		_, _ = cacheControl.Unset("ttl")
+		return true
+	})
+}
+
 func ConvertRequestBodyToBytes(
 	meta *meta.Meta,
 	ctx context.Context,
@@ -115,6 +129,19 @@ func ConvertRequestBodyToBytes(
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return nil, err
+	}
+
+	err = resetCacheTTLWithContentsNode(node.Get("system"))
+	if err != nil {
+		return nil, err
+	}
+
+	messagesNode := node.Get("messages")
+	if messagesNode.Check() == nil {
+		messagesNode.ForEach(func(_ ast.Sequence, messages *ast.Node) bool {
+			_ = resetCacheTTLWithContentsNode(messages.Get("content"))
+			return true
+		})
 	}
 
 	maxTokensNode := node.Get("max_tokens")
