@@ -108,13 +108,19 @@ func (a *Adaptor) GetRequestURL(
 		return adaptor.RequestURL{}, err
 	}
 
+	publishers := "google"
+	if strings.Contains(meta.ActualModel, "claude") {
+		publishers = "anthropic"
+	}
+
 	if meta.Channel.BaseURL != "" {
 		if config.ProjectID == "" || config.Region == "" {
 			return adaptor.RequestURL{
 				Method: http.MethodPost,
 				URL: fmt.Sprintf(
-					"%s/v1/publishers/google/models/%s:%s",
+					"%s/v1/publishers/%s/models/%s:%s",
 					meta.Channel.BaseURL,
+					publishers,
 					meta.ActualModel,
 					suffix,
 				),
@@ -124,10 +130,11 @@ func (a *Adaptor) GetRequestURL(
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
-				"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+				"%s/v1/projects/%s/locations/%s/publishers/%s/models/%s:%s",
 				meta.Channel.BaseURL,
 				config.ProjectID,
 				config.Region,
+				publishers,
 				meta.ActualModel,
 				suffix,
 			),
@@ -145,8 +152,9 @@ func (a *Adaptor) GetRequestURL(
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
-				"https://%s/v1/publishers/google/models/%s:%s",
+				"https://%s/v1/publishers/%s/models/%s:%s",
 				requestDoamin,
+				publishers,
 				meta.ActualModel,
 				suffix,
 			),
@@ -156,10 +164,11 @@ func (a *Adaptor) GetRequestURL(
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
 		URL: fmt.Sprintf(
-			"https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+			"https://%s/v1/projects/%s/locations/%s/publishers/%s/models/%s:%s",
 			requestDoamin,
 			config.ProjectID,
 			config.Region,
+			publishers,
 			meta.ActualModel,
 			suffix,
 		),

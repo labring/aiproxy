@@ -104,12 +104,15 @@ func resetCacheTTLWithContentsNode(contents *ast.Node) error {
 	if contents.Check() != nil {
 		return nil
 	}
+
 	return contents.ForEach(func(_ ast.Sequence, content *ast.Node) bool {
 		cacheControl := content.Get("cache_control")
 		if cacheControl.Check() != nil {
 			return true
 		}
+
 		_, _ = cacheControl.Unset("ttl")
+
 		return true
 	})
 }
@@ -138,7 +141,7 @@ func ConvertRequestBodyToBytes(
 
 	messagesNode := node.Get("messages")
 	if messagesNode.Check() == nil {
-		messagesNode.ForEach(func(_ ast.Sequence, messages *ast.Node) bool {
+		_ = messagesNode.ForEach(func(_ ast.Sequence, messages *ast.Node) bool {
 			_ = resetCacheTTLWithContentsNode(messages.Get("content"))
 			return true
 		})
