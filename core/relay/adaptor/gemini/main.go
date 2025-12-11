@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -215,11 +216,17 @@ func NativeStreamHandler(
 	log := common.GetLogger(c)
 
 	scanner := bufio.NewScanner(resp.Body)
+	if strings.Contains(meta.ActualModel, "image") {
+		buf := GetImageScannerBuffer()
+		defer PutImageScannerBuffer(buf)
 
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
+		scanner.Buffer(*buf, cap(*buf))
+	} else {
+		buf := utils.GetScannerBuffer()
+		defer utils.PutScannerBuffer(buf)
 
-	scanner.Buffer(*buf, cap(*buf))
+		scanner.Buffer(*buf, cap(*buf))
+	}
 
 	usage := model.Usage{}
 
