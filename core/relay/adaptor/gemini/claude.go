@@ -111,7 +111,10 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return claudeResponse.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	modelUsage := claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()
+	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
+
+	return modelUsage, nil
 }
 
 // ClaudeStreamHandler handles streaming Gemini responses and converts them to Claude format
@@ -146,6 +149,7 @@ func ClaudeStreamHandler(
 		contentText         strings.Builder
 		thinkingText        strings.Builder
 		usage               relaymodel.ChatUsage
+		webSearchCount      int64
 		stopReason          string
 		currentContentIndex = -1
 		currentContentType  = ""
@@ -212,6 +216,10 @@ func ClaudeStreamHandler(
 		// Update usage if available
 		if geminiResponse.UsageMetadata != nil {
 			usage = geminiResponse.UsageMetadata.ToUsage()
+		}
+		// Track web search count from grounding metadata
+		if count := geminiResponse.GetWebSearchCount(); count > 0 {
+			webSearchCount = count
 		}
 
 		// Process each candidate
@@ -370,7 +378,10 @@ func ClaudeStreamHandler(
 		Type: "message_stop",
 	})
 
-	return usage.ToModelUsage(), nil
+	modelUsage := usage.ToModelUsage()
+	modelUsage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
+
+	return modelUsage, nil
 }
 
 // geminiResponse2Claude converts a Gemini response to Claude format

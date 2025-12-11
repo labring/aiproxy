@@ -35,6 +35,9 @@ type Price struct {
 	OutputPrice     ZeroNullFloat64 `json:"output_price,omitempty"`
 	OutputPriceUnit ZeroNullInt64   `json:"output_price_unit,omitempty"`
 
+	ImageOutputPrice     ZeroNullFloat64 `json:"image_output_price,omitempty"`
+	ImageOutputPriceUnit ZeroNullInt64   `json:"image_output_price_unit,omitempty"`
+
 	// when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit
 	// will be overwritten
 	ThinkingModeOutputPrice     ZeroNullFloat64 `json:"thinking_mode_output_price,omitempty"`
@@ -313,6 +316,13 @@ func (p *Price) GetOutputPriceUnit() int64 {
 	return PriceUnit
 }
 
+func (p *Price) GetImageOutputPriceUnit() int64 {
+	if p.ImageOutputPriceUnit > 0 {
+		return int64(p.ImageOutputPriceUnit)
+	}
+	return PriceUnit
+}
+
 func (p *Price) GetCachedPriceUnit() int64 {
 	if p.CachedPriceUnit > 0 {
 		return int64(p.CachedPriceUnit)
@@ -339,6 +349,7 @@ type Usage struct {
 	ImageInputTokens    ZeroNullInt64 `json:"image_input_tokens,omitempty"`
 	AudioInputTokens    ZeroNullInt64 `json:"audio_input_tokens,omitempty"`
 	OutputTokens        ZeroNullInt64 `json:"output_tokens,omitempty"`
+	ImageOutputTokens   ZeroNullInt64 `json:"image_output_tokens,omitempty"`
 	CachedTokens        ZeroNullInt64 `json:"cached_tokens,omitempty"`
 	CacheCreationTokens ZeroNullInt64 `json:"cache_creation_tokens,omitempty"`
 	ReasoningTokens     ZeroNullInt64 `json:"reasoning_tokens,omitempty"`
@@ -351,6 +362,7 @@ func (u *Usage) Add(other Usage) {
 	u.ImageInputTokens += other.ImageInputTokens
 	u.AudioInputTokens += other.AudioInputTokens
 	u.OutputTokens += other.OutputTokens
+	u.ImageOutputTokens += other.ImageOutputTokens
 	u.CachedTokens += other.CachedTokens
 	u.CacheCreationTokens += other.CacheCreationTokens
 	u.TotalTokens += other.TotalTokens

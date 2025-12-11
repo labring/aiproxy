@@ -378,7 +378,7 @@ func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 
 				// Update usage metadata
 				if geminiResp.UsageMetadata != nil {
-					usage = geminiResp.UsageMetadata.ToUsage().ToModelUsage()
+					usage = geminiResp.UsageMetadata.ToModelUsage()
 				}
 			}
 

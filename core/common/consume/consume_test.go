@@ -81,7 +81,22 @@ func TestCalculateAmount(t *testing.T) {
 				ImageInputPrice: 0.003,
 				OutputPrice:     0.004,
 			},
-			want: 0.016, // 0.001 * (2000-1000)/1000 + 0.003 * 1000/1000 + 0.004 * 4000/1000
+			want: 0.016, // 0.001 * (2000-1000)/1000 + 0.003 * 1000/1000 + 0.004 * 3000/1000
+		},
+		{
+			name: "Image Output Pricing",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:       1000,
+				OutputTokens:      3000,
+				ImageOutputTokens: 1000,
+			},
+			price: model.Price{
+				InputPrice:       0.001,
+				OutputPrice:      0.004,
+				ImageOutputPrice: 0.01,
+			},
+			want: 0.019, // 0.001 * 1000/1000 + 0.004 * (3000-1000)/1000 + 0.01 * 1000/1000
 		},
 		{
 			name: "Cached Token Pricing",

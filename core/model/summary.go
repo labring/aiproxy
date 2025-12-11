@@ -191,6 +191,13 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		)
 	}
 
+	if d.ImageOutputTokens > 0 {
+		data["image_output_tokens"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.image_output_tokens, 0) + ?", tableName),
+			d.ImageOutputTokens,
+		)
+	}
+
 	if d.TotalTokens > 0 {
 		data["total_tokens"] = gorm.Expr(
 			fmt.Sprintf("COALESCE(%s.total_tokens, 0) + ?", tableName),
@@ -350,7 +357,7 @@ func getChartData(
 	const selectFields = "hour_timestamp as timestamp, sum(used_amount) as used_amount, " +
 		"sum(request_count) as request_count, sum(retry_count) as retry_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, " +
+		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
 		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
 
@@ -408,7 +415,7 @@ func getGroupChartData(
 	const selectFields = "hour_timestamp as timestamp, sum(used_amount) as used_amount, " +
 		"sum(request_count) as request_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, " +
+		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
 		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
 

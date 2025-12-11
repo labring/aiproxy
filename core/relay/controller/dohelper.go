@@ -366,6 +366,10 @@ func updateUsageMetrics(usage model.Usage, log *log.Entry) {
 		log.Data["t_output"] = usage.OutputTokens
 	}
 
+	if usage.ImageOutputTokens > 0 {
+		log.Data["t_image_output"] = usage.ImageOutputTokens
+	}
+
 	if usage.TotalTokens > 0 {
 		log.Data["t_total"] = usage.TotalTokens
 	}

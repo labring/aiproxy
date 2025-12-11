@@ -271,7 +271,7 @@ func GeminiStreamHandler(
 			_ = render.GeminiObjectData(c, geminiResp)
 
 			if geminiResp.UsageMetadata != nil {
-				usage = geminiResp.UsageMetadata.ToUsage().ToModelUsage()
+				usage = geminiResp.UsageMetadata.ToModelUsage()
 			}
 		}
 	}
