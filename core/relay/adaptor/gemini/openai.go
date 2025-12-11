@@ -736,7 +736,7 @@ func streamResponseChat2OpenAI(
 	return response
 }
 
-const imageScannerBufferSize = 2 * 1024 * 1024
+const imageScannerBufferSize = 10 * 1024 * 1024
 
 var scannerBufferPool = sync.Pool{
 	New: func() any {
