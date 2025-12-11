@@ -196,6 +196,10 @@ func CalculateAmount(
 	}
 
 	outputTokens := usage.OutputTokens
+	if modelPrice.ImageOutputPrice > 0 {
+		outputTokens -= usage.ImageOutputTokens
+	}
+
 	outputPrice := float64(modelPrice.OutputPrice)
 
 	outputPriceUnit := modelPrice.GetOutputPriceUnit()
@@ -234,6 +238,10 @@ func CalculateAmount(
 		Mul(decimal.NewFromFloat(outputPrice)).
 		Div(decimal.NewFromInt(outputPriceUnit))
 
+	imageOutputAmount := decimal.NewFromInt(int64(usage.ImageOutputTokens)).
+		Mul(decimal.NewFromFloat(float64(modelPrice.ImageOutputPrice))).
+		Div(decimal.NewFromInt(modelPrice.GetImageOutputPriceUnit()))
+
 	return inputAmount.
 		Add(imageInputAmount).
 		Add(audioInputAmount).
@@ -241,6 +249,7 @@ func CalculateAmount(
 		Add(cacheCreationAmount).
 		Add(webSearchAmount).
 		Add(outputAmount).
+		Add(imageOutputAmount).
 		InexactFloat64()
 }
 

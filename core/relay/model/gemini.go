@@ -1,6 +1,9 @@
 package model
 
-import "github.com/labring/aiproxy/core/relay/adaptor"
+import (
+	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
+)
 
 // Gemini API request and response types
 // https://ai.google.dev/api/generate-content
@@ -88,22 +91,31 @@ type GeminiChatResponse struct {
 	ModelVersion   string                    `json:"modelVersion,omitempty"`
 }
 
+// GetWebSearchCount returns the total number of web search queries from all candidates
+func (r *GeminiChatResponse) GetWebSearchCount() int64 {
+	var count int64
+	for _, candidate := range r.Candidates {
+		if candidate.GroundingMetadata != nil {
+			count += int64(len(candidate.GroundingMetadata.WebSearchQueries))
+		}
+	}
+	return count
+}
+
 type GeminiUsageMetadata struct {
-	PromptTokenCount        int64                      `json:"promptTokenCount"`
-	CandidatesTokenCount    int64                      `json:"candidatesTokenCount"`
-	TotalTokenCount         int64                      `json:"totalTokenCount"`
-	ThoughtsTokenCount      int64                      `json:"thoughtsTokenCount,omitempty"`
-	PromptTokensDetails     []GeminiPromptTokensDetail `json:"promptTokensDetails"`
-	CachedContentTokenCount int64                      `json:"cachedContentTokenCount,omitempty"`
-	CacheTokensDetails      []GeminiCacheTokensDetail  `json:"cacheTokensDetails,omitempty"`
+	PromptTokenCount            int64                `json:"promptTokenCount"`
+	CandidatesTokenCount        int64                `json:"candidatesTokenCount"`
+	TotalTokenCount             int64                `json:"totalTokenCount"`
+	ThoughtsTokenCount          int64                `json:"thoughtsTokenCount,omitempty"`
+	PromptTokensDetails         []GeminiTokensDetail `json:"promptTokensDetails"`
+	CandidatesTokensDetails     []GeminiTokensDetail `json:"candidatesTokensDetails,omitempty"`
+	CachedContentTokenCount     int64                `json:"cachedContentTokenCount,omitempty"`
+	CacheTokensDetails          []GeminiTokensDetail `json:"cacheTokensDetails,omitempty"`
+	ToolUsePromptTokenCount     int64                `json:"toolUsePromptTokenCount,omitempty"`
+	ToolUsePromptTokensDetails  []GeminiTokensDetail `json:"toolUsePromptTokensDetails,omitempty"`
 }
 
-type GeminiPromptTokensDetail struct {
-	Modality   string `json:"modality"`
-	TokenCount int64  `json:"tokenCount"`
-}
-
-type GeminiCacheTokensDetail struct {
+type GeminiTokensDetail struct {
 	Modality   string `json:"modality"`
 	TokenCount int64  `json:"tokenCount"`
 }
@@ -115,7 +127,12 @@ type GeminiChatCandidate struct {
 		Category    string `json:"category"`
 		Probability string `json:"probability"`
 	} `json:"safetyRatings,omitempty"`
-	Index int64 `json:"index"`
+	Index             int64                    `json:"index"`
+	GroundingMetadata *GeminiGroundingMetadata `json:"groundingMetadata,omitempty"`
+}
+
+type GeminiGroundingMetadata struct {
+	WebSearchQueries []string `json:"webSearchQueries,omitempty"`
 }
 
 type GeminiChatPromptFeedback struct {
@@ -123,6 +140,34 @@ type GeminiChatPromptFeedback struct {
 		Category    string `json:"category"`
 		Probability string `json:"probability"`
 	} `json:"safetyRatings,omitempty"`
+}
+
+// Gemini Modality constants
+const (
+	GeminiModalityText  = "TEXT"
+	GeminiModalityImage = "IMAGE"
+	GeminiModalityAudio = "AUDIO"
+	GeminiModalityVideo = "VIDEO"
+)
+
+// GetImageInputTokens returns the number of image input tokens from PromptTokensDetails
+func (u *GeminiUsageMetadata) GetImageInputTokens() int64 {
+	for _, detail := range u.PromptTokensDetails {
+		if detail.Modality == GeminiModalityImage {
+			return detail.TokenCount
+		}
+	}
+	return 0
+}
+
+// GetImageOutputTokens returns the number of image output tokens from CandidatesTokensDetails
+func (u *GeminiUsageMetadata) GetImageOutputTokens() int64 {
+	for _, detail := range u.CandidatesTokensDetails {
+		if detail.Modality == GeminiModalityImage {
+			return detail.TokenCount
+		}
+	}
+	return 0
 }
 
 // ToUsage converts GeminiUsageMetadata to ChatUsage format
@@ -141,6 +186,24 @@ func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 	}
 
 	return chatUsage
+}
+
+// ToModelUsage converts GeminiUsageMetadata to model.Usage format with image token support
+func (u *GeminiUsageMetadata) ToModelUsage() model.Usage {
+	// Input tokens should include both prompt tokens and tool use prompt tokens
+	inputTokens := u.PromptTokenCount + u.ToolUsePromptTokenCount
+
+	usage := model.Usage{
+		InputTokens:       model.ZeroNullInt64(inputTokens),
+		ImageInputTokens:  model.ZeroNullInt64(u.GetImageInputTokens()),
+		OutputTokens:      model.ZeroNullInt64(u.CandidatesTokenCount + u.ThoughtsTokenCount),
+		ImageOutputTokens: model.ZeroNullInt64(u.GetImageOutputTokens()),
+		CachedTokens:      model.ZeroNullInt64(u.CachedContentTokenCount),
+		ReasoningTokens:   model.ZeroNullInt64(u.ThoughtsTokenCount),
+		TotalTokens:       model.ZeroNullInt64(u.TotalTokenCount),
+	}
+
+	return usage
 }
 
 // ToResponseUsage converts GeminiUsageMetadata to ResponseUsage (OpenAI Responses API format)

@@ -736,7 +736,7 @@ func streamResponseChat2OpenAI(
 	return response
 }
 
-const imageScannerBufferSize = 10 * 1024 * 1024
+const imageScannerBufferSize = 50 * 1024 * 1024
 
 var scannerBufferPool = sync.Pool{
 	New: func() any {
@@ -794,6 +794,7 @@ func StreamHandler(
 	usage := relaymodel.ChatUsage{
 		PromptTokens: int64(meta.RequestUsage.InputTokens),
 	}
+	var webSearchCount int64
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -818,6 +819,10 @@ func StreamHandler(
 		if response.Usage != nil {
 			usage = *response.Usage
 		}
+		// Track web search count from grounding metadata
+		if count := geminiResponse.GetWebSearchCount(); count > 0 {
+			webSearchCount = count
+		}
 
 		if len(response.Choices) > 0 {
 			responseText.WriteString(response.Choices[0].Delta.StringContent())
@@ -832,7 +837,10 @@ func StreamHandler(
 
 	render.OpenaiDone(c)
 
-	return usage.ToModelUsage(), nil
+	modelUsage := usage.ToModelUsage()
+	modelUsage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
+
+	return modelUsage, nil
 }
 
 func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
@@ -868,5 +876,8 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	modelUsage := fullTextResponse.Usage.ToModelUsage()
+	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
+
+	return modelUsage, nil
 }

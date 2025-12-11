@@ -181,8 +181,10 @@ func NativeHandler(
 	// Calculate usage
 	usage := model.Usage{}
 	if geminiResponse.UsageMetadata != nil {
-		usage = geminiResponse.UsageMetadata.ToUsage().ToModelUsage()
+		usage = geminiResponse.UsageMetadata.ToModelUsage()
 	}
+	// Get web search count from grounding metadata
+	usage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
 
 	// Pass through the response as-is
 	jsonResponse, err := sonic.Marshal(geminiResponse)
@@ -238,11 +240,15 @@ func NativeStreamHandler(
 
 		data = render.ExtractSSEData(data)
 
-		// Parse to extract usage metadata
+		// Parse to extract usage metadata and web search count
 		var geminiResp relaymodel.GeminiChatResponse
 		if err := sonic.Unmarshal(data, &geminiResp); err == nil {
 			if geminiResp.UsageMetadata != nil {
-				usage = geminiResp.UsageMetadata.ToUsage().ToModelUsage()
+				usage = geminiResp.UsageMetadata.ToModelUsage()
+			}
+			// Get web search count from grounding metadata
+			if webSearchCount := geminiResp.GetWebSearchCount(); webSearchCount > 0 {
+				usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
 			}
 		}
 

@@ -8,6 +8,9 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
+// ImageInputTokensPerImage is the number of tokens per image for Gemini
+const ImageInputTokensPerImage = 560
+
 func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, error) {
 	var geminiReq relaymodel.GeminiChatRequest
 
@@ -18,12 +21,17 @@ func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, e
 
 	// Count tokens from all content parts
 	totalTokens := int64(0)
+	imageCount := int64(0)
 
 	// Count system instruction tokens
 	if geminiReq.SystemInstruction != nil {
 		for _, part := range geminiReq.SystemInstruction.Parts {
 			if part.Text != "" {
 				totalTokens += countTokensForText(part.Text, mc.Model)
+			}
+			// Count images in system instruction
+			if part.InlineData != nil {
+				imageCount++
 			}
 		}
 	}
@@ -33,6 +41,10 @@ func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, e
 		for _, part := range content.Parts {
 			if part.Text != "" {
 				totalTokens += countTokensForText(part.Text, mc.Model)
+			}
+			// Count images
+			if part.InlineData != nil {
+				imageCount++
 			}
 			// Function calls and responses also consume tokens
 			if part.FunctionCall != nil {
@@ -51,8 +63,12 @@ func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, e
 		}
 	}
 
+	// Calculate image input tokens (each image is 560 tokens)
+	imageInputTokens := imageCount * ImageInputTokensPerImage
+
 	return model.Usage{
-		InputTokens: model.ZeroNullInt64(totalTokens),
+		InputTokens:      model.ZeroNullInt64(totalTokens + imageInputTokens),
+		ImageInputTokens: model.ZeroNullInt64(imageInputTokens),
 	}, nil
 }
 
