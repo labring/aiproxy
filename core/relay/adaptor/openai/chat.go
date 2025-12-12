@@ -1100,6 +1100,7 @@ func ConvertResponsesToChatCompletionStreamResponse(
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
+
 	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
 	defer cleanup()
 

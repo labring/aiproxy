@@ -238,6 +238,7 @@ func (u *ClaudeUsage) FromModelUsage(usage model.Usage) {
 	u.InputTokens = int64(usage.InputTokens)
 	u.OutputTokens = int64(usage.OutputTokens)
 	u.CacheCreationInputTokens = int64(usage.CacheCreationTokens)
+
 	u.CacheReadInputTokens = int64(usage.CachedTokens)
 	if usage.WebSearchCount > 0 {
 		u.ServerToolUse = &ClaudeServerToolUse{

@@ -219,6 +219,7 @@ func NativeStreamHandler(
 	defer cleanup()
 
 	usage := model.Usage{}
+
 	var websearchCount int64
 
 	for scanner.Scan() {

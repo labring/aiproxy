@@ -632,6 +632,7 @@ func responseChat2OpenAI(
 			} else {
 				choice.Message.Content = builder.String()
 			}
+
 			choice.Message.ReasoningContent = reasoningContent.String()
 		}
 
@@ -742,6 +743,7 @@ func streamResponseChat2OpenAI(
 			} else {
 				choice.Delta.Content = builder.String()
 			}
+
 			choice.Delta.ReasoningContent = reasoningContent.String()
 		}
 
@@ -768,6 +770,7 @@ func StreamHandler(
 	defer cleanup()
 
 	usage := model.Usage{}
+
 	var websearchCount int64
 
 	for scanner.Scan() {

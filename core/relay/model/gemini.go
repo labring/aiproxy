@@ -99,6 +99,7 @@ func (r *GeminiChatResponse) GetWebSearchCount() int64 {
 			count += int64(len(candidate.GroundingMetadata.WebSearchQueries))
 		}
 	}
+
 	return count
 }
 
@@ -157,6 +158,7 @@ func (u *GeminiUsageMetadata) GetImageInputTokens() int64 {
 			return detail.TokenCount
 		}
 	}
+
 	return 0
 }
 
@@ -167,6 +169,7 @@ func (u *GeminiUsageMetadata) GetImageOutputTokens() int64 {
 			return detail.TokenCount
 		}
 	}
+
 	return 0
 }
 
