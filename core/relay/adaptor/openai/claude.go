@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"net/http"
@@ -338,12 +337,8 @@ func ClaudeStreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	// Initialize Claude response tracking
 	var (
@@ -951,12 +946,8 @@ func ConvertResponsesToClaudeStreamResponse(
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var usage model.Usage
 

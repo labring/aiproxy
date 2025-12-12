@@ -1,7 +1,6 @@
 package coze
 
 import (
-	"bufio"
 	"net/http"
 	"strconv"
 	"strings"
@@ -119,12 +118,8 @@ func StreamHandler(
 	responseText := strings.Builder{}
 	createdTime := time.Now().Unix()
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	for scanner.Scan() {
 		data := scanner.Bytes()

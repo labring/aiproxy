@@ -1,7 +1,6 @@
 package ollama
 
 import (
-	"bufio"
 	"bytes"
 	"net/http"
 	"strconv"
@@ -237,12 +236,8 @@ func StreamHandler(
 
 	var usage *relaymodel.ChatUsage
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	for scanner.Scan() {
 		data := scanner.Bytes()

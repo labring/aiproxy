@@ -1,11 +1,9 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
@@ -131,24 +129,12 @@ func ClaudeStreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-	if strings.Contains(meta.ActualModel, "image") {
-		buf := GetImageScannerBuffer()
-		defer PutImageScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	} else {
-		buf := utils.GetScannerBuffer()
-		defer utils.PutScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	}
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var (
 		messageID           = "msg_" + common.ShortUUID()
-		contentText         strings.Builder
-		thinkingText        strings.Builder
-		usage               relaymodel.ChatUsage
+		usage               model.Usage
 		webSearchCount      int64
 		stopReason          string
 		currentContentIndex = -1
@@ -215,11 +201,11 @@ func ClaudeStreamHandler(
 
 		// Update usage if available
 		if geminiResponse.UsageMetadata != nil {
-			usage = geminiResponse.UsageMetadata.ToUsage()
+			usage = geminiResponse.UsageMetadata.ToModelUsage()
 		}
 		// Track web search count from grounding metadata
 		if count := geminiResponse.GetWebSearchCount(); count > 0 {
-			webSearchCount = count
+			webSearchCount += count
 		}
 
 		// Process each candidate
@@ -261,8 +247,6 @@ func ClaudeStreamHandler(
 						}
 					}
 
-					thinkingText.WriteString(part.Text)
-
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
 						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
@@ -288,8 +272,6 @@ func ClaudeStreamHandler(
 							},
 						})
 					}
-
-					contentText.WriteString(part.Text)
 
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
 						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
@@ -344,21 +326,9 @@ func ClaudeStreamHandler(
 	// Close the last open content block
 	closeCurrentBlock()
 
-	// Calculate final usage if not provided
-	if usage.TotalTokens == 0 && (contentText.Len() > 0 || thinkingText.Len() > 0) {
-		totalText := contentText.String()
-		if thinkingText.Len() > 0 {
-			totalText = thinkingText.String() + "\n" + totalText
-		}
+	usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
 
-		usage = openai.ResponseText2Usage(
-			totalText,
-			meta.ActualModel,
-			int64(meta.RequestUsage.InputTokens),
-		)
-	}
-
-	claudeUsage := usage.ToClaudeUsage()
+	claudeUsage := relaymodel.ClaudeFromModelUsage(usage)
 
 	if stopReason == "" {
 		stopReason = relaymodel.ClaudeStopReasonEndTurn
@@ -378,10 +348,7 @@ func ClaudeStreamHandler(
 		Type: "message_stop",
 	})
 
-	modelUsage := usage.ToModelUsage()
-	modelUsage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
-
-	return modelUsage, nil
+	return usage, nil
 }
 
 // geminiResponse2Claude converts a Gemini response to Claude format

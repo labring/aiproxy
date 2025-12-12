@@ -131,6 +131,7 @@ type CompletionTokensDetails struct {
 	AudioTokens              int64 `json:"audio_tokens"`
 	AcceptedPredictionTokens int64 `json:"accepted_prediction_tokens"`
 	RejectedPredictionTokens int64 `json:"rejected_prediction_tokens"`
+	ImageTokens              int64 `json:"image_tokens"`
 }
 
 type OpenAIErrorResponse struct {

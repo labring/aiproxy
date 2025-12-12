@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"net/http"
@@ -536,12 +535,8 @@ func OpenAIStreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, m.ActualModel)
+	defer cleanup()
 
 	responseText := strings.Builder{}
 

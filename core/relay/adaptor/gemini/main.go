@@ -1,11 +1,9 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
@@ -217,20 +215,11 @@ func NativeStreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-	if strings.Contains(meta.ActualModel, "image") {
-		buf := GetImageScannerBuffer()
-		defer PutImageScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	} else {
-		buf := utils.GetScannerBuffer()
-		defer utils.PutScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	}
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	usage := model.Usage{}
+	var websearchCount int64
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -248,7 +237,7 @@ func NativeStreamHandler(
 			}
 			// Get web search count from grounding metadata
 			if webSearchCount := geminiResp.GetWebSearchCount(); webSearchCount > 0 {
-				usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
+				websearchCount += webSearchCount
 			}
 		}
 
@@ -259,6 +248,8 @@ func NativeStreamHandler(
 	if err := scanner.Err(); err != nil {
 		log.Error("error reading stream: " + err.Error())
 	}
+
+	usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
 
 	return usage, nil
 }
