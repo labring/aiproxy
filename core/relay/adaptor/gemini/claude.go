@@ -42,7 +42,7 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 		}
 	}
 
-	config := buildGenerationConfig(meta, textRequest, textRequest)
+	config := buildGenerationConfig(meta, req, textRequest, textRequest)
 
 	// Build actual request
 	geminiRequest := relaymodel.GeminiChatRequest{

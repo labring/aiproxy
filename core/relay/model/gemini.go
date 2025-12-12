@@ -68,6 +68,12 @@ type GeminiChatGenerationConfig struct {
 	CandidateCount     int                   `json:"candidateCount,omitempty"`
 	ResponseModalities []string              `json:"responseModalities,omitempty"`
 	ThinkingConfig     *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
+	ImageConfig        *GeminiImageConfig    `json:"imageConfig,omitempty"`
+}
+
+type GeminiImageConfig struct {
+	AspectRatio string `json:"aspectRatio,omitempty"`
+	ImageSize   string `json:"imageSize,omitempty"`
 }
 
 type GeminiThinkingConfig struct {
