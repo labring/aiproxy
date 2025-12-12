@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -247,6 +249,72 @@ func PutScannerBuffer(buf *[]byte) {
 	}
 
 	scannerBufferPool.Put(buf)
+}
+
+const ImageScannerBufferSize = 50 * 1024 * 1024
+
+var imageScannerBufferPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, ImageScannerBufferSize)
+		return &buf
+	},
+}
+
+//nolint:forcetypeassert
+func GetImageScannerBuffer() *[]byte {
+	v, ok := imageScannerBufferPool.Get().(*[]byte)
+	if !ok {
+		panic(fmt.Sprintf("image scanner buffer type error: %T, %v", v, v))
+	}
+
+	return v
+}
+
+func PutImageScannerBuffer(buf *[]byte) {
+	if cap(*buf) != ImageScannerBufferSize {
+		return
+	}
+
+	imageScannerBufferPool.Put(buf)
+}
+
+// IsImageModel checks if the model name indicates an image generation model
+func IsImageModel(modelName string) bool {
+	return strings.Contains(modelName, "image")
+}
+
+// NewStreamScanner creates a bufio.Scanner with appropriate buffer size based on model type.
+// Returns the scanner and a cleanup function that must be called when done.
+func NewStreamScanner(r io.Reader, modelName string) (*bufio.Scanner, func()) {
+	scanner := bufio.NewScanner(r)
+
+	if IsImageModel(modelName) {
+		buf := GetImageScannerBuffer()
+		scanner.Buffer(*buf, cap(*buf))
+
+		return scanner, func() {
+			PutImageScannerBuffer(buf)
+		}
+	}
+
+	buf := GetScannerBuffer()
+	scanner.Buffer(*buf, cap(*buf))
+
+	return scanner, func() {
+		PutScannerBuffer(buf)
+	}
+}
+
+// NewScanner creates a bufio.Scanner with standard buffer size.
+// Returns the scanner and a cleanup function that must be called when done.
+func NewScanner(r io.Reader) (*bufio.Scanner, func()) {
+	scanner := bufio.NewScanner(r)
+	buf := GetScannerBuffer()
+	scanner.Buffer(*buf, cap(*buf))
+
+	return scanner, func() {
+		PutScannerBuffer(buf)
+	}
 }
 
 // IsGeminiStreamRequest checks if the request path ends with :streamGenerateContent

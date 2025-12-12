@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"net/http"
@@ -442,12 +441,8 @@ func StreamHandler(
 
 	responseText := strings.Builder{}
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var usage relaymodel.ChatUsage
 
@@ -1105,12 +1100,9 @@ func ConvertResponsesToChatCompletionStreamResponse(
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
 
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var usage model.Usage
 

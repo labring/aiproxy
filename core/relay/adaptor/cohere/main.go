@@ -1,7 +1,6 @@
 package cohere
 
 import (
-	"bufio"
 	"net/http"
 	"strconv"
 	"strings"
@@ -178,12 +177,8 @@ func StreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	var usage relaymodel.ChatUsage
 

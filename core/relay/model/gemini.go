@@ -99,20 +99,21 @@ func (r *GeminiChatResponse) GetWebSearchCount() int64 {
 			count += int64(len(candidate.GroundingMetadata.WebSearchQueries))
 		}
 	}
+
 	return count
 }
 
 type GeminiUsageMetadata struct {
-	PromptTokenCount            int64                `json:"promptTokenCount"`
-	CandidatesTokenCount        int64                `json:"candidatesTokenCount"`
-	TotalTokenCount             int64                `json:"totalTokenCount"`
-	ThoughtsTokenCount          int64                `json:"thoughtsTokenCount,omitempty"`
-	PromptTokensDetails         []GeminiTokensDetail `json:"promptTokensDetails"`
-	CandidatesTokensDetails     []GeminiTokensDetail `json:"candidatesTokensDetails,omitempty"`
-	CachedContentTokenCount     int64                `json:"cachedContentTokenCount,omitempty"`
-	CacheTokensDetails          []GeminiTokensDetail `json:"cacheTokensDetails,omitempty"`
-	ToolUsePromptTokenCount     int64                `json:"toolUsePromptTokenCount,omitempty"`
-	ToolUsePromptTokensDetails  []GeminiTokensDetail `json:"toolUsePromptTokensDetails,omitempty"`
+	PromptTokenCount           int64                `json:"promptTokenCount"`
+	CandidatesTokenCount       int64                `json:"candidatesTokenCount"`
+	TotalTokenCount            int64                `json:"totalTokenCount"`
+	ThoughtsTokenCount         int64                `json:"thoughtsTokenCount,omitempty"`
+	PromptTokensDetails        []GeminiTokensDetail `json:"promptTokensDetails"`
+	CandidatesTokensDetails    []GeminiTokensDetail `json:"candidatesTokensDetails,omitempty"`
+	CachedContentTokenCount    int64                `json:"cachedContentTokenCount,omitempty"`
+	CacheTokensDetails         []GeminiTokensDetail `json:"cacheTokensDetails,omitempty"`
+	ToolUsePromptTokenCount    int64                `json:"toolUsePromptTokenCount,omitempty"`
+	ToolUsePromptTokensDetails []GeminiTokensDetail `json:"toolUsePromptTokensDetails,omitempty"`
 }
 
 type GeminiTokensDetail struct {
@@ -157,6 +158,7 @@ func (u *GeminiUsageMetadata) GetImageInputTokens() int64 {
 			return detail.TokenCount
 		}
 	}
+
 	return 0
 }
 
@@ -167,6 +169,7 @@ func (u *GeminiUsageMetadata) GetImageOutputTokens() int64 {
 			return detail.TokenCount
 		}
 	}
+
 	return 0
 }
 
@@ -182,6 +185,7 @@ func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 		},
 		CompletionTokensDetails: &CompletionTokensDetails{
 			ReasoningTokens: u.ThoughtsTokenCount,
+			ImageTokens:     u.GetImageOutputTokens(),
 		},
 	}
 

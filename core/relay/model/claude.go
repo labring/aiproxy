@@ -1,5 +1,9 @@
 package model
 
+import (
+	"github.com/labring/aiproxy/core/model"
+)
+
 type ClaudeOpenAIRequest struct {
 	ToolChoice  any                    `json:"tool_choice,omitempty"`
 	Stop        any                    `json:"stop,omitempty"`
@@ -228,6 +232,25 @@ func (u *ClaudeUsage) ToGeminiUsage() GeminiUsageMetadata {
 	}
 
 	return usage
+}
+
+func (u *ClaudeUsage) FromModelUsage(usage model.Usage) {
+	u.InputTokens = int64(usage.InputTokens)
+	u.OutputTokens = int64(usage.OutputTokens)
+	u.CacheCreationInputTokens = int64(usage.CacheCreationTokens)
+
+	u.CacheReadInputTokens = int64(usage.CachedTokens)
+	if usage.WebSearchCount > 0 {
+		u.ServerToolUse = &ClaudeServerToolUse{
+			WebSearchRequests: int64(usage.WebSearchCount),
+		}
+	}
+}
+
+func ClaudeFromModelUsage(usage model.Usage) ClaudeUsage {
+	u := ClaudeUsage{}
+	u.FromModelUsage(usage)
+	return u
 }
 
 // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta

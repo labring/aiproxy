@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -589,10 +588,18 @@ func responseChat2OpenAI(
 
 				if part.Text != "" {
 					if hasImage {
-						contents = append(contents, relaymodel.MessageContent{
-							Type: relaymodel.ContentTypeText,
-							Text: part.Text,
-						})
+						if part.Thought {
+							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Message.Signature = part.ThoughtSignature
+							}
+						} else {
+							contents = append(contents, relaymodel.MessageContent{
+								Type: relaymodel.ContentTypeText,
+								Text: part.Text,
+							})
+						}
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
@@ -624,8 +631,9 @@ func responseChat2OpenAI(
 				choice.Message.Content = contents
 			} else {
 				choice.Message.Content = builder.String()
-				choice.Message.ReasoningContent = reasoningContent.String()
 			}
+
+			choice.Message.ReasoningContent = reasoningContent.String()
 		}
 
 		fullTextResponse.Choices = append(fullTextResponse.Choices, &choice)
@@ -691,10 +699,18 @@ func streamResponseChat2OpenAI(
 
 				if part.Text != "" {
 					if hasImage {
-						contents = append(contents, relaymodel.MessageContent{
-							Type: relaymodel.ContentTypeText,
-							Text: part.Text,
-						})
+						if part.Thought {
+							reasoningContent.WriteString(part.Text)
+
+							if part.ThoughtSignature != "" {
+								choice.Delta.Signature = part.ThoughtSignature
+							}
+						} else {
+							contents = append(contents, relaymodel.MessageContent{
+								Type: relaymodel.ContentTypeText,
+								Text: part.Text,
+							})
+						}
 					} else {
 						if part.Thought {
 							reasoningContent.WriteString(part.Text)
@@ -726,41 +742,15 @@ func streamResponseChat2OpenAI(
 				choice.Delta.Content = contents
 			} else {
 				choice.Delta.Content = builder.String()
-				choice.Delta.ReasoningContent = reasoningContent.String()
 			}
+
+			choice.Delta.ReasoningContent = reasoningContent.String()
 		}
 
 		response.Choices = append(response.Choices, &choice)
 	}
 
 	return response
-}
-
-const imageScannerBufferSize = 50 * 1024 * 1024
-
-var scannerBufferPool = sync.Pool{
-	New: func() any {
-		buf := make([]byte, imageScannerBufferSize)
-		return &buf
-	},
-}
-
-//nolint:forcetypeassert
-func GetImageScannerBuffer() *[]byte {
-	v, ok := scannerBufferPool.Get().(*[]byte)
-	if !ok {
-		panic(fmt.Sprintf("scanner buffer type error: %T, %v", v, v))
-	}
-
-	return v
-}
-
-func PutImageScannerBuffer(buf *[]byte) {
-	if cap(*buf) != imageScannerBufferSize {
-		return
-	}
-
-	scannerBufferPool.Put(buf)
 }
 
 func StreamHandler(
@@ -776,25 +766,12 @@ func StreamHandler(
 
 	log := common.GetLogger(c)
 
-	responseText := strings.Builder{}
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
-	scanner := bufio.NewScanner(resp.Body)
-	if strings.Contains(meta.ActualModel, "image") {
-		buf := GetImageScannerBuffer()
-		defer PutImageScannerBuffer(buf)
+	usage := model.Usage{}
 
-		scanner.Buffer(*buf, cap(*buf))
-	} else {
-		buf := utils.GetScannerBuffer()
-		defer utils.PutScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	}
-
-	usage := relaymodel.ChatUsage{
-		PromptTokens: int64(meta.RequestUsage.InputTokens),
-	}
-	var webSearchCount int64
+	var websearchCount int64
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -817,15 +794,11 @@ func StreamHandler(
 
 		response := streamResponseChat2OpenAI(meta, &geminiResponse)
 		if response.Usage != nil {
-			usage = *response.Usage
+			usage = geminiResponse.UsageMetadata.ToModelUsage()
 		}
 		// Track web search count from grounding metadata
 		if count := geminiResponse.GetWebSearchCount(); count > 0 {
-			webSearchCount = count
-		}
-
-		if len(response.Choices) > 0 {
-			responseText.WriteString(response.Choices[0].Delta.StringContent())
+			websearchCount += count
 		}
 
 		_ = render.OpenaiObjectData(c, response)
@@ -837,10 +810,9 @@ func StreamHandler(
 
 	render.OpenaiDone(c)
 
-	modelUsage := usage.ToModelUsage()
-	modelUsage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
+	usage.WebSearchCount = model.ZeroNullInt64(websearchCount)
 
-	return modelUsage, nil
+	return usage, nil
 }
 
 func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {

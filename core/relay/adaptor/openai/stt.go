@@ -235,12 +235,8 @@ func handleSTTStream(
 ) (model.Usage, adaptor.Error) {
 	defer resp.Body.Close()
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	return processSTTStreamChunks(scanner, c, meta), nil
 }

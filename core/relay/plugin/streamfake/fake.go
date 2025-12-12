@@ -187,6 +187,8 @@ type fakeStreamResponseWriter struct {
 	finishReason     relaymodel.FinishReason
 	logprobsContent  []ast.Node
 	toolCalls        []*relaymodel.ToolCall
+	contentParts     []relaymodel.MessageContent // for image/multimodal content
+	signature        string                      // for thought signature
 }
 
 // ignore flush
@@ -239,14 +241,40 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 			return true
 		}
 
-		content, err := deltaNode.Get("content").String()
-		if err == nil {
-			rw.contentBuilder.WriteString(content)
+		contentNode := deltaNode.Get("content")
+		if err := contentNode.Check(); err == nil {
+			// Try as string first (common case)
+			if content, err := contentNode.String(); err == nil {
+				rw.contentBuilder.WriteString(content)
+			} else {
+				// Try as array (for image/multimodal content)
+				_ = contentNode.ForEach(func(_ ast.Sequence, partNode *ast.Node) bool {
+					partRaw, err := partNode.Raw()
+					if err != nil {
+						return true
+					}
+
+					var part relaymodel.MessageContent
+					if err := sonic.UnmarshalString(partRaw, &part); err != nil {
+						return true
+					}
+
+					// Keep all parts in contentParts for multimodal content
+					rw.contentParts = append(rw.contentParts, part)
+
+					return true
+				})
+			}
 		}
 
 		reasoningContent, err := deltaNode.Get("reasoning_content").String()
 		if err == nil {
 			rw.reasoningContent.WriteString(reasoningContent)
+		}
+
+		// Handle signature for thought
+		if signature, err := deltaNode.Get("signature").String(); err == nil && signature != "" {
+			rw.signature = signature
 		}
 
 		_ = deltaNode.Get("tool_calls").
@@ -314,13 +342,23 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 	}
 
 	message := map[string]any{
-		"role":    "assistant",
-		"content": rw.contentBuilder.String(),
+		"role": "assistant",
+	}
+
+	// Use contentParts if available (for image/multimodal content), otherwise use string content
+	if len(rw.contentParts) > 0 {
+		message["content"] = rw.contentParts
+	} else {
+		message["content"] = rw.contentBuilder.String()
 	}
 
 	reasoningContent := rw.reasoningContent.String()
 	if reasoningContent != "" {
 		message["reasoning_content"] = reasoningContent
+	}
+
+	if rw.signature != "" {
+		message["signature"] = rw.signature
 	}
 
 	if len(rw.toolCalls) > 0 {
