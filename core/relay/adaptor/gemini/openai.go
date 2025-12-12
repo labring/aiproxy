@@ -59,27 +59,45 @@ func buildSafetySettings(safetySetting string) []relaymodel.GeminiChatSafetySett
 
 func buildGenerationConfig(
 	meta *meta.Meta,
+	httpReq *http.Request,
 	req *relaymodel.GeneralOpenAIRequest,
 	textRequest *relaymodel.GeneralOpenAIRequest,
 ) *relaymodel.GeminiChatGenerationConfig {
-	config := relaymodel.GeminiChatGenerationConfig{
-		Temperature: textRequest.Temperature,
-		TopP:        textRequest.TopP,
+	// First unmarshal generationConfig from request body if present
+	var reqWithConfig struct {
+		GenerationConfig *relaymodel.GeminiChatGenerationConfig `json:"generationConfig,omitempty"`
+	}
+
+	_ = common.UnmarshalRequestReusable(httpReq, &reqWithConfig)
+
+	var config relaymodel.GeminiChatGenerationConfig
+	if reqWithConfig.GenerationConfig != nil {
+		config = *reqWithConfig.GenerationConfig
+	}
+
+	// Override with OpenAI-style parameters if provided
+	if config.Temperature != nil && textRequest.Temperature != nil {
+		config.Temperature = textRequest.Temperature
+	}
+
+	if config.TopP != nil && textRequest.TopP != nil {
+		config.TopP = textRequest.TopP
 	}
 
 	// Convert MaxTokens (int) to MaxOutputTokens (*int)
-	if textRequest.MaxTokens != 0 {
+	if config.MaxOutputTokens == nil && textRequest.MaxTokens != 0 {
 		config.MaxOutputTokens = &textRequest.MaxTokens
 	}
 
-	if strings.Contains(meta.ActualModel, "image") {
+	if len(config.ResponseModalities) == 0 &&
+		strings.Contains(meta.ActualModel, "image") {
 		config.ResponseModalities = []string{
 			"Text",
 			"Image",
 		}
 	}
 
-	if textRequest.ResponseFormat != nil {
+	if config.ResponseMimeType == "" && textRequest.ResponseFormat != nil {
 		if mimeType, ok := mimeTypeMap[textRequest.ResponseFormat.Type]; ok {
 			config.ResponseMimeType = mimeType
 		}
@@ -91,7 +109,7 @@ func buildGenerationConfig(
 		}
 	}
 
-	if req.Thinking != nil {
+	if config.ThinkingConfig == nil && req.Thinking != nil {
 		thinkingConfig := relaymodel.GeminiThinkingConfig{}
 		switch req.Thinking.Type {
 		case relaymodel.ClaudeThinkingTypeEnabled:
@@ -105,12 +123,12 @@ func buildGenerationConfig(
 	}
 
 	// https://ai.google.dev/gemini-api/docs/thinking
-	if strings.Contains(meta.ActualModel, "2.5") {
-		if config.ThinkingConfig == nil {
-			config.ThinkingConfig = &relaymodel.GeminiThinkingConfig{}
+	if config.ThinkingConfig == nil &&
+		strings.Contains(meta.ActualModel, "-2.5") ||
+		strings.Contains(meta.ActualModel, "-3") {
+		config.ThinkingConfig = &relaymodel.GeminiThinkingConfig{
+			IncludeThoughts: true,
 		}
-
-		config.ThinkingConfig.IncludeThoughts = true
 	}
 
 	return &config
@@ -466,7 +484,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		}
 	}
 
-	config := buildGenerationConfig(meta, textRequest, textRequest)
+	config := buildGenerationConfig(meta, req, textRequest, textRequest)
 
 	// Build actual request
 	geminiRequest := relaymodel.GeminiChatRequest{
