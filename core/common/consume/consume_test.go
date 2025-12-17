@@ -150,6 +150,94 @@ func TestCalculateAmount(t *testing.T) {
 			},
 			want: 0.02, // 0.01 * 2000/1000
 		},
+		{
+			name: "Image Generation - With OutputTokensDetails (text + image output)",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:       1000, // total input (text 500 + image 500)
+				ImageInputTokens:  500,
+				OutputTokens:      2000, // total output (text 1000 + image 1000)
+				ImageOutputTokens: 1000,
+			},
+			price: model.Price{
+				InputPrice:       0.005, // $5 per 1M = $0.005 per 1K
+				ImageInputPrice:  0.008, // $8 per 1M = $0.008 per 1K
+				OutputPrice:      0.01,  // $10 per 1M = $0.01 per 1K
+				ImageOutputPrice: 0.032, // $32 per 1M = $0.032 per 1K
+			},
+			// Text input: (1000 - 500) / 1000 * 0.005 = 0.0025
+			// Image input: 500 / 1000 * 0.008 = 0.004
+			// Text output: (2000 - 1000) / 1000 * 0.01 = 0.01
+			// Image output: 1000 / 1000 * 0.032 = 0.032
+			// Total: 0.0025 + 0.004 + 0.01 + 0.032 = 0.0485
+			want: 0.0485,
+		},
+		{
+			name: "Image Generation - Without OutputTokensDetails (all output is image)",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:       1000, // total input (text 500 + image 500)
+				ImageInputTokens:  500,
+				OutputTokens:      2000, // all image output
+				ImageOutputTokens: 2000, // same as OutputTokens
+			},
+			price: model.Price{
+				InputPrice:       0.005,
+				ImageInputPrice:  0.008,
+				OutputPrice:      0.01,
+				ImageOutputPrice: 0.032,
+			},
+			// Text input: (1000 - 500) / 1000 * 0.005 = 0.0025
+			// Image input: 500 / 1000 * 0.008 = 0.004
+			// Text output: (2000 - 2000) / 1000 * 0.01 = 0
+			// Image output: 2000 / 1000 * 0.032 = 0.064
+			// Total: 0.0025 + 0.004 + 0 + 0.064 = 0.0705
+			want: 0.0705,
+		},
+		{
+			name: "Image Generation - Only image input and output",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:       1000, // all image input
+				ImageInputTokens:  1000,
+				OutputTokens:      1000, // all image output
+				ImageOutputTokens: 1000,
+			},
+			price: model.Price{
+				InputPrice:       0.005,
+				ImageInputPrice:  0.008,
+				OutputPrice:      0.01,
+				ImageOutputPrice: 0.032,
+			},
+			// Text input: (1000 - 1000) / 1000 * 0.005 = 0
+			// Image input: 1000 / 1000 * 0.008 = 0.008
+			// Text output: (1000 - 1000) / 1000 * 0.01 = 0
+			// Image output: 1000 / 1000 * 0.032 = 0.032
+			// Total: 0 + 0.008 + 0 + 0.032 = 0.04
+			want: 0.04,
+		},
+		{
+			name: "Image Generation - Only text input with image output",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:       500, // all text input
+				ImageInputTokens:  0,
+				OutputTokens:      1000, // all image output
+				ImageOutputTokens: 1000,
+			},
+			price: model.Price{
+				InputPrice:       0.005,
+				ImageInputPrice:  0.008,
+				OutputPrice:      0.01,
+				ImageOutputPrice: 0.032,
+			},
+			// Text input: 500 / 1000 * 0.005 = 0.0025
+			// Image input: 0
+			// Text output: (1000 - 1000) / 1000 * 0.01 = 0
+			// Image output: 1000 / 1000 * 0.032 = 0.032
+			// Total: 0.0025 + 0 + 0 + 0.032 = 0.0345
+			want: 0.0345,
+		},
 	}
 
 	for _, tt := range tests {

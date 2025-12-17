@@ -3,6 +3,7 @@ package model_test
 import (
 	"testing"
 
+	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
 )
@@ -225,5 +226,78 @@ func TestRoundTripConversions(t *testing.T) {
 			original.OutputTokensDetails.ReasoningTokens,
 			converted.OutputTokensDetails.ReasoningTokens,
 		)
+	})
+}
+
+func TestImageUsageToModelUsage(t *testing.T) {
+	t.Run("WithOutputTokensDetails", func(t *testing.T) {
+		// New format with separate text and image output tokens
+		imageUsage := model.ImageUsage{
+			InputTokens:  1000,
+			OutputTokens: 5000, // total: 1000 text + 4000 image
+			TotalTokens:  6000,
+			InputTokensDetails: model.ImageInputTokensDetails{
+				TextTokens:  200,
+				ImageTokens: 800,
+			},
+			OutputTokensDetails: &model.ImageOutputTokensDetails{
+				TextTokens:  1000,
+				ImageTokens: 4000,
+			},
+		}
+
+		usage := imageUsage.ToModelUsage()
+
+		assert.Equal(t, coremodel.ZeroNullInt64(1000), usage.InputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(800), usage.ImageInputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(5000), usage.OutputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(4000), usage.ImageOutputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(6000), usage.TotalTokens)
+	})
+
+	t.Run("WithoutOutputTokensDetails", func(t *testing.T) {
+		// Old format where all output tokens are image tokens
+		imageUsage := model.ImageUsage{
+			InputTokens:  1000,
+			OutputTokens: 4000, // all image tokens
+			TotalTokens:  5000,
+			InputTokensDetails: model.ImageInputTokensDetails{
+				TextTokens:  200,
+				ImageTokens: 800,
+			},
+			// OutputTokensDetails is nil
+		}
+
+		usage := imageUsage.ToModelUsage()
+
+		assert.Equal(t, coremodel.ZeroNullInt64(1000), usage.InputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(800), usage.ImageInputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(4000), usage.OutputTokens)
+		assert.Equal(
+			t,
+			coremodel.ZeroNullInt64(4000),
+			usage.ImageOutputTokens,
+		) // same as OutputTokens
+		assert.Equal(t, coremodel.ZeroNullInt64(5000), usage.TotalTokens)
+	})
+
+	t.Run("ZeroValues", func(t *testing.T) {
+		imageUsage := model.ImageUsage{
+			InputTokens:  0,
+			OutputTokens: 0,
+			TotalTokens:  0,
+			InputTokensDetails: model.ImageInputTokensDetails{
+				TextTokens:  0,
+				ImageTokens: 0,
+			},
+		}
+
+		usage := imageUsage.ToModelUsage()
+
+		assert.Equal(t, coremodel.ZeroNullInt64(0), usage.InputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(0), usage.ImageInputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(0), usage.OutputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(0), usage.ImageOutputTokens)
+		assert.Equal(t, coremodel.ZeroNullInt64(0), usage.TotalTokens)
 	})
 }
