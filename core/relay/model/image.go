@@ -58,6 +58,7 @@ func (i *ImageUsage) ToModelUsage() model.Usage {
 		// When OutputTokensDetails is not provided, all output tokens are image tokens
 		usage.ImageOutputTokens = model.ZeroNullInt64(i.OutputTokens)
 	}
+
 	return usage
 }
 
