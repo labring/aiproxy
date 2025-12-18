@@ -124,8 +124,11 @@ func buildGenerationConfig(
 
 	// https://ai.google.dev/gemini-api/docs/thinking
 	if config.ThinkingConfig == nil &&
-		strings.Contains(meta.ActualModel, "-2.5") ||
-		strings.Contains(meta.ActualModel, "-3") {
+		(strings.Contains(meta.ActualModel, "-2.5") ||
+			strings.Contains(meta.ActualModel, "-3")) &&
+		// disable vertexai image model include thoughts
+		// because error call gemini-3-pro-image-preview model
+		(meta.Channel.Type == model.ChannelTypeVertexAI && !strings.Contains(meta.ActualModel, "image")) {
 		config.ThinkingConfig = &relaymodel.GeminiThinkingConfig{
 			IncludeThoughts: true,
 		}
