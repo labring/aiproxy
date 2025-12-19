@@ -370,12 +370,13 @@ func buildContents(
 
 			for _, part := range openaiContent {
 				msgPart := buildMessageParts(part)
-				if msgPart.InlineData != nil {
-					imageTasks = append(imageTasks, msgPart)
+
+				if msgPart.Text == "" && msgPart.InlineData == nil {
+					continue
 				}
 
-				if msgPart.Text == "" {
-					continue
+				if msgPart.InlineData != nil {
+					imageTasks = append(imageTasks, msgPart)
 				}
 
 				content.Parts = append(content.Parts, msgPart)
