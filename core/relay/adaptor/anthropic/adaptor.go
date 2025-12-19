@@ -63,7 +63,7 @@ func ModelDefaultMaxTokens(model string) int {
 	case strings.Contains(model, "opus-4-5"):
 		return 64000
 	case strings.Contains(model, "sonnet-4-5"):
-		return 200000
+		return 64000
 	case strings.Contains(model, "4-1"):
 		return 204800
 	case strings.Contains(model, "sonnet-4-"):
