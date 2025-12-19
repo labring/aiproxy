@@ -16,6 +16,10 @@ on:
       - "**/*.md"
       - "**/*.yaml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO != '' && secrets.DOCKERHUB_REPO || secrets.DOCKERHUB_USERNAME != '' && format('{0}/{1}', secrets.DOCKERHUB_USERNAME, 'aiproxy') || '' }}
   GHCR_REPO: ghcr.io/${{ github.repository }}
