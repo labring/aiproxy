@@ -155,7 +155,7 @@ func getChartDataMinute(
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
+		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	query = query.
 		Select(selectFields).
@@ -214,7 +214,7 @@ func getGroupChartDataMinute(
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
+		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	query = query.
 		Select(selectFields).
@@ -560,7 +560,7 @@ func GetTimeSeriesModelData(
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
 		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
 		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count"
+		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	var rawData []SummaryDataV2
 
@@ -644,7 +644,7 @@ func GetGroupTimeSeriesModelData(
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
 		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
 		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count"
+		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	var rawData []SummaryDataV2
 
@@ -892,7 +892,7 @@ func getTimeSeriesModelDataMinute(
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
 		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
 		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count"
+		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	var rawData []SummaryDataV2
 
@@ -962,7 +962,7 @@ func getGroupTimeSeriesModelDataMinute(
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
 		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
 		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count"
+		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	var rawData []SummaryDataV2
 

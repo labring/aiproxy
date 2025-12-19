@@ -36,6 +36,7 @@ type Count struct {
 	Status400Count ZeroNullInt64 `json:"status_400_count"`
 	Status429Count ZeroNullInt64 `json:"status_429_count"`
 	Status500Count ZeroNullInt64 `json:"status_500_count"`
+	CacheHitCount  ZeroNullInt64 `json:"cache_hit_count"`
 }
 
 func (c *Count) AddRequest(status int, isRetry bool) {
@@ -79,6 +80,7 @@ func (c *Count) Add(other Count) {
 	c.Status400Count += other.Status400Count
 	c.Status429Count += other.Status429Count
 	c.Status500Count += other.Status500Count
+	c.CacheHitCount += other.CacheHitCount
 }
 
 type SummaryData struct {
@@ -226,6 +228,13 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		)
 	}
 
+	if d.CacheHitCount > 0 {
+		data["cache_hit_count"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cache_hit_count, 0) + ?", tableName),
+			d.CacheHitCount,
+		)
+	}
+
 	return data
 }
 
@@ -359,7 +368,7 @@ func getChartData(
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
+		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	query = query.
 		Select(selectFields).
@@ -417,7 +426,7 @@ func getGroupChartData(
 		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
 		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
 		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count"
+		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
 
 	query = query.
 		Select(selectFields).

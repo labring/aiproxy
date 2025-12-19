@@ -586,6 +586,9 @@ func updateGroupSummaryData(
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
+	if usage.CachedTokens > 0 {
+		groupSummary.CacheHitCount++
+	}
 }
 
 func updateGroupSummaryDataMinute(
@@ -633,6 +636,9 @@ func updateGroupSummaryDataMinute(
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
+	if usage.CachedTokens > 0 {
+		groupSummary.CacheHitCount++
+	}
 }
 
 func updateSummaryData(
@@ -681,6 +687,9 @@ func updateSummaryData(
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
+	if usage.CachedTokens > 0 {
+		summary.CacheHitCount++
+	}
 }
 
 func updateSummaryDataMinute(
@@ -729,4 +738,7 @@ func updateSummaryDataMinute(
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
+	if usage.CachedTokens > 0 {
+		summary.CacheHitCount++
+	}
 }
