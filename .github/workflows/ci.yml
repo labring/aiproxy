@@ -18,6 +18,10 @@ on:
       - "**/*.md"
       - "**/*.yaml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   golangci-lint-aiproxy:
     name: Lint AI Proxy
