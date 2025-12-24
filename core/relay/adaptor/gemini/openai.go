@@ -226,9 +226,14 @@ func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *relaymodel.G
 		return nil
 	}
 
+	defaultMode := relaymodel.GeminiFunctionCallingModeAuto
+	if strings.Contains(textRequest.Model, "gemini-3") {
+		defaultMode = ""
+	}
+
 	toolConfig := relaymodel.GeminiToolConfig{
 		FunctionCallingConfig: relaymodel.GeminiFunctionCallingConfig{
-			Mode: relaymodel.GeminiFunctionCallingModeAuto,
+			Mode: defaultMode,
 		},
 	}
 	switch mode := textRequest.ToolChoice.(type) {
