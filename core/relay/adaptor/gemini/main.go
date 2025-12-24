@@ -110,6 +110,31 @@ func ensureRole(node *ast.Node) error {
 	})
 }
 
+func ensureGemini3RemoveToolConfigFunctionCallingAUTOModeConfig(node *ast.Node) error {
+	toolConfig := node.Get("toolConfig")
+	if !toolConfig.Exists() {
+		return nil
+	}
+
+	return toolConfig.ForEach(func(_ ast.Sequence, config *ast.Node) bool {
+		functionCallingConfig := config.Get("functionCallingConfig")
+		if !functionCallingConfig.Exists() {
+			return true
+		}
+
+		modeNode := functionCallingConfig.Get("mode")
+		if !modeNode.Exists() {
+			return true
+		}
+
+		modeStr, _ := modeNode.String()
+		if modeStr == relaymodel.GeminiFunctionCallingModeAuto {
+			_, _ = config.Unset("functionCallingConfig")
+		}
+		return true
+	})
+}
+
 func NativeConvertRequest(
 	meta *meta.Meta,
 	req *http.Request,
@@ -126,6 +151,11 @@ func NativeConvertRequest(
 	}
 
 	err = ensureRole(&node)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	err = ensureGemini3RemoveToolConfigFunctionCallingAUTOModeConfig(&node)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

@@ -247,4 +247,26 @@ var DefaultPredefinedPatches = []PatchRule{
 			},
 		},
 	},
+	{
+		Name:        "gemini3_remove_tool_choice_auto",
+		Description: "Remove tool_choice when it is 'auto' for Gemini 3 models",
+		Conditions: []PatchCondition{
+			{
+				Key:      "model",
+				Operator: OperatorContains,
+				Value:    "gemini-3",
+			},
+			{
+				Key:      "tool_choice",
+				Operator: OperatorEquals,
+				Value:    "auto",
+			},
+		},
+		Operations: []PatchOperation{
+			{
+				Op:  OpDelete,
+				Key: "tool_choice",
+			},
+		},
+	},
 }
