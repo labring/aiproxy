@@ -160,7 +160,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 			Role:      response.Message.Role,
 			Content:   response.Message.Content,
 			ToolCalls: getToolCalls(response),
-			ReasoningContent: response.Thinking,
+			ReasoningContent: response.Message.Thinking,
 		}
 	}
 
