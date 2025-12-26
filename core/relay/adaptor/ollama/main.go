@@ -195,6 +195,7 @@ func streamResponse2OpenAI(
 		choice.Delta = relaymodel.Message{
 			Role:      ollamaResponse.Message.Role,
 			Content:   ollamaResponse.Message.Content,
+			ReasoningContent:  ollamaResponse.Message.Thinking,
 			ToolCalls: getToolCalls(ollamaResponse),
 		}
 	}
