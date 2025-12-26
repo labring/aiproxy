@@ -159,6 +159,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 		choice.Message = relaymodel.Message{
 			Role:      response.Message.Role,
 			Content:   response.Message.Content,
+			ReasoningContent: response.Message.Thinking,
 			ToolCalls: getToolCalls(response),
 		}
 	}
@@ -194,6 +195,7 @@ func streamResponse2OpenAI(
 		choice.Delta = relaymodel.Message{
 			Role:      ollamaResponse.Message.Role,
 			Content:   ollamaResponse.Message.Content,
+			ReasoningContent: ollamaResponse.Message.Thinking,
 			ToolCalls: getToolCalls(ollamaResponse),
 		}
 	}
