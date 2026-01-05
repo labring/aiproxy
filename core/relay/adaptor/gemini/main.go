@@ -131,6 +131,7 @@ func ensureGemini3RemoveToolConfigFunctionCallingAUTOModeConfig(node *ast.Node) 
 		if modeStr == relaymodel.GeminiFunctionCallingModeAuto {
 			_, _ = config.Unset("functionCallingConfig")
 		}
+
 		return true
 	})
 }
