@@ -189,6 +189,11 @@ type fakeStreamResponseWriter struct {
 	toolCalls        []*relaymodel.ToolCall
 	contentParts     []relaymodel.MessageContent // for image/multimodal content
 	signature        string                      // for thought signature
+
+	// Azure OpenAI content filtering fields
+	promptFilterResults  *ast.Node // prompt-level filter results (from first chunk)
+	contentFilterResults *ast.Node // choice-level filter results
+	contentFilterResult  *ast.Node // choice-level filter result (alternative field name)
 }
 
 // ignore flush
@@ -230,12 +235,32 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 		rw.usageNode = usageNode
 	}
 
+	// Extract prompt_filter_results from first chunk (only save once)
+	if rw.promptFilterResults == nil {
+		promptFilterResultsNode := node.Get("prompt_filter_results")
+		if err := promptFilterResultsNode.Check(); err == nil {
+			rw.promptFilterResults = promptFilterResultsNode
+		}
+	}
+
 	choicesNode := node.Get("choices")
 	if err := choicesNode.Check(); err != nil {
 		return err
 	}
 
 	return choicesNode.ForEach(func(_ ast.Sequence, choiceNode *ast.Node) bool {
+		// Extract content_filter_results from choice (keep last non-empty value)
+		contentFilterResultsNode := choiceNode.Get("content_filter_results")
+		if err := contentFilterResultsNode.Check(); err == nil {
+			rw.contentFilterResults = contentFilterResultsNode
+		}
+
+		// Extract content_filter_result from choice (alternative field name, keep last non-empty value)
+		contentFilterResultNode := choiceNode.Get("content_filter_result")
+		if err := contentFilterResultNode.Check(); err == nil {
+			rw.contentFilterResult = contentFilterResultNode
+		}
+
 		deltaNode := choiceNode.Get("delta")
 		if err := deltaNode.Check(); err != nil {
 			return true
@@ -371,15 +396,40 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 		}
 	}
 
-	_, err = lastChunk.SetAny("choices", []any{
-		map[string]any{
-			"index":         0,
-			"message":       message,
-			"finish_reason": rw.finishReason,
-		},
-	})
+	// Build choice with content filter fields
+	choice := map[string]any{
+		"index":         0,
+		"message":       message,
+		"finish_reason": rw.finishReason,
+	}
+
+	// Add content_filter_results to choice if present
+	if rw.contentFilterResults != nil {
+		contentFilterResultsRaw, err := rw.contentFilterResults.Interface()
+		if err == nil {
+			choice["content_filter_results"] = contentFilterResultsRaw
+		}
+	}
+
+	// Add content_filter_result to choice if present (alternative field name)
+	if rw.contentFilterResult != nil {
+		contentFilterResultRaw, err := rw.contentFilterResult.Interface()
+		if err == nil {
+			choice["content_filter_result"] = contentFilterResultRaw
+		}
+	}
+
+	_, err = lastChunk.SetAny("choices", []any{choice})
 	if err != nil {
 		return nil, err
+	}
+
+	// Add prompt_filter_results to response if present
+	if rw.promptFilterResults != nil {
+		_, err = lastChunk.Set("prompt_filter_results", *rw.promptFilterResults)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return lastChunk.MarshalJSON()

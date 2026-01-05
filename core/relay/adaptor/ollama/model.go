@@ -18,7 +18,7 @@ type Message struct {
 	ToolCallID string   `json:"tool_call_id,omitempty"`
 	ToolCalls  []*Tool  `json:"tool_calls,omitempty"`
 	Images     []string `json:"images,omitempty"`
-	Thinking   string	`json:"thinking,omitempty"`
+	Thinking   string   `json:"thinking,omitempty"`
 }
 
 type Tool struct {

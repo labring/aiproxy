@@ -157,10 +157,10 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 	}
 	if response.Message != nil {
 		choice.Message = relaymodel.Message{
-			Role:      response.Message.Role,
-			Content:   response.Message.Content,
+			Role:             response.Message.Role,
+			Content:          response.Message.Content,
 			ReasoningContent: response.Message.Thinking,
-			ToolCalls: getToolCalls(response),
+			ToolCalls:        getToolCalls(response),
 		}
 	}
 
@@ -193,10 +193,10 @@ func streamResponse2OpenAI(
 	}
 	if ollamaResponse.Message != nil {
 		choice.Delta = relaymodel.Message{
-			Role:      ollamaResponse.Message.Role,
-			Content:   ollamaResponse.Message.Content,
+			Role:             ollamaResponse.Message.Role,
+			Content:          ollamaResponse.Message.Content,
 			ReasoningContent: ollamaResponse.Message.Thinking,
-			ToolCalls: getToolCalls(ollamaResponse),
+			ToolCalls:        getToolCalls(ollamaResponse),
 		}
 	}
 
