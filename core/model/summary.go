@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -13,6 +14,182 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// SummarySelectFields is a list of field names to select when querying summary data
+type SummarySelectFields []string
+
+// allSummaryFields contains all available summary field names
+var allSummaryFields = []string{
+	// Count fields
+	"request_count", "retry_count", "exception_count",
+	"status4xx_count", "status5xx_count", "status400_count",
+	"status429_count", "status500_count", "cache_hit_count",
+	// Usage fields
+	"input_tokens", "image_input_tokens", "audio_input_tokens",
+	"output_tokens", "image_output_tokens", "cached_tokens",
+	"cache_creation_tokens", "total_tokens", "web_search_count",
+	// Other fields
+	"used_amount", "total_time_milliseconds", "total_ttfb_milliseconds",
+}
+
+// summaryFieldGroups maps group names to their fields
+var summaryFieldGroups = map[string][]string{
+	"count": {
+		"request_count", "retry_count", "exception_count",
+		"status4xx_count", "status5xx_count", "status400_count",
+		"status429_count", "status500_count", "cache_hit_count",
+	},
+	"usage": {
+		"input_tokens", "image_input_tokens", "audio_input_tokens",
+		"output_tokens", "image_output_tokens", "cached_tokens",
+		"cache_creation_tokens", "total_tokens", "web_search_count",
+	},
+	"time": {"total_time_milliseconds", "total_ttfb_milliseconds"},
+}
+
+// summaryFieldAliases maps alternative field names to canonical names
+var summaryFieldAliases = map[string]string{
+	"total_time": "total_time_milliseconds",
+	"total_ttfb": "total_ttfb_milliseconds",
+}
+
+// IsEmpty checks if no fields are selected (nil or empty slice means all fields)
+func (f SummarySelectFields) IsEmpty() bool {
+	return len(f) == 0
+}
+
+// ParseSummaryFields parses a comma-separated string of field names into SummarySelectFields
+// Returns nil (meaning all fields) if the input is empty
+// Supports field groups: "count", "usage", "time", "all"
+// Example: "request_count,exception_count,cache_hit_count" or "count,used_amount"
+func ParseSummaryFields(fieldsStr string) SummarySelectFields {
+	if fieldsStr == "" {
+		return nil
+	}
+
+	// Create a set to avoid duplicates
+	fieldSet := make(map[string]struct{})
+
+	for part := range strings.SplitSeq(fieldsStr, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Check if it's a group
+		if part == "all" {
+			return nil // nil means all fields
+		}
+
+		if groupFields, ok := summaryFieldGroups[part]; ok {
+			for _, f := range groupFields {
+				fieldSet[f] = struct{}{}
+			}
+
+			continue
+		}
+
+		// Check if it's an alias
+		if canonical, ok := summaryFieldAliases[part]; ok {
+			part = canonical
+		}
+
+		// Check if it's a valid field
+		if slices.Contains(allSummaryFields, part) {
+			fieldSet[part] = struct{}{}
+		}
+	}
+
+	// If no valid fields were found, return nil (all fields)
+	if len(fieldSet) == 0 {
+		return nil
+	}
+
+	result := make(SummarySelectFields, 0, len(fieldSet))
+	for field := range fieldSet {
+		result = append(result, field)
+	}
+
+	return result
+}
+
+// BuildSelectFields generates SQL select clause based on selected fields
+// timestampField should be "hour_timestamp" or "minute_timestamp"
+// Security: Only fields in allSummaryFields whitelist are allowed to prevent SQL injection
+func (f SummarySelectFields) BuildSelectFields(timestampField string) string {
+	var sb strings.Builder
+
+	sb.WriteString(timestampField)
+	sb.WriteString(" as timestamp")
+
+	// If no fields specified, select all
+	fields := f
+	if fields.IsEmpty() {
+		fields = allSummaryFields
+	}
+
+	// Deduplicate and validate fields against whitelist
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		// Skip duplicates
+		if _, exists := seen[field]; exists {
+			continue
+		}
+
+		// Security: Only allow fields in whitelist (defense in depth)
+		if !slices.Contains(allSummaryFields, field) {
+			continue
+		}
+
+		seen[field] = struct{}{}
+
+		sb.WriteString(", sum(")
+		sb.WriteString(field)
+		sb.WriteString(") as ")
+		sb.WriteString(field)
+	}
+
+	return sb.String()
+}
+
+// BuildSelectFieldsV2 generates SQL select clause with additional grouping fields for V2 API
+// groupFields should be fields like "channel_id, model" or "group_id, token_name, model"
+func (f SummarySelectFields) BuildSelectFieldsV2(timestampField, groupFields string) string {
+	var sb strings.Builder
+
+	sb.WriteString(timestampField)
+	sb.WriteString(" as timestamp, ")
+	sb.WriteString(groupFields)
+
+	// If no fields specified, select all
+	fields := f
+	if fields.IsEmpty() {
+		fields = allSummaryFields
+	}
+
+	// Deduplicate and validate fields against whitelist
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		// Skip duplicates
+		if _, exists := seen[field]; exists {
+			continue
+		}
+
+		// Security: Only allow fields in whitelist (defense in depth)
+		if !slices.Contains(allSummaryFields, field) {
+			continue
+		}
+
+		seen[field] = struct{}{}
+
+		sb.WriteString(", sum(")
+		sb.WriteString(field)
+		sb.WriteString(") as ")
+		sb.WriteString(field)
+	}
+
+	return sb.String()
+}
 
 // only summary result only requests
 type Summary struct {
@@ -343,6 +520,7 @@ func getChartData(
 	modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]ChartData, error) {
 	query := LogDB.Model(&Summary{})
 
@@ -363,12 +541,7 @@ func getChartData(
 		query = query.Where("hour_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "hour_timestamp as timestamp, sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(retry_count) as retry_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
-		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFields("hour_timestamp")
 
 	query = query.
 		Select(selectFields).
@@ -398,6 +571,7 @@ func getGroupChartData(
 	tokenName, modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]ChartData, error) {
 	query := LogDB.Model(&GroupSummary{})
 	if group != "" {
@@ -421,12 +595,7 @@ func getGroupChartData(
 		query = query.Where("hour_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "hour_timestamp as timestamp, sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
-		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFields("hour_timestamp")
 
 	query = query.
 		Select(selectFields).
@@ -730,9 +899,10 @@ func GetDashboardData(
 	channelID int,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) (*DashboardResponse, error) {
 	if timeSpan == TimeSpanMinute {
-		return getDashboardDataMinute(start, end, modelName, channelID, timeSpan, timezone)
+		return getDashboardDataMinute(start, end, modelName, channelID, timeSpan, timezone, fields)
 	}
 
 	if end.IsZero() {
@@ -752,7 +922,7 @@ func GetDashboardData(
 	g.Go(func() error {
 		var err error
 
-		chartData, err = getChartData(start, end, channelID, modelName, timeSpan, timezone)
+		chartData, err = getChartData(start, end, channelID, modelName, timeSpan, timezone, fields)
 		return err
 	})
 
@@ -788,6 +958,7 @@ func GetGroupDashboardData(
 	modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) (*GroupDashboardResponse, error) {
 	if timeSpan == TimeSpanMinute {
 		return getGroupDashboardDataMinute(
@@ -798,6 +969,7 @@ func GetGroupDashboardData(
 			modelName,
 			timeSpan,
 			timezone,
+			fields,
 		)
 	}
 
@@ -830,6 +1002,7 @@ func GetGroupDashboardData(
 			modelName,
 			timeSpan,
 			timezone,
+			fields,
 		)
 
 		return err

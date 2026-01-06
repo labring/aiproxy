@@ -129,6 +129,7 @@ func getChartDataMinute(
 	modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]ChartData, error) {
 	query := LogDB.Model(&SummaryMinute{})
 
@@ -149,13 +150,7 @@ func getChartDataMinute(
 		query = query.Where("minute_timestamp <= ?", end.Unix())
 	}
 
-	// Only include max metrics when we have specific channel and model
-	const selectFields = "minute_timestamp as timestamp, sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(retry_count) as retry_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
-		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFields("minute_timestamp")
 
 	query = query.
 		Select(selectFields).
@@ -185,6 +180,7 @@ func getGroupChartDataMinute(
 	tokenName, modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]ChartData, error) {
 	query := LogDB.Model(&GroupSummaryMinute{})
 	if group != "" {
@@ -208,13 +204,7 @@ func getGroupChartDataMinute(
 		query = query.Where("minute_timestamp <= ?", end.Unix())
 	}
 
-	// Only include max metrics when we have specific channel and model
-	const selectFields = "minute_timestamp as timestamp, sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, " +
-		"sum(cached_tokens) as cached_tokens, sum(cache_creation_tokens) as cache_creation_tokens, " +
-		"sum(total_tokens) as total_tokens, sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFields("minute_timestamp")
 
 	query = query.
 		Select(selectFields).
@@ -378,6 +368,7 @@ func getDashboardDataMinute(
 	channelID int,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) (*DashboardResponse, error) {
 	if end.IsZero() {
 		end = time.Now()
@@ -396,7 +387,10 @@ func getDashboardDataMinute(
 	g.Go(func() error {
 		var err error
 
-		chartData, err = getChartDataMinute(start, end, channelID, modelName, timeSpan, timezone)
+		chartData, err = getChartDataMinute(
+			start, end, channelID, modelName, timeSpan, timezone, fields,
+		)
+
 		return err
 	})
 
@@ -432,6 +426,7 @@ func getGroupDashboardDataMinute(
 	modelName string,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) (*GroupDashboardResponse, error) {
 	if group == "" {
 		return nil, errors.New("group is required")
@@ -462,6 +457,7 @@ func getGroupDashboardDataMinute(
 			modelName,
 			timeSpan,
 			timezone,
+			fields,
 		)
 
 		return err
@@ -523,9 +519,12 @@ func GetTimeSeriesModelData(
 	start, end time.Time,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
 	if timeSpan == TimeSpanMinute {
-		return getTimeSeriesModelDataMinute(channelID, modelName, start, end, timeSpan, timezone)
+		return getTimeSeriesModelDataMinute(
+			channelID, modelName, start, end, timeSpan, timezone, fields,
+		)
 	}
 
 	if end.IsZero() {
@@ -553,14 +552,7 @@ func GetTimeSeriesModelData(
 		query = query.Where("hour_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "hour_timestamp as timestamp, channel_id, model, " +
-		"sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(retry_count) as retry_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
-		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
-		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFieldsV2("hour_timestamp", "channel_id, model")
 
 	var rawData []SummaryDataV2
 
@@ -599,6 +591,7 @@ func GetGroupTimeSeriesModelData(
 	start, end time.Time,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
 	if timeSpan == TimeSpanMinute {
 		return getGroupTimeSeriesModelDataMinute(
@@ -609,6 +602,7 @@ func GetGroupTimeSeriesModelData(
 			end,
 			timeSpan,
 			timezone,
+			fields,
 		)
 	}
 
@@ -637,14 +631,7 @@ func GetGroupTimeSeriesModelData(
 		query = query.Where("hour_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "hour_timestamp as timestamp, group_id, token_name, model, " +
-		"sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
-		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
-		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFieldsV2("hour_timestamp", "group_id, token_name, model")
 
 	var rawData []SummaryDataV2
 
@@ -859,6 +846,7 @@ func getTimeSeriesModelDataMinute(
 	start, end time.Time,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
 	if end.IsZero() {
 		end = time.Now()
@@ -885,14 +873,7 @@ func getTimeSeriesModelDataMinute(
 		query = query.Where("minute_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "minute_timestamp as timestamp, channel_id, model, " +
-		"sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(retry_count) as retry_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
-		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
-		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFieldsV2("minute_timestamp", "channel_id, model")
 
 	var rawData []SummaryDataV2
 
@@ -929,6 +910,7 @@ func getGroupTimeSeriesModelDataMinute(
 	start, end time.Time,
 	timeSpan TimeSpanType,
 	timezone *time.Location,
+	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
 	if end.IsZero() {
 		end = time.Now()
@@ -955,14 +937,7 @@ func getGroupTimeSeriesModelDataMinute(
 		query = query.Where("minute_timestamp <= ?", end.Unix())
 	}
 
-	const selectFields = "minute_timestamp as timestamp, group_id, token_name, model, " +
-		"sum(used_amount) as used_amount, " +
-		"sum(request_count) as request_count, sum(exception_count) as exception_count, sum(status4xx_count) as status4xx_count, sum(status5xx_count) as status5xx_count, sum(status400_count) as status400_count, sum(status429_count) as status429_count, sum(status500_count) as status500_count, " +
-		"sum(total_time_milliseconds) as total_time_milliseconds, sum(total_ttfb_milliseconds) as total_ttfb_milliseconds, " +
-		"sum(input_tokens) as input_tokens, sum(image_input_tokens) as image_input_tokens, sum(audio_input_tokens) as audio_input_tokens, " +
-		"sum(output_tokens) as output_tokens, sum(image_output_tokens) as image_output_tokens, sum(cached_tokens) as cached_tokens, " +
-		"sum(cache_creation_tokens) as cache_creation_tokens, sum(total_tokens) as total_tokens, " +
-		"sum(web_search_count) as web_search_count, sum(cache_hit_count) as cache_hit_count"
+	selectFields := fields.BuildSelectFieldsV2("minute_timestamp", "group_id, token_name, model")
 
 	var rawData []SummaryDataV2
 
