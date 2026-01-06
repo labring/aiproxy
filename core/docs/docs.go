@@ -975,6 +975,12 @@ const docTemplate = `{
                         "description": "Time span type (minute, hour, day, month)",
                         "name": "timespan",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1058,6 +1064,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Time span type (minute, hour, day, month)",
                         "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
                         "in": "query"
                     }
                 ],
@@ -1185,6 +1197,12 @@ const docTemplate = `{
                         "description": "Time span type (minute, hour, day, month)",
                         "name": "timespan",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1271,6 +1289,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Time span type (minute, hour, day, month)",
                         "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
                         "in": "query"
                     }
                 ],
@@ -9915,6 +9939,9 @@ const docTemplate = `{
                 "cache_creation_tokens": {
                     "type": "integer"
                 },
+                "cache_hit_count": {
+                    "type": "integer"
+                },
                 "cached_tokens": {
                     "type": "integer"
                 },
@@ -9922,6 +9949,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_tokens": {
                     "type": "integer"
                 },
                 "input_tokens": {
@@ -10015,6 +10045,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "audio_tokens": {
+                    "type": "integer"
+                },
+                "image_tokens": {
                     "type": "integer"
                 },
                 "reasoning_tokens": {
@@ -10126,6 +10159,9 @@ const docTemplate = `{
                 "cache_creation_tokens": {
                     "type": "integer"
                 },
+                "cache_hit_count": {
+                    "type": "integer"
+                },
                 "cached_tokens": {
                     "type": "integer"
                 },
@@ -10145,6 +10181,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_tokens": {
                     "type": "integer"
                 },
                 "input_tokens": {
@@ -10546,6 +10585,9 @@ const docTemplate = `{
                 "cache_creation_tokens": {
                     "type": "integer"
                 },
+                "cache_hit_count": {
+                    "type": "integer"
+                },
                 "cached_tokens": {
                     "type": "integer"
                 },
@@ -10565,6 +10607,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_tokens": {
                     "type": "integer"
                 },
                 "input_tokens": {
@@ -10793,6 +10838,19 @@ const docTemplate = `{
                 }
             }
         },
+        "model.ImageOutputTokensDetails": {
+            "type": "object",
+            "properties": {
+                "image_tokens": {
+                    "description": "The number of image output tokens generated by the model.",
+                    "type": "integer"
+                },
+                "text_tokens": {
+                    "description": "The number of text output tokens generated by the model.",
+                    "type": "integer"
+                }
+            }
+        },
         "model.ImageRequest": {
             "type": "object",
             "properties": {
@@ -10879,6 +10937,14 @@ const docTemplate = `{
                 "output_tokens": {
                     "description": "The number of image tokens in the output image.",
                     "type": "integer"
+                },
+                "output_tokens_details": {
+                    "description": "The output token details for the image generation.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.ImageOutputTokensDetails"
+                        }
+                    ]
                 },
                 "total_tokens": {
                     "description": "The total number of tokens (images and text) used for the image generation.",
@@ -11418,6 +11484,12 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "image_input_price_unit": {
+                    "type": "integer"
+                },
+                "image_output_price": {
+                    "type": "number"
+                },
+                "image_output_price_unit": {
                     "type": "integer"
                 },
                 "input_price": {
@@ -12014,6 +12086,9 @@ const docTemplate = `{
                 "cache_creation_tokens": {
                     "type": "integer"
                 },
+                "cache_hit_count": {
+                    "type": "integer"
+                },
                 "cached_tokens": {
                     "type": "integer"
                 },
@@ -12027,6 +12102,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_tokens": {
                     "type": "integer"
                 },
                 "input_tokens": {
@@ -12304,6 +12382,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_tokens": {
                     "type": "integer"
                 },
                 "input_tokens": {
