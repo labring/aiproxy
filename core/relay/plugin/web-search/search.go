@@ -120,7 +120,9 @@ func fallback(
 	store adaptor.Store,
 	req *http.Request,
 	do adaptor.ConvertRequest,
+	reason string,
 ) (adaptor.ConvertResult, error) {
+	logrus.Debugf("web-search: fallback to original request, reason: %s", reason)
 	lazyRemoveSearchOption(meta)
 	return do.ConvertRequest(meta, store, req)
 }
@@ -140,23 +142,28 @@ func (p *WebSearch) ConvertRequest(
 	// Load plugin configuration
 	pluginConfig, err := p.getConfig(meta)
 	if err != nil {
+		logrus.Debugf("web-search: skipping, config load error: %v", err)
 		return do.ConvertRequest(meta, store, req)
 	}
 
 	// Skip if plugin is disabled
 	if !pluginConfig.Enable {
+		logrus.Debugf("web-search: skipping, plugin is disabled")
 		return do.ConvertRequest(meta, store, req)
 	}
 
 	// Apply default configuration values if needed
 	if err := p.validateAndApplyDefaults(&pluginConfig); err != nil {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, fmt.Sprintf("config validation failed: %v", err))
 	}
 
 	// Initialize search engines
 	engines, arxivExists, err := p.initializeSearchEngines(pluginConfig.SearchFrom)
-	if err != nil || len(engines) == 0 {
-		return fallback(meta, store, req, do)
+	if err != nil {
+		return fallback(meta, store, req, do, fmt.Sprintf("init engines failed: %v", err))
+	}
+	if len(engines) == 0 {
+		return fallback(meta, store, req, do, "no search engines configured")
 	}
 
 	// Read and parse request body
@@ -167,29 +174,29 @@ func (p *WebSearch) ConvertRequest(
 
 	var chatRequest map[string]any
 	if err := sonic.Unmarshal(body, &chatRequest); err != nil {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, fmt.Sprintf("unmarshal failed: %v", err))
 	}
 
 	// Check if web search should be enabled for this request
 	webSearchOptions, hasWebSearchOptions := chatRequest["web_search_options"].(map[string]any)
 	if !pluginConfig.ForceSearch && !hasWebSearchOptions {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "no web_search_options and forceSearch=false")
 	}
 
 	webSearchEnable, ok := webSearchOptions["enable"].(bool)
 	if ok && !webSearchEnable {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "web_search_options.enable=false")
 	}
 
 	// Extract user query from messages
 	messages, ok := chatRequest["messages"].([]any)
 	if !ok || len(messages) == 0 {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "no messages in request")
 	}
 
 	queryIndex, query := p.extractUserQuery(messages)
 	if query == "" {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "empty user query")
 	}
 
 	// Prepare search rewrite prompt if configured
@@ -208,17 +215,23 @@ func (p *WebSearch) ConvertRequest(
 		searchRewritePrompt,
 	)
 	if err != nil {
-		return fallback(meta, store, req, do)
+		return fallback(
+			meta,
+			store,
+			req,
+			do,
+			fmt.Sprintf("generate search contexts failed: %v", err),
+		)
 	}
 
 	if len(searchContexts) == 0 {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "no search contexts generated")
 	}
 
 	// Execute searches
 	searchResult := p.executeSearches(context.Background(), engines, searchContexts)
 	if searchResult.Count == 0 || len(searchResult.Results) == 0 {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, "no search results found")
 	}
 
 	setSearchCount(meta, searchResult.Count)
@@ -231,7 +244,7 @@ func (p *WebSearch) ConvertRequest(
 	// Create new request body
 	modifiedBody, err := sonic.Marshal(chatRequest)
 	if err != nil {
-		return fallback(meta, store, req, do)
+		return fallback(meta, store, req, do, fmt.Sprintf("marshal failed: %v", err))
 	}
 
 	// Update the request
@@ -578,10 +591,10 @@ func (p *WebSearch) executeSearches(
 		mu         sync.Mutex
 	)
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	g, ctx := errgroup.WithContext(ctx)
+	var g errgroup.Group
 
 	for _, eng := range engines {
 		for _, searchCtx := range searchContexts {
@@ -593,8 +606,9 @@ func (p *WebSearch) executeSearches(
 					ArxivCategory: searchCtx.ArxivCategory,
 				})
 				if err != nil {
-					logrus.Errorf("search error: %v", err)
-					return err
+					logrus.Errorf("web-search: search error with engine %T: %v", eng, err)
+					// Return nil to allow other searches to continue
+					return nil
 				}
 
 				mu.Lock()
