@@ -1,8 +1,10 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -79,6 +81,16 @@ func timeoutSecond(second int64) time.Duration {
 	return time.Duration(second) * time.Second
 }
 
+// jsonRawMessageDecodeHook handles decoding map or slice to json.RawMessage
+func jsonRawMessageDecodeHook(from reflect.Type, to reflect.Type, data any) (any, error) {
+	if to != reflect.TypeOf(json.RawMessage{}) {
+		return data, nil
+	}
+
+	// Marshal the data to JSON bytes for json.RawMessage fields
+	return sonic.Marshal(data)
+}
+
 func (c *ModelConfig) LoadPluginConfig(pluginName string, config any) error {
 	if len(c.Plugin) == 0 {
 		return nil
@@ -89,7 +101,16 @@ func (c *ModelConfig) LoadPluginConfig(pluginName string, config any) error {
 		return nil
 	}
 
-	return mapstructure.Decode(pluginConfig, config)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName:    "json",
+		Result:     config,
+		DecodeHook: jsonRawMessageDecodeHook,
+	})
+	if err != nil {
+		return err
+	}
+
+	return decoder.Decode(pluginConfig)
 }
 
 func (c *ModelConfig) LoadFromGroupModelConfig(groupModelConfig GroupModelConfig) ModelConfig {
