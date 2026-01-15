@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/trylock"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -77,7 +78,10 @@ func RecordError(key string) time.Time {
 
 	t, err := recordErrorRedis(key)
 	if err != nil {
-		log.Errorf("oncall: failed to record error in Redis: %v, falling back to memory", err)
+		// Throttle error logs to avoid flooding when Redis is down
+		if trylock.MemLock("oncall_record_error_log", 5*time.Second) {
+			log.Errorf("oncall: failed to record error in Redis: %v, falling back to memory", err)
+		}
 		return recordErrorMemory(key)
 	}
 
@@ -141,7 +145,10 @@ func HasError(key string) bool {
 
 	has, err := hasErrorRedis(key)
 	if err != nil {
-		log.Errorf("oncall: failed to check error state in Redis: %v, falling back to memory", err)
+		// Throttle error logs to avoid flooding when Redis is down
+		if trylock.MemLock("oncall_has_error_log", 5*time.Second) {
+			log.Errorf("oncall: failed to check error state in Redis: %v, falling back to memory", err)
+		}
 		return hasErrorMemory(key)
 	}
 
@@ -169,7 +176,10 @@ func hasErrorMemory(key string) bool {
 func ClearError(key string) {
 	if common.RedisEnabled {
 		if err := clearErrorRedis(key); err != nil {
-			log.Errorf("oncall: failed to clear error state in Redis: %v", err)
+			// Throttle error logs to avoid flooding when Redis is down
+			if trylock.MemLock("oncall_clear_error_log", 5*time.Second) {
+				log.Errorf("oncall: failed to clear error state in Redis: %v", err)
+			}
 		}
 	}
 
@@ -195,11 +205,10 @@ func HasAlerted(key string) bool {
 
 	has, err := hasAlertedRedis(key)
 	if err != nil {
-		log.Errorf(
-			"oncall: failed to check alerted state in Redis: %v, falling back to memory",
-			err,
-		)
-
+		// Throttle error logs to avoid flooding when Redis is down
+		if trylock.MemLock("oncall_has_alerted_log", 5*time.Second) {
+			log.Errorf("oncall: failed to check alerted state in Redis: %v, falling back to memory", err)
+		}
 		return hasAlertedMemory(key)
 	}
 
@@ -242,7 +251,10 @@ func MarkAlerted(key string) bool {
 
 	marked, err := markAlertedRedis(key)
 	if err != nil {
-		log.Errorf("oncall: failed to mark alerted in Redis: %v, falling back to memory", err)
+		// Throttle error logs to avoid flooding when Redis is down
+		if trylock.MemLock("oncall_mark_alerted_log", 5*time.Second) {
+			log.Errorf("oncall: failed to mark alerted in Redis: %v, falling back to memory", err)
+		}
 		return markAlertedMemory(key)
 	}
 
@@ -297,7 +309,10 @@ func markAlertedMemory(key string) bool {
 func ClearAlerted(key string) {
 	if common.RedisEnabled {
 		if err := clearAlertedRedis(key); err != nil {
-			log.Errorf("oncall: failed to clear alerted state in Redis: %v", err)
+			// Throttle error logs to avoid flooding when Redis is down
+			if trylock.MemLock("oncall_clear_alerted_log", 5*time.Second) {
+				log.Errorf("oncall: failed to clear alerted state in Redis: %v", err)
+			}
 		}
 	}
 

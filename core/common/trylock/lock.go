@@ -68,7 +68,7 @@ func Lock(key string, expiration time.Duration) bool {
 
 	result, err := common.RDB.SetNX(ctx, common.RedisKey(key), true, expiration).Result()
 	if err != nil {
-		if MemLock("lockerror", time.Second*3) {
+		if MemLock("lockerror", 5*time.Second) {
 			log.Errorf("try notify error: %v", err)
 		}
 		return MemLock(key, expiration)

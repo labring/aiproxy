@@ -11,6 +11,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func init() {
+	// Disable go-redis internal logging (connection pool errors, etc.)
+	// These are too verbose when Redis is down and we handle errors ourselves
+	redis.SetLogger(nopLogger{})
+}
+
+// nopLogger implements redis internal.Logging interface with no-op
+type nopLogger struct{}
+
+func (nopLogger) Printf(_ context.Context, _ string, _ ...any) {
+	// no-op
+}
+
 var (
 	RDB          *redis.Client
 	RedisEnabled = false

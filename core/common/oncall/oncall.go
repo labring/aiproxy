@@ -20,7 +20,9 @@ const (
 // AlertDBError triggers an oncall alert for database connection errors
 // Call this when a database operation fails with a connection error
 func AlertDBError(source string, err error) {
-	if !common.IsDBConnectionError(err) {
+	isConnErr := common.IsDBConnectionError(err)
+	log.Debugf("oncall: AlertDBError called, source=%s, isConnectionError=%v, err=%v", source, isConnErr, err)
+	if !isConnErr {
 		return
 	}
 
@@ -125,6 +127,7 @@ func SetDefault(oc OnCall) {
 
 // Alert sends an urgent alert using the default on-call handler
 func Alert(key string, persistDuration time.Duration, title, message string) {
+	log.Debugf("oncall: Alert called, key=%s, persistDuration=%v", key, persistDuration)
 	defaultOnCall.Alert(key, persistDuration, title, message)
 }
 
@@ -140,6 +143,7 @@ func (l *LarkOnCall) Alert(key string, persistDuration time.Duration, title, mes
 
 	// Check if we've already sent an alert for this key recently
 	if l.state.HasAlerted(key) {
+		log.Debugf("oncall: skipping alert for key=%s, already alerted recently", key)
 		return
 	}
 
