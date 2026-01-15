@@ -213,7 +213,7 @@ func SyncOptions(ctx context.Context, wg *sync.WaitGroup, frequency time.Duratio
 				)
 				oncall.AlertDBError("SyncOptions", err)
 			} else {
-				oncall.ClearDBError()
+				oncall.ClearDBError("SyncOptions")
 			}
 		}
 	}

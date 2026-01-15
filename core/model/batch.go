@@ -206,7 +206,7 @@ func ProcessBatchUpdatesSummary() {
 	if dbErr := errs.FirstDBConnectionError(); dbErr != nil {
 		oncall.AlertDBError("BatchProcessor", dbErr)
 	} else {
-		oncall.ClearDBError()
+		oncall.ClearDBError("BatchProcessor")
 	}
 }
 

@@ -11,33 +11,47 @@ import (
 )
 
 const (
-	// KeyDBConnection is the oncall key for database connection errors
-	KeyDBConnection = "db_connection_error"
+	// KeyDBConnectionPrefix is the oncall key prefix for database connection errors
+	KeyDBConnectionPrefix = "db_connection_error"
 	// DBErrorPersistDuration is how long database errors must persist before triggering urgent alert
 	DBErrorPersistDuration = 2 * time.Minute
+	// KeyGlobalPhoneCall is the key for global phone call throttling
+	// This ensures only one phone call is made even if multiple error sources trigger alerts
+	KeyGlobalPhoneCall = "oncall_global_phone_call"
 )
+
+// dbConnectionKey returns the oncall key for a specific source
+func dbConnectionKey(source string) string {
+	return KeyDBConnectionPrefix + ":" + source
+}
 
 // AlertDBError triggers an oncall alert for database connection errors
 // Call this when a database operation fails with a connection error
+// Each source has its own error tracking, but phone calls are globally throttled
 func AlertDBError(source string, err error) {
 	isConnErr := common.IsDBConnectionError(err)
-	log.Debugf("oncall: AlertDBError called, source=%s, isConnectionError=%v, err=%v", source, isConnErr, err)
+	log.Debugf(
+		"oncall: AlertDBError called, source=%s, isConnectionError=%v, err=%v",
+		source,
+		isConnErr,
+		err,
+	)
 	if !isConnErr {
 		return
 	}
 
 	Alert(
-		KeyDBConnection,
+		dbConnectionKey(source),
 		DBErrorPersistDuration,
 		"Database Connection Error",
 		source+": "+err.Error(),
 	)
 }
 
-// ClearDBError clears the database connection error state
+// ClearDBError clears the database connection error state for a specific source
 // Call this when database operations succeed
-func ClearDBError() {
-	Clear(KeyDBConnection)
+func ClearDBError(source string) {
+	Clear(dbConnectionKey(source))
 }
 
 // OnCall handles urgent alerts via Lark (Feishu) API
@@ -206,9 +220,11 @@ func (l *LarkOnCall) Clear(key string) {
 }
 
 func (l *LarkOnCall) sendAlert(key, title, message string) {
-	// Mark as alerted to prevent duplicate alerts
-	if !l.state.MarkAlerted(key) {
-		return // Already alerted
+	// Use global throttling for phone calls - even if multiple keys have errors,
+	// only one phone call is made within the cooldown period
+	if !l.state.MarkAlerted(KeyGlobalPhoneCall) {
+		log.Debugf("oncall: skipping phone call for key=%s, global phone call throttled", key)
+		return // Already sent a phone call recently
 	}
 
 	log.Warnf(
@@ -241,9 +257,9 @@ func (l *LarkOnCall) sendAlert(key, title, message string) {
 		successCount++
 	}
 
-	// If no messages were sent successfully, clear alerted state so we can retry
+	// If no messages were sent successfully, clear global alerted state so we can retry
 	if successCount == 0 {
 		log.Error("oncall: failed to send alert to any user, will retry")
-		l.state.ClearAlerted(key)
+		l.state.ClearAlerted(KeyGlobalPhoneCall)
 	}
 }

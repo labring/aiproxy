@@ -1309,7 +1309,7 @@ func SyncModelConfigAndChannelCache(
 				)
 				oncall.AlertDBError("SyncModelConfigAndChannelCache", err)
 			} else {
-				oncall.ClearDBError()
+				oncall.ClearDBError("SyncModelConfigAndChannelCache")
 			}
 		}
 	}
