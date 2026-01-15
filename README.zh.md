@@ -7,7 +7,8 @@
   [![Go Version](https://img.shields.io/github/go-mod/go-version/labring/aiproxy?filename=core%2Fgo.mod)](https://github.com/labring/aiproxy/blob/main/core/go.mod)
   [![Build Status](https://img.shields.io/github/actions/workflow/status/labring/aiproxy/release.yml?branch=main)](https://github.com/labring/aiproxy/actions)
 
-  [English](./README.md) | [简体中文](./README.zh.md)
+[English](./README.md) | [简体中文](./README.zh.md)
+
 </div>
 
 ---
@@ -79,22 +80,22 @@ graph TB
     Gateway --> Router[智能路由器]
     Gateway --> Monitor[监控与分析]
     Gateway --> Plugins[插件系统]
-    
+
     Plugins --> CachePlugin[缓存插件]
     Plugins --> SearchPlugin[网络搜索插件]
     Plugins --> ThinkSplitPlugin[思考模式插件]
     Plugins --> StreamFakePlugin[流式伪装插件]
-    
+
     Router --> Provider1[OpenAI]
     Router --> Provider2[Anthropic]
     Router --> Provider3[Azure OpenAI]
     Router --> ProviderN[其他提供商]
-    
+
     Gateway --> MCP[MCP 服务器]
     MCP --> PublicMCP[公共 MCP]
     MCP --> GroupMCP[组织 MCP]
     MCP --> EmbedMCP[嵌入式 MCP]
-    
+
     Monitor --> Alerts[告警系统]
     Monitor --> Analytics[分析仪表板]
     Monitor --> Logs[审计日志]
@@ -283,7 +284,7 @@ curl -X POST http://localhost:3000/v1/messages \
 ### FastGPT 集成
 
 与 FastGPT 无缝集成，增强 AI 工作流：
-[FastGPT 文档](https://doc.tryfastgpt.ai/docs/development/modelconfig/ai-proxy/)
+[FastGPT 文档](https://doc.fastgpt.cn/docs/introduction/development/modelConfig/ai-proxy)
 
 ### Claude Code 集成
 
@@ -330,6 +331,7 @@ wire_api = "chat"
 ```
 
 **协议转换支持**：
+
 - **仅支持 Responses 的模型**：AI Proxy 自动将 Chat/Claude/Gemini 请求转换为 Responses API 格式，支持仅提供 Responses API 的模型
 - **多协议访问**：使用任意协议（Chat Completions、Claude Messages 或 Gemini）访问仅支持 Responses 的模型
 - **透明转换**：无需客户端修改 - AI Proxy 自动处理协议转换
