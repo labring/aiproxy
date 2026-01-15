@@ -19,6 +19,7 @@ import (
 
 const (
 	ToolCacheKey = "tool:%s:%d" // mcp_id:updated_at
+	redisTimeout = 2 * time.Second
 )
 
 type redisToolSlice []mcp.Tool
@@ -121,11 +122,14 @@ func CacheSetTools(mcpID string, updatedAt int64, tools []mcp.Tool) error {
 	key := getToolCacheKey(mcpID, updatedAt)
 
 	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
 		redisKey := common.RedisKeyf(ToolCacheKey, mcpID, updatedAt)
 		pipe := common.RDB.Pipeline()
-		pipe.HSet(context.Background(), redisKey, tools)
-		pipe.Expire(context.Background(), redisKey, time.Hour)
-		_, err := pipe.Exec(context.Background())
+		pipe.HSet(ctx, redisKey, tools)
+		pipe.Expire(ctx, redisKey, time.Hour)
+		_, err := pipe.Exec(ctx)
 
 		return err
 	}
@@ -139,9 +143,12 @@ func CacheGetTools(mcpID string, updatedAt int64) ([]mcp.Tool, bool) {
 	key := getToolCacheKey(mcpID, updatedAt)
 
 	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
 		tools := redisToolSlice{}
 
-		err := common.RDB.HGetAll(context.Background(), key).Scan(&tools)
+		err := common.RDB.HGetAll(ctx, key).Scan(&tools)
 		if err != nil {
 			log.Errorf("failed to get tools cache from redis (%s): %v", key, err)
 		} else {

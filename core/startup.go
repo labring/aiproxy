@@ -19,6 +19,7 @@ import (
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/labring/aiproxy/core/common/pprof"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
@@ -33,6 +34,9 @@ func initializeServices(pprofPort int) error {
 	if err := common.InitRedisClient(); err != nil {
 		return err
 	}
+
+	// Initialize oncall after Redis so it can use Redis for state synchronization
+	oncall.Init()
 
 	if err := initializeBalance(); err != nil {
 		return err

@@ -6,9 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/errgroup"
 )
 
 type batchUpdateData struct {
@@ -123,46 +126,90 @@ func CleanBatchUpdatesSummary(ctx context.Context) {
 	}
 }
 
+// batchErrors collects errors from batch processors
+type batchErrors struct {
+	mu     sync.Mutex
+	errors []error
+}
+
+func (e *batchErrors) Add(err error) {
+	if err == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.errors = append(e.errors, err)
+}
+
+func (e *batchErrors) HasDBConnectionError() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, err := range e.errors {
+		if common.IsDBConnectionError(err) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *batchErrors) FirstDBConnectionError() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, err := range e.errors {
+		if common.IsDBConnectionError(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func ProcessBatchUpdatesSummary() {
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	var wg sync.WaitGroup
+	errs := &batchErrors{}
+	g := new(errgroup.Group)
 
-	wg.Add(1)
+	g.Go(func() error {
+		processGroupUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processTokenUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processChannelUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupSummaryUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processSummaryUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processSummaryMinuteUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupSummaryMinuteUpdates(errs)
+		return nil
+	})
 
-	go processGroupUpdates(&wg)
+	_ = g.Wait()
 
-	wg.Add(1)
-
-	go processTokenUpdates(&wg)
-
-	wg.Add(1)
-
-	go processChannelUpdates(&wg)
-
-	wg.Add(1)
-
-	go processGroupSummaryUpdates(&wg)
-
-	wg.Add(1)
-
-	go processSummaryUpdates(&wg)
-
-	wg.Add(1)
-
-	go processSummaryMinuteUpdates(&wg)
-
-	wg.Add(1)
-
-	go processGroupSummaryMinuteUpdates(&wg)
-
-	wg.Wait()
+	// Check for database connection errors after all processors complete
+	if dbErr := errs.FirstDBConnectionError(); dbErr != nil {
+		oncall.AlertDBError("BatchProcessor", dbErr)
+	} else {
+		oncall.ClearDBError()
+	}
 }
 
-func processGroupUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processGroupUpdates(errs *batchErrors) {
 	for groupID, data := range batchData.Groups {
 		err := UpdateGroupUsedAmountAndRequestCount(
 			groupID,
@@ -176,15 +223,14 @@ func processGroupUpdates(wg *sync.WaitGroup) {
 				"failed to batch update group",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.Groups, groupID)
 		}
 	}
 }
 
-func processTokenUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processTokenUpdates(errs *batchErrors) {
 	for tokenID, data := range batchData.Tokens {
 		err := UpdateTokenUsedAmount(tokenID, data.Amount.InexactFloat64(), data.Count)
 		if IgnoreNotFound(err) != nil {
@@ -194,15 +240,14 @@ func processTokenUpdates(wg *sync.WaitGroup) {
 				"failed to batch update token",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.Tokens, tokenID)
 		}
 	}
 }
 
-func processChannelUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processChannelUpdates(errs *batchErrors) {
 	for channelID, data := range batchData.Channels {
 		err := UpdateChannelUsedAmount(
 			channelID,
@@ -217,15 +262,14 @@ func processChannelUpdates(wg *sync.WaitGroup) {
 				"failed to batch update channel",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.Channels, channelID)
 		}
 	}
 }
 
-func processGroupSummaryUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processGroupSummaryUpdates(errs *batchErrors) {
 	for key, data := range batchData.GroupSummaries {
 		err := UpsertGroupSummary(data.GroupSummaryUnique, data.SummaryData)
 		if err != nil {
@@ -235,33 +279,31 @@ func processGroupSummaryUpdates(wg *sync.WaitGroup) {
 				"failed to batch update group summary",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.GroupSummaries, key)
 		}
 	}
 }
 
-func processGroupSummaryMinuteUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processGroupSummaryMinuteUpdates(errs *batchErrors) {
 	for key, data := range batchData.GroupSummariesMinute {
 		err := UpsertGroupSummaryMinute(data.GroupSummaryMinuteUnique, data.SummaryData)
 		if err != nil {
 			notify.ErrorThrottle(
-				"batchUpdateGroupSummary",
+				"batchUpdateGroupSummaryMinute",
 				time.Minute*10,
-				"failed to batch update group summary",
+				"failed to batch update group summary minute",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.GroupSummariesMinute, key)
 		}
 	}
 }
 
-func processSummaryUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processSummaryUpdates(errs *batchErrors) {
 	for key, data := range batchData.Summaries {
 		err := UpsertSummary(data.SummaryUnique, data.SummaryData)
 		if err != nil {
@@ -271,15 +313,14 @@ func processSummaryUpdates(wg *sync.WaitGroup) {
 				"failed to batch update summary",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.Summaries, key)
 		}
 	}
 }
 
-func processSummaryMinuteUpdates(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func processSummaryMinuteUpdates(errs *batchErrors) {
 	for key, data := range batchData.SummariesMinute {
 		err := UpsertSummaryMinute(data.SummaryMinuteUnique, data.SummaryData)
 		if err != nil {
@@ -289,6 +330,7 @@ func processSummaryMinuteUpdates(wg *sync.WaitGroup) {
 				"failed to batch update summary minute",
 				err.Error(),
 			)
+			errs.Add(err)
 		} else {
 			delete(batchData.SummariesMinute, key)
 		}

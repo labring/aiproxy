@@ -164,6 +164,9 @@ func cacheDecreaseGroupBalance(ctx context.Context, group string, amount int64) 
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	return decreaseGroupBalanceScript.Run(ctx, common.RDB, []string{common.RedisKeyf(sealosGroupBalanceKey, group)}, amount).
 		Err()
 }
