@@ -387,7 +387,11 @@ func GetGroupDashboardModels(c *gin.Context) {
 				model.LoadModelCaches().EnabledModelConfigsBySet[model.ChannelDefaultSet],
 			)
 		} else {
-			middleware.ErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+			middleware.ErrorResponse(
+				c,
+				http.StatusInternalServerError,
+				fmt.Sprintf("failed to get group: %v", err),
+			)
 		}
 
 		return

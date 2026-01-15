@@ -23,6 +23,7 @@ func AlertDBError(source string, err error) {
 	if !common.IsDBConnectionError(err) {
 		return
 	}
+
 	Alert(
 		KeyDBConnection,
 		DBErrorPersistDuration,
@@ -232,6 +233,7 @@ func (l *LarkOnCall) sendAlert(key, title, message string) {
 			log.Errorf("oncall: failed to send urgent phone call to %s: %v", openID, err)
 			// Message was sent successfully, count as partial success
 		}
+
 		successCount++
 	}
 

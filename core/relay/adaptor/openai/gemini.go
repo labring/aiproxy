@@ -129,16 +129,22 @@ func ConvertOpenAIToGeminiResponse(
 			switch content := choice.Message.Content.(type) {
 			case string:
 				if content != "" {
-					candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
-						Text: content,
-					})
+					candidate.Content.Parts = append(
+						candidate.Content.Parts,
+						&relaymodel.GeminiPart{
+							Text: content,
+						},
+					)
 				}
 			case []relaymodel.MessageContent:
 				for _, part := range content {
 					if part.Type == relaymodel.ContentTypeText {
-						candidate.Content.Parts = append(candidate.Content.Parts, &relaymodel.GeminiPart{
-							Text: part.Text,
-						})
+						candidate.Content.Parts = append(
+							candidate.Content.Parts,
+							&relaymodel.GeminiPart{
+								Text: part.Text,
+							},
+						)
 					}
 				}
 			}

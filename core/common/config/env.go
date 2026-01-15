@@ -52,7 +52,9 @@ func parseOpenIDs(s string) []string {
 	if s == "" {
 		return nil
 	}
+
 	parts := strings.Split(s, ",")
+
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -60,6 +62,7 @@ func parseOpenIDs(s string) []string {
 			result = append(result, p)
 		}
 	}
+
 	return result
 }
 

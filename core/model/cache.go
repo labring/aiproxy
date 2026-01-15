@@ -183,8 +183,10 @@ func CacheDeleteToken(key string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
+
 	return common.RDB.Del(ctx, common.RedisKeyf(TokenCacheKey, key)).Err()
 }
 
@@ -393,8 +395,10 @@ func CacheDeleteGroup(id string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
+
 	return common.RDB.Del(ctx, common.RedisKeyf(GroupCacheKey, id)).Err()
 }
 
@@ -677,8 +681,10 @@ func CacheDeletePublicMCP(mcpID string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
+
 	return common.RDB.Del(ctx, common.RedisKeyf(PublicMCPCacheKey, mcpID)).Err()
 }
 
@@ -834,7 +840,12 @@ func CacheGetPublicMCPReusingParam(mcpID, groupID string) (PublicMCPReusingParam
 	if err == nil && paramCache.MCPID != "" {
 		return paramCache, nil
 	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get public mcp reusing param (%s:%s) from redis error: %s", mcpID, groupID, err.Error())
+		log.Errorf(
+			"get public mcp reusing param (%s:%s) from redis error: %s",
+			mcpID,
+			groupID,
+			err.Error(),
+		)
 	}
 
 	param, err := GetPublicMCPReusingParam(mcpID, groupID)

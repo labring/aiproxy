@@ -359,7 +359,11 @@ func GetChannelModelRequestRate(c *gin.Context, meta *meta.Meta) RequestRate {
 		rate.RPM, _ = rpm.(int64)
 		rate.RPS = meta.GetInt64(MetaChannelModelKeyRPS)
 	} else {
-		rpm, rps := reqlimit.GetChannelModelRequest(context.Background(), strconv.Itoa(meta.Channel.ID), meta.OriginModel)
+		rpm, rps := reqlimit.GetChannelModelRequest(
+			context.Background(),
+			strconv.Itoa(meta.Channel.ID),
+			meta.OriginModel,
+		)
 		rate.RPM = rpm
 		rate.RPS = rps
 		updateChannelModelRequestRate(c, meta, rpm, rps)
@@ -369,7 +373,11 @@ func GetChannelModelRequestRate(c *gin.Context, meta *meta.Meta) RequestRate {
 		rate.TPM, _ = tpm.(int64)
 		rate.TPS = meta.GetInt64(MetaChannelModelKeyTPS)
 	} else {
-		tpm, tps := reqlimit.GetChannelModelTokensRequest(context.Background(), strconv.Itoa(meta.Channel.ID), meta.OriginModel)
+		tpm, tps := reqlimit.GetChannelModelTokensRequest(
+			context.Background(),
+			strconv.Itoa(meta.Channel.ID),
+			meta.OriginModel,
+		)
 		rate.TPM = tpm
 		rate.TPS = tps
 		updateChannelModelTokensRequestRate(c, meta, tpm, tps)

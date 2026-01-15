@@ -108,7 +108,12 @@ func init() {
 				}
 				builtinModels = append(builtinModels, (BuiltinModelConfig)(_model))
 			} else if v.OwnedBy != string(_model.Owner) {
-				log.Fatalf("model %s owner mismatch, expect %s, actual %s", _model.Model, string(_model.Owner), v.OwnedBy)
+				log.Fatalf(
+					"model %s owner mismatch, expect %s, actual %s",
+					_model.Model,
+					string(_model.Owner),
+					v.OwnedBy,
+				)
 			}
 
 			builtinChannelType2Models[i][idx] = (BuiltinModelConfig)(_model)

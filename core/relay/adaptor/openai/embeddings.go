@@ -166,7 +166,11 @@ func EmbeddingsHandler(
 
 		_, err = node.Set("usage", ast.NewAny(usage))
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(err, "set_usage_failed", http.StatusInternalServerError)
+			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				err,
+				"set_usage_failed",
+				http.StatusInternalServerError,
+			)
 		}
 	}
 

@@ -164,6 +164,7 @@ func (p *WebSearch) ConvertRequest(
 	if err != nil {
 		return fallback(log, meta, store, req, do, fmt.Sprintf("init engines failed: %v", err))
 	}
+
 	if len(engines) == 0 {
 		return fallback(log, meta, store, req, do, "no search engines configured")
 	}
@@ -761,7 +762,10 @@ func (rw *responseWriter) processWebSearchCount(node *ast.Node) {
 		)
 	} else {
 		// If not exists, set the value
-		_, _ = usageNode.Set("web_search_count", ast.NewNumber(strconv.FormatInt(int64(rw.webSearchCount), 10)))
+		_, _ = usageNode.Set(
+			"web_search_count",
+			ast.NewNumber(strconv.FormatInt(int64(rw.webSearchCount), 10)),
+		)
 	}
 }
 

@@ -19,7 +19,9 @@ func getTestCredentials(t *testing.T) (appID, appSecret, openID string) {
 	openID = os.Getenv("TEST_LARK_OPEN_ID")
 
 	if appID == "" || appSecret == "" || openID == "" {
-		t.Skip("TEST_LARK_APP_ID, TEST_LARK_APP_SECRET, TEST_LARK_OPEN_ID environment variables not set")
+		t.Skip(
+			"TEST_LARK_APP_ID, TEST_LARK_APP_SECRET, TEST_LARK_OPEN_ID environment variables not set",
+		)
 	}
 
 	return appID, appSecret, openID
@@ -31,7 +33,14 @@ func TestSendMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	messageID, err := SendMessage(ctx, appID, appSecret, openID, "Test Alert", "This is a test message from oncall unit test.\n\nTime: "+time.Now().Format(time.RFC3339))
+	messageID, err := SendMessage(
+		ctx,
+		appID,
+		appSecret,
+		openID,
+		"Test Alert",
+		"This is a test message from oncall unit test.\n\nTime: "+time.Now().Format(time.RFC3339),
+	)
 	if err != nil {
 		t.Fatalf("SendMessage failed: %v", err)
 	}
@@ -72,7 +81,14 @@ func TestSendUrgentPhone(t *testing.T) {
 	defer cancel()
 
 	// First send a message to get messageID
-	messageID, err := SendMessage(ctx, appID, appSecret, openID, "Urgent Test", "This is an urgent test message.\n\nTime: "+time.Now().Format(time.RFC3339))
+	messageID, err := SendMessage(
+		ctx,
+		appID,
+		appSecret,
+		openID,
+		"Urgent Test",
+		"This is an urgent test message.\n\nTime: "+time.Now().Format(time.RFC3339),
+	)
 	if err != nil {
 		t.Fatalf("SendMessage failed: %v", err)
 	}
@@ -87,4 +103,3 @@ func TestSendUrgentPhone(t *testing.T) {
 
 	t.Log("Urgent phone call sent successfully")
 }
-

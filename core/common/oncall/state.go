@@ -42,6 +42,7 @@ func cleanupMemory() {
 			if !ok || now.Sub(t) > errorStateTTL {
 				errorTimes.CompareAndDelete(key, value)
 			}
+
 			return true
 		})
 
@@ -51,6 +52,7 @@ func cleanupMemory() {
 			if !ok || now.Sub(t) > alertCooldown {
 				alertedTimes.CompareAndDelete(key, value)
 			}
+
 			return true
 		})
 	}
@@ -97,6 +99,7 @@ func recordErrorRedis(key string) (time.Time, error) {
 	// Set new value with NX (only if not exists)
 	now := time.Now()
 	nowNanos := now.UnixNano()
+
 	set, err := common.RDB.SetNX(ctx, redisKey, nowNanos, errorStateTTL).Result()
 	if err != nil {
 		return time.Time{}, err
@@ -117,6 +120,7 @@ func recordErrorRedis(key string) (time.Time, error) {
 
 func recordErrorMemory(key string) time.Time {
 	now := time.Now()
+
 	actual, loaded := errorTimes.LoadOrStore(key, now)
 	if loaded {
 		if t, ok := actual.(time.Time); ok {
@@ -125,6 +129,7 @@ func recordErrorMemory(key string) time.Time {
 		// Invalid type, replace it
 		errorTimes.Store(key, now)
 	}
+
 	return now
 }
 
@@ -167,6 +172,7 @@ func ClearError(key string) {
 			log.Errorf("oncall: failed to clear error state in Redis: %v", err)
 		}
 	}
+
 	clearErrorMemory(key)
 }
 
@@ -189,7 +195,11 @@ func HasAlerted(key string) bool {
 
 	has, err := hasAlertedRedis(key)
 	if err != nil {
-		log.Errorf("oncall: failed to check alerted state in Redis: %v, falling back to memory", err)
+		log.Errorf(
+			"oncall: failed to check alerted state in Redis: %v, falling back to memory",
+			err,
+		)
+
 		return hasAlertedMemory(key)
 	}
 
@@ -244,7 +254,8 @@ func markAlertedRedis(key string) (bool, error) {
 	defer cancel()
 
 	// Use SetNX to ensure atomicity
-	set, err := common.RDB.SetNX(ctx, redisKeyAlerted(key), time.Now().UnixNano(), alertedStateTTL).Result()
+	set, err := common.RDB.SetNX(ctx, redisKeyAlerted(key), time.Now().UnixNano(), alertedStateTTL).
+		Result()
 	if err != nil {
 		return false, err
 	}
@@ -289,6 +300,7 @@ func ClearAlerted(key string) {
 			log.Errorf("oncall: failed to clear alerted state in Redis: %v", err)
 		}
 	}
+
 	clearAlertedMemory(key)
 }
 

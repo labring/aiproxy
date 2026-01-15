@@ -144,7 +144,8 @@ func cacheGetGroupBalance(ctx context.Context, group string) (*sealosCache, erro
 	defer cancel()
 
 	var cache sealosCache
-	if err := common.RDB.HGetAll(ctx, common.RedisKeyf(sealosGroupBalanceKey, group)).Scan(&cache); err != nil {
+	if err := common.RDB.HGetAll(ctx, common.RedisKeyf(sealosGroupBalanceKey, group)).
+		Scan(&cache); err != nil {
 		return nil, err
 	}
 

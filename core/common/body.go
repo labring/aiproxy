@@ -130,7 +130,11 @@ func GetRequestBodyReusable(req *http.Request) ([]byte, error) {
 		}
 	} else {
 		if req.ContentLength > MaxRequestBodySize {
-			return nil, fmt.Errorf("request body too large: %d, max: %d", req.ContentLength, MaxRequestBodySize)
+			return nil, fmt.Errorf(
+				"request body too large: %d, max: %d",
+				req.ContentLength,
+				MaxRequestBodySize,
+			)
 		}
 
 		buf = make([]byte, req.ContentLength)

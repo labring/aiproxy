@@ -590,8 +590,16 @@ func AutoTestBannedModels() {
 					log.Errorf("clear channel errors failed: %+v", err)
 				}
 			} else {
-				notify.Error(fmt.Sprintf("channel %s (type: %d, id: %d) model %s test failed", channel.Name, channel.Type, channel.ID, modelName),
-					fmt.Sprintf("code: %d, response: %s", result.Code, result.Response))
+				notify.Error(
+					fmt.Sprintf(
+						"channel %s (type: %d, id: %d) model %s test failed",
+						channel.Name,
+						channel.Type,
+						channel.ID,
+						modelName,
+					),
+					fmt.Sprintf("code: %d, response: %s", result.Code, result.Response),
+				)
 			}
 		}
 	}

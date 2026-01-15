@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -136,30 +137,30 @@ func (e *batchErrors) Add(err error) {
 	if err == nil {
 		return
 	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	e.errors = append(e.errors, err)
 }
 
 func (e *batchErrors) HasDBConnectionError() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for _, err := range e.errors {
-		if common.IsDBConnectionError(err) {
-			return true
-		}
-	}
-	return false
+
+	return slices.ContainsFunc(e.errors, common.IsDBConnectionError)
 }
 
 func (e *batchErrors) FirstDBConnectionError() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	for _, err := range e.errors {
 		if common.IsDBConnectionError(err) {
 			return err
 		}
 	}
+
 	return nil
 }
 

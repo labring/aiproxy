@@ -78,7 +78,10 @@ func ensureThoughtSignature(node *ast.Node) error {
 			} else {
 				val, _ := thoughtSignature.String()
 				if val == "" {
-					_, _ = part.Set("thoughtSignature", ast.NewString(ThoughtSignatureDummySkipValidator))
+					_, _ = part.Set(
+						"thoughtSignature",
+						ast.NewString(ThoughtSignatureDummySkipValidator),
+					)
 				}
 			}
 

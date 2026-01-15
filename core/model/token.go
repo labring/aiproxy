@@ -859,7 +859,10 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	token := &Token{}
 	defer func() {
 		if amount > 0 && err == nil && (token.Quota > 0 || token.PeriodQuota > 0) {
-			if err := CacheUpdateTokenUsedAmountOnlyIncrease(token.Key, token.UsedAmount); err != nil {
+			if err := CacheUpdateTokenUsedAmountOnlyIncrease(
+				token.Key,
+				token.UsedAmount,
+			); err != nil {
 				log.Error("update token used amount in cache failed: " + err.Error())
 			}
 		}
@@ -1020,7 +1023,11 @@ func ResetTokenPeriodUsage(id int) error {
 
 	// Update cache only if database update succeeded
 	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
-		if cacheErr := CacheResetTokenPeriodUsage(token.Key, newPeriodStartTime, token.UsedAmount); cacheErr != nil {
+		if cacheErr := CacheResetTokenPeriodUsage(
+			token.Key,
+			newPeriodStartTime,
+			token.UsedAmount,
+		); cacheErr != nil {
 			log.Error("reset token period usage in cache failed: " + cacheErr.Error())
 		}
 	}
