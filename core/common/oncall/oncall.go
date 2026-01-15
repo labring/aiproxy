@@ -227,6 +227,11 @@ func (l *LarkOnCall) sendAlert(key, title, message string) {
 		return // Already sent a phone call recently
 	}
 
+	// Add NOTIFY_NOTE to identify which zone/instance sent the alert
+	if note := config.GetNotifyNote(); note != "" {
+		message = "[" + note + "] " + message
+	}
+
 	log.Warnf(
 		"oncall: sending urgent alert for key=%s, title=%s, to %d users",
 		key,
