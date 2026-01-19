@@ -14,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/oncall"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -210,6 +211,9 @@ func SyncOptions(ctx context.Context, wg *sync.WaitGroup, frequency time.Duratio
 					"failed to sync options",
 					err.Error(),
 				)
+				oncall.AlertDBError("SyncOptions", err)
+			} else {
+				oncall.ClearDBError("SyncOptions")
 			}
 		}
 	}

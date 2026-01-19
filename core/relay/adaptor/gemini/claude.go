@@ -391,17 +391,23 @@ func geminiResponse2Claude(
 			} else if part.Text != "" {
 				if part.Thought {
 					// Add thinking content
-					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type:      relaymodel.ClaudeContentTypeThinking,
-						Thinking:  part.Text,
-						Signature: part.ThoughtSignature,
-					})
+					claudeResponse.Content = append(
+						claudeResponse.Content,
+						relaymodel.ClaudeContent{
+							Type:      relaymodel.ClaudeContentTypeThinking,
+							Thinking:  part.Text,
+							Signature: part.ThoughtSignature,
+						},
+					)
 				} else {
 					// Add text content
-					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type: relaymodel.ClaudeContentTypeText,
-						Text: part.Text,
-					})
+					claudeResponse.Content = append(
+						claudeResponse.Content,
+						relaymodel.ClaudeContent{
+							Type: relaymodel.ClaudeContentTypeText,
+							Text: part.Text,
+						},
+					)
 				}
 			}
 		}

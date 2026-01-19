@@ -262,7 +262,10 @@ func UpdateGroupUsedAmountAndRequestCount(id string, amount float64, count int) 
 	group := &Group{}
 	defer func() {
 		if amount > 0 && err == nil {
-			if err := CacheUpdateGroupUsedAmountOnlyIncrease(group.ID, group.UsedAmount); err != nil {
+			if err := CacheUpdateGroupUsedAmountOnlyIncrease(
+				group.ID,
+				group.UsedAmount,
+			); err != nil {
 				log.Error("update group used amount in cache failed: " + err.Error())
 			}
 		}

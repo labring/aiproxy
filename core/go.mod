@@ -17,10 +17,12 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 	github.com/json-iterator/go v1.1.12
 	github.com/labring/aiproxy/mcp-servers v0.0.0-20251212144731-5fbec1516a45
 	github.com/labring/aiproxy/openapi-mcp v0.0.0-20251212144731-5fbec1516a45
+	github.com/larksuite/oapi-sdk-go/v3 v3.5.2
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/maruel/natural v1.2.1
 	github.com/mattn/go-isatty v0.0.20
@@ -102,7 +104,6 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.6 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect

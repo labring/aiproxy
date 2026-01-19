@@ -196,7 +196,8 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 
 			openaiContent := message.ParseContent()
 			for _, part := range openaiContent {
-				if message.Role == relaymodel.RoleAssistant && part.Text == "" && len(message.ToolCalls) > 0 {
+				if message.Role == relaymodel.RoleAssistant && part.Text == "" &&
+					len(message.ToolCalls) > 0 {
 					continue
 				}
 

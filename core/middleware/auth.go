@@ -11,6 +11,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/network"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -102,9 +103,13 @@ func TokenAuth(c *gin.Context) {
 	} else {
 		tokenCache, err := model.GetAndValidateToken(key)
 		if err != nil {
+			oncall.AlertDBError("TokenAuth", err)
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
+
+		// Clear DB error state on successful token validation
+		oncall.ClearDBError("TokenAuth")
 
 		token = *tokenCache
 	}
@@ -116,8 +121,11 @@ func TokenAuth(c *gin.Context) {
 			AbortLogWithMessage(c, http.StatusInternalServerError, err.Error())
 			return
 		} else if !ok {
-			AbortLogWithMessage(c, http.StatusForbidden,
-				fmt.Sprintf("token (%s[%d]) can only be used in the specified subnets: %v, current ip: %s",
+			AbortLogWithMessage(
+				c,
+				http.StatusForbidden,
+				fmt.Sprintf(
+					"token (%s[%d]) can only be used in the specified subnets: %v, current ip: %s",
 					token.Name,
 					token.ID,
 					token.Subnets,
@@ -140,7 +148,12 @@ func TokenAuth(c *gin.Context) {
 	} else {
 		groupCache, err := model.CacheGetGroup(token.Group)
 		if err != nil {
-			AbortLogWithMessage(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+			AbortLogWithMessage(
+				c,
+				http.StatusInternalServerError,
+				fmt.Sprintf("failed to get group: %v", err),
+			)
+
 			return
 		}
 

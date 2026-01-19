@@ -17,6 +17,7 @@ import (
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/maruel/natural"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
@@ -28,6 +29,7 @@ const (
 	TokenCacheKey    = "token:%s"
 	GroupCacheKey    = "group:%s"
 	GroupModelTPMKey = "group:%s:model_tpm"
+	redisTimeout     = 2 * time.Second
 )
 
 var (
@@ -181,7 +183,11 @@ func CacheDeleteToken(key string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RDB.Del(context.Background(), common.RedisKeyf(TokenCacheKey, key)).Err()
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return common.RDB.Del(ctx, common.RedisKeyf(TokenCacheKey, key)).Err()
 }
 
 func CacheSetToken(token *TokenCache) error {
@@ -189,13 +195,16 @@ func CacheSetToken(token *TokenCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(TokenCacheKey, token.Key)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, token)
+	pipe.HSet(ctx, key, token)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -210,10 +219,13 @@ func CacheGetTokenByKey(key string) (*TokenCache, error) {
 		return token.ToTokenCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(TokenCacheKey, key)
 	tokenCache := &TokenCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(tokenCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(tokenCache)
 	if err == nil && tokenCache.ID != 0 {
 		tokenCache.Key = key
 		return tokenCache, nil
@@ -252,7 +264,10 @@ func CacheUpdateTokenUsedAmountOnlyIncrease(key string, amount float64) error {
 		return nil
 	}
 
-	return updateTokenUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, amount).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateTokenUsedAmountOnlyIncreaseScript.Run(ctx, common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, amount).
 		Err()
 }
 
@@ -266,12 +281,15 @@ func CacheResetTokenPeriodUsage(
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(TokenCacheKey, key)
 	pipe := common.RDB.Pipeline()
 	periodLastUpdateTimeBytes, _ := periodLastUpdateTime.MarshalBinary()
-	pipe.HSet(context.Background(), cacheKey, "plut", periodLastUpdateTimeBytes)
-	pipe.HSet(context.Background(), cacheKey, "plua", periodLastUpdateAmount)
-	_, err := pipe.Exec(context.Background())
+	pipe.HSet(ctx, cacheKey, "plut", periodLastUpdateTimeBytes)
+	pipe.HSet(ctx, cacheKey, "plua", periodLastUpdateAmount)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -288,7 +306,10 @@ func CacheUpdateTokenName(key, name string) error {
 		return nil
 	}
 
-	return updateTokenNameScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, name).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateTokenNameScript.Run(ctx, common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, name).
 		Err()
 }
 
@@ -304,7 +325,10 @@ func CacheUpdateTokenStatus(key string, status int) error {
 		return nil
 	}
 
-	return updateTokenStatusScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, status).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateTokenStatusScript.Run(ctx, common.RDB, []string{common.RedisKeyf(TokenCacheKey, key)}, status).
 		Err()
 }
 
@@ -371,7 +395,11 @@ func CacheDeleteGroup(id string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RDB.Del(context.Background(), common.RedisKeyf(GroupCacheKey, id)).Err()
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return common.RDB.Del(ctx, common.RedisKeyf(GroupCacheKey, id)).Err()
 }
 
 var updateGroupRPMRatioScript = redis.NewScript(`
@@ -386,7 +414,10 @@ func CacheUpdateGroupRPMRatio(id string, rpmRatio float64) error {
 		return nil
 	}
 
-	return updateGroupRPMRatioScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, rpmRatio).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateGroupRPMRatioScript.Run(ctx, common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, rpmRatio).
 		Err()
 }
 
@@ -402,7 +433,10 @@ func CacheUpdateGroupTPMRatio(id string, tpmRatio float64) error {
 		return nil
 	}
 
-	return updateGroupTPMRatioScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, tpmRatio).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateGroupTPMRatioScript.Run(ctx, common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, tpmRatio).
 		Err()
 }
 
@@ -418,7 +452,10 @@ func CacheUpdateGroupStatus(id string, status int) error {
 		return nil
 	}
 
-	return updateGroupStatusScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, status).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateGroupStatusScript.Run(ctx, common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, status).
 		Err()
 }
 
@@ -427,13 +464,16 @@ func CacheSetGroup(group *GroupCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(GroupCacheKey, group.ID)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, group)
+	pipe.HSet(ctx, key, group)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -448,10 +488,13 @@ func CacheGetGroup(id string) (*GroupCache, error) {
 		return group.ToGroupCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(GroupCacheKey, id)
 	groupCache := &GroupCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(groupCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupCache)
 	if err == nil && groupCache.Status != 0 {
 		groupCache.ID = id
 		return groupCache, nil
@@ -490,7 +533,10 @@ func CacheUpdateGroupUsedAmountOnlyIncrease(id string, amount float64) error {
 		return nil
 	}
 
-	return updateGroupUsedAmountOnlyIncreaseScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, amount).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateGroupUsedAmountOnlyIncreaseScript.Run(ctx, common.RDB, []string{common.RedisKeyf(GroupCacheKey, id)}, amount).
 		Err()
 }
 
@@ -523,7 +569,10 @@ func CacheDeleteGroupMCP(groupID, mcpID string) error {
 		return nil
 	}
 
-	return common.RDB.Del(context.Background(), common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return common.RDB.Del(ctx, common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)).
 		Err()
 }
 
@@ -532,13 +581,16 @@ func CacheSetGroupMCP(groupMCP *GroupMCPCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(GroupMCPCacheKey, groupMCP.GroupID, groupMCP.ID)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, groupMCP)
+	pipe.HSet(ctx, key, groupMCP)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -553,10 +605,13 @@ func CacheGetGroupMCP(groupID, mcpID string) (*GroupMCPCache, error) {
 		return groupMCP.ToGroupMCPCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)
 	groupMCPCache := &GroupMCPCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(groupMCPCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupMCPCache)
 	if err == nil && groupMCPCache.ID != "" {
 		return groupMCPCache, nil
 	} else if err != nil && !errors.Is(err, redis.Nil) {
@@ -589,7 +644,10 @@ func CacheUpdateGroupMCPStatus(groupID, mcpID string, status GroupMCPStatus) err
 		return nil
 	}
 
-	return updateGroupMCPStatusScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)}, status).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updateGroupMCPStatusScript.Run(ctx, common.RDB, []string{common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)}, status).
 		Err()
 }
 
@@ -623,7 +681,11 @@ func CacheDeletePublicMCP(mcpID string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RDB.Del(context.Background(), common.RedisKeyf(PublicMCPCacheKey, mcpID)).Err()
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return common.RDB.Del(ctx, common.RedisKeyf(PublicMCPCacheKey, mcpID)).Err()
 }
 
 func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
@@ -631,13 +693,16 @@ func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(PublicMCPCacheKey, publicMCP.ID)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, publicMCP)
+	pipe.HSet(ctx, key, publicMCP)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -652,10 +717,13 @@ func CacheGetPublicMCP(mcpID string) (*PublicMCPCache, error) {
 		return publicMCP.ToPublicMCPCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(PublicMCPCacheKey, mcpID)
 	publicMCPCache := &PublicMCPCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(publicMCPCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(publicMCPCache)
 	if err == nil && publicMCPCache.ID != "" {
 		return publicMCPCache, nil
 	} else if err != nil && !errors.Is(err, redis.Nil) {
@@ -688,7 +756,10 @@ func CacheUpdatePublicMCPStatus(mcpID string, status PublicMCPStatus) error {
 		return nil
 	}
 
-	return updatePublicMCPStatusScript.Run(context.Background(), common.RDB, []string{common.RedisKeyf(PublicMCPCacheKey, mcpID)}, status).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return updatePublicMCPStatusScript.Run(ctx, common.RDB, []string{common.RedisKeyf(PublicMCPCacheKey, mcpID)}, status).
 		Err()
 }
 
@@ -715,7 +786,10 @@ func CacheDeletePublicMCPReusingParam(mcpID, groupID string) error {
 		return nil
 	}
 
-	return common.RDB.Del(context.Background(), common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)).
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
+	return common.RDB.Del(ctx, common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)).
 		Err()
 }
 
@@ -724,13 +798,16 @@ func CacheSetPublicMCPReusingParam(param PublicMCPReusingParamCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(PublicMCPReusingParamCacheKey, param.MCPID, param.GroupID)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, param)
+	pipe.HSet(ctx, key, param)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -753,14 +830,22 @@ func CacheGetPublicMCPReusingParam(mcpID, groupID string) (PublicMCPReusingParam
 		return param.ToPublicMCPReusingParamCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)
 	paramCache := PublicMCPReusingParamCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(&paramCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(&paramCache)
 	if err == nil && paramCache.MCPID != "" {
 		return paramCache, nil
 	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get public mcp reusing param (%s:%s) from redis error: %s", mcpID, groupID, err.Error())
+		log.Errorf(
+			"get public mcp reusing param (%s:%s) from redis error: %s",
+			mcpID,
+			groupID,
+			err.Error(),
+		)
 	}
 
 	param, err := GetPublicMCPReusingParam(mcpID, groupID)
@@ -806,13 +891,16 @@ func CacheSetStore(store *StoreCache) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	key := common.RedisKeyf(StoreCacheKey, store.GroupID, store.TokenID, store.ID)
 	pipe := common.RDB.Pipeline()
-	pipe.HSet(context.Background(), key, store)
+	pipe.HSet(ctx, key, store)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(context.Background(), key, expireTime)
-	_, err := pipe.Exec(context.Background())
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
 	return err
 }
@@ -827,10 +915,13 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 		return store.ToStoreCache(), nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+	defer cancel()
+
 	cacheKey := common.RedisKeyf(StoreCacheKey, group, tokenID, id)
 	storeCache := &StoreCache{}
 
-	err := common.RDB.HGetAll(context.Background(), cacheKey).Scan(storeCache)
+	err := common.RDB.HGetAll(ctx, cacheKey).Scan(storeCache)
 	if err == nil && storeCache.ID != "" {
 		return storeCache, nil
 	}
@@ -1216,6 +1307,9 @@ func SyncModelConfigAndChannelCache(
 					"failed to sync channels",
 					err.Error(),
 				)
+				oncall.AlertDBError("SyncModelConfigAndChannelCache", err)
+			} else {
+				oncall.ClearDBError("SyncModelConfigAndChannelCache")
 			}
 		}
 	}

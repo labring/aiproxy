@@ -8,9 +8,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const redisTimeout = 2 * time.Second
+
 func SetIPBlackAnyWay(ip string, duration time.Duration) {
 	if common.RedisEnabled {
-		_, err := redisSetIPBlack(context.Background(), ip, duration)
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		_, err := redisSetIPBlack(ctx, ip, duration)
 		if err == nil {
 			return
 		}

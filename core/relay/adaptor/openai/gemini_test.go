@@ -689,7 +689,10 @@ func TestConvertGeminiRequest_ToolsWithRequiredField(t *testing.T) {
 						t.Errorf("required field should be removed when it's null")
 					}
 				} else {
-					t.Errorf("Parameters should be a map, got %T", openAIReq.Tools[0].Function.Parameters)
+					t.Errorf(
+						"Parameters should be a map, got %T",
+						openAIReq.Tools[0].Function.Parameters,
+					)
 				}
 			},
 		},

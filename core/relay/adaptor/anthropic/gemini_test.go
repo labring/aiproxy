@@ -69,7 +69,9 @@ func TestConvertGeminiRequestToStruct_Tools(t *testing.T) {
 		}
 
 		if tool.InputSchema == nil {
-			t.Errorf("Expected InputSchema to be populated (from parametersJsonSchema), but got nil")
+			t.Errorf(
+				"Expected InputSchema to be populated (from parametersJsonSchema), but got nil",
+			)
 		}
 	}
 }

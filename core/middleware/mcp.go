@@ -53,8 +53,11 @@ func MCPAuth(c *gin.Context) {
 			AbortLogWithMessage(c, http.StatusInternalServerError, err.Error())
 			return
 		} else if !ok {
-			AbortLogWithMessage(c, http.StatusForbidden,
-				fmt.Sprintf("token (%s[%d]) can only be used in the specified subnets: %v, current ip: %s",
+			AbortLogWithMessage(
+				c,
+				http.StatusForbidden,
+				fmt.Sprintf(
+					"token (%s[%d]) can only be used in the specified subnets: %v, current ip: %s",
 					token.Name,
 					token.ID,
 					token.Subnets,
@@ -74,7 +77,12 @@ func MCPAuth(c *gin.Context) {
 	} else {
 		groupCache, err := model.CacheGetGroup(token.Group)
 		if err != nil {
-			AbortLogWithMessage(c, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+			AbortLogWithMessage(
+				c,
+				http.StatusInternalServerError,
+				fmt.Sprintf("failed to get group: %v", err),
+			)
+
 			return
 		}
 

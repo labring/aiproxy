@@ -293,7 +293,10 @@ func buildContents(
 
 				var args map[string]any
 				if toolCall.Function.Arguments != "" {
-					if err := sonic.UnmarshalString(toolCall.Function.Arguments, &args); err != nil {
+					if err := sonic.UnmarshalString(
+						toolCall.Function.Arguments,
+						&args,
+					); err != nil {
 						args = make(map[string]any)
 					}
 				} else {

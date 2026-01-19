@@ -68,8 +68,8 @@ type Log struct {
 	Usage            Usage           `gorm:"embedded"                                                       json:"usage,omitempty"`
 	UsedAmount       float64         `                                                                      json:"used_amount,omitempty"`
 	// https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
-	User     EmptyNullString   `gorm:"type:text"                                                      json:"user,omitempty"`
-	Metadata map[string]string `gorm:"serializer:fastjson;type:text"                                  json:"metadata,omitempty"`
+	User     EmptyNullString   `gorm:"type:text"                     json:"user,omitempty"`
+	Metadata map[string]string `gorm:"serializer:fastjson;type:text" json:"metadata,omitempty"`
 }
 
 func CreateLogIndexes(db *gorm.DB) error {

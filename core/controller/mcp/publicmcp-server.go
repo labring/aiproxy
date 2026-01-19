@@ -387,7 +387,12 @@ func handlePublicProxyStreamable(
 	backendQuery := backendURL.Query()
 
 	// Process reusing parameters if any
-	if err := processProxyReusingParams(config.Reusing, paramsFunc, headers, &backendQuery); err != nil {
+	if err := processProxyReusingParams(
+		config.Reusing,
+		paramsFunc,
+		headers,
+		&backendQuery,
+	); err != nil {
 		c.JSON(http.StatusBadRequest, mcpservers.CreateMCPErrorResponse(
 			mcp.NewRequestId(nil),
 			mcp.INVALID_REQUEST,

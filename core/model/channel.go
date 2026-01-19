@@ -453,7 +453,9 @@ func (c *Channel) UpdateModelTest(
 				return err
 			}
 		} else if !c.LastTestErrorAt.IsZero() && time.Since(c.LastTestErrorAt) > time.Hour {
-			result := tx.Model(&Channel{}).Where("id = ?", c.ID).Update("last_test_error_at", gorm.Expr("NULL"))
+			result := tx.Model(&Channel{}).
+				Where("id = ?", c.ID).
+				Update("last_test_error_at", gorm.Expr("NULL"))
 			if err := HandleUpdateResult(result, ErrChannelNotFound); err != nil {
 				return err
 			}

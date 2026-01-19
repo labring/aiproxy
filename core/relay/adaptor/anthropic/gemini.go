@@ -489,7 +489,11 @@ func convertGeminiContent(
 				// Orphaned result - convert to text to avoid validation error
 				msg.Content = append(msg.Content, relaymodel.ClaudeContent{
 					Type: relaymodel.ClaudeContentTypeText,
-					Text: fmt.Sprintf("Tool result for %s: %s", part.FunctionResponse.Name, content),
+					Text: fmt.Sprintf(
+						"Tool result for %s: %s",
+						part.FunctionResponse.Name,
+						content,
+					),
 				})
 			}
 		case part.Text != "":

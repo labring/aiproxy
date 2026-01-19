@@ -26,26 +26,26 @@ type TimeoutConfig struct {
 }
 
 type ModelConfig struct {
-	CreatedAt        time.Time                 `gorm:"index;autoCreateTime"          json:"created_at"                     yaml:"-"`
-	UpdatedAt        time.Time                 `gorm:"index;autoUpdateTime"          json:"updated_at"                     yaml:"-"`
-	Config           map[ModelConfigKey]any    `gorm:"serializer:fastjson;type:text" json:"config,omitempty"               yaml:"config,omitempty"`
-	Plugin           map[string]map[string]any `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"               yaml:"plugin,omitempty"`
-	Model            string                    `gorm:"size:64;primaryKey"            json:"model"                          yaml:"model,omitempty"`
-	Owner            ModelOwner                `gorm:"type:varchar(32);index"        json:"owner"                          yaml:"owner,omitempty"`
-	Type             mode.Mode                 `                                     json:"type"                           yaml:"type,omitempty"`
-	ExcludeFromTests bool                      `                                     json:"exclude_from_tests,omitempty"   yaml:"exclude_from_tests,omitempty"`
-	RPM              int64                     `                                     json:"rpm,omitempty"                  yaml:"rpm,omitempty"`
-	TPM              int64                     `                                     json:"tpm,omitempty"                  yaml:"tpm,omitempty"`
+	CreatedAt        time.Time                 `gorm:"index;autoCreateTime"          json:"created_at"                   yaml:"-"`
+	UpdatedAt        time.Time                 `gorm:"index;autoUpdateTime"          json:"updated_at"                   yaml:"-"`
+	Config           map[ModelConfigKey]any    `gorm:"serializer:fastjson;type:text" json:"config,omitempty"             yaml:"config,omitempty"`
+	Plugin           map[string]map[string]any `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"             yaml:"plugin,omitempty"`
+	Model            string                    `gorm:"size:64;primaryKey"            json:"model"                        yaml:"model,omitempty"`
+	Owner            ModelOwner                `gorm:"type:varchar(32);index"        json:"owner"                        yaml:"owner,omitempty"`
+	Type             mode.Mode                 `                                     json:"type"                         yaml:"type,omitempty"`
+	ExcludeFromTests bool                      `                                     json:"exclude_from_tests,omitempty" yaml:"exclude_from_tests,omitempty"`
+	RPM              int64                     `                                     json:"rpm,omitempty"                yaml:"rpm,omitempty"`
+	TPM              int64                     `                                     json:"tpm,omitempty"                yaml:"tpm,omitempty"`
 	// map[size]map[quality]price_per_image
 	ImageQualityPrices map[string]map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_quality_prices,omitempty" yaml:"image_quality_prices,omitempty"`
 	// map[size]price_per_image
-	ImagePrices     map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"         yaml:"image_prices,omitempty"`
-	Price           Price              `gorm:"embedded"                      json:"price,omitempty"                yaml:"price,omitempty"`
-	RetryTimes      int64              `                                     json:"retry_times,omitempty"          yaml:"retry_times,omitempty"`
-	TimeoutConfig   TimeoutConfig      `gorm:"embedded"                      json:"timeout_config,omitempty"       yaml:"timeout_config,omitempty"`
-	WarnErrorRate   float64            `                                     json:"warn_error_rate,omitempty"      yaml:"warn_error_rate,omitempty"`
-	MaxErrorRate    float64            `                                     json:"max_error_rate,omitempty"       yaml:"max_error_rate,omitempty"`
-	ForceSaveDetail bool               `                                     json:"force_save_detail,omitempty"    yaml:"force_save_detail,omitempty"`
+	ImagePrices     map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"      yaml:"image_prices,omitempty"`
+	Price           Price              `gorm:"embedded"                      json:"price,omitempty"             yaml:"price,omitempty"`
+	RetryTimes      int64              `                                     json:"retry_times,omitempty"       yaml:"retry_times,omitempty"`
+	TimeoutConfig   TimeoutConfig      `gorm:"embedded"                      json:"timeout_config,omitempty"    yaml:"timeout_config,omitempty"`
+	WarnErrorRate   float64            `                                     json:"warn_error_rate,omitempty"   yaml:"warn_error_rate,omitempty"`
+	MaxErrorRate    float64            `                                     json:"max_error_rate,omitempty"    yaml:"max_error_rate,omitempty"`
+	ForceSaveDetail bool               `                                     json:"force_save_detail,omitempty" yaml:"force_save_detail,omitempty"`
 }
 
 func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
@@ -82,8 +82,8 @@ func timeoutSecond(second int64) time.Duration {
 }
 
 // jsonRawMessageDecodeHook handles decoding map or slice to json.RawMessage
-func jsonRawMessageDecodeHook(from reflect.Type, to reflect.Type, data any) (any, error) {
-	if to != reflect.TypeOf(json.RawMessage{}) {
+func jsonRawMessageDecodeHook(from, to reflect.Type, data any) (any, error) {
+	if to != reflect.TypeFor[json.RawMessage]() {
 		return data, nil
 	}
 

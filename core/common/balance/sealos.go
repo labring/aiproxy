@@ -144,7 +144,8 @@ func cacheGetGroupBalance(ctx context.Context, group string) (*sealosCache, erro
 	defer cancel()
 
 	var cache sealosCache
-	if err := common.RDB.HGetAll(ctx, common.RedisKeyf(sealosGroupBalanceKey, group)).Scan(&cache); err != nil {
+	if err := common.RDB.HGetAll(ctx, common.RedisKeyf(sealosGroupBalanceKey, group)).
+		Scan(&cache); err != nil {
 		return nil, err
 	}
 
@@ -163,6 +164,9 @@ func cacheDecreaseGroupBalance(ctx context.Context, group string, amount int64) 
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	return decreaseGroupBalanceScript.Run(ctx, common.RDB, []string{common.RedisKeyf(sealosGroupBalanceKey, group)}, amount).
 		Err()
