@@ -11,6 +11,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/network"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -102,9 +103,13 @@ func TokenAuth(c *gin.Context) {
 	} else {
 		tokenCache, err := model.GetAndValidateToken(key)
 		if err != nil {
+			oncall.AlertDBError("TokenAuth", err)
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
+
+		// Clear DB error state on successful token validation
+		oncall.ClearDBError("TokenAuth")
 
 		token = *tokenCache
 	}
