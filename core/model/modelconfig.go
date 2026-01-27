@@ -102,9 +102,10 @@ func (c *ModelConfig) LoadPluginConfig(pluginName string, config any) error {
 	}
 
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName:    "json",
-		Result:     config,
-		DecodeHook: jsonRawMessageDecodeHook,
+		TagName:          "json",
+		Result:           config,
+		DecodeHook:       jsonRawMessageDecodeHook,
+		WeaklyTypedInput: true,
 	})
 	if err != nil {
 		return err

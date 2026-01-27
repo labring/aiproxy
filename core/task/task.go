@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/ipblack"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/labring/aiproxy/core/common/trylock"
 	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/model"
@@ -252,4 +254,51 @@ func CleanLogTask(ctx context.Context) {
 			}
 		}
 	}
+}
+
+const (
+	// KeyRedisConnection is the oncall key prefix for redis connection errors
+	KeyRedisConnection = "redis_connection_error"
+	// RedisHealthCheckInterval is how often to ping redis
+	RedisHealthCheckInterval = 30 * time.Second
+	// RedisErrorPersistDuration is how long redis errors must persist before triggering urgent alert
+	RedisErrorPersistDuration = 2 * time.Minute
+)
+
+// RedisHealthCheckTask monitors Redis connection health
+func RedisHealthCheckTask(ctx context.Context) {
+	ticker := time.NewTicker(RedisHealthCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			checkRedisHealth()
+		}
+	}
+}
+
+func checkRedisHealth() {
+	if !common.RedisEnabled {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := common.RDB.Ping(ctx).Result()
+	if err != nil {
+		oncall.Alert(
+			KeyRedisConnection,
+			RedisErrorPersistDuration,
+			"Redis Connection Error",
+			"Redis ping failed: "+err.Error(),
+		)
+		return
+	}
+
+	// Clear error state if ping succeeds
+	oncall.Clear(KeyRedisConnection)
 }
