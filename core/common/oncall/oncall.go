@@ -36,6 +36,7 @@ func AlertDBError(source string, err error) {
 		isConnErr,
 		err,
 	)
+
 	if !isConnErr {
 		return
 	}

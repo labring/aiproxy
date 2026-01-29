@@ -296,6 +296,7 @@ func checkRedisHealth() {
 			"Redis Connection Error",
 			"Redis ping failed: "+err.Error(),
 		)
+
 		return
 	}
 
