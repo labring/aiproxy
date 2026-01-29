@@ -152,6 +152,7 @@ func HasError(key string) bool {
 				err,
 			)
 		}
+
 		return hasErrorMemory(key)
 	}
 
@@ -215,6 +216,7 @@ func HasAlerted(key string) bool {
 				err,
 			)
 		}
+
 		return hasAlertedMemory(key)
 	}
 

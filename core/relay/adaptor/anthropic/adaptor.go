@@ -36,18 +36,29 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 func (a *Adaptor) GetRequestURL(
 	meta *meta.Meta,
 	_ adaptor.Store,
-	_ *gin.Context,
+	c *gin.Context,
 ) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
-	url, err := url.JoinPath(u, "/messages")
+	pu, err := url.Parse(u)
 	if err != nil {
 		return adaptor.RequestURL{}, err
 	}
 
+	result := pu.JoinPath("/messages")
+
+	beta := c.Query("beta")
+
+	querys := url.Values{}
+	if beta != "" {
+		querys.Add("beta", beta)
+	}
+
+	result.RawQuery = querys.Encode()
+
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
-		URL:    url,
+		URL:    result.String(),
 	}, nil
 }
 

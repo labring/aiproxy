@@ -1,4 +1,4 @@
-package common
+package common_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -180,7 +181,7 @@ func TestIsDBConnectionError(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := IsDBConnectionError(tc.err)
+			result := common.IsDBConnectionError(tc.err)
 			if result != tc.expected {
 				t.Errorf("IsDBConnectionError(%v) = %v, expected %v", tc.err, result, tc.expected)
 			}

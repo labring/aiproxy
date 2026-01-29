@@ -70,7 +70,8 @@ func (a *Adaptor) ConvertRequest(
 }
 
 var unsupportedBetas = map[string]struct{}{
-	"tool-examples-2025-10-29": {},
+	"tool-examples-2025-10-29":        {},
+	"prompt-caching-scope-2026-01-05": {},
 }
 
 func fixBetas(model string, betas []string) []string {

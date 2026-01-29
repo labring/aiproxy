@@ -86,6 +86,7 @@ func main() {
 
 	if common.RedisEnabled {
 		log.Info("redis health check task started")
+
 		go task.RedisHealthCheckTask(ctx)
 	}
 
