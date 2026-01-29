@@ -1,3 +1,4 @@
+//nolint:testpackage
 package oncall
 
 import (
@@ -145,16 +146,14 @@ func TestRecordErrorMemoryConcurrent(t *testing.T) {
 		if firstTime.IsZero() {
 			firstTime = t
 		} else if !t.Equal(firstTime) {
-			// Allow small difference due to timing
+			// Allow small difference due to timing - concurrent LoadOrStore may return different times
+			// as long as they're consistent
 			diff := t.Sub(firstTime)
 			if diff < 0 {
 				diff = -diff
 			}
-
-			if diff > time.Millisecond {
-				// This is acceptable - concurrent LoadOrStore may return different times
-				// as long as they're consistent
-			}
+			// Acceptable timing variance
+			_ = diff
 		}
 	}
 }

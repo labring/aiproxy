@@ -1,13 +1,17 @@
-package oncall
+package oncall_test
 
 import (
 	"context"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/labring/aiproxy/core/common/oncall"
 )
 
 func getTestCredentials(t *testing.T) (appID, appSecret, openID string) {
+	t.Helper()
+
 	appID = os.Getenv("TEST_LARK_APP_ID")
 	appSecret = os.Getenv("TEST_LARK_APP_SECRET")
 	openID = os.Getenv("TEST_LARK_OPEN_ID")
@@ -27,7 +31,7 @@ func TestSendMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	messageID, err := SendMessage(
+	messageID, err := oncall.SendMessage(
 		ctx,
 		appID,
 		appSecret,
@@ -56,7 +60,7 @@ func TestSendMessageWithSpecialChars(t *testing.T) {
 	title := `Test "Alert" with 'quotes'`
 	message := "Line1\nLine2\tTabbed\nPath: C:\\Users\\test\n\"Quoted text\""
 
-	messageID, err := SendMessage(ctx, appID, appSecret, openID, title, message)
+	messageID, err := oncall.SendMessage(ctx, appID, appSecret, openID, title, message)
 	if err != nil {
 		t.Fatalf("SendMessage with special chars failed: %v", err)
 	}
@@ -75,7 +79,7 @@ func TestSendUrgentPhone(t *testing.T) {
 	defer cancel()
 
 	// First send a message to get messageID
-	messageID, err := SendMessage(
+	messageID, err := oncall.SendMessage(
 		ctx,
 		appID,
 		appSecret,
@@ -90,7 +94,7 @@ func TestSendUrgentPhone(t *testing.T) {
 	t.Logf("Message sent, messageID: %s", messageID)
 
 	// Then send urgent phone call
-	err = SendUrgentPhone(ctx, appID, appSecret, messageID, openID)
+	err = oncall.SendUrgentPhone(ctx, appID, appSecret, messageID, openID)
 	if err != nil {
 		t.Fatalf("SendUrgentPhone failed: %v", err)
 	}
