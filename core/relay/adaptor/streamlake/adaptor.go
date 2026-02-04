@@ -10,6 +10,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/utils"
@@ -89,6 +90,16 @@ func (a *Adaptor) DoResponse(
 		}
 	default:
 		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
+	}
+
+	// Handle rate limit error: convert 400 with specific message to 429
+	if err != nil && strings.Contains(err.Error(), "Request rate increased too quickl") {
+		err = relaymodel.WrapperError(
+			meta.Mode,
+			http.StatusTooManyRequests,
+			err,
+			relaymodel.WithType("rate_limit_error"),
+		)
 	}
 
 	return usage, err
