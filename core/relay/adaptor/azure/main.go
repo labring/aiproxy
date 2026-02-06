@@ -31,6 +31,21 @@ func (a *Adaptor) GetRequestURL(
 	return GetRequestURL(meta, true)
 }
 
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	model := meta.ActualModel
+	newmodel := strings.ReplaceAll(model, ".", "")
+	meta.ActualModel = newmodel
+	defer func() {
+		meta.ActualModel = model
+	}()
+
+	return a.Adaptor.ConvertRequest(meta, store, req)
+}
+
 //nolint:gocyclo
 func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error) {
 	_, apiVersion, err := GetTokenAndAPIVersion(meta.Channel.Key)

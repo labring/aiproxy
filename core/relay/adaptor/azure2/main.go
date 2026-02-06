@@ -2,6 +2,7 @@ package azure2
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -20,6 +21,14 @@ func (a *Adaptor) GetRequestURL(
 	_ *gin.Context,
 ) (adaptor.RequestURL, error) {
 	return azure.GetRequestURL(meta, false)
+}
+
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	return a.Adaptor.Adaptor.ConvertRequest(meta, store, req)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
