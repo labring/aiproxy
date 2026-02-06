@@ -57,7 +57,11 @@ func RemoveContextManagenetEdits(
 	node *ast.Node,
 	isSupportedEditsType ...func(t string) bool,
 ) {
-	editesNode := node.GetByPath("context_management", "edits")
+	contextManagementNode := node.Get("context_management")
+	if contextManagementNode.Check() != nil {
+		return
+	}
+	editesNode := contextManagementNode.GetByPath("edits")
 	if editesNode.Check() != nil {
 		return
 	}
@@ -81,6 +85,11 @@ func RemoveContextManagenetEdits(
 
 			return true
 		})
+
+	if len(newEdits) == 0 {
+		contextManagementNode.Unset("edits")
+		return
+	}
 
 	*editesNode = ast.NewArray(newEdits)
 }

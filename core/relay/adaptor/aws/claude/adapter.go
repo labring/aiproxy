@@ -83,6 +83,7 @@ func fixBetas(model string, betas []string) []string {
 
 var supportedContextManagementEditsType = map[string]struct{}{
 	"clear_tool_uses_20250919": {},
+	"clear_thinking_20251015":  {},
 }
 
 func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
@@ -121,10 +122,14 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 			)
 		}
 
-		anthropic.RemoveContextManagenetEdits(node, func(t string) bool {
-			_, ok := supportedContextManagementEditsType[t]
-			return ok
-		})
+		if strings.Contains(meta.ActualModel, "4-6") {
+			node.Unset("context_management")
+		} else {
+			anthropic.RemoveContextManagenetEdits(node, func(t string) bool {
+				_, ok := supportedContextManagementEditsType[t]
+				return ok
+			})
+		}
 		anthropic.RemoveToolsExamples(node)
 
 		stream, _ := node.Get("stream").Bool()
