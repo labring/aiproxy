@@ -235,8 +235,10 @@ var ModelList = []model.ModelConfig{
 }
 
 var responsesOnlyModels = map[string]struct{}{
-	"gpt-5-codex": {},
-	"gpt-5-pro":   {},
+	"gpt-52-codex":  {},
+	"gpt-5.2-codex": {},
+	"gpt-5-codex":   {},
+	"gpt-5-pro":     {},
 }
 
 // IsResponsesOnlyModel checks if a model only supports the Responses API
