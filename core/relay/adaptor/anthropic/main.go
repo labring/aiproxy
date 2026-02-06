@@ -61,6 +61,7 @@ func RemoveContextManagenetEdits(
 	if contextManagementNode.Check() != nil {
 		return
 	}
+
 	editesNode := contextManagementNode.GetByPath("edits")
 	if editesNode.Check() != nil {
 		return
@@ -87,7 +88,7 @@ func RemoveContextManagenetEdits(
 		})
 
 	if len(newEdits) == 0 {
-		contextManagementNode.Unset("edits")
+		_, _ = contextManagementNode.Unset("edits")
 		return
 	}
 
