@@ -122,13 +122,26 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 			claudeRequest.Thinking = nil
 		}
 	} else if strings.Contains(meta.OriginModel, "think") {
+		// Use "adaptive" for Opus 4.6, "enabled" for older models
+		thinkingType := relaymodel.ClaudeThinkingTypeEnabled
+		if strings.Contains(meta.OriginModel, "opus") && strings.Contains(meta.OriginModel, "4-6") {
+			thinkingType = "adaptive"
+		}
+
 		claudeRequest.Thinking = &relaymodel.ClaudeThinking{
-			Type: "enabled",
+			Type: thinkingType,
 		}
 	}
 
 	if claudeRequest.Thinking != nil {
-		adjustThinkingBudgetTokens(&claudeRequest.MaxTokens, &claudeRequest.Thinking.BudgetTokens)
+		// Only adjust budget_tokens for "enabled" type
+		// Opus 4.6's "adaptive" type doesn't support budget_tokens
+		if claudeRequest.Thinking.Type == relaymodel.ClaudeThinkingTypeEnabled {
+			adjustThinkingBudgetTokens(
+				&claudeRequest.MaxTokens,
+				&claudeRequest.Thinking.BudgetTokens,
+			)
+		}
 
 		claudeRequest.Temperature = nil
 	}

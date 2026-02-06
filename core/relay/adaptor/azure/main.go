@@ -38,6 +38,7 @@ func (a *Adaptor) ConvertRequest(
 ) (adaptor.ConvertResult, error) {
 	model := meta.ActualModel
 	newmodel := strings.ReplaceAll(model, ".", "")
+
 	meta.ActualModel = newmodel
 	defer func() {
 		meta.ActualModel = model
