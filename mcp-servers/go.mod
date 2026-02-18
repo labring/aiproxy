@@ -1,6 +1,6 @@
 module github.com/labring/aiproxy/mcp-servers
 
-go 1.25.0
+go 1.26
 
 replace github.com/labring/aiproxy/core => ../core
 

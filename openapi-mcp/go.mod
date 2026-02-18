@@ -1,6 +1,6 @@
 module github.com/labring/aiproxy/openapi-mcp
 
-go 1.25
+go 1.26
 
 require (
 	github.com/bytedance/sonic v1.15.0

@@ -1,6 +1,6 @@
 module github.com/labring/aiproxy/core
 
-go 1.25.0
+go 1.26
 
 require (
 	cloud.google.com/go/iam v1.5.3
