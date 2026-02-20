@@ -8,7 +8,7 @@ RUN npm install -g pnpm
 
 RUN pnpm install && pnpm run build
 
-FROM golang:1.25.5-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /aiproxy/core
 
