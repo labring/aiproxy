@@ -330,6 +330,27 @@ func ConvertChatCompletionsRequest(
 		}
 	}
 
+	const forceThinkModel = "deepseek-reasoner"
+	enableReasoning := false
+
+	if meta.OriginModel == forceThinkModel {
+		_, err = node.SetAny("chat_template_kwargs", map[string]any{
+			"thinking": true,
+		})
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+		enableReasoning = true
+	} else {
+		ifReasoning := node.GetByPath("chat_template_kwargs", "thinking")
+		b, _ := ifReasoning.Bool()
+		if b {
+			enableReasoning = true
+		}
+	}
+
+	meta.Set("if_reasoning", enableReasoning)
+
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return adaptor.ConvertResult{}, err
@@ -445,6 +466,11 @@ func StreamHandler(
 	defer cleanup()
 
 	var usage relaymodel.ChatUsage
+	enableAny, _ := meta.Get("if_reasoning")
+	enableReasoning, _ := enableAny.(bool)
+	const endThink = "</think>"
+	reasoningClosed := make(map[int]bool)
+	lookbehind := make(map[int]string)
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -468,6 +494,79 @@ func StreamHandler(
 			if err != nil {
 				log.Error("error pre handler: " + err.Error())
 				continue
+			}
+		}
+
+		if enableReasoning {
+			raw, err := node.Get("choices").Raw()
+			if err == nil && len(raw) > 0 {
+				var choices []*relaymodel.ChatCompletionsStreamResponseChoice
+				if err := sonic.UnmarshalString(raw, &choices); err == nil {
+					changed := false
+
+					for i, ch := range choices {
+						if ch == nil || reasoningClosed[i] {
+							continue
+						}
+
+						s := ch.Delta.StringContent()
+						if s == "" {
+							continue
+						}
+
+						combined := lookbehind[i] + s
+						if idx := strings.Index(combined, endThink); idx >= 0 {
+
+							start := idx - len(lookbehind[i])
+							end := start + len(endThink)
+							if start < 0 {
+								start = 0
+							}
+							if end < 0 {
+								end = 0
+							}
+							if end > len(s) {
+								end = len(s)
+							}
+
+							if prefix := s[:start]; prefix != "" {
+								ch.Delta.ReasoningContent = prefix
+							} else {
+								ch.Delta.ReasoningContent = ""
+							}
+							if tail := s[end:]; tail != "" {
+								ch.Delta.Content = tail
+							} else {
+								ch.Delta.Content = ""
+							}
+
+							reasoningClosed[i] = true
+							changed = true
+						} else {
+							ch.Delta.ReasoningContent = s
+							ch.Delta.Content = ""
+
+							keep := len(endThink) - 1
+							if keep < 0 {
+								keep = 0
+							}
+							if l := len(combined); l >= keep {
+								lookbehind[i] = combined[l-keep:]
+							} else {
+								lookbehind[i] = combined
+							}
+							changed = true
+						}
+					}
+
+					if changed {
+						if bs, err := sonic.Marshal(choices); err == nil {
+							if newChoicesNode, err := sonic.Get(bs); err == nil {
+								_, _ = node.Set("choices", newChoicesNode)
+							}
+						}
+					}
+				}
 			}
 		}
 
