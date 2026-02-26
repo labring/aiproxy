@@ -216,6 +216,11 @@ func ConvertRequestBodyToBytes(
 		_, _ = node.Unset("temperature")
 	}
 
+	if node.Get("temperature").Exists() && node.Get("top_p").Exists() {
+		// Claude does not allow both temperature and top_p to be specified
+		_, _ = node.Unset("top_p")
+	}
+
 	for _, callback := range callbacks {
 		if callback == nil {
 			continue
