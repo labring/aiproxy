@@ -11,7 +11,6 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -64,17 +63,17 @@ func VideoHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK &&
 		resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -82,7 +81,7 @@ func VideoHandler(
 
 	idNode, err := sonic.GetWithOptions(responseBody, ast.SearchOptions{}, "id")
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -90,7 +89,7 @@ func VideoHandler(
 
 	id, err := idNode.String()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -113,7 +112,7 @@ func VideoHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, _ = c.Writer.Write(responseBody)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 func VideoGetJobsHandler(
@@ -121,16 +120,16 @@ func VideoGetJobsHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -138,7 +137,7 @@ func VideoGetJobsHandler(
 
 	node, err := sonic.Get(responseBody)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -146,7 +145,7 @@ func VideoGetJobsHandler(
 
 	expiresAt, err := node.Get("expires_at").Int64()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -185,7 +184,7 @@ func VideoGetJobsHandler(
 	}
 
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -195,7 +194,7 @@ func VideoGetJobsHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, _ = c.Writer.Write(responseBody)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 func VideoGetJobsContentHandler(
@@ -203,9 +202,9 @@ func VideoGetJobsContentHandler(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -214,5 +213,5 @@ func VideoGetJobsContentHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }

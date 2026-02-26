@@ -44,6 +44,26 @@ func TestStreamResponse2OpenAI(t *testing.T) {
 			convey.So(err, convey.ShouldBeNil)
 			convey.So(resp.Choices[0].Delta.ReasoningContent, convey.ShouldEqual, "I am thinking")
 		})
+
+		convey.Convey("should capture upstream ID from message_start", func() {
+			data := []byte(`{
+				"type": "message_start",
+				"message": {
+					"id": "msg_test_123",
+					"type": "message",
+					"role": "assistant",
+					"model": "claude-3-7-sonnet-20250219",
+					"usage": {
+						"input_tokens": 10,
+						"output_tokens": 0
+					}
+				}
+			}`)
+
+			resp, err := streamState.StreamResponse2OpenAI(m, data)
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(resp.ID, convey.ShouldEqual, "msg_test_123")
+		})
 	})
 }
 
@@ -78,6 +98,7 @@ func TestResponse2OpenAI(t *testing.T) {
 
 			resp, err := anthropic.Response2OpenAI(m, data)
 			convey.So(err, convey.ShouldBeNil)
+			convey.So(resp.ID, convey.ShouldEqual, "msg_123")
 			convey.So(
 				resp.Choices[0].Message.ReasoningContent,
 				convey.ShouldEqual,

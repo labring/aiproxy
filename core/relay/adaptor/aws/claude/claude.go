@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -19,10 +18,10 @@ import (
 	"github.com/labring/aiproxy/core/relay/render"
 )
 
-func Handler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func Handler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing response",
 			nil,
 			http.StatusInternalServerError,
@@ -31,7 +30,7 @@ func Handler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
 
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"unknow response type",
 			nil,
 			http.StatusInternalServerError,
@@ -40,20 +39,23 @@ func Handler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
 
 	openaiResp, adaptorErr := anthropic.Response2OpenAI(meta, awsResp.Body)
 	if adaptorErr != nil {
-		return model.Usage{}, adaptorErr
+		return adaptor.DoResponseResult{}, adaptorErr
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(awsResp.Body)))
 	_, _ = c.Writer.Write(awsResp.Body)
 
-	return openaiResp.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      openaiResp.Usage.ToModelUsage(),
+		UpstreamID: openaiResp.ID,
+	}, nil
 }
 
-func StreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func StreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing response",
 			nil,
 			http.StatusInternalServerError,
@@ -62,7 +64,7 @@ func StreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelWithResponseStreamOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"unknow response type",
 			nil,
 			http.StatusInternalServerError,
@@ -75,8 +77,9 @@ func StreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	responseText := strings.Builder{}
 
 	var (
-		usage  *relaymodel.ChatUsage
-		writed bool
+		usage       *relaymodel.ChatUsage
+		writed      bool
+		upstreamID  string
 	)
 
 	streamState := anthropic.NewStreamState()
@@ -101,8 +104,13 @@ func StreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 						usage.Add(response.Usage)
 					}
 
-					return usage.ToModelUsage(), err
+					return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
 				}
+			}
+
+			// Capture upstream ID from response ID
+			if response != nil && response.ID != "" && upstreamID == "" {
+				upstreamID = response.ID
 			}
 
 			if response != nil {
@@ -156,5 +164,8 @@ func StreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 		}
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }

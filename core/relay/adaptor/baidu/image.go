@@ -24,7 +24,7 @@ type ImageResponse struct {
 	Created int64        `json:"created"`
 }
 
-func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
@@ -33,7 +33,7 @@ func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (model.Usag
 
 	err := common.UnmarshalResponse(resp, &imageResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			err.Error(),
 			nil,
 			http.StatusInternalServerError,
@@ -46,14 +46,14 @@ func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (model.Usag
 	}
 
 	if imageResponse.Error != nil && imageResponse.ErrorMsg != "" {
-		return usage, ErrorHandler(imageResponse.Error)
+		return adaptor.DoResponseResult{Usage: usage}, ErrorHandler(imageResponse.Error)
 	}
 
 	openaiResponse := ToOpenAIImageResponse(&imageResponse)
 
 	data, err := sonic.Marshal(openaiResponse)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
 			err.Error(),
 			nil,
 			http.StatusInternalServerError,
@@ -68,7 +68,7 @@ func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (model.Usag
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 func ToOpenAIImageResponse(imageResponse *ImageResponse) *relaymodel.ImageResponse {

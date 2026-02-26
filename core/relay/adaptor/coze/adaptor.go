@@ -10,7 +10,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -129,14 +128,11 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if utils.IsStreamResponse(resp) {
-		usage, err = StreamHandler(meta, c, resp)
-	} else {
-		usage, err = Handler(meta, c, resp)
+		return StreamHandler(meta, c, resp)
 	}
-
-	return usage, err
+	return Handler(meta, c, resp)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

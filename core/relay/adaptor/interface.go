@@ -60,13 +60,19 @@ type DoRequest interface {
 	) (*http.Response, error)
 }
 
+// DoResponseResult contains the result of DoResponse
+type DoResponseResult struct {
+	Usage      model.Usage
+	UpstreamID string // ID from response body or x-request-id header
+}
+
 type DoResponse interface {
 	DoResponse(
 		meta *meta.Meta,
 		store Store,
 		c *gin.Context,
 		resp *http.Response,
-	) (model.Usage, Error)
+	) (DoResponseResult, Error)
 }
 
 type Adaptor interface {

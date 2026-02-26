@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -80,16 +79,19 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
+	var result adaptor.DoResponseResult
+	var err adaptor.Error
+
 	switch {
 	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.StreamHandler(meta, c, resp)
+			result, err = anthropic.StreamHandler(meta, c, resp)
 		} else {
-			usage, err = anthropic.Handler(meta, c, resp)
+			result, err = anthropic.Handler(meta, c, resp)
 		}
 	default:
-		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
+		result, err = a.Adaptor.DoResponse(meta, store, c, resp)
 	}
 
 	// Handle rate limit error: convert 400 with specific message to 429
@@ -102,7 +104,7 @@ func (a *Adaptor) DoResponse(
 		)
 	}
 
-	return usage, err
+	return result, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

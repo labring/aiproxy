@@ -45,7 +45,7 @@ type innerAIAdapter interface {
 		store adaptor.Store,
 		c *gin.Context,
 		resp *http.Response,
-	) (usage model.Usage, err adaptor.Error)
+	) (adaptor.DoResponseResult, adaptor.Error)
 }
 
 func GetAdaptor(model string) innerAIAdapter {

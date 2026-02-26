@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -108,7 +107,7 @@ func (p *StreamFake) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Only process chat completions
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
@@ -135,7 +134,7 @@ func (p *StreamFake) handleFakeStreamResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	log := common.GetLogger(c)
 	// Create a custom response writer to collect streaming data
 	rw := &fakeStreamResponseWriter{
@@ -148,16 +147,16 @@ func (p *StreamFake) handleFakeStreamResponse(
 	}()
 
 	// Process the streaming response
-	usage, relayErr := do.DoResponse(meta, store, c, resp)
+	result, relayErr := do.DoResponse(meta, store, c, resp)
 	if relayErr != nil {
-		return usage, relayErr
+		return result, relayErr
 	}
 
 	// Convert collected streaming chunks to non-streaming response
 	respBody, err := rw.convertToNonStream()
 	if err != nil {
 		log.Errorf("failed to convert to non-streaming response: %v", err)
-		return usage, relayErr
+		return result, relayErr
 	}
 
 	// Set appropriate headers for non-streaming response
@@ -173,7 +172,7 @@ func (p *StreamFake) handleFakeStreamResponse(
 	// Write the non-streaming response
 	_, _ = rw.ResponseWriter.Write(respBody)
 
-	return usage, nil
+	return result, nil
 }
 
 // fakeStreamResponseWriter captures streaming response data

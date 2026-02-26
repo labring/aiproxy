@@ -22,6 +22,7 @@ func recordConsume(
 	downstreamResult bool,
 	user string,
 	metadata map[string]string,
+	upstreamID string,
 ) error {
 	return model.BatchRecordLogs(
 		now,
@@ -47,6 +48,7 @@ func recordConsume(
 		amount,
 		user,
 		metadata,
+		upstreamID,
 	)
 }
 

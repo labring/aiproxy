@@ -340,6 +340,7 @@ func recordResult(
 		downstreamResult,
 		user,
 		metadata,
+		result.UpstreamID,
 	)
 }
 

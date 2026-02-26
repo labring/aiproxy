@@ -194,16 +194,16 @@ func NativeHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	var geminiResponse relaymodel.GeminiChatResponse
 	if err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse); err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -221,7 +221,7 @@ func NativeHandler(
 	// Pass through the response as-is
 	jsonResponse, err := sonic.Marshal(geminiResponse)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -232,7 +232,7 @@ func NativeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // NativeStreamHandler handles streaming responses in native Gemini format (passthrough)
@@ -240,9 +240,9 @@ func NativeStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -284,7 +284,7 @@ func NativeStreamHandler(
 		log.Error("error reading stream: " + err.Error())
 	}
 
-	usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
+	usage.WebSearchCount = model.ZeroNullInt64(websearchCount)
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

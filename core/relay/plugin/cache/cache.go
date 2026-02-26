@@ -334,7 +334,7 @@ func (c *Cache) DoResponse(
 	ctx *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (usage model.Usage, adapterErr adaptor.Error) {
+) (result adaptor.DoResponseResult, adapterErr adaptor.Error) {
 	pluginConfig, err := getPluginConfig(meta)
 	if err != nil {
 		return do.DoResponse(meta, store, ctx, resp)
@@ -360,7 +360,7 @@ func (c *Cache) DoResponse(
 		c.writeCacheHeader(ctx, pluginConfig, "hit")
 		_, _ = ctx.Writer.Write(item.Body)
 
-		return item.Usage, nil
+		return adaptor.DoResponseResult{Usage: item.Usage}, nil
 	}
 
 	if !pluginConfig.Enable {
@@ -395,7 +395,7 @@ func (c *Cache) DoResponse(
 		item := Item{
 			Body:   bytes.Clone(rw.cacheBody.Bytes()),
 			Header: headerMap,
-			Usage:  usage,
+			Usage:  result.Usage,
 		}
 
 		ttl := time.Duration(pluginConfig.TTL) * time.Second

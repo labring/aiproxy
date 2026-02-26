@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -51,17 +50,17 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
-	adaptor := GetAdaptor(meta.ActualModel)
-	if adaptor == nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+) (adaptor.DoResponseResult, adaptor.Error) {
+	innerAdaptor := GetAdaptor(meta.ActualModel)
+	if innerAdaptor == nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			meta.ActualModel+" adaptor not found",
 			"adaptor_not_found",
 			http.StatusInternalServerError,
 		)
 	}
 
-	return adaptor.DoResponse(meta, store, c, resp)
+	return innerAdaptor.DoResponse(meta, store, c, resp)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

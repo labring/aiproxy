@@ -9,7 +9,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/coze/constant/messagetype"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -106,9 +105,9 @@ func StreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -161,16 +160,16 @@ func StreamHandler(
 
 	render.OpenaiDone(c)
 
-	return openai.ResponseText2Usage(
+	return adaptor.DoResponseResult{Usage: openai.ResponseText2Usage(
 		responseText.String(),
 		meta.ActualModel,
 		int64(meta.RequestUsage.InputTokens),
-	).ToModelUsage(), nil
+	).ToModelUsage()}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -181,7 +180,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&cozeResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -189,7 +188,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 	}
 
 	if cozeResponse.Code != 0 {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			cozeResponse.Msg,
 			cozeResponse.Code,
 			resp.StatusCode,
@@ -200,7 +199,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -220,7 +219,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 		responseText = fullTextResponse.Choices[0].Message.StringContent()
 	}
 
-	return openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).
-			ToModelUsage(),
+	return adaptor.DoResponseResult{Usage: openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).
+			ToModelUsage()},
 		nil
 }

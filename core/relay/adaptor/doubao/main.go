@@ -121,19 +121,22 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		websearchCount := int64(0)
+		var result adaptor.DoResponseResult
+		var err adaptor.Error
 		if utils.IsStreamResponse(resp) {
-			usage, err = openai.StreamHandler(meta, c, resp, newHandlerPreHandler(&websearchCount))
+			result, err = openai.StreamHandler(meta, c, resp, newHandlerPreHandler(&websearchCount))
 		} else {
-			usage, err = openai.Handler(meta, c, resp, newHandlerPreHandler(&websearchCount))
+			result, err = openai.Handler(meta, c, resp, newHandlerPreHandler(&websearchCount))
 		}
 
-		usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
+		result.Usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
+		return result, err
 	case mode.Embeddings:
-		usage, err = openai.EmbeddingsHandler(
+		return openai.EmbeddingsHandler(
 			meta,
 			c,
 			resp,
@@ -142,8 +145,6 @@ func (a *Adaptor) DoResponse(
 	default:
 		return openai.DoResponse(meta, store, c, resp)
 	}
-
-	return usage, err
 }
 
 func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {

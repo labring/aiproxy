@@ -133,9 +133,9 @@ func STTHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	if utils.IsStreamResponse(resp) {
@@ -150,12 +150,12 @@ func handleSTTNonStream(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -164,7 +164,7 @@ func handleSTTNonStream(
 
 	text, err := extractTextFromResponse(responseBody, meta.GetString(MetaResponseFormat))
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"extract_text_failed",
 			http.StatusInternalServerError,
@@ -177,7 +177,7 @@ func handleSTTNonStream(
 	if strings.Contains(resp.Header.Get("Content-Type"), "json") {
 		node, err := sonic.Get(responseBody)
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+			return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 				err,
 				"get_node_from_body_err",
 				http.StatusInternalServerError,
@@ -188,7 +188,7 @@ func handleSTTNonStream(
 		if usageNode != nil && usageNode.Exists() {
 			usageStr, err := usageNode.Raw()
 			if err != nil {
-				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 					err,
 					"unmarshal_response_err",
 					http.StatusInternalServerError,
@@ -197,7 +197,7 @@ func handleSTTNonStream(
 
 			err = sonic.UnmarshalString(usageStr, usage)
 			if err != nil {
-				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 					err,
 					"unmarshal_response_err",
 					http.StatusInternalServerError,
@@ -206,7 +206,7 @@ func handleSTTNonStream(
 		} else {
 			responseBody, err = injectUsageIntoJSON(&node, usage)
 			if err != nil {
-				return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 					err,
 					"inject_usage_failed",
 					http.StatusInternalServerError,
@@ -224,7 +224,7 @@ func handleSTTNonStream(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 // handleSTTStream handles streaming STT response
@@ -232,13 +232,13 @@ func handleSTTStream(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	scanner, cleanup := utils.NewScanner(resp.Body)
 	defer cleanup()
 
-	return processSTTStreamChunks(scanner, c, meta), nil
+	return adaptor.DoResponseResult{Usage: processSTTStreamChunks(scanner, c, meta)}, nil
 }
 
 // processSTTStreamChunks processes streaming chunks and returns final usage

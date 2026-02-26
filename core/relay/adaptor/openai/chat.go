@@ -430,9 +430,9 @@ func StreamHandler(
 	c *gin.Context,
 	resp *http.Response,
 	preHandler PreHandler,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -445,6 +445,7 @@ func StreamHandler(
 	defer cleanup()
 
 	var usage relaymodel.ChatUsage
+	var upstreamID string
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -481,6 +482,15 @@ func StreamHandler(
 			usage = *u
 
 			responseText.Reset()
+		}
+
+		// Extract upstream ID from response if available
+		if upstreamID == "" {
+			if idNode := node.Get("id"); idNode.Exists() && idNode.TypeSafe() != ast.V_NULL {
+				if id, err := idNode.String(); err == nil && id != "" {
+					upstreamID = id
+				}
+			}
 		}
 
 		for _, choice := range ch {
@@ -526,7 +536,10 @@ func StreamHandler(
 
 	render.OpenaiDone(c)
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }
 
 func GetUsageOrChoicesResponseFromNode(
@@ -576,9 +589,9 @@ func Handler(
 	c *gin.Context,
 	resp *http.Response,
 	preHandler PreHandler,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -587,7 +600,7 @@ func Handler(
 
 	node, err := common.UnmarshalResponse2Node(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -597,7 +610,7 @@ func Handler(
 	if preHandler != nil {
 		err := preHandler(meta, &node)
 		if err != nil {
-			return model.Usage{}, relaymodel.WrapperOpenAIError(
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 				err,
 				"pre_handler_failed",
 				http.StatusInternalServerError,
@@ -607,11 +620,19 @@ func Handler(
 
 	usage, choices, err := GetUsageOrChoicesResponseFromNode(&node)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
 		)
+	}
+
+	// Extract upstream ID from response if available
+	var upstreamID string
+	if idNode := node.Get("id"); idNode.Exists() && idNode.TypeSafe() != ast.V_NULL {
+		if id, err := idNode.String(); err == nil && id != "" {
+			upstreamID = id
+		}
 	}
 
 	if usage == nil ||
@@ -635,11 +656,14 @@ func Handler(
 
 		_, err = node.Set("usage", ast.NewAny(usage))
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-				err,
-				"set_usage_failed",
-				http.StatusInternalServerError,
-			)
+			return adaptor.DoResponseResult{
+					Usage:      usage.ToModelUsage(),
+					UpstreamID: upstreamID,
+				}, relaymodel.WrapperOpenAIError(
+					err,
+					"set_usage_failed",
+					http.StatusInternalServerError,
+				)
 		}
 	} else if usage.TotalTokens != 0 && usage.PromptTokens == 0 { // some channels don't return prompt tokens & completion tokens
 		usage.PromptTokens = int64(meta.RequestUsage.InputTokens)
@@ -647,30 +671,39 @@ func Handler(
 
 		_, err = node.Set("usage", ast.NewAny(usage))
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-				err,
-				"set_usage_failed",
-				http.StatusInternalServerError,
-			)
+			return adaptor.DoResponseResult{
+					Usage:      usage.ToModelUsage(),
+					UpstreamID: upstreamID,
+				}, relaymodel.WrapperOpenAIError(
+					err,
+					"set_usage_failed",
+					http.StatusInternalServerError,
+				)
 		}
 	}
 
 	_, err = node.Set("model", ast.NewString(meta.OriginModel))
 	if err != nil {
-		return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"set_model_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage:      usage.ToModelUsage(),
+				UpstreamID: upstreamID,
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"set_model_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	newData, err := sonic.Marshal(&node)
 	if err != nil {
-		return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage:      usage.ToModelUsage(),
+				UpstreamID: upstreamID,
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -681,7 +714,10 @@ func Handler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }
 
 // CleanToolParameters removes null or empty required field from tool parameters
@@ -985,16 +1021,16 @@ func ConvertResponsesToChatCompletionResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -1005,7 +1041,7 @@ func ConvertResponsesToChatCompletionResponse(
 
 	err = sonic.Unmarshal(responseBody, &responsesResp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -1073,7 +1109,7 @@ func ConvertResponsesToChatCompletionResponse(
 	// Marshal and return
 	chatRespData, err := sonic.Marshal(chatResp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -1085,10 +1121,10 @@ func ConvertResponsesToChatCompletionResponse(
 	_, _ = c.Writer.Write(chatRespData)
 
 	if responsesResp.Usage != nil {
-		return responsesResp.Usage.ToModelUsage(), nil
+		return adaptor.DoResponseResult{Usage: responsesResp.Usage.ToModelUsage()}, nil
 	}
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // ConvertResponsesToChatCompletionStreamResponse converts Responses API stream to ChatCompletion stream
@@ -1096,9 +1132,9 @@ func ConvertResponsesToChatCompletionStreamResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -1173,5 +1209,5 @@ func ConvertResponsesToChatCompletionStreamResponse(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

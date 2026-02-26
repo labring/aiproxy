@@ -62,12 +62,12 @@ func HandleParsePdfResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	var response ParsePdfResponse
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&response)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"decode response failed: "+err.Error(),
 			"decode_response_failed",
 			http.StatusBadRequest,
@@ -75,7 +75,7 @@ func HandleParsePdfResponse(
 	}
 
 	if response.Code != "success" {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"parse pdf failed: "+response.Msg,
 			"parse_pdf_failed",
 			http.StatusBadRequest,
@@ -85,7 +85,7 @@ func HandleParsePdfResponse(
 	for {
 		status, err := GetStatus(context.Background(), meta, response.Data.UID)
 		if err != nil {
-			return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 				"get status failed: "+err.Error(),
 				"get_status_failed",
 				http.StatusInternalServerError,
@@ -98,7 +98,7 @@ func HandleParsePdfResponse(
 		case StatusResponseDataStatusProcessing:
 			time.Sleep(1 * time.Second)
 		case StatusResponseDataStatusFailed:
-			return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 				"parse pdf failed: "+status.Detail,
 				"parse_pdf_failed",
 				http.StatusBadRequest,
@@ -396,7 +396,7 @@ func handleParsePdfResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	response *StatusResponseDataResult,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	mds := make([]string, 0, len(response.Pages))
 
 	totalLength := 0
@@ -432,10 +432,10 @@ func handleParsePdfResponse(
 		})
 	}
 
-	return model.Usage{
+	return adaptor.DoResponseResult{Usage: model.Usage{
 		InputTokens: model.ZeroNullInt64(pages),
 		TotalTokens: model.ZeroNullInt64(pages),
-	}, nil
+	}}, nil
 }
 
 type StatusResponse struct {

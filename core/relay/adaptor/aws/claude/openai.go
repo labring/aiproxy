@@ -12,7 +12,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -21,10 +20,10 @@ import (
 	"github.com/labring/aiproxy/core/relay/render"
 )
 
-func OpenaiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func OpenaiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing response",
 			nil,
 			http.StatusInternalServerError,
@@ -33,7 +32,7 @@ func OpenaiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"unknow response type",
 			nil,
 			http.StatusInternalServerError,
@@ -42,12 +41,15 @@ func OpenaiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 
 	openaiResp, adaptorErr := anthropic.Response2OpenAI(meta, awsResp.Body)
 	if adaptorErr != nil {
-		return model.Usage{}, adaptorErr
+		return adaptor.DoResponseResult{}, adaptorErr
 	}
 
 	jsonBody, err := sonic.Marshal(openaiResp)
 	if err != nil {
-		return openaiResp.Usage.ToModelUsage(), relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{
+			Usage:      openaiResp.Usage.ToModelUsage(),
+			UpstreamID: openaiResp.ID,
+		}, relaymodel.WrapperOpenAIErrorWithMessage(
 			err.Error(),
 			nil,
 			http.StatusInternalServerError,
@@ -58,13 +60,16 @@ func OpenaiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonBody)))
 	_, _ = c.Writer.Write(jsonBody)
 
-	return openaiResp.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      openaiResp.Usage.ToModelUsage(),
+		UpstreamID: openaiResp.ID,
+	}, nil
 }
 
-func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing response",
 			nil,
 			http.StatusInternalServerError,
@@ -73,7 +78,7 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelWithResponseStreamOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"unknow response type",
 			nil,
 			http.StatusInternalServerError,
@@ -86,8 +91,9 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 	responseText := strings.Builder{}
 
 	var (
-		usage  *relaymodel.ChatUsage
-		writed bool
+		usage       *relaymodel.ChatUsage
+		writed      bool
+		upstreamID  string
 	)
 
 	streamState := anthropic.NewStreamState()
@@ -104,7 +110,12 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 					continue
 				}
 
-				return usage.ToModelUsage(), err
+				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
+			}
+
+			// Capture upstream ID from response ID
+			if response != nil && response.ID != "" && upstreamID == "" {
+				upstreamID = response.ID
 			}
 
 			if response == nil {
@@ -169,5 +180,8 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 
 	render.OpenaiDone(c)
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }

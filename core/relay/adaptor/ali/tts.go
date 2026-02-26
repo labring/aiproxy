@@ -213,7 +213,7 @@ func TTSDoResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	_ *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	log := common.GetLogger(c)
 
 	conn, ok := meta.MustGet("ws_conn").(*websocket.Conn)
@@ -224,12 +224,12 @@ func TTSDoResponse(
 
 	sseFormat := meta.GetString("stream_format") == "sse"
 
-	usage = model.Usage{}
+	usage := model.Usage{}
 
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
-			return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+			return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
 				"ali_wss_read_msg_failed",
 				nil,
 				http.StatusInternalServerError,
@@ -241,7 +241,7 @@ func TTSDoResponse(
 		case websocket.TextMessage:
 			err = sonic.Unmarshal(data, &msg)
 			if err != nil {
-				return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
 					"ali_wss_read_msg_failed",
 					nil,
 					http.StatusInternalServerError,
@@ -256,7 +256,7 @@ func TTSDoResponse(
 			case "task-finished":
 				usage.InputTokens = model.ZeroNullInt64(msg.Payload.Usage.Characters)
 				usage.TotalTokens = model.ZeroNullInt64(msg.Payload.Usage.Characters)
-				return usage, nil
+				return adaptor.DoResponseResult{Usage: usage}, nil
 			case "task-failed":
 				if sseFormat {
 					render.OpenaiAudioDone(c, relaymodel.TextToSpeechUsage{
@@ -265,10 +265,10 @@ func TTSDoResponse(
 						TotalTokens:  int64(usage.TotalTokens),
 					})
 
-					return usage, nil
+					return adaptor.DoResponseResult{Usage: usage}, nil
 				}
 
-				return usage, relaymodel.WrapperOpenAIErrorWithMessage(
+				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
 					msg.Header.ErrorMessage,
 					msg.Header.ErrorCode,
 					http.StatusInternalServerError,

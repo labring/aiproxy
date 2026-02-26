@@ -239,29 +239,24 @@ func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	_ adaptor.Store,
 	c *gin.Context,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Anthropic:
 		if meta.GetBool("stream") {
-			usage, err = StreamHandler(meta, c)
-		} else {
-			usage, err = Handler(meta, c)
+			return StreamHandler(meta, c)
 		}
+		return Handler(meta, c)
 	case mode.Gemini:
 		if meta.GetBool("stream") {
-			usage, err = GeminiStreamHandler(meta, c)
-		} else {
-			usage, err = GeminiHandler(meta, c)
+			return GeminiStreamHandler(meta, c)
 		}
+		return GeminiHandler(meta, c)
 	default:
 		if meta.GetBool("stream") {
-			usage, err = OpenaiStreamHandler(meta, c)
-		} else {
-			usage, err = OpenaiHandler(meta, c)
+			return OpenaiStreamHandler(meta, c)
 		}
+		return OpenaiHandler(meta, c)
 	}
-
-	return usage, err
 }
 
 func handleGeminiRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
@@ -286,11 +281,11 @@ func handleGeminiRequest(meta *meta.Meta, request *http.Request) ([]byte, error)
 	return sonic.Marshal(req)
 }
 
-func GeminiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func GeminiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	// Get the response output from meta
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperAnthropicErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicErrorWithMessage(
 			"response output not found in meta",
 			"response_output_not_found",
 			http.StatusInternalServerError,
@@ -300,7 +295,7 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	// Cast to AWS response type
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperAnthropicErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicErrorWithMessage(
 			"unknown response type",
 			"unknown_response_type",
 			http.StatusInternalServerError,
@@ -310,7 +305,7 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	// Parse Claude response
 	var claudeResp relaymodel.ClaudeResponse
 	if err := sonic.Unmarshal(awsResp.Body, &claudeResp); err != nil {
-		return model.Usage{}, relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicError(
 			err,
 			"unmarshal_response_failed",
 			http.StatusInternalServerError,
@@ -323,7 +318,7 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	// Marshal and send
 	data, err := sonic.Marshal(geminiResp)
 	if err != nil {
-		return claudeResp.Usage.ToOpenAIUsage().ToModelUsage(), relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, relaymodel.WrapperAnthropicError(
 			err,
 			"marshal_response_failed",
 			http.StatusInternalServerError,
@@ -333,14 +328,14 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error)
 	c.Writer.Header().Set("Content-Type", "application/json")
 	_, _ = c.Writer.Write(data)
 
-	return claudeResp.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, nil
 }
 
-func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.Error) {
+func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
 	// Get the response output from meta
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperAnthropicErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicErrorWithMessage(
 			"response output not found in meta",
 			"response_output_not_found",
 			http.StatusInternalServerError,
@@ -350,7 +345,7 @@ func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 	// Cast to AWS streaming response type
 	awsResp, ok := resp.(*bedrockruntime.InvokeModelWithResponseStreamOutput)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperAnthropicErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicErrorWithMessage(
 			"unknown response type",
 			"unknown_response_type",
 			http.StatusInternalServerError,
@@ -398,5 +393,5 @@ func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (model.Usage, adaptor.
 		}
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

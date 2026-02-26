@@ -57,6 +57,7 @@ type Log struct {
 	GroupID          string          `gorm:"size:64"                                                        json:"group,omitempty"`
 	Model            string          `gorm:"size:64"                                                        json:"model"`
 	RequestID        EmptyNullString `gorm:"type:char(16);index:,where:request_id is not null"              json:"request_id"`
+	UpstreamID       EmptyNullString `gorm:"type:text"                                                      json:"upstream_id,omitempty"`
 	ID               int             `gorm:"primaryKey"                                                     json:"id"`
 	TokenID          int             `gorm:"index"                                                          json:"token_id,omitempty"`
 	ChannelID        int             `                                                                      json:"channel,omitempty"`
@@ -338,6 +339,7 @@ func RecordConsumeLog(
 	amount float64,
 	user string,
 	metadata map[string]string,
+	upstreamID string,
 ) error {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -374,6 +376,7 @@ func RecordConsumeLog(
 		UsedAmount:       amount,
 		User:             EmptyNullString(user),
 		Metadata:         metadata,
+		UpstreamID:       EmptyNullString(upstreamID),
 	}
 
 	return LogDB.Create(log).Error
@@ -420,6 +423,7 @@ func buildGetLogsQuery(
 	endTimestamp time.Time,
 	modelName string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	channelID int,
@@ -432,6 +436,10 @@ func buildGetLogsQuery(
 
 	if requestID != "" {
 		tx = tx.Where("request_id = ?", requestID)
+	}
+
+	if upstreamID != "" {
+		tx = tx.Where("upstream_id = ?", upstreamID)
 	}
 
 	if ip != "" {
@@ -491,6 +499,7 @@ func getLogs(
 	endTimestamp time.Time,
 	modelName string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	channelID int,
@@ -517,6 +526,7 @@ func getLogs(
 			endTimestamp,
 			modelName,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			channelID,
@@ -534,6 +544,7 @@ func getLogs(
 			endTimestamp,
 			modelName,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			channelID,
@@ -571,6 +582,7 @@ func GetLogs(
 	endTimestamp time.Time,
 	modelName string,
 	requestID string,
+	upstreamID string,
 	channelID int,
 	order string,
 	codeType CodeType,
@@ -605,6 +617,7 @@ func GetLogs(
 			endTimestamp,
 			modelName,
 			requestID,
+			upstreamID,
 			0,
 			"",
 			channelID,
@@ -640,6 +653,7 @@ func GetGroupLogs(
 	endTimestamp time.Time,
 	modelName string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	order string,
@@ -673,6 +687,7 @@ func GetGroupLogs(
 			endTimestamp,
 			modelName,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			0,
@@ -721,6 +736,7 @@ func buildSearchLogsQuery(
 	group string,
 	keyword string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	modelName string,
@@ -736,6 +752,10 @@ func buildSearchLogsQuery(
 
 	if requestID != "" {
 		tx = tx.Where("request_id = ?", requestID)
+	}
+
+	if upstreamID != "" {
+		tx = tx.Where("upstream_id = ?", upstreamID)
 	}
 
 	if ip != "" {
@@ -798,6 +818,11 @@ func buildSearchLogsQuery(
 			values = append(values, keyword)
 		}
 
+		if upstreamID == "" {
+			conditions = append(conditions, "upstream_id = ?")
+			values = append(values, keyword)
+		}
+
 		if group == "" {
 			conditions = append(conditions, "group_id = ?")
 			values = append(values, keyword)
@@ -845,6 +870,7 @@ func searchLogs(
 	group string,
 	keyword string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	modelName string,
@@ -872,6 +898,7 @@ func searchLogs(
 			group,
 			keyword,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			modelName,
@@ -890,6 +917,7 @@ func searchLogs(
 			group,
 			keyword,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			modelName,
@@ -929,6 +957,7 @@ func searchLogs(
 func SearchLogs(
 	keyword string,
 	requestID string,
+	upstreamID string,
 	group string,
 	tokenID int,
 	tokenName string,
@@ -960,6 +989,7 @@ func SearchLogs(
 			group,
 			keyword,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			modelName,
@@ -1003,6 +1033,7 @@ func SearchGroupLogs(
 	group string,
 	keyword string,
 	requestID string,
+	upstreamID string,
 	tokenID int,
 	tokenName string,
 	modelName string,
@@ -1036,6 +1067,7 @@ func SearchGroupLogs(
 		total, logs, err = searchLogs(group,
 			keyword,
 			requestID,
+			upstreamID,
 			tokenID,
 			tokenName,
 			modelName,

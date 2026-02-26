@@ -14,6 +14,8 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
+// need to keep model import for model.Usage
+
 func ConvertModerationsRequest(
 	meta *meta.Meta,
 	req *http.Request,
@@ -46,9 +48,9 @@ func ModerationsHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -57,7 +59,7 @@ func ModerationsHandler(
 
 	node, err := common.UnmarshalResponse2Node(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -65,7 +67,7 @@ func ModerationsHandler(
 	}
 
 	if _, err := node.Set("model", ast.NewString(meta.OriginModel)); err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"set_model_failed",
 			http.StatusInternalServerError,
@@ -74,7 +76,7 @@ func ModerationsHandler(
 
 	newData, err := node.MarshalJSON()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -94,5 +96,5 @@ func ModerationsHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

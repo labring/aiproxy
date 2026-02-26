@@ -6,7 +6,6 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
@@ -194,7 +193,7 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.ImagesGenerations:
 		return ImageHandler(meta, c, resp)
@@ -211,17 +210,15 @@ func (a *Adaptor) DoResponse(
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
 			return anthropic.StreamHandler(meta, c, resp)
-		} else {
-			return anthropic.Handler(meta, c, resp)
 		}
+		return anthropic.Handler(meta, c, resp)
 	case mode.Gemini:
 		if utils.IsStreamResponse(resp) {
 			return openai.GeminiStreamHandler(meta, c, resp)
-		} else {
-			return openai.GeminiHandler(meta, c, resp)
 		}
+		return openai.GeminiHandler(meta, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,

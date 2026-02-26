@@ -6,7 +6,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,9 +16,9 @@ import (
 // https://open.bigmodel.cn/api/paas/v3/model-api/chatglm_std/invoke
 // https://open.bigmodel.cn/api/paas/v3/model-api/chatglm_std/sse-invoke
 
-func EmbeddingsHandler(c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func EmbeddingsHandler(c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -28,7 +27,7 @@ func EmbeddingsHandler(c *gin.Context, resp *http.Response) (model.Usage, adapto
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&zhipuResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -39,7 +38,7 @@ func EmbeddingsHandler(c *gin.Context, resp *http.Response) (model.Usage, adapto
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -50,7 +49,7 @@ func EmbeddingsHandler(c *gin.Context, resp *http.Response) (model.Usage, adapto
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
 }
 
 func embeddingResponseZhipu2OpenAI(response *EmbeddingResponse) *relaymodel.EmbeddingResponse {
