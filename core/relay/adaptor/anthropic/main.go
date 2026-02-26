@@ -131,6 +131,32 @@ func ConvertRequestBodyToBytes(
 	node *ast.Node,
 	callbacks ...func(node *ast.Node) error,
 ) ([]byte, error) { // Process image content if present
+	adaptorConfig := Config{}
+	if err := meta.ChannelConfigs.LoadConfig(&adaptorConfig); err != nil {
+		return nil, err
+	}
+
+	if adaptorConfig.DisableContextManagement {
+		_, _ = node.Unset("context_management")
+	} else if len(adaptorConfig.SupportedContextManagementEditsType) > 0 {
+		supported := make(
+			map[string]struct{},
+			len(adaptorConfig.SupportedContextManagementEditsType),
+		)
+		for _, t := range adaptorConfig.SupportedContextManagementEditsType {
+			supported[t] = struct{}{}
+		}
+
+		RemoveContextManagenetEdits(node, func(t string) bool {
+			_, ok := supported[t]
+			return ok
+		})
+	}
+
+	if adaptorConfig.RemoveToolsExamples {
+		RemoveToolsExamples(node)
+	}
+
 	err := ConvertImage2Base64(ctx, node)
 	if err != nil {
 		return nil, err

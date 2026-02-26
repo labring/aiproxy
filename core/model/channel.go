@@ -404,7 +404,7 @@ func UpdateChannel(channel *Channel) (err error) {
 		"base_url",
 		"models",
 		"priority",
-		"config",
+		"configs",
 		"enabled_auto_balance_check",
 		"balance_threshold",
 		"sets",
