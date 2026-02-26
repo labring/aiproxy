@@ -57,7 +57,7 @@ type Log struct {
 	GroupID          string          `gorm:"size:64"                                                        json:"group,omitempty"`
 	Model            string          `gorm:"size:64"                                                        json:"model"`
 	RequestID        EmptyNullString `gorm:"type:char(16);index:,where:request_id is not null"              json:"request_id"`
-	UpstreamID       EmptyNullString `gorm:"type:text"                                                      json:"upstream_id,omitempty"`
+	UpstreamID       EmptyNullString `gorm:"type:varchar(256)"                                              json:"upstream_id,omitempty"`
 	ID               int             `gorm:"primaryKey"                                                     json:"id"`
 	TokenID          int             `gorm:"index"                                                          json:"token_id,omitempty"`
 	ChannelID        int             `                                                                      json:"channel,omitempty"`
@@ -351,6 +351,12 @@ func RecordConsumeLog(
 
 	if firstByteAt.IsZero() || firstByteAt.Before(requestAt) {
 		firstByteAt = requestAt
+	}
+
+	// Truncate upstreamID to max length
+	const maxUpstreamIDLength = 256
+	if len(upstreamID) > maxUpstreamIDLength {
+		upstreamID = upstreamID[:maxUpstreamIDLength]
 	}
 
 	log := &Log{
