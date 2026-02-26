@@ -90,8 +90,15 @@ func ConvertGeminiRequestToStruct(
 	if geminiReq.GenerationConfig != nil {
 		if geminiReq.GenerationConfig.Temperature != nil {
 			claudeReq.Temperature = geminiReq.GenerationConfig.Temperature
-		} else if geminiReq.GenerationConfig.TopP != nil {
+		}
+
+		if geminiReq.GenerationConfig.TopP != nil {
 			claudeReq.TopP = geminiReq.GenerationConfig.TopP
+		}
+
+		if claudeReq.Temperature != nil && claudeReq.TopP != nil {
+			// Claude does not allow both temperature and top_p to be specified
+			claudeReq.TopP = nil
 		}
 
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {

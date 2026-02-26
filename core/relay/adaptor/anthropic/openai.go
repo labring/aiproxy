@@ -145,6 +145,11 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 		claudeRequest.Temperature = nil
 	}
 
+	if claudeRequest.Temperature != nil && claudeRequest.TopP != nil {
+		// Claude does not allow both temperature and top_p to be specified
+		claudeRequest.TopP = nil
+	}
+
 	if len(claudeTools) > 0 {
 		claudeToolChoice := struct {
 			Type string `json:"type"`
