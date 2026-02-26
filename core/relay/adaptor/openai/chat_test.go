@@ -242,7 +242,7 @@ func TestConvertChatCompletionToResponsesRequest(t *testing.T) {
 				Messages: []relaymodel.Message{
 					{Role: "user", Content: "Hello"},
 				},
-				Temperature: floatPtr(0.7),
+				Temperature: new(0.7),
 				MaxTokens:   100,
 			},
 			checkFunc: func(t *testing.T, responsesReq relaymodel.CreateResponseRequest) {
@@ -452,8 +452,10 @@ func TestConvertResponsesToChatCompletionResponse(t *testing.T) {
 }
 
 // Helper function
+//
+//go:fix inline
 func floatPtr(f float64) *float64 {
-	return &f
+	return new(f)
 }
 
 // mockReadCloser is a helper to create a ReadCloser from a Reader

@@ -16,7 +16,10 @@ import (
 // https://open.bigmodel.cn/api/paas/v3/model-api/chatglm_std/invoke
 // https://open.bigmodel.cn/api/paas/v3/model-api/chatglm_std/sse-invoke
 
-func EmbeddingsHandler(c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+func EmbeddingsHandler(
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
 	}
@@ -38,11 +41,13 @@ func EmbeddingsHandler(c *gin.Context, resp *http.Response) (adaptor.DoResponseR
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")

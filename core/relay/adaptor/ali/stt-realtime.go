@@ -229,11 +229,13 @@ func STTDoResponse(
 
 				err = conn.WriteMessage(websocket.BinaryMessage, chunk)
 				if err != nil {
-					return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
-						"ali_wss_write_msg_failed",
-						nil,
-						http.StatusInternalServerError,
-					)
+					return adaptor.DoResponseResult{
+							Usage: usage,
+						}, relaymodel.WrapperOpenAIErrorWithMessage(
+							"ali_wss_write_msg_failed",
+							nil,
+							http.StatusInternalServerError,
+						)
 				}
 			}
 
@@ -250,20 +252,24 @@ func STTDoResponse(
 
 			finishData, err := sonic.Marshal(finishMsg)
 			if err != nil {
-				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
-					"ali_wss_write_msg_failed",
-					nil,
-					http.StatusInternalServerError,
-				)
+				return adaptor.DoResponseResult{
+						Usage: usage,
+					}, relaymodel.WrapperOpenAIErrorWithMessage(
+						"ali_wss_write_msg_failed",
+						nil,
+						http.StatusInternalServerError,
+					)
 			}
 
 			err = conn.WriteMessage(websocket.TextMessage, finishData)
 			if err != nil {
-				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIErrorWithMessage(
-					"ali_wss_write_msg_failed",
-					nil,
-					http.StatusInternalServerError,
-				)
+				return adaptor.DoResponseResult{
+						Usage: usage,
+					}, relaymodel.WrapperOpenAIErrorWithMessage(
+						"ali_wss_write_msg_failed",
+						nil,
+						http.StatusInternalServerError,
+					)
 			}
 		case "result-generated":
 			if msg.Payload.Output.STTSentence.EndTime != nil &&

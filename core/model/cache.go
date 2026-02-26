@@ -99,6 +99,7 @@ func (t *TokenCache) FindModel(model string) string {
 			if ok {
 				findModel = e
 			}
+
 			return ok
 		}) {
 			return findModel
@@ -116,6 +117,7 @@ func containsModel(model string, sets []string, modelsBySet map[string][]string)
 			if ok {
 				findModel = e
 			}
+
 			return ok
 		}) {
 			return findModel

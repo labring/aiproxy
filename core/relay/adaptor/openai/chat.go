@@ -444,8 +444,10 @@ func StreamHandler(
 	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
 	defer cleanup()
 
-	var usage relaymodel.ChatUsage
-	var upstreamID string
+	var (
+		usage      relaymodel.ChatUsage
+		upstreamID string
+	)
 
 	for scanner.Scan() {
 		data := scanner.Bytes()

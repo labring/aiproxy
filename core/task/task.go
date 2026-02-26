@@ -214,13 +214,11 @@ func formatGroupUsageAlerts(alerts []model.GroupUsageAlertItem) string {
 
 	var result strings.Builder
 	for _, alert := range alerts {
-		result.WriteString(fmt.Sprintf(
-			"GroupID: %s | 3-Day Avg: %.4f | Today: %.4f | Ratio: %.2fx\n",
+		fmt.Fprintf(&result, "GroupID: %s | 3-Day Avg: %.4f | Today: %.4f | Ratio: %.2fx\n",
 			alert.GroupID,
 			alert.ThreeDayAvgAmount,
 			alert.TodayAmount,
-			alert.Ratio,
-		))
+			alert.Ratio)
 	}
 
 	return result.String()

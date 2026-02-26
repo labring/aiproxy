@@ -332,9 +332,9 @@ func StreamHandler(
 	responseText := strings.Builder{}
 
 	var (
-		usage       *relaymodel.ChatUsage
-		writed      bool
-		upstreamID  string
+		usage      *relaymodel.ChatUsage
+		writed     bool
+		upstreamID string
 	)
 
 	streamState := NewStreamState()
@@ -450,7 +450,11 @@ func StreamHandler(
 	}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}

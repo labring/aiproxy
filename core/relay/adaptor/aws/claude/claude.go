@@ -77,9 +77,9 @@ func StreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, a
 	responseText := strings.Builder{}
 
 	var (
-		usage       *relaymodel.ChatUsage
-		writed      bool
-		upstreamID  string
+		usage      *relaymodel.ChatUsage
+		writed     bool
+		upstreamID string
 	)
 
 	streamState := anthropic.NewStreamState()

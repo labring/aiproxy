@@ -47,18 +47,24 @@ func EmbeddingsHandler(
 	}
 
 	if baiduResponse.Error != nil && baiduResponse.ErrorCode != 0 {
-		return adaptor.DoResponseResult{Usage: baiduResponse.Usage.ToModelUsage()}, ErrorHandler(baiduResponse.Error)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, ErrorHandler(
+				baiduResponse.Error,
+			)
 	}
 
 	respMap := make(map[string]any)
 
 	err = sonic.Unmarshal(body, &respMap)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: baiduResponse.Usage.ToModelUsage()}, relaymodel.WrapperOpenAIErrorWithMessage(
-			err.Error(),
-			nil,
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIErrorWithMessage(
+				err.Error(),
+				nil,
+				http.StatusInternalServerError,
+			)
 	}
 
 	respMap["model"] = meta.OriginModel
@@ -66,11 +72,13 @@ func EmbeddingsHandler(
 
 	data, err := sonic.Marshal(respMap)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: baiduResponse.Usage.ToModelUsage()}, relaymodel.WrapperOpenAIErrorWithMessage(
-			err.Error(),
-			nil,
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIErrorWithMessage(
+				err.Error(),
+				nil,
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")

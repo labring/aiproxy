@@ -167,7 +167,11 @@ func StreamHandler(
 	).ToModelUsage()}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
 	}
@@ -219,7 +223,9 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoRe
 		responseText = fullTextResponse.Choices[0].Message.StringContent()
 	}
 
-	return adaptor.DoResponseResult{Usage: openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).
-			ToModelUsage()},
+	return adaptor.DoResponseResult{
+			Usage: openai.ResponseText2Usage(responseText, meta.ActualModel, int64(meta.RequestUsage.InputTokens)).
+				ToModelUsage(),
+		},
 		nil
 }

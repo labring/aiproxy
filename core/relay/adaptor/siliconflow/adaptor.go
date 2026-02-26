@@ -50,6 +50,7 @@ func (a *Adaptor) DoResponse(
 			OutputTokens: model.ZeroNullInt64(size),
 			TotalTokens:  model.ZeroNullInt64(size),
 		}
+
 		return result, nil
 	case mode.Rerank:
 		if resp.StatusCode != http.StatusOK {

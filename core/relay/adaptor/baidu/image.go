@@ -24,7 +24,11 @@ type ImageResponse struct {
 	Created int64        `json:"created"`
 }
 
-func ImageHandler(_ *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+func ImageHandler(
+	_ *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)

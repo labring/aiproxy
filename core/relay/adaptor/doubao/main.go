@@ -125,8 +125,12 @@ func (a *Adaptor) DoResponse(
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		websearchCount := int64(0)
-		var result adaptor.DoResponseResult
-		var err adaptor.Error
+
+		var (
+			result adaptor.DoResponseResult
+			err    adaptor.Error
+		)
+
 		if utils.IsStreamResponse(resp) {
 			result, err = openai.StreamHandler(meta, c, resp, newHandlerPreHandler(&websearchCount))
 		} else {
@@ -134,6 +138,7 @@ func (a *Adaptor) DoResponse(
 		}
 
 		result.Usage.WebSearchCount += model.ZeroNullInt64(websearchCount)
+
 		return result, err
 	case mode.Embeddings:
 		return openai.EmbeddingsHandler(

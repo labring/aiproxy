@@ -184,7 +184,8 @@ func (s *Server) formatTicketsInfo(ticketsInfo []TicketInfo) string {
 
 	for _, ticketInfo := range ticketsInfo {
 		var infoStr strings.Builder
-		infoStr.WriteString(fmt.Sprintf(
+		fmt.Fprintf(
+			&infoStr,
 			"%s(实际车次train_no: %s) %s(telecode: %s) -> %s(telecode: %s) %s -> %s 历时：%s",
 			ticketInfo.StartTrainCode,
 			ticketInfo.TrainNo,
@@ -195,13 +196,11 @@ func (s *Server) formatTicketsInfo(ticketsInfo []TicketInfo) string {
 			ticketInfo.StartTime,
 			ticketInfo.ArriveTime,
 			ticketInfo.Lishi,
-		))
+		)
 
 		for _, price := range ticketInfo.Prices {
 			ticketStatus := s.formatTicketStatus(price.Num)
-			infoStr.WriteString(
-				fmt.Sprintf("\n- %s: %s %.1f元", price.SeatName, ticketStatus, price.Price),
-			)
+			fmt.Fprintf(&infoStr, "\n- %s: %s %.1f元", price.SeatName, ticketStatus, price.Price)
 		}
 
 		result.WriteString(infoStr.String() + "\n")
@@ -859,19 +858,15 @@ func (s *Server) formatInterlinesInfo(interlinesInfo []InterlineInfo) string {
 	result.WriteString("出发时间 -> 到达时间 | 出发车站 -> 中转车站 -> 到达车站 | 换乘标志 |换乘等待时间| 总历时\n\n")
 
 	for _, interlineInfo := range interlinesInfo {
-		result.WriteString(fmt.Sprintf(
-			"%s %s -> %s %s | ",
+		fmt.Fprintf(&result, "%s %s -> %s %s | ",
 			interlineInfo.StartDate,
 			interlineInfo.StartTime,
 			interlineInfo.ArriveDate,
-			interlineInfo.ArriveTime,
-		))
-		result.WriteString(fmt.Sprintf(
-			"%s -> %s -> %s | ",
+			interlineInfo.ArriveTime)
+		fmt.Fprintf(&result, "%s -> %s -> %s | ",
 			interlineInfo.FromStationName,
 			interlineInfo.MiddleStationName,
-			interlineInfo.EndStationName,
-		))
+			interlineInfo.EndStationName)
 
 		switch {
 		case interlineInfo.SameStation:
@@ -882,9 +877,7 @@ func (s *Server) formatInterlinesInfo(interlinesInfo []InterlineInfo) string {
 			result.WriteString("换站换乘")
 		}
 
-		result.WriteString(
-			fmt.Sprintf(" | %s | %s\n\n", interlineInfo.WaitTime, interlineInfo.Lishi),
-		)
+		fmt.Fprintf(&result, " | %s | %s\n\n", interlineInfo.WaitTime, interlineInfo.Lishi)
 		result.WriteString("\t" + strings.ReplaceAll(
 			s.formatTicketsInfo(interlineInfo.TicketList),
 			"\n",

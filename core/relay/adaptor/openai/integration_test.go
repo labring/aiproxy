@@ -31,7 +31,7 @@ func TestIntegrationChatCompletionToResponsesFlow(t *testing.T) {
 			{Role: "system", Content: "You are a helpful assistant."},
 			{Role: "user", Content: "What is 2+2?"},
 		},
-		Temperature: floatPtr(0.7),
+		Temperature: new(0.7),
 		MaxTokens:   100,
 	}
 

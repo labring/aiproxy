@@ -80,8 +80,10 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	var result adaptor.DoResponseResult
-	var err adaptor.Error
+	var (
+		result adaptor.DoResponseResult
+		err    adaptor.Error
+	)
 
 	switch {
 	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):

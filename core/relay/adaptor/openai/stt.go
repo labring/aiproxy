@@ -177,40 +177,48 @@ func handleSTTNonStream(
 	if strings.Contains(resp.Header.Get("Content-Type"), "json") {
 		node, err := sonic.Get(responseBody)
 		if err != nil {
-			return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-				err,
-				"get_node_from_body_err",
-				http.StatusInternalServerError,
-			)
+			return adaptor.DoResponseResult{
+					Usage: usage.ToModelUsage(),
+				}, relaymodel.WrapperOpenAIError(
+					err,
+					"get_node_from_body_err",
+					http.StatusInternalServerError,
+				)
 		}
 
 		usageNode := node.Get("usage")
 		if usageNode != nil && usageNode.Exists() {
 			usageStr, err := usageNode.Raw()
 			if err != nil {
-				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-					err,
-					"unmarshal_response_err",
-					http.StatusInternalServerError,
-				)
+				return adaptor.DoResponseResult{
+						Usage: usage.ToModelUsage(),
+					}, relaymodel.WrapperOpenAIError(
+						err,
+						"unmarshal_response_err",
+						http.StatusInternalServerError,
+					)
 			}
 
 			err = sonic.UnmarshalString(usageStr, usage)
 			if err != nil {
-				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-					err,
-					"unmarshal_response_err",
-					http.StatusInternalServerError,
-				)
+				return adaptor.DoResponseResult{
+						Usage: usage.ToModelUsage(),
+					}, relaymodel.WrapperOpenAIError(
+						err,
+						"unmarshal_response_err",
+						http.StatusInternalServerError,
+					)
 			}
 		} else {
 			responseBody, err = injectUsageIntoJSON(&node, usage)
 			if err != nil {
-				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-					err,
-					"inject_usage_failed",
-					http.StatusInternalServerError,
-				)
+				return adaptor.DoResponseResult{
+						Usage: usage.ToModelUsage(),
+					}, relaymodel.WrapperOpenAIError(
+						err,
+						"inject_usage_failed",
+						http.StatusInternalServerError,
+					)
 			}
 		}
 

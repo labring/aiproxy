@@ -47,13 +47,13 @@ func OpenaiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, a
 	jsonBody, err := sonic.Marshal(openaiResp)
 	if err != nil {
 		return adaptor.DoResponseResult{
-			Usage:      openaiResp.Usage.ToModelUsage(),
-			UpstreamID: openaiResp.ID,
-		}, relaymodel.WrapperOpenAIErrorWithMessage(
-			err.Error(),
-			nil,
-			http.StatusInternalServerError,
-		)
+				Usage:      openaiResp.Usage.ToModelUsage(),
+				UpstreamID: openaiResp.ID,
+			}, relaymodel.WrapperOpenAIErrorWithMessage(
+				err.Error(),
+				nil,
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -66,7 +66,10 @@ func OpenaiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, a
 	}, nil
 }
 
-func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
+func OpenaiStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
@@ -91,9 +94,9 @@ func OpenaiStreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseRes
 	responseText := strings.Builder{}
 
 	var (
-		usage       *relaymodel.ChatUsage
-		writed      bool
-		upstreamID  string
+		usage      *relaymodel.ChatUsage
+		writed     bool
+		upstreamID string
 	)
 
 	streamState := anthropic.NewStreamState()

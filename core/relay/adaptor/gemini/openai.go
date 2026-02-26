@@ -847,7 +847,11 @@ func StreamHandler(
 	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
@@ -869,11 +873,13 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (adaptor.DoRe
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")

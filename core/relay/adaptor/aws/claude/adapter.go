@@ -318,11 +318,13 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, a
 	// Marshal and send
 	data, err := sonic.Marshal(geminiResp)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, relaymodel.WrapperAnthropicError(
-			err,
-			"marshal_response_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage(),
+			}, relaymodel.WrapperAnthropicError(
+				err,
+				"marshal_response_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -331,7 +333,10 @@ func GeminiHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, a
 	return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, nil
 }
 
-func GeminiStreamHandler(meta *meta.Meta, c *gin.Context) (adaptor.DoResponseResult, adaptor.Error) {
+func GeminiStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Get the response output from meta
 	resp, ok := meta.Get(ResponseOutput)
 	if !ok {
