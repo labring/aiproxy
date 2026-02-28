@@ -89,14 +89,14 @@ func DoHelper(
 	meta *meta.Meta,
 	store adaptor.Store,
 ) (
-	model.Usage,
+	adaptor.DoResponseResult,
 	*RequestDetail,
 	adaptor.Error,
 ) {
 	detail := RequestDetail{}
 
 	if err := storeRequestBody(meta, c, &detail); err != nil {
-		return model.Usage{}, nil, err
+		return adaptor.DoResponseResult{}, nil, err
 	}
 
 	// donot use c.Request.Context() because it will be canceled by the client
@@ -104,7 +104,7 @@ func DoHelper(
 
 	resp, err := prepareAndDoRequest(ctx, a, c, meta, store)
 	if err != nil {
-		return model.Usage{}, &detail, err
+		return adaptor.DoResponseResult{}, &detail, err
 	}
 
 	if resp == nil {
@@ -116,27 +116,31 @@ func DoHelper(
 		respBody, _ := relayErr.MarshalJSON()
 		detail.ResponseBody = conv.BytesToString(respBody)
 
-		return model.Usage{}, &detail, relayErr
+		return adaptor.DoResponseResult{}, &detail, relayErr
 	}
 
 	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
 
-	usage, relayErr := handleResponse(a, c, meta, store, resp, &detail)
+	result, relayErr := handleResponse(a, c, meta, store, resp, &detail)
 	if relayErr != nil {
-		return model.Usage{}, &detail, relayErr
+		return adaptor.DoResponseResult{}, &detail, relayErr
 	}
 
 	log := common.GetLogger(c)
-	updateUsageMetrics(usage, log)
+	updateUsageMetrics(result.Usage, log)
+
+	if result.UpstreamID != "" {
+		log.Data["upstream_id"] = result.UpstreamID
+	}
 
 	if !detail.FirstByteAt.IsZero() {
 		ttfb := detail.FirstByteAt.Sub(meta.RequestAt)
 		log.Data["ttfb"] = common.TruncateDuration(ttfb).String()
 	}
 
-	return usage, &detail, nil
+	return result, &detail, nil
 }
 
 func storeRequestBody(meta *meta.Meta, c *gin.Context, detail *RequestDetail) adaptor.Error {
@@ -315,7 +319,7 @@ func handleResponse(
 	store adaptor.Store,
 	resp *http.Response,
 	detail *RequestDetail,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	buf := getBuffer()
 	defer putBuffer(buf)
 
@@ -332,7 +336,7 @@ func handleResponse(
 
 	c.Writer = rw
 
-	usage, relayErr := a.DoResponse(meta, store, c, resp)
+	result, relayErr := a.DoResponse(meta, store, c, resp)
 	if relayErr != nil {
 		respBody, _ := relayErr.MarshalJSON()
 		detail.ResponseBody = conv.BytesToString(respBody)
@@ -342,7 +346,12 @@ func handleResponse(
 		detail.ResponseBody = rw.body.String()
 	}
 
-	return usage, relayErr
+	if result.UpstreamID == "" && resp != nil && resp.Header != nil &&
+		resp.Header.Get("x-request-id") != "" {
+		result.UpstreamID = resp.Header.Get("x-request-id")
+	}
+
+	return result, relayErr
 }
 
 func updateUsageMetrics(usage model.Usage, log *log.Entry) {

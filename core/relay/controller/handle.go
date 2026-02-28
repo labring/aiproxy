@@ -11,9 +11,10 @@ import (
 
 // HandleResult contains all the information needed for consumption recording
 type HandleResult struct {
-	Error  adaptor.Error
-	Usage  model.Usage
-	Detail *RequestDetail
+	Error      adaptor.Error
+	Usage      model.Usage
+	UpstreamID string
+	Detail     *RequestDetail
 }
 
 func Handle(
@@ -24,7 +25,7 @@ func Handle(
 ) *HandleResult {
 	log := common.GetLogger(c)
 
-	usage, detail, respErr := DoHelper(adaptor, c, meta, store)
+	result, detail, respErr := DoHelper(adaptor, c, meta, store)
 	if respErr != nil {
 		var logDetail *RequestDetail
 		if detail != nil && config.DebugEnabled {
@@ -40,14 +41,16 @@ func Handle(
 		}
 
 		return &HandleResult{
-			Error:  respErr,
-			Usage:  usage,
-			Detail: detail,
+			Error:      respErr,
+			Usage:      result.Usage,
+			UpstreamID: result.UpstreamID,
+			Detail:     detail,
 		}
 	}
 
 	return &HandleResult{
-		Usage:  usage,
-		Detail: detail,
+		Usage:      result.Usage,
+		UpstreamID: result.UpstreamID,
+		Detail:     detail,
 	}
 }

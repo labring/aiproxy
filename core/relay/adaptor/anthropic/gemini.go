@@ -90,8 +90,15 @@ func ConvertGeminiRequestToStruct(
 	if geminiReq.GenerationConfig != nil {
 		if geminiReq.GenerationConfig.Temperature != nil {
 			claudeReq.Temperature = geminiReq.GenerationConfig.Temperature
-		} else if geminiReq.GenerationConfig.TopP != nil {
+		}
+
+		if geminiReq.GenerationConfig.TopP != nil {
 			claudeReq.TopP = geminiReq.GenerationConfig.TopP
+		}
+
+		if claudeReq.Temperature != nil && claudeReq.TopP != nil {
+			// Claude does not allow both temperature and top_p to be specified
+			claudeReq.TopP = nil
 		}
 
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
@@ -184,16 +191,16 @@ func GeminiHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	var claudeResp relaymodel.ClaudeResponse
 	if err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
-		return model.Usage{}, relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -204,11 +211,13 @@ func GeminiHandler(
 
 	jsonResponse, err := sonic.Marshal(geminiResp)
 	if err != nil {
-		return claudeResp.Usage.ToOpenAIUsage().ToModelUsage(), relaymodel.WrapperAnthropicError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage(),
+			}, relaymodel.WrapperAnthropicError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -216,7 +225,7 @@ func GeminiHandler(
 
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return claudeResp.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, nil
 }
 
 // GeminiStreamHandler handles streaming responses and converts them to Gemini format
@@ -224,9 +233,9 @@ func GeminiStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -275,7 +284,7 @@ func GeminiStreamHandler(
 		log.Error("error reading stream: " + err.Error())
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // GeminiStreamState maintains state during streaming response conversion

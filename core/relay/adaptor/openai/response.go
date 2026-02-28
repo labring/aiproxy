@@ -55,16 +55,16 @@ func ResponseHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -76,7 +76,7 @@ func ResponseHandler(
 
 	err = sonic.Unmarshal(responseBody, &response)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -106,10 +106,10 @@ func ResponseHandler(
 
 	// Calculate usage
 	if response.Usage != nil {
-		return response.Usage.ToModelUsage(), nil
+		return adaptor.DoResponseResult{Usage: response.Usage.ToModelUsage()}, nil
 	}
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // ResponseStreamHandler handles streaming response
@@ -118,9 +118,9 @@ func ResponseStreamHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -186,7 +186,7 @@ func ResponseStreamHandler(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // GetResponseHandler handles GET /v1/responses/{response_id}
@@ -194,9 +194,9 @@ func GetResponseHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -205,7 +205,7 @@ func GetResponseHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // DeleteResponseHandler handles DELETE /v1/responses/{response_id}
@@ -213,9 +213,9 @@ func DeleteResponseHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -225,7 +225,7 @@ func DeleteResponseHandler(
 	c.Status(http.StatusNoContent)
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // CancelResponseHandler handles POST /v1/responses/{response_id}/cancel
@@ -233,9 +233,9 @@ func CancelResponseHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -244,7 +244,7 @@ func CancelResponseHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // GetInputItemsHandler handles GET /v1/responses/{response_id}/input_items
@@ -252,9 +252,9 @@ func GetInputItemsHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -263,5 +263,5 @@ func GetInputItemsHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -103,9 +102,9 @@ func EmbeddingsHandler(
 	c *gin.Context,
 	resp *http.Response,
 	preHandler PreHandler,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -114,7 +113,7 @@ func EmbeddingsHandler(
 
 	node, err := common.UnmarshalResponse2Node(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -124,7 +123,7 @@ func EmbeddingsHandler(
 	if preHandler != nil {
 		err := preHandler(meta, &node)
 		if err != nil {
-			return model.Usage{}, relaymodel.WrapperOpenAIError(
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 				err,
 				"pre_handler_failed",
 				http.StatusInternalServerError,
@@ -134,7 +133,7 @@ func EmbeddingsHandler(
 
 	usage, err := GetEmbeddingsUsageFromNode(&node)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -155,28 +154,32 @@ func EmbeddingsHandler(
 
 		_, err = node.Set("usage", ast.NewAny(usage))
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-				err,
-				"set_usage_failed",
-				http.StatusInternalServerError,
-			)
+			return adaptor.DoResponseResult{
+					Usage: usage.ToModelUsage(),
+				}, relaymodel.WrapperOpenAIError(
+					err,
+					"set_usage_failed",
+					http.StatusInternalServerError,
+				)
 		}
 	} else if usage.TotalTokens != 0 && usage.PromptTokens == 0 { // some channels don't return prompt tokens
 		usage.PromptTokens = usage.TotalTokens
 
 		_, err = node.Set("usage", ast.NewAny(usage))
 		if err != nil {
-			return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-				err,
-				"set_usage_failed",
-				http.StatusInternalServerError,
-			)
+			return adaptor.DoResponseResult{
+					Usage: usage.ToModelUsage(),
+				}, relaymodel.WrapperOpenAIError(
+					err,
+					"set_usage_failed",
+					http.StatusInternalServerError,
+				)
 		}
 	}
 
 	_, err = node.Set("model", ast.NewString(meta.OriginModel))
 	if err != nil {
-		return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 			err,
 			"set_model_failed",
 			http.StatusInternalServerError,
@@ -185,7 +188,7 @@ func EmbeddingsHandler(
 
 	newData, err := node.MarshalJSON()
 	if err != nil {
-		return usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -200,5 +203,5 @@ func EmbeddingsHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }

@@ -435,7 +435,7 @@ func TestConvertResponsesToClaudeResponse(t *testing.T) {
 			}
 
 			assert.NotNil(t, usage)
-			assert.Equal(t, tt.responsesResp.Usage.InputTokens, int64(usage.InputTokens))
+			assert.Equal(t, tt.responsesResp.Usage.InputTokens, int64(usage.Usage.InputTokens))
 		})
 	}
 }

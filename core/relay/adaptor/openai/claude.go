@@ -328,9 +328,9 @@ func ClaudeStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ClaudeErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ClaudeErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -573,7 +573,7 @@ func ClaudeStreamHandler(
 		Type: relaymodel.ClaudeStreamTypeMessageStop,
 	})
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 // ClaudeHandler handles OpenAI non-streaming responses and converts them to Claude format
@@ -581,9 +581,9 @@ func ClaudeHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ClaudeErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ClaudeErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -591,7 +591,7 @@ func ClaudeHandler(
 	// Read OpenAI response
 	body, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -603,7 +603,7 @@ func ClaudeHandler(
 
 	err = sonic.Unmarshal(body, &openAIResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -679,7 +679,7 @@ func ClaudeHandler(
 	// Marshal Claude response
 	claudeResponseData, err := sonic.Marshal(claudeResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -691,7 +691,7 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(claudeResponseData)))
 	_, _ = c.Writer.Write(claudeResponseData)
 
-	return claudeResponse.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()}, nil
 }
 
 // convertFinishReasonToClaude converts OpenAI finish reason to Claude stop reason
@@ -832,16 +832,16 @@ func ConvertResponsesToClaudeResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -852,7 +852,7 @@ func ConvertResponsesToClaudeResponse(
 
 	err = sonic.Unmarshal(responseBody, &responsesResp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -915,7 +915,7 @@ func ConvertResponsesToClaudeResponse(
 	// Marshal and return
 	claudeRespData, err := sonic.Marshal(claudeResp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -927,10 +927,10 @@ func ConvertResponsesToClaudeResponse(
 	_, _ = c.Writer.Write(claudeRespData)
 
 	if responsesResp.Usage != nil {
-		return responsesResp.Usage.ToModelUsage(), nil
+		return adaptor.DoResponseResult{Usage: responsesResp.Usage.ToModelUsage()}, nil
 	}
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // ConvertResponsesToClaudeStreamResponse converts Responses API stream to Claude stream
@@ -938,9 +938,9 @@ func ConvertResponsesToClaudeStreamResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -1006,7 +1006,7 @@ func ConvertResponsesToClaudeStreamResponse(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // claudeStreamState manages state for Claude stream conversion

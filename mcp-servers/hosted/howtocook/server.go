@@ -647,7 +647,6 @@ func (s *Server) selectWeekendMeals(
 
 // selectMeatDishes selects meat dishes with preference for different meat types
 func (s *Server) selectMeatDishes(meatDishes []Recipe, count int) []Recipe {
-	//nolint:prealloc
 	var selectedMeatDishes []Recipe
 
 	meatTypes := []string{"猪肉", "鸡肉", "牛肉", "羊肉", "鸭肉", "鱼肉"}
@@ -706,7 +705,6 @@ func (s *Server) selectMeatDishes(meatDishes []Recipe, count int) []Recipe {
 
 // selectRandomDishes selects random dishes from a list
 func (s *Server) selectRandomDishes(dishes []Recipe, count int) []Recipe {
-	//nolint:prealloc
 	var selectedDishes []Recipe
 
 	availableDishes := make([]Recipe, len(dishes))

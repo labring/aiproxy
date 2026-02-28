@@ -480,7 +480,7 @@ func TestConvertResponsesToGeminiResponse(t *testing.T) {
 			}
 
 			assert.NotNil(t, usage)
-			assert.Equal(t, tt.responsesResp.Usage.TotalTokens, int64(usage.TotalTokens))
+			assert.Equal(t, tt.responsesResp.Usage.TotalTokens, int64(usage.Usage.TotalTokens))
 		})
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/reqlimit"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -200,15 +199,15 @@ func (m *ChannelMonitor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
-	usage, relayErr := do.DoResponse(meta, store, c, resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	result, relayErr := do.DoResponse(meta, store, c, resp)
 
-	if usage.TotalTokens > 0 {
+	if result.Usage.TotalTokens > 0 {
 		count, overLimitCount, secondCount := reqlimit.PushChannelModelTokensRequest(
 			context.Background(),
 			strconv.Itoa(meta.Channel.ID),
 			meta.OriginModel,
-			int64(usage.TotalTokens),
+			int64(result.Usage.TotalTokens),
 		)
 		updateChannelModelTokensRequestRate(c, meta, count+overLimitCount, secondCount)
 	}
@@ -226,16 +225,16 @@ func (m *ChannelMonitor) DoResponse(
 			common.GetLogger(c).Errorf("add request failed: %+v", err)
 		}
 
-		return usage, nil
+		return result, nil
 	}
 
 	if !ShouldRetry(relayErr) {
-		return usage, relayErr
+		return result, relayErr
 	}
 
 	handleAdaptorError(meta, c, relayErr)
 
-	return usage, relayErr
+	return result, relayErr
 }
 
 func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error) {

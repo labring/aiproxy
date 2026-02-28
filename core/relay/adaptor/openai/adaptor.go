@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -339,48 +338,48 @@ func DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (result adaptor.DoResponseResult, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.Responses:
 		if utils.IsStreamResponse(resp) {
-			usage, err = ResponseStreamHandler(meta, store, c, resp)
+			result, err = ResponseStreamHandler(meta, store, c, resp)
 		} else {
-			usage, err = ResponseHandler(meta, store, c, resp)
+			result, err = ResponseHandler(meta, store, c, resp)
 		}
 	case mode.ResponsesGet:
-		usage, err = GetResponseHandler(meta, c, resp)
+		result, err = GetResponseHandler(meta, c, resp)
 	case mode.ResponsesDelete:
-		usage, err = DeleteResponseHandler(meta, c, resp)
+		result, err = DeleteResponseHandler(meta, c, resp)
 	case mode.ResponsesCancel:
-		usage, err = CancelResponseHandler(meta, c, resp)
+		result, err = CancelResponseHandler(meta, c, resp)
 	case mode.ResponsesInputItems:
-		usage, err = GetInputItemsHandler(meta, c, resp)
+		result, err = GetInputItemsHandler(meta, c, resp)
 	case mode.ImagesGenerations, mode.ImagesEdits:
-		usage, err = ImagesHandler(meta, c, resp)
+		result, err = ImagesHandler(meta, c, resp)
 	case mode.AudioTranscription, mode.AudioTranslation:
-		usage, err = STTHandler(meta, c, resp)
+		result, err = STTHandler(meta, c, resp)
 	case mode.AudioSpeech:
-		usage, err = TTSHandler(meta, c, resp)
+		result, err = TTSHandler(meta, c, resp)
 	case mode.Rerank:
-		usage, err = RerankHandler(meta, c, resp)
+		result, err = RerankHandler(meta, c, resp)
 	case mode.Moderations:
-		usage, err = ModerationsHandler(meta, c, resp)
+		result, err = ModerationsHandler(meta, c, resp)
 	case mode.Embeddings:
-		usage, err = EmbeddingsHandler(meta, c, resp, nil)
+		result, err = EmbeddingsHandler(meta, c, resp, nil)
 	case mode.Completions, mode.ChatCompletions:
 		// Check if model required Responses API conversion
 		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
 			// Convert Responses API response back to ChatCompletion format
 			if utils.IsStreamResponse(resp) {
-				usage, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
+				result, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
 			} else {
-				usage, err = ConvertResponsesToChatCompletionResponse(meta, c, resp)
+				result, err = ConvertResponsesToChatCompletionResponse(meta, c, resp)
 			}
 		} else {
 			if utils.IsStreamResponse(resp) {
-				usage, err = StreamHandler(meta, c, resp, nil)
+				result, err = StreamHandler(meta, c, resp, nil)
 			} else {
-				usage, err = Handler(meta, c, resp, nil)
+				result, err = Handler(meta, c, resp, nil)
 			}
 		}
 	case mode.Anthropic:
@@ -388,48 +387,48 @@ func DoResponse(
 		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
 			// Convert Responses API response back to Claude format
 			if utils.IsStreamResponse(resp) {
-				usage, err = ConvertResponsesToClaudeStreamResponse(meta, c, resp)
+				result, err = ConvertResponsesToClaudeStreamResponse(meta, c, resp)
 			} else {
-				usage, err = ConvertResponsesToClaudeResponse(meta, c, resp)
+				result, err = ConvertResponsesToClaudeResponse(meta, c, resp)
 			}
 		} else {
 			if utils.IsStreamResponse(resp) {
-				usage, err = ClaudeStreamHandler(meta, c, resp)
+				result, err = ClaudeStreamHandler(meta, c, resp)
 			} else {
-				usage, err = ClaudeHandler(meta, c, resp)
+				result, err = ClaudeHandler(meta, c, resp)
 			}
 		}
 	case mode.VideoGenerationsJobs:
-		usage, err = VideoHandler(meta, store, c, resp)
+		result, err = VideoHandler(meta, store, c, resp)
 	case mode.VideoGenerationsGetJobs:
-		usage, err = VideoGetJobsHandler(meta, store, c, resp)
+		result, err = VideoGetJobsHandler(meta, store, c, resp)
 	case mode.VideoGenerationsContent:
-		usage, err = VideoGetJobsContentHandler(meta, store, c, resp)
+		result, err = VideoGetJobsContentHandler(meta, store, c, resp)
 	case mode.Gemini:
 		// Check if model required Responses API conversion
 		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
 			// Convert Responses API response back to Gemini format
 			if utils.IsStreamResponse(resp) {
-				usage, err = ConvertResponsesToGeminiStreamResponse(meta, c, resp)
+				result, err = ConvertResponsesToGeminiStreamResponse(meta, c, resp)
 			} else {
-				usage, err = ConvertResponsesToGeminiResponse(meta, c, resp)
+				result, err = ConvertResponsesToGeminiResponse(meta, c, resp)
 			}
 		} else {
 			if utils.IsStreamResponse(resp) {
-				usage, err = GeminiStreamHandler(meta, c, resp)
+				result, err = GeminiStreamHandler(meta, c, resp)
 			} else {
-				usage, err = GeminiHandler(meta, c, resp)
+				result, err = GeminiHandler(meta, c, resp)
 			}
 		}
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
 		)
 	}
 
-	return usage, err
+	return result, err
 }
 
 const MetaResponseFormat = "response_format"
@@ -448,7 +447,7 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (result adaptor.DoResponseResult, err adaptor.Error) {
 	return DoResponse(meta, store, c, resp)
 }
 

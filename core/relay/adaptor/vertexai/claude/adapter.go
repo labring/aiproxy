@@ -10,7 +10,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -152,33 +151,28 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.OpenAIStreamHandler(meta, c, resp)
-		} else {
-			usage, err = anthropic.OpenAIHandler(meta, c, resp)
+			return anthropic.OpenAIStreamHandler(meta, c, resp)
 		}
+		return anthropic.OpenAIHandler(meta, c, resp)
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.StreamHandler(meta, c, resp)
-		} else {
-			usage, err = anthropic.Handler(meta, c, resp)
+			return anthropic.StreamHandler(meta, c, resp)
 		}
+		return anthropic.Handler(meta, c, resp)
 	case mode.Gemini:
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.GeminiStreamHandler(meta, c, resp)
-		} else {
-			usage, err = anthropic.GeminiHandler(meta, c, resp)
+			return anthropic.GeminiStreamHandler(meta, c, resp)
 		}
+		return anthropic.GeminiHandler(meta, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
 		)
 	}
-
-	return usage, err
 }

@@ -833,7 +833,7 @@ func (p *WebSearch) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
 	}
@@ -890,13 +890,13 @@ func (p *WebSearch) doResponseWithCount(
 	resp *http.Response,
 	do adaptor.DoResponse,
 	count int,
-) (model.Usage, adaptor.Error) {
-	u, err := do.DoResponse(meta, store, c, resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	result, err := do.DoResponse(meta, store, c, resp)
 	if err != nil {
-		return model.Usage{}, err
+		return adaptor.DoResponseResult{}, err
 	}
 
-	u.WebSearchCount += model.ZeroNullInt64(int64(count))
+	result.Usage.WebSearchCount += model.ZeroNullInt64(int64(count))
 
-	return u, nil
+	return result, nil
 }

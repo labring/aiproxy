@@ -7,7 +7,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -22,14 +21,14 @@ func EmbeddingsHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
 	body, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			err.Error(),
 			nil,
 			http.StatusInternalServerError,
@@ -40,7 +39,7 @@ func EmbeddingsHandler(
 
 	err = sonic.Unmarshal(body, &baiduResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			err.Error(),
 			nil,
 			http.StatusInternalServerError,
@@ -48,18 +47,24 @@ func EmbeddingsHandler(
 	}
 
 	if baiduResponse.Error != nil && baiduResponse.ErrorCode != 0 {
-		return baiduResponse.Usage.ToModelUsage(), ErrorHandler(baiduResponse.Error)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, ErrorHandler(
+				baiduResponse.Error,
+			)
 	}
 
 	respMap := make(map[string]any)
 
 	err = sonic.Unmarshal(body, &respMap)
 	if err != nil {
-		return baiduResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIErrorWithMessage(
-			err.Error(),
-			nil,
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIErrorWithMessage(
+				err.Error(),
+				nil,
+				http.StatusInternalServerError,
+			)
 	}
 
 	respMap["model"] = meta.OriginModel
@@ -67,11 +72,13 @@ func EmbeddingsHandler(
 
 	data, err := sonic.Marshal(respMap)
 	if err != nil {
-		return baiduResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIErrorWithMessage(
-			err.Error(),
-			nil,
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: baiduResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIErrorWithMessage(
+				err.Error(),
+				nil,
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -82,5 +89,5 @@ func EmbeddingsHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return baiduResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: baiduResponse.Usage.ToModelUsage()}, nil
 }

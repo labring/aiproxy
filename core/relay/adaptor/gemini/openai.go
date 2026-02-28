@@ -789,9 +789,9 @@ func StreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -844,12 +844,16 @@ func StreamHandler(
 
 	usage.WebSearchCount = model.ZeroNullInt64(websearchCount)
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -858,7 +862,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -869,11 +873,13 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -883,5 +889,5 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 	modelUsage := fullTextResponse.Usage.ToModelUsage()
 	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
 
-	return modelUsage, nil
+	return adaptor.DoResponseResult{Usage: modelUsage}, nil
 }

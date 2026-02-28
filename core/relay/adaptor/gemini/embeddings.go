@@ -7,7 +7,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -62,9 +61,9 @@ func EmbeddingHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -73,7 +72,7 @@ func EmbeddingHandler(
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiEmbeddingResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -84,18 +83,20 @@ func EmbeddingHandler(
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
 }
 
 func embeddingResponse2OpenAI(

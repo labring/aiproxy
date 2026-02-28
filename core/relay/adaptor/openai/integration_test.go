@@ -31,7 +31,7 @@ func TestIntegrationChatCompletionToResponsesFlow(t *testing.T) {
 			{Role: "system", Content: "You are a helpful assistant."},
 			{Role: "user", Content: "What is 2+2?"},
 		},
-		Temperature: floatPtr(0.7),
+		Temperature: new(0.7),
 		MaxTokens:   100,
 	}
 
@@ -122,8 +122,8 @@ func TestIntegrationChatCompletionToResponsesFlow(t *testing.T) {
 	assert.Equal(t, "gpt-5-codex", finalResp.Model)
 	assert.NotEmpty(t, finalResp.Choices)
 	assert.Contains(t, finalResp.Choices[0].Message.Content, "2 + 2 equals 4")
-	assert.Equal(t, int64(25), int64(usage.InputTokens))
-	assert.Equal(t, int64(10), int64(usage.OutputTokens))
+	assert.Equal(t, int64(25), int64(usage.Usage.InputTokens))
+	assert.Equal(t, int64(10), int64(usage.Usage.OutputTokens))
 }
 
 // TestIntegrationModelDetection tests that IsResponsesOnlyModel correctly

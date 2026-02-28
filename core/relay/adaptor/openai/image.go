@@ -135,9 +135,9 @@ func ImagesHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -148,7 +148,7 @@ func ImagesHandler(
 
 	err := common.UnmarshalResponse(resp, &imageResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -173,7 +173,7 @@ func ImagesHandler(
 
 			_, data.B64Json, err = image.GetImageFromURL(c.Request.Context(), data.URL)
 			if err != nil {
-				return usage, relaymodel.WrapperOpenAIError(
+				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 					err,
 					"get_image_from_url_failed",
 					http.StatusInternalServerError,
@@ -184,7 +184,7 @@ func ImagesHandler(
 
 	data, err := sonic.Marshal(imageResponse)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -199,5 +199,5 @@ func ImagesHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

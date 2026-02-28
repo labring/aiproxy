@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/image"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -227,9 +226,9 @@ func StreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -267,10 +266,10 @@ func StreamHandler(
 	render.OpenaiDone(c)
 
 	if usage == nil {
-		return meta.RequestUsage, nil
+		return adaptor.DoResponseResult{Usage: meta.RequestUsage}, nil
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 func ConvertEmbeddingRequest(
@@ -312,9 +311,9 @@ func EmbeddingHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -323,7 +322,7 @@ func EmbeddingHandler(
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&ollamaResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -331,7 +330,7 @@ func EmbeddingHandler(
 	}
 
 	if ollamaResponse.Error != "" {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			ollamaResponse.Error,
 			relaymodel.ErrorTypeUpstream,
 			resp.StatusCode,
@@ -342,18 +341,20 @@ func EmbeddingHandler(
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
 }
 
 func embeddingResponseOllama2OpenAI(
@@ -383,9 +384,13 @@ func embeddingResponseOllama2OpenAI(
 	return &openAIEmbeddingResponse
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -394,7 +399,7 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&ollamaResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -405,16 +410,18 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
 }

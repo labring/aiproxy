@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -111,38 +110,33 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Embeddings:
-		usage, err = EmbeddingHandler(meta, c, resp)
+		return EmbeddingHandler(meta, c, resp)
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
-			usage, err = StreamHandler(meta, c, resp)
-		} else {
-			usage, err = Handler(meta, c, resp)
+			return StreamHandler(meta, c, resp)
 		}
+		return Handler(meta, c, resp)
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
-			usage, err = ClaudeStreamHandler(meta, c, resp)
-		} else {
-			usage, err = ClaudeHandler(meta, c, resp)
+			return ClaudeStreamHandler(meta, c, resp)
 		}
+		return ClaudeHandler(meta, c, resp)
 	case mode.Gemini:
 		// For Gemini mode (native format), pass through the response as-is
 		if utils.IsStreamResponse(resp) {
-			usage, err = NativeStreamHandler(meta, c, resp)
-		} else {
-			usage, err = NativeHandler(meta, c, resp)
+			return NativeStreamHandler(meta, c, resp)
 		}
+		return NativeHandler(meta, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
 		)
 	}
-
-	return usage, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

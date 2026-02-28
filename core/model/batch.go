@@ -362,6 +362,7 @@ func BatchRecordLogs(
 	amount float64,
 	user string,
 	metadata map[string]string,
+	upstreamID string,
 ) (err error) {
 	if now.IsZero() {
 		now = time.Now()
@@ -398,6 +399,7 @@ func BatchRecordLogs(
 				amount,
 				user,
 				metadata,
+				upstreamID,
 			)
 		}
 	} else {

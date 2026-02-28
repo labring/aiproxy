@@ -73,9 +73,9 @@ func ClaudeHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -84,7 +84,7 @@ func ClaudeHandler(
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -96,8 +96,8 @@ func ClaudeHandler(
 
 	jsonResponse, err := sonic.Marshal(claudeResponse)
 	if err != nil {
-		return claudeResponse.Usage.ToOpenAIUsage().
-				ToModelUsage(),
+		return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().
+				ToModelUsage()},
 			relaymodel.WrapperAnthropicError(
 				err,
 				"marshal_response_body_failed",
@@ -112,7 +112,7 @@ func ClaudeHandler(
 	modelUsage := claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()
 	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
 
-	return modelUsage, nil
+	return adaptor.DoResponseResult{Usage: modelUsage}, nil
 }
 
 // ClaudeStreamHandler handles streaming Gemini responses and converts them to Claude format
@@ -120,9 +120,9 @@ func ClaudeStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -348,7 +348,7 @@ func ClaudeStreamHandler(
 		Type: "message_stop",
 	})
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // geminiResponse2Claude converts a Gemini response to Claude format

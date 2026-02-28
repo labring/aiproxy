@@ -34,9 +34,11 @@ var configTemplates = mcpservers.ConfigTemplates{
 			if err != nil {
 				return errors.New("timeout must be a number")
 			}
+
 			if timeout < 1 || timeout > 120 {
 				return errors.New("timeout must be between 1 and 120 seconds")
 			}
+
 			return nil
 		},
 	},

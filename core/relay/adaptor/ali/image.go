@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/image"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -63,9 +62,9 @@ func ImageHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -78,7 +77,7 @@ func ImageHandler(
 
 	err := common.UnmarshalResponse(resp, &aliTaskResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -88,7 +87,7 @@ func ImageHandler(
 	if aliTaskResponse.Message != "" {
 		log.Error("aliAsyncTask err: " + aliTaskResponse.Message)
 
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			errors.New(aliTaskResponse.Message),
 			"ali_async_task_failed",
 			http.StatusInternalServerError,
@@ -97,7 +96,7 @@ func ImageHandler(
 
 	aliResponse, err := asyncTaskWait(c, aliTaskResponse.Output.TaskID, meta.Channel.Key)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"ali_async_task_wait_failed",
 			http.StatusInternalServerError,
@@ -105,7 +104,7 @@ func ImageHandler(
 	}
 
 	if aliResponse.Output.TaskStatus != "SUCCEEDED" {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			aliResponse.Output.Message,
 			"ali_error",
 			resp.StatusCode,
@@ -116,18 +115,20 @@ func ImageHandler(
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return fullTextResponse.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: fullTextResponse.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
 }
 
 func asyncTask(ctx context.Context, taskID, key string) (*TaskResponse, error) {

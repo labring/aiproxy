@@ -74,19 +74,19 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	_ *http.Response,
-) (usage model.Usage, err adaptor.Error) {
-	adaptor, ok := meta.Get("awsAdapter")
+) (adaptor.DoResponseResult, adaptor.Error) {
+	awsAdaptor, ok := meta.Get("awsAdapter")
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"awsAdapter not found",
 			nil,
 			http.StatusInternalServerError,
 		)
 	}
 
-	v, ok := adaptor.(utils.AwsAdapter)
+	v, ok := awsAdaptor.(utils.AwsAdapter)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("aws adapter type error: %T, %v", v, v),
 			nil,
 			http.StatusInternalServerError,

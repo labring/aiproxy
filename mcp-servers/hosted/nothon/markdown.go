@@ -71,7 +71,7 @@ func convertPageToMarkdown(page *PageResponse) string {
 	// Extract title
 	title := extractPageTitle(page)
 	if title != "" {
-		markdown.WriteString(fmt.Sprintf("# %s\n\n", title))
+		fmt.Fprintf(&markdown, "# %s\n\n", title)
 	}
 
 	// Display page properties as a Markdown table
@@ -81,11 +81,11 @@ func convertPageToMarkdown(page *PageResponse) string {
 	markdown.WriteString(
 		"\n\n> This page contains child blocks. You can retrieve them using `retrieveBlockChildren`.\n",
 	)
-	markdown.WriteString(fmt.Sprintf("> Block ID: `%s`\n", page.ID))
+	fmt.Fprintf(&markdown, "> Block ID: `%s`\n", page.ID)
 
 	// Add link to view the page in Notion
 	if page.URL != "" {
-		markdown.WriteString(fmt.Sprintf("\n[View in Notion](%s)\n", page.URL))
+		fmt.Fprintf(&markdown, "\n[View in Notion](%s)\n", page.URL)
 	}
 
 	return markdown.String()
@@ -98,7 +98,7 @@ func convertDatabaseToMarkdown(database *DatabaseResponse) string {
 	// Extract database title
 	title := extractRichText(database.Title)
 	if title != "" {
-		markdown.WriteString(fmt.Sprintf("# %s (Database)\n\n", title))
+		fmt.Fprintf(&markdown, "# %s (Database)\n\n", title)
 	}
 
 	// Add description if available
@@ -127,10 +127,10 @@ func convertDatabaseToMarkdown(database *DatabaseResponse) string {
 			// Additional information based on property type
 			details := getPropertyDetails(prop)
 
-			markdown.WriteString(fmt.Sprintf("| %s | %s | %s |\n",
+			fmt.Fprintf(&markdown, "| %s | %s | %s |\n",
 				escapeTableCell(propName),
 				propType,
-				escapeTableCell(details)))
+				escapeTableCell(details))
 		}
 
 		markdown.WriteString("\n")
@@ -138,7 +138,7 @@ func convertDatabaseToMarkdown(database *DatabaseResponse) string {
 
 	// Add link to view the database in Notion
 	if database.URL != "" {
-		markdown.WriteString(fmt.Sprintf("\n[View in Notion](%s)\n", database.URL))
+		fmt.Fprintf(&markdown, "\n[View in Notion](%s)\n", database.URL)
 	}
 
 	return markdown.String()
@@ -196,8 +196,8 @@ func convertListToMarkdown(list *ListResponse) string {
 						url = "#"
 					}
 
-					markdown.WriteString(fmt.Sprintf("## [%s](%s)\n\n", title, url))
-					markdown.WriteString(fmt.Sprintf("ID: `%s`\n\n", page.ID))
+					fmt.Fprintf(&markdown, "## [%s](%s)\n\n", title, url)
+					fmt.Fprintf(&markdown, "ID: `%s`\n\n", page.ID)
 					markdown.WriteString("---\n\n")
 				}
 			} else {
@@ -222,8 +222,8 @@ func convertListToMarkdown(list *ListResponse) string {
 						url = "#"
 					}
 
-					markdown.WriteString(fmt.Sprintf("## [%s](%s)\n\n", dbTitle, url))
-					markdown.WriteString(fmt.Sprintf("ID: `%s`\n\n", db.ID))
+					fmt.Fprintf(&markdown, "## [%s](%s)\n\n", dbTitle, url)
+					fmt.Fprintf(&markdown, "ID: `%s`\n\n", db.ID)
 					markdown.WriteString("---\n\n")
 				}
 			} else {
@@ -242,7 +242,7 @@ func convertListToMarkdown(list *ListResponse) string {
 
 		default:
 			jsonData, _ := sonic.MarshalIndent(item, "", "  ")
-			markdown.WriteString(fmt.Sprintf("```json\n%s\n```\n\n", string(jsonData)))
+			fmt.Fprintf(&markdown, "```json\n%s\n```\n\n", string(jsonData))
 		}
 	}
 
@@ -253,7 +253,7 @@ func convertListToMarkdown(list *ListResponse) string {
 		)
 
 		if list.NextCursor != nil {
-			markdown.WriteString(fmt.Sprintf("> Next cursor: `%s`\n", *list.NextCursor))
+			fmt.Fprintf(&markdown, "> Next cursor: `%s`\n", *list.NextCursor)
 		}
 	}
 
@@ -289,9 +289,9 @@ func convertPropertiesToMarkdown(properties map[string]PageProperty) string {
 	for key, prop := range properties {
 		propValue := getPropertyValue(prop)
 
-		markdown.WriteString(fmt.Sprintf("| %s | %s |\n",
+		fmt.Fprintf(&markdown, "| %s | %s |\n",
 			escapeTableCell(key),
-			escapeTableCell(propValue)))
+			escapeTableCell(propValue))
 	}
 
 	return markdown.String()

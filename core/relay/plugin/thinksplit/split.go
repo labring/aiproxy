@@ -7,7 +7,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -46,7 +45,7 @@ func (p *ThinkPlugin) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Only process chat completions
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
@@ -68,7 +67,7 @@ func (p *ThinkPlugin) handleResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Create a custom response writer
 	rw := &thinkResponseWriter{
 		ResponseWriter: c.Writer,

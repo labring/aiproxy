@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/image"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -144,6 +143,11 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 		}
 
 		claudeRequest.Temperature = nil
+	}
+
+	if claudeRequest.Temperature != nil && claudeRequest.TopP != nil {
+		// Claude does not allow both temperature and top_p to be specified
+		claudeRequest.TopP = nil
 	}
 
 	if len(claudeTools) > 0 {
@@ -353,6 +357,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 		thinking   string
 		signature  string
 		stopReason string
+		upstreamID string
 	)
 
 	tools := make([]relaymodel.ToolCall, 0)
@@ -418,6 +423,7 @@ func (s *StreamState) StreamResponse2OpenAI(
 
 		openAIUsage := claudeResponse.Message.Usage.ToOpenAIUsage()
 		usage = &openAIUsage
+		upstreamID = claudeResponse.Message.ID
 	case "message_delta":
 		if claudeResponse.Usage != nil {
 			openAIUsage := claudeResponse.Usage.ToOpenAIUsage()
@@ -441,8 +447,14 @@ func (s *StreamState) StreamResponse2OpenAI(
 		FinishReason: stopReasonClaude2OpenAI(stopReason),
 	}
 
+	// Use upstream ID if available, otherwise generate a new one
+	responseID := upstreamID
+	if responseID == "" {
+		responseID = openai.ChatCompletionID()
+	}
+
 	openaiResponse := relaymodel.ChatCompletionsStreamResponse{
-		ID:      openai.ChatCompletionID(),
+		ID:      responseID,
 		Object:  relaymodel.ChatCompletionChunkObject,
 		Created: time.Now().Unix(),
 		Model:   meta.OriginModel,
@@ -519,8 +531,14 @@ func Response2OpenAI(
 		FinishReason: stopReasonClaude2OpenAI(claudeResponse.StopReason),
 	}
 
+	// Use upstream ID if available, otherwise generate a new one
+	responseID := claudeResponse.ID
+	if responseID == "" {
+		responseID = openai.ChatCompletionID()
+	}
+
 	fullTextResponse := relaymodel.TextResponse{
-		ID:      openai.ChatCompletionID(),
+		ID:      responseID,
 		Model:   meta.OriginModel,
 		Object:  relaymodel.ChatCompletionObject,
 		Created: time.Now().Unix(),
@@ -540,9 +558,9 @@ func OpenAIStreamHandler(
 	m *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, OpenAIErrorHandler(resp)
+		return adaptor.DoResponseResult{}, OpenAIErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -555,8 +573,9 @@ func OpenAIStreamHandler(
 	responseText := strings.Builder{}
 
 	var (
-		usage  *relaymodel.ChatUsage
-		writed bool
+		usage      *relaymodel.ChatUsage
+		writed     bool
+		upstreamID string
 	)
 
 	streamState := NewStreamState()
@@ -587,11 +606,16 @@ func OpenAIStreamHandler(
 				usage.Add(response.Usage)
 			}
 
-			return usage.ToModelUsage(), err
+			return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
 		}
 
 		if response == nil {
 			continue
+		}
+
+		// Capture upstream ID from response ID
+		if response.ID != "" && upstreamID == "" {
+			upstreamID = response.ID
 		}
 
 		switch {
@@ -649,23 +673,26 @@ func OpenAIStreamHandler(
 
 	render.OpenaiDone(c)
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }
 
 func OpenAIHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, OpenAIErrorHandler(resp)
+		return adaptor.DoResponseResult{}, OpenAIErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	body, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -674,12 +701,12 @@ func OpenAIHandler(
 
 	fullTextResponse, adaptorErr := Response2OpenAI(meta, body)
 	if adaptorErr != nil {
-		return model.Usage{}, adaptorErr
+		return adaptor.DoResponseResult{}, adaptorErr
 	}
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -690,5 +717,8 @@ func OpenAIHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      fullTextResponse.Usage.ToModelUsage(),
+		UpstreamID: fullTextResponse.ID,
+	}, nil
 }

@@ -116,14 +116,14 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.AudioSpeech:
 		return TTSHandler(meta, c, resp)
 	default:
 		if !utils.IsStreamResponse(resp) {
 			if err := TryErrorHanlder(resp); err != nil {
-				return model.Usage{}, err
+				return adaptor.DoResponseResult{}, err
 			}
 		}
 

@@ -322,7 +322,7 @@ func (s *WeatherServer) handleHourlyWeather(
 
 	var hoursText strings.Builder
 	for _, hour := range weatherData.Hourly {
-		hoursText.WriteString(fmt.Sprintf(`时间: %s
+		fmt.Fprintf(&hoursText, `时间: %s
 天气: %s
 温度: %s°C
 湿度: %s%%
@@ -334,7 +334,7 @@ func (s *WeatherServer) handleHourlyWeather(
 			hour.Temp,
 			hour.Humidity,
 			hour.WindDir,
-			hour.WindScale))
+			hour.WindScale)
 	}
 
 	result := fmt.Sprintf("地点: %s\n%s小时预报:\n%s", location, days, hoursText.String())
@@ -373,7 +373,7 @@ func (s *WeatherServer) handleDailyWeather(
 
 	var forecastText strings.Builder
 	for _, day := range weatherData.Daily {
-		forecastText.WriteString(fmt.Sprintf(`日期: %s
+		fmt.Fprintf(&forecastText, `日期: %s
 白天天气: %s
 夜间天气: %s
 最高温度: %s°C
@@ -390,7 +390,7 @@ func (s *WeatherServer) handleDailyWeather(
 			day.WindDirDay,
 			day.WindScaleDay,
 			day.WindDirNight,
-			day.WindScaleNight))
+			day.WindScaleNight)
 	}
 
 	// Parse days number for display
