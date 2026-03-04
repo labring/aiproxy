@@ -151,21 +151,21 @@ jobs:
     steps:
       - name: Login to GitHub Container Registry
         if: ${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' && env.DOCKERHUB_REPO }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to Aliyun Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' && env.ALIYUN_REGISTRY }}
         with:
           registry: ${{ env.ALIYUN_REGISTRY }}
@@ -220,21 +220,21 @@ jobs:
     if: ${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' }}
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ env.DOCKERHUB_REPO }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to Aliyun Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ env.ALIYUN_REGISTRY }}
         with:
           registry: ${{ env.ALIYUN_REGISTRY }}
@@ -335,21 +335,21 @@ jobs:
           sudo sealos registry save --registry-dir=registry_amd64 --arch amd64 .
           sudo sealos registry save --registry-dir=registry_arm64 --arch arm64 .
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ env.DOCKERHUB_REPO }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to Aliyun Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: ${{ env.ALIYUN_REGISTRY }}
         with:
           registry: ${{ env.ALIYUN_REGISTRY }}
