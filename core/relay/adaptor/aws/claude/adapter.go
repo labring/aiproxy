@@ -133,6 +133,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		}
 
 		anthropic.RemoveToolsExamples(node)
+		anthropic.RemoveToolsCustomDeferLoading(node)
 
 		stream, _ := node.Get("stream").Bool()
 		meta.Set("stream", stream)

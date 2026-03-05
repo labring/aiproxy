@@ -52,6 +52,16 @@ func RemoveToolsExamples(node *ast.Node) {
 	}
 }
 
+func RemoveToolsCustomDeferLoading(node *ast.Node) {
+	toolsNode := node.Get("tools")
+	if toolsNode != nil && toolsNode.Check() == nil {
+		_ = toolsNode.ForEach(func(path ast.Sequence, toolNode *ast.Node) bool {
+			_, _ = toolNode.Unset("defer_loading")
+			return true
+		})
+	}
+}
+
 func RemoveContextManagenetEdits(
 	node *ast.Node,
 	isSupportedEditsType ...func(t string) bool,
@@ -155,6 +165,10 @@ func ConvertRequestBodyToBytes(
 
 	if adaptorConfig.RemoveToolsExamples {
 		RemoveToolsExamples(node)
+	}
+
+	if adaptorConfig.RemoveToolsCustomDeferLoading {
+		RemoveToolsCustomDeferLoading(node)
 	}
 
 	err := ConvertImage2Base64(ctx, node)

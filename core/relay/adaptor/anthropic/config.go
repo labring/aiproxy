@@ -4,4 +4,5 @@ type Config struct {
 	DisableContextManagement            bool     `json:"disable_context_management"`
 	SupportedContextManagementEditsType []string `json:"supported_context_management_edits_type"`
 	RemoveToolsExamples                 bool     `json:"remove_tools_examples"`
+	RemoveToolsCustomDeferLoading       bool     `json:"remove_tools_custom_defer_loading"`
 }

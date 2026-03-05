@@ -120,6 +120,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 
 		_, _ = node.Unset("context_management")
 		anthropic.RemoveToolsExamples(node)
+		anthropic.RemoveToolsCustomDeferLoading(node)
 
 		if _, err := node.Set("anthropic_version", ast.NewString(anthropicVersion)); err != nil {
 			return err
