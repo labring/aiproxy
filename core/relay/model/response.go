@@ -139,10 +139,16 @@ type IncompleteDetails struct {
 	Reason string `json:"reason"`
 }
 
+// SummaryPart represents a part of the reasoning summary in response
+type SummaryPart struct {
+	Type string `json:"type"` // Always "summary_text"
+	Text string `json:"text"`
+}
+
 // ResponseReasoning represents reasoning information
 type ResponseReasoning struct {
 	Effort  *string `json:"effort"`
-	Summary *string `json:"summary"`
+	Summary any     `json:"summary,omitempty"` // string ("detailed", "auto", "concise") or []SummaryPart in response
 }
 
 // ResponseTextFormat represents text format configuration
@@ -172,7 +178,7 @@ type OutputItem struct {
 	Arguments string          `json:"arguments,omitempty"` // For function_call type
 	CallID    string          `json:"call_id,omitempty"`   // For function_call type
 	Name      string          `json:"name,omitempty"`      // For function_call type
-	Summary   []string        `json:"summary,omitempty"`   // For reasoning type
+	Summary   any             `json:"summary,omitempty"`   // For reasoning type: []SummaryPart or string
 }
 
 // InputContent represents content in an input item
