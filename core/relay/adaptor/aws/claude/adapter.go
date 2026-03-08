@@ -72,6 +72,7 @@ func (a *Adaptor) ConvertRequest(
 var unsupportedBetas = map[string]struct{}{
 	"tool-examples-2025-10-29":        {},
 	"prompt-caching-scope-2026-01-05": {},
+	"advanced-tool-use-2025-11-20":    {},
 }
 
 func fixBetas(model string, betas []string) []string {
@@ -132,6 +133,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		}
 
 		anthropic.RemoveToolsExamples(node)
+		anthropic.RemoveToolsCustomDeferLoading(node)
 
 		stream, _ := node.Get("stream").Bool()
 		meta.Set("stream", stream)

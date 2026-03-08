@@ -65,6 +65,7 @@ var unsupportedBetas = map[string]struct{}{
 	"tool-examples-2025-10-29":        {},
 	"context-management-2025-06-27":   {},
 	"prompt-caching-scope-2026-01-05": {},
+	"advanced-tool-use-2025-11-20":    {},
 }
 
 func fixBetas(model string, betas []string) []string {
@@ -119,6 +120,7 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 
 		_, _ = node.Unset("context_management")
 		anthropic.RemoveToolsExamples(node)
+		anthropic.RemoveToolsCustomDeferLoading(node)
 
 		if _, err := node.Set("anthropic_version", ast.NewString(anthropicVersion)); err != nil {
 			return err
