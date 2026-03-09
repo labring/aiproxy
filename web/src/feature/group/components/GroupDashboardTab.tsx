@@ -6,23 +6,25 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '@/api/dashboard'
 import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
+import { GroupDashboardFilters } from './GroupDashboardFilters'
 import type { DashboardFilters } from '@/types/dashboard'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface GroupDashboardTabProps {
     groupId: string
+    initialTokenName?: string
 }
 
-export function GroupDashboardTab({ groupId }: GroupDashboardTabProps) {
+export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardTabProps) {
     const { t } = useTranslation()
 
-    // Calculate default date range (7 days ago to today)
-    const getDefaultFilters = (): DashboardFilters => {
+    const getDefaultFilters = (): DashboardFilters & { tokenName?: string } => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
 
         return {
+            tokenName: initialTokenName || undefined,
             timespan: 'day',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             start_timestamp: Math.floor(sevenDaysAgo.getTime() / 1000),
@@ -30,13 +32,13 @@ export function GroupDashboardTab({ groupId }: GroupDashboardTabProps) {
         }
     }
 
-    const [filters] = useState<DashboardFilters>(getDefaultFilters())
+    const [filters, setFilters] = useState<DashboardFilters & { tokenName?: string }>(getDefaultFilters())
 
     // Fetch group dashboard data
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['groupDashboard', groupId, filters],
         queryFn: () => dashboardApi.getDashboardByGroup(groupId, filters),
-        refetchInterval: 5 * 60 * 1000, // 5 minutes
+        refetchInterval: 5 * 60 * 1000,
         refetchOnWindowFocus: true,
         retry: false,
     })
@@ -49,6 +51,10 @@ export function GroupDashboardTab({ groupId }: GroupDashboardTabProps) {
 
         return () => clearInterval(interval)
     }, [refetch])
+
+    const handleFiltersChange = (newFilters: DashboardFilters & { tokenName?: string }) => {
+        setFilters(newFilters)
+    }
 
     const chartData = data?.chart_data || []
     const hasChartData = chartData.length > 0
@@ -63,6 +69,15 @@ export function GroupDashboardTab({ groupId }: GroupDashboardTabProps) {
 
     return (
         <div className="space-y-4">
+            {/* Filters */}
+            <GroupDashboardFilters
+                onFiltersChange={handleFiltersChange}
+                loading={isLoading}
+                availableModels={data?.models}
+                availableTokenNames={data?.token_names}
+                defaultTokenName={initialTokenName}
+            />
+
             {/* Metrics cards */}
             {isLoading ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

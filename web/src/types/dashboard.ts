@@ -27,6 +27,7 @@ export interface DashboardData {
     max_tpm: number
     max_tps: number
     models: string[]
+    token_names: string[]
     output_tokens: number
     rpm: number
     total_count: number

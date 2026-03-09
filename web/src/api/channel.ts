@@ -50,6 +50,11 @@ export const channelApi = {
         return response
     },
 
+    getChannelBatchInfo: async (ids: number[]): Promise<{ id: number; name: string; type: number }[]> => {
+        const response = await post<{ id: number; name: string; type: number }[]>('channels/batch_info', ids)
+        return response
+    },
+
     createChannel: async (data: ChannelCreateRequest): Promise<void> => {
         await post('channel/', data)
         return

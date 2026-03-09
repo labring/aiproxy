@@ -5,13 +5,14 @@ import {
     getCoreRowModel,
     ColumnDef,
 } from '@tanstack/react-table'
+import { useNavigate } from 'react-router'
 import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels } from '../hooks'
 import { channelApi } from '@/api/channel'
 import { Channel } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical
+    PowerOff, Power, FlaskConical, ChevronDown, ChevronRight
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -29,9 +30,11 @@ import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { ROUTES } from '@/routes/constants'
 
 export function ChannelTable() {
     const { t } = useTranslation()
+    const navigate = useNavigate()
 
     // 状态管理
     const [channelDialogOpen, setChannelDialogOpen] = useState(false)
@@ -43,6 +46,7 @@ export function ChannelTable() {
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [testDialogOpen, setTestDialogOpen] = useState(false)
     const [isTestAll, setIsTestAll] = useState(false)
+    const [expandedModels, setExpandedModels] = useState<Record<number, boolean>>({})
 
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
@@ -80,7 +84,6 @@ export function ChannelTable() {
 
     // 优化的无限滚动实现
     useEffect(() => {
-        // 只有当有更多页面可加载时才创建观察器
         if (!hasNextPage) return
 
         const options = {
@@ -119,10 +122,8 @@ export function ChannelTable() {
 
     // 打开更新渠道对话框
     const openUpdateDialog = (channel: Channel) => {
-        console.log('Opening update dialog for channel:', channel);
-        console.log('Channel ID to be updated:', channel.id);
         setDialogMode('update')
-        setSelectedChannel({...channel}) // Create a new reference to ensure update
+        setSelectedChannel({...channel})
         setChannelDialogOpen(true)
     }
 
@@ -134,7 +135,6 @@ export function ChannelTable() {
 
     // 更新渠道状态
     const handleStatusChange = (id: number, currentStatus: number) => {
-        // 状态切换: 2 -> 1 (禁用 -> 启用), 1 -> 2 (启用 -> 禁用)
         const newStatus = currentStatus === 2 ? 1 : 2
         updateStatus({ id, status: { status: newStatus } })
     }
@@ -143,11 +143,14 @@ export function ChannelTable() {
     const refreshChannels = () => {
         setIsRefreshAnimating(true)
         refetch()
-
-        // 停止动画，延迟1秒以匹配动画效果
         setTimeout(() => {
             setIsRefreshAnimating(false)
         }, 1000)
+    }
+
+    // 跳转到全局仪表盘
+    const navigateToDashboard = (channelId: number) => {
+        navigate(`${ROUTES.MONITOR}?channel=${channelId}`)
     }
 
     // 获取渠道类型名称
@@ -157,23 +160,50 @@ export function ChannelTable() {
         return meta ? meta.name : String(typeId)
     }
 
+    // 切换模型展开
+    const toggleModels = (channelId: number) => {
+        setExpandedModels(prev => ({ ...prev, [channelId]: !prev[channelId] }))
+    }
+
+    // 可点击单元格样式
+    const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
+    const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
+
     // 表格列定义
     const columns: ColumnDef<Channel>[] = [
         {
             accessorKey: 'id',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.id")}</div>,
-            cell: ({ row }) => <div className="font-medium">{row.original.id}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={dashboardCell}
+                    onClick={() => navigateToDashboard(row.original.id)}
+                    title={t("channel.viewDashboard")}
+                >
+                    {row.original.id}
+                </div>
+            ),
         },
         {
             accessorKey: 'name',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.name")}</div>,
-            cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={cn("font-medium", clickableCell)}
+                    onClick={() => openUpdateDialog(row.original)}
+                >
+                    {row.original.name}
+                </div>
+            ),
         },
         {
             accessorKey: 'type',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.type")}</div>,
             cell: ({ row }) => (
-                <div className="font-medium">
+                <div
+                    className={clickableCell}
+                    onClick={() => openUpdateDialog(row.original)}
+                >
                     {getChannelTypeName(row.original.type)}
                 </div>
             ),
@@ -186,12 +216,15 @@ export function ChannelTable() {
                 if (sets.length === 0) return <div className="text-muted-foreground text-xs">-</div>;
 
                 return (
-                    <div className="flex flex-wrap gap-1">
+                    <div
+                        className={cn("flex flex-wrap gap-1", "cursor-pointer")}
+                        onClick={() => openUpdateDialog(row.original)}
+                    >
                         {sets.map((set, index) => (
                             <Badge
                                 key={index}
                                 variant="secondary"
-                                className="text-xs py-0 px-2"
+                                className="text-xs py-0 px-2 hover:bg-secondary/80"
                             >
                                 {set}
                             </Badge>
@@ -203,12 +236,93 @@ export function ChannelTable() {
         {
             accessorKey: 'priority',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.priority")}</div>,
-            cell: ({ row }) => <div>{row.original.priority || 10}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={clickableCell}
+                    onClick={() => openUpdateDialog(row.original)}
+                >
+                    {row.original.priority || 10}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'models',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
+            cell: ({ row }) => {
+                const models = row.original.models || []
+                const isExpanded = expandedModels[row.original.id]
+                if (models.length === 0) return <div className="text-muted-foreground text-xs">-</div>
+
+                return (
+                    <div className="max-w-xs">
+                        <div
+                            className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-sm"
+                            onClick={() => toggleModels(row.original.id)}
+                        >
+                            {isExpanded
+                                ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                                : <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                            }
+                            <span>{models.length} {t("channel.modelsCount")}</span>
+                        </div>
+                        {isExpanded && (
+                            <div
+                                className="mt-1 flex flex-wrap gap-1 cursor-pointer"
+                                onClick={() => openUpdateDialog(row.original)}
+                            >
+                                {models.map((model, index) => (
+                                    <Badge
+                                        key={index}
+                                        variant="outline"
+                                        className="text-xs py-0 px-1.5 font-mono"
+                                    >
+                                        {model}
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )
+            }
         },
         {
             accessorKey: 'request_count',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.requestCount")}</div>,
-            cell: ({ row }) => <div>{row.original.request_count}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={dashboardCell}
+                    onClick={() => navigateToDashboard(row.original.id)}
+                    title={t("channel.viewDashboard")}
+                >
+                    {row.original.request_count.toLocaleString()}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'retry_count',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.retryCount")}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={dashboardCell}
+                    onClick={() => navigateToDashboard(row.original.id)}
+                    title={t("channel.viewDashboard")}
+                >
+                    {(row.original.retry_count || 0).toLocaleString()}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'used_amount',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.usedAmount")}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={dashboardCell}
+                    onClick={() => navigateToDashboard(row.original.id)}
+                    title={t("channel.viewDashboard")}
+                >
+                    ${(row.original.used_amount || 0).toFixed(4)}
+                </div>
+            ),
         },
         {
             accessorKey: 'status',
@@ -422,7 +536,6 @@ export function ChannelTable() {
                         setSelectedChannel(channel)
                         setDialogMode('update')
                         setChannelDialogOpen(true)
-                        // 不关闭测试对话框，保持测试结果
                     }
                 }}
                 onCancel={() => {

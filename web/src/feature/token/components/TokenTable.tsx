@@ -106,6 +106,8 @@ export function TokenTable() {
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [groupDialogOpen, setGroupDialogOpen] = useState(false)
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+    const [groupDialogTab, setGroupDialogTab] = useState<string>('dashboard')
+    const [groupDialogTokenName, setGroupDialogTokenName] = useState<string | undefined>(undefined)
     const sentinelRef = useRef<HTMLDivElement>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
 
@@ -204,7 +206,24 @@ export function TokenTable() {
         {
             accessorKey: 'name',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.name")}</div>,
-            cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+            cell: ({ row }) => {
+                const group = row.original.group
+                return (
+                    <div
+                        className={cn("font-medium", group && "cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors")}
+                        onClick={() => {
+                            if (group) {
+                                setGroupDialogTab('tokens')
+                                setGroupDialogTokenName(undefined)
+                                setSelectedGroupId(group)
+                                setGroupDialogOpen(true)
+                            }
+                        }}
+                    >
+                        {row.original.name}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: 'group',
@@ -216,6 +235,7 @@ export function TokenTable() {
                     <div
                         className="text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
                         onClick={() => {
+                            setGroupDialogTab('tokens')
                             setSelectedGroupId(group)
                             setGroupDialogOpen(true)
                         }}
@@ -230,7 +250,12 @@ export function TokenTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.key")}</div>,
             cell: ({ row }) => (
                 <div className="flex items-center space-x-2">
-                    <span className="font-mono">{maskApiKey(row.original.key)}</span>
+                    <span
+                        className="font-mono cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => copyToClipboard(row.original.key)}
+                    >
+                        {maskApiKey(row.original.key)}
+                    </span>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -252,14 +277,20 @@ export function TokenTable() {
                 // 没有设置限额
                 if (remaining.total < 0 && remaining.period < 0) {
                     return (
-                        <span className="text-muted-foreground text-sm">
+                        <span
+                            className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => openQuotaDialog(token)}
+                        >
                             {t("token.quota.unlimited")}
                         </span>
                     )
                 }
 
                 return (
-                    <div className="text-sm space-y-1">
+                    <div
+                        className="text-sm space-y-1 cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => openQuotaDialog(token)}
+                    >
                         {token.quota > 0 && (
                             <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Total:</span>
@@ -293,21 +324,68 @@ export function TokenTable() {
 
                 if (!nextRefresh) {
                     return (
-                        <span className="text-muted-foreground text-sm">-</span>
+                        <span
+                            className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => openQuotaDialog(token)}
+                        >
+                            -
+                        </span>
                     )
                 }
 
                 return (
-                    <span className="text-sm">
+                    <span
+                        className="text-sm cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => openQuotaDialog(token)}
+                    >
                         {formatRemainingTime(nextRefresh)}
                     </span>
                 )
             },
         },
         {
+            accessorKey: 'used_amount',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.usedAmount")}</div>,
+            cell: ({ row }) => {
+                const group = row.original.group
+                return (
+                    <div
+                        className={cn(group && "cursor-pointer hover:text-primary transition-colors")}
+                        onClick={() => {
+                            if (group) {
+                                setGroupDialogTab('dashboard')
+                                setGroupDialogTokenName(row.original.name)
+                                setSelectedGroupId(group)
+                                setGroupDialogOpen(true)
+                            }
+                        }}
+                    >
+                        ${(row.original.used_amount || 0).toFixed(4)}
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: 'request_count',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.requestCount")}</div>,
-            cell: ({ row }) => <div>{row.original.request_count}</div>,
+            cell: ({ row }) => {
+                const group = row.original.group
+                return (
+                    <div
+                        className={cn(group && "cursor-pointer hover:text-primary transition-colors")}
+                        onClick={() => {
+                            if (group) {
+                                setGroupDialogTab('dashboard')
+                                setGroupDialogTokenName(row.original.name)
+                                setSelectedGroupId(group)
+                                setGroupDialogOpen(true)
+                            }
+                        }}
+                    >
+                        {row.original.request_count.toLocaleString()}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: 'status',
@@ -460,7 +538,8 @@ export function TokenTable() {
                 open={groupDialogOpen}
                 onOpenChange={setGroupDialogOpen}
                 groupId={selectedGroupId}
-                initialTab="tokens"
+                initialTab={groupDialogTab}
+                initialTokenName={groupDialogTokenName}
             />
         </>
     )

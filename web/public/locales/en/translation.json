@@ -130,6 +130,7 @@
     "group": "Group",
     "lastUsed": "Last Used",
     "requestCount": "Request Count",
+    "usedAmount": "Used Amount",
     "status": "Status",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -536,6 +537,11 @@
     "noResults": "No channels found",
     "fetchFailed": "Failed to fetch channel",
     "sets": "Groups",
+    "models": "Models",
+    "modelsCount": "models",
+    "retryCount": "Retry Count",
+    "usedAmount": "Used Amount",
+    "viewDashboard": "View in Dashboard",
     "test": "Test",
     "testing": "Testing",
     "testSuccess": "Test Success",
@@ -651,6 +657,9 @@
       "models": "Models",
       "modelConfigs": "Model Configs",
       "logs": "Logs"
+    },
+    "dashboard": {
+      "tokenNamePlaceholder": "Select token name"
     },
     "models": {
       "model": "Model",

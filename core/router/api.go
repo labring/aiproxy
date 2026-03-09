@@ -107,6 +107,7 @@ func SetAPIRouter(router *gin.Engine) {
 			channelsRoute.GET("/search", controller.SearchChannels)
 			channelsRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelsRoute.POST("/batch_delete", controller.DeleteChannels)
+			channelsRoute.POST("/batch_info", controller.GetChannelBatchInfo)
 			channelsRoute.GET("/test", controller.TestAllChannels)
 
 			importRoute := channelsRoute.Group("/import")

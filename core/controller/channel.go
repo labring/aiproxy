@@ -396,6 +396,35 @@ func DeleteChannels(c *gin.Context) {
 	middleware.SuccessResponse(c, nil)
 }
 
+// GetChannelBatchInfo godoc
+//
+//	@Summary		Get basic info for multiple channels
+//	@Description	Returns id, name, and type for a batch of channel IDs
+//	@Tags			channels
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			ids	body		[]int	true	"Channel IDs"
+//	@Success		200	{object}	middleware.APIResponse{data=[]model.ChannelBasicInfo}
+//	@Router			/api/channels/batch_info [post]
+func GetChannelBatchInfo(c *gin.Context) {
+	ids := []int{}
+
+	err := c.ShouldBindJSON(&ids)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	channels, err := model.GetChannelsBasicInfoByIDs(ids)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, channels)
+}
+
 // UpdateChannel godoc
 //
 //	@Summary		Update a channel

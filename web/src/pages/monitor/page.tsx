@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 
 import { useDashboard } from '@/feature/monitor/hooks'
 import { MonitorFilters } from '@/feature/monitor/components/MonitorFilters'
@@ -11,14 +12,18 @@ import { DashboardFilters } from '@/types/dashboard'
 
 export default function MonitorPage() {
     const { t } = useTranslation()
-    
+    const [searchParams] = useSearchParams()
+
+    const initialChannel = searchParams.get('channel') ? Number(searchParams.get('channel')) : undefined
+
     // 计算默认日期范围（当前时间往前7天）
     const getDefaultFilters = (): DashboardFilters => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
-        
+
         return {
+            channel: initialChannel,
             timespan: 'day',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             start_timestamp: Math.floor(sevenDaysAgo.getTime() / 1000),
@@ -55,12 +60,13 @@ export default function MonitorPage() {
                 loading={isLoading}
                 availableModels={data?.models}
                 availableChannels={data?.channels}
+                defaultChannel={initialChannel}
             />
 
             {/* 错误显示 - 使用 AdvancedErrorDisplay 组件 */}
             {error && (
-                <AdvancedErrorDisplay 
-                    error={error} 
+                <AdvancedErrorDisplay
+                    error={error}
                     onRetry={refetch}
                     useCardStyle={true}
                 />

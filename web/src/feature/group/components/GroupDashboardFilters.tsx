@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { Search, RotateCcw } from 'lucide-react'
@@ -14,17 +14,22 @@ import {
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import { DashboardFilters } from '@/types/dashboard'
 import { Combobox } from '@/components/ui/combobox'
-import { channelApi } from '@/api/channel'
 
-interface MonitorFiltersProps {
-    onFiltersChange: (filters: DashboardFilters) => void
+interface GroupDashboardFiltersProps {
+    onFiltersChange: (filters: DashboardFilters & { tokenName?: string }) => void
     loading?: boolean
     availableModels?: string[]
-    availableChannels?: number[]
-    defaultChannel?: number
+    availableTokenNames?: string[]
+    defaultTokenName?: string
 }
 
-export function MonitorFilters({ onFiltersChange, loading = false, availableModels = [], availableChannels = [], defaultChannel }: MonitorFiltersProps) {
+export function GroupDashboardFilters({
+    onFiltersChange,
+    loading = false,
+    availableModels = [],
+    availableTokenNames = [],
+    defaultTokenName,
+}: GroupDashboardFiltersProps) {
     const { t } = useTranslation()
 
     const getDefaultDateRange = (): DateRange => {
@@ -34,49 +39,19 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         return { from: sevenDaysAgo, to: today }
     }
 
+    const [tokenName, setTokenName] = useState(defaultTokenName || '')
     const [model, setModel] = useState('')
-    const [channel, setChannel] = useState(defaultChannel ? String(defaultChannel) : '')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [timespan, setTimespan] = useState<'day' | 'hour'>('day')
-
-    // Batch fetch channel names
-    const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
-
-    useEffect(() => {
-        if (availableChannels.length === 0) return
-        const missing = availableChannels.filter(id => !(id in channelInfoMap))
-        if (missing.length === 0) return
-
-        channelApi.getChannelBatchInfo(missing)
-            .then(infos => {
-                setChannelInfoMap(prev => {
-                    const next = { ...prev }
-                    for (const info of infos) {
-                        next[info.id] = { name: info.name, type: info.type }
-                    }
-                    return next
-                })
-            })
-            .catch(() => {
-                // fallback: use IDs as names
-                setChannelInfoMap(prev => {
-                    const next = { ...prev }
-                    for (const id of missing) {
-                        if (!(id in next)) next[id] = { name: `#${id}`, type: 0 }
-                    }
-                    return next
-                })
-            })
-    }, [availableChannels]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
-        const filters: DashboardFilters = {
+        const filters: DashboardFilters & { tokenName?: string } = {
+            tokenName: tokenName || undefined,
             model: model || undefined,
-            channel: channel ? Number(channel) : undefined,
             timespan,
             timezone: getClientTimezone(),
         }
@@ -92,13 +67,13 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
     }
 
     const handleReset = () => {
+        setTokenName('')
         setModel('')
-        setChannel('')
         const defaultDateRange = getDefaultDateRange()
         setDateRange(defaultDateRange)
         setTimespan('day')
 
-        const filters: DashboardFilters = {
+        const filters: DashboardFilters & { tokenName?: string } = {
             timespan: 'day',
             timezone: getClientTimezone(),
             start_timestamp: Math.floor(defaultDateRange.from!.getTime() / 1000),
@@ -107,12 +82,9 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         onFiltersChange(filters)
     }
 
-    const channelOptions = useMemo(() =>
-        availableChannels.map(id => ({
-            value: String(id),
-            label: channelInfoMap[id]?.name || `#${id}`,
-        })),
-        [availableChannels, channelInfoMap]
+    const tokenNameOptions = useMemo(() =>
+        availableTokenNames.map(name => ({ value: name, label: name })),
+        [availableTokenNames]
     )
 
     const modelOptions = useMemo(() =>
@@ -124,20 +96,20 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-4">
-                    {/* Channel 选择器 */}
+                    {/* Token Name */}
                     <div className="flex-1 min-w-0">
                         <Combobox
-                            options={channelOptions}
-                            value={channel}
-                            onValueChange={setChannel}
-                            placeholder={t('monitor.filters.channelPlaceholder')}
+                            options={tokenNameOptions}
+                            value={tokenName}
+                            onValueChange={setTokenName}
+                            placeholder={t('group.dashboard.tokenNamePlaceholder')}
                             emptyText={t('common.noResult')}
                             disabled={loading}
                             className="h-10"
                         />
                     </div>
 
-                    {/* Model 选择器 */}
+                    {/* Model */}
                     <div className="flex-1 min-w-0">
                         <Combobox
                             options={modelOptions}
@@ -150,7 +122,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                         />
                     </div>
 
-                    {/* 日期范围 */}
+                    {/* Date Range */}
                     <div className="min-w-48 max-w-72">
                         <DateRangePicker
                             value={dateRange}
@@ -161,7 +133,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                         />
                     </div>
 
-                    {/* 时间粒度 */}
+                    {/* Timespan */}
                     <div className="w-24">
                         <Select
                             value={timespan}
@@ -178,7 +150,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                         </Select>
                     </div>
 
-                    {/* 操作按钮 */}
+                    {/* Buttons */}
                     <div className="flex gap-2 flex-shrink-0">
                         <Button type="submit" disabled={loading} className="h-10 px-4">
                             <Search className="h-4 w-4 mr-2" />

@@ -8,6 +8,7 @@ export interface Channel {
     models: string[]
     model_mapping: Record<string, string> | null
     request_count: number
+    retry_count: number
     status: number
     created_at: number
     priority: number

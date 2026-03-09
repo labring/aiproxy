@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Check, ChevronsUpDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,6 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover'
-import { Input } from '@/components/ui/input'
 
 interface ComboboxOption {
     value: string
@@ -19,7 +18,6 @@ interface ComboboxProps {
     value: string
     onValueChange: (value: string) => void
     placeholder?: string
-    searchPlaceholder?: string
     emptyText?: string
     disabled?: boolean
     className?: string
@@ -30,19 +28,11 @@ export function Combobox({
     value,
     onValueChange,
     placeholder = 'Select...',
-    searchPlaceholder = 'Search...',
     emptyText = 'No results',
     disabled = false,
     className,
 }: ComboboxProps) {
     const [open, setOpen] = useState(false)
-    const [search, setSearch] = useState('')
-
-    const filtered = useMemo(() => {
-        if (!search) return options
-        const lower = search.toLowerCase()
-        return options.filter(o => o.label.toLowerCase().includes(lower))
-    }, [options, search])
 
     const selectedLabel = options.find(o => o.value === value)?.label
 
@@ -56,7 +46,7 @@ export function Combobox({
                     disabled={disabled}
                     className={cn('w-full justify-between font-normal', !value && 'text-muted-foreground', className)}
                 >
-                    <span className="truncate">{selectedLabel || value || placeholder}</span>
+                    <span className="truncate">{selectedLabel || placeholder}</span>
                     <div className="flex items-center gap-1 ml-2 shrink-0">
                         {value && (
                             <X
@@ -64,7 +54,6 @@ export function Combobox({
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     onValueChange('')
-                                    setSearch('')
                                 }}
                             />
                         )}
@@ -73,19 +62,11 @@ export function Combobox({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <div className="p-2">
-                    <Input
-                        placeholder={searchPlaceholder}
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="h-8"
-                    />
-                </div>
-                <div className="max-h-60 overflow-auto px-1 pb-1">
-                    {filtered.length === 0 ? (
+                <div className="max-h-60 overflow-auto p-1">
+                    {options.length === 0 ? (
                         <div className="py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
                     ) : (
-                        filtered.map((option) => (
+                        options.map((option) => (
                             <div
                                 key={option.value}
                                 className={cn(
@@ -95,7 +76,6 @@ export function Combobox({
                                 onClick={() => {
                                     onValueChange(option.value === value ? '' : option.value)
                                     setOpen(false)
-                                    setSearch('')
                                 }}
                             >
                                 <Check className={cn('mr-2 h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />

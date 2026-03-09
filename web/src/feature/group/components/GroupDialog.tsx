@@ -21,9 +21,10 @@ interface GroupDialogProps {
     onOpenChange: (open: boolean) => void
     groupId: string | null
     initialTab?: string
+    initialTokenName?: string
 }
 
-export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboard' }: GroupDialogProps) {
+export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboard', initialTokenName }: GroupDialogProps) {
     const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState(initialTab)
 
@@ -77,7 +78,7 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
 
                             <div className="flex-1 overflow-auto mt-4 min-h-0">
                                 <TabsContent value="dashboard" className="h-full m-0">
-                                    {groupId && <GroupDashboardTab groupId={groupId} />}
+                                    {groupId && <GroupDashboardTab groupId={groupId} initialTokenName={initialTokenName} />}
                                 </TabsContent>
 
                                 <TabsContent value="tokens" className="h-full m-0">
