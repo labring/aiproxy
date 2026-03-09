@@ -47,7 +47,7 @@ func (s *Server) getAllCategories() []string {
 		}
 	}
 
-	categories := make([]string, len(categorySet))
+	categories := make([]string, 0, len(categorySet))
 	for category := range categorySet {
 		categories = append(categories, category)
 	}

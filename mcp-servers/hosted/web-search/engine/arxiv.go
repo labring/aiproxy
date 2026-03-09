@@ -38,7 +38,7 @@ type arxivEntry struct {
 }
 
 func (a *ArxivEngine) Search(ctx context.Context, query SearchQuery) ([]SearchResult, error) {
-	searchQueryItems := make([]string, 0)
+	searchQueryItems := make([]string, 0, len(query.Queries))
 	for _, q := range query.Queries {
 		searchQueryItems = append(searchQueryItems, "all:"+url.QueryEscape(q))
 	}

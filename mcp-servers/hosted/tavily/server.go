@@ -841,7 +841,7 @@ func (s *Server) formatCrawlResults(response CrawlResponse) string {
 }
 
 func (s *Server) formatMapResults(response MapResponse) string {
-	output := make([]string, 3+len(response.Results))
+	output := make([]string, 0, 3+len(response.Results))
 
 	output = append(output, "Site Map Results:")
 	output = append(output, "Base URL: "+response.BaseURL)

@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -65,7 +66,7 @@ func TestConvertGeminiToResponsesRequest_WithFunctionCalls(t *testing.T) {
 	reqBody, err := json.Marshal(geminiReq)
 	require.NoError(t, err)
 
-	httpReq := httptest.NewRequest(
+	httpReq, _ := http.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/v1beta/models/gpt-5-codex:streamGenerateContent",
 		bytes.NewReader(reqBody),
@@ -232,7 +233,7 @@ func TestConvertGeminiToResponsesRequest_WithToolsRequiredField(t *testing.T) {
 	reqBody, err := json.Marshal(geminiReq)
 	require.NoError(t, err)
 
-	httpReq := httptest.NewRequest(
+	httpReq, _ := http.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/v1beta/models/gpt-5-codex:streamGenerateContent",
 		bytes.NewReader(reqBody),
@@ -310,7 +311,7 @@ func TestConvertGeminiToResponsesRequest_WithoutFunctionCalls(t *testing.T) {
 	reqBody, err := json.Marshal(geminiReq)
 	require.NoError(t, err)
 
-	httpReq := httptest.NewRequest(
+	httpReq, _ := http.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/v1beta/models/gpt-5-codex:streamGenerateContent",
 		bytes.NewReader(reqBody),

@@ -101,7 +101,9 @@ func (s *StreamableHTTPServer) handlePost(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(jsonBody)))
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(jsonBody)
+	_, _ = w.Write(
+		jsonBody,
+	) //nolint:gosec // response body is from backend, not user-controlled XSS
 }
 
 func (s *StreamableHTTPServer) handleGet(w http.ResponseWriter, _ *http.Request) {

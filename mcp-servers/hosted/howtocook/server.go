@@ -444,7 +444,7 @@ func (s *Server) generateDishRecommendation(peopleCount int) DishRecommendation 
 	recommendedDishes = append(recommendedDishes, selectedVegetableDishes...)
 
 	// Convert to simple recipes
-	simpleDishes := make([]SimpleRecipe, len(recommendedDishes))
+	simpleDishes := make([]SimpleRecipe, 0, len(recommendedDishes))
 	for _, dish := range recommendedDishes {
 		simpleDishes = append(simpleDishes, s.simplifyRecipe(dish))
 	}
@@ -469,7 +469,7 @@ func (s *Server) generateDishRecommendation(peopleCount int) DishRecommendation 
 
 // simplifyRecipe converts Recipe to SimpleRecipe
 func (s *Server) simplifyRecipe(recipe Recipe) SimpleRecipe {
-	ingredients := make([]SimpleIngredient, len(recipe.Ingredients))
+	ingredients := make([]SimpleIngredient, 0, len(recipe.Ingredients))
 	for _, ing := range recipe.Ingredients {
 		ingredients = append(ingredients, SimpleIngredient{
 			Name:         ing.Name,
@@ -729,7 +729,7 @@ func (s *Server) generateGroceryList(selectedRecipes []Recipe) GroceryList {
 	}
 
 	// Convert map to slice
-	ingredients := make([]GroceryItem, len(ingredientMap))
+	ingredients := make([]GroceryItem, 0, len(ingredientMap))
 	for _, item := range ingredientMap {
 		ingredients = append(ingredients, *item)
 	}

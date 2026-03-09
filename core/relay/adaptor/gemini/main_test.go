@@ -2,6 +2,7 @@ package gemini_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -51,7 +52,12 @@ func TestHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/",
+				nil,
+			)
 
 			usage, handlerErr := gemini.Handler(meta, c, httpResp)
 			convey.So(handlerErr, convey.ShouldBeNil)
@@ -114,7 +120,12 @@ func TestStreamHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/",
+				nil,
+			)
 
 			_, err := gemini.StreamHandler(meta, c, httpResp)
 			convey.So(err, convey.ShouldBeNil)

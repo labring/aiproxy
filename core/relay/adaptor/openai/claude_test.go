@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -81,7 +82,7 @@ func TestConvertClaudeToResponsesRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpReq := httptest.NewRequest(
+			httpReq, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/v1/messages",
 				bytes.NewReader([]byte(tt.inputRequest)),
@@ -283,7 +284,7 @@ func TestConvertClaudeToResponsesRequest_WithToolsRequiredField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpReq := httptest.NewRequest(
+			httpReq, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/v1/messages",
 				bytes.NewReader([]byte(tt.request)),

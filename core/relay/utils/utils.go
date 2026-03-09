@@ -202,7 +202,10 @@ func loadHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func DoRequest(req *http.Request, timeout time.Duration) (*http.Response, error) {
-	resp, err := loadHTTPClient(timeout).Do(req)
+	resp, err := loadHTTPClient(
+		timeout,
+	).Do(req)
+	//nolint:gosec // URL is constructed from channel configuration
 	if err != nil {
 		return nil, err
 	}
