@@ -57,10 +57,12 @@ func guessModelConfig(modelName string) model.ModelConfig {
 }
 
 // testSingleModel tests a single model in the channel
+// If saveToDB is true, the test result will be saved to database
 func testSingleModel(
 	mc *model.ModelCaches,
 	channel *model.Channel,
 	modelName string,
+	saveToDB bool,
 ) (*model.ChannelTest, error) {
 	modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
 	if !ok {
@@ -113,14 +115,14 @@ func testSingleModel(
 	}
 	middleware.SetRequestID(newc, channelTestRequestID)
 
-	meta := meta.NewMeta(
+	testMeta := meta.NewMeta(
 		channel,
 		m,
 		modelName,
 		modelConfig,
 		meta.WithRequestID(channelTestRequestID),
 	)
-	result := relayHandler(newc, meta, mc)
+	result := relayHandler(newc, testMeta, mc)
 	success := result.Error == nil
 
 	var (
@@ -129,7 +131,7 @@ func testSingleModel(
 	)
 
 	if success {
-		switch meta.Mode {
+		switch testMeta.Mode {
 		case mode.AudioSpeech,
 			mode.ImagesGenerations:
 			respStr = ""
@@ -144,16 +146,35 @@ func testSingleModel(
 		code = result.Error.StatusCode()
 	}
 
-	return channel.UpdateModelTest(
-		meta.RequestAt,
-		meta.OriginModel,
-		meta.ActualModel,
-		meta.Mode,
-		time.Since(meta.RequestAt).Seconds(),
-		success,
-		respStr,
-		code,
-	)
+	ct := &model.ChannelTest{
+		TestAt:      testMeta.RequestAt,
+		Model:       testMeta.OriginModel,
+		ActualModel: testMeta.ActualModel,
+		Mode:        testMeta.Mode,
+		Took:        time.Since(testMeta.RequestAt).Seconds(),
+		Success:     success,
+		Response:    respStr,
+		Code:        code,
+		ChannelName: channel.Name,
+		ChannelType: channel.Type,
+		ChannelID:   channel.ID,
+	}
+
+	// Only save to database for saved channels (not preview tests)
+	if saveToDB && channel.ID != 0 {
+		return channel.UpdateModelTest(
+			testMeta.RequestAt,
+			testMeta.OriginModel,
+			testMeta.ActualModel,
+			testMeta.Mode,
+			time.Since(testMeta.RequestAt).Seconds(),
+			success,
+			respStr,
+			code,
+		)
+	}
+
+	return ct, nil
 }
 
 // TestChannel godoc
@@ -209,7 +230,7 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
-	ct, err := testSingleModel(model.LoadModelCaches(), channel, modelName)
+	ct, err := testSingleModel(model.LoadModelCaches(), channel, modelName, true)
 	if err != nil {
 		log.Errorf(
 			"failed to test channel %s(%d) model %s: %s",
@@ -254,7 +275,7 @@ func processTestResult(
 	modelName string,
 	returnSuccess, successResponseBody bool,
 ) *TestResult {
-	ct, err := testSingleModel(mc, channel, modelName)
+	ct, err := testSingleModel(mc, channel, modelName, true)
 
 	e := &utils.UnsupportedModelTypeError{}
 	if errors.As(err, &e) {
@@ -557,7 +578,7 @@ func AutoTestBannedModels() {
 				continue
 			}
 
-			result, err := testSingleModel(mc, channel, modelName)
+			result, err := testSingleModel(mc, channel, modelName, true)
 			if err != nil {
 				notify.Error(
 					fmt.Sprintf(
@@ -602,5 +623,205 @@ func AutoTestBannedModels() {
 				)
 			}
 		}
+	}
+}
+
+// TestChannelRequest 用于测试未保存的渠道配置
+// 尽可能接近 Channel 结构
+type TestChannelRequest struct {
+	Type         int                `json:"type" binding:"required"`
+	Key          string             `json:"key" binding:"required"`
+	BaseURL      string             `json:"base_url"`
+	Name         string             `json:"name"`
+	Models       []string           `json:"models"`
+	ModelMapping map[string]string  `json:"model_mapping"`
+	Configs      map[string]any     `json:"configs"`
+}
+
+// TestSingleModelRequest 测试单个模型的请求
+type TestSingleModelRequest struct {
+	Type         int               `json:"type" binding:"required"`
+	Key          string            `json:"key" binding:"required"`
+	BaseURL      string            `json:"base_url"`
+	Name         string            `json:"name"`
+	Model        string            `json:"model" binding:"required"`
+	ModelMapping map[string]string `json:"model_mapping"`
+	Configs      map[string]any    `json:"configs"`
+}
+
+// createTempChannel 创建临时 Channel 对象
+func createTempChannel(req *TestChannelRequest) *model.Channel {
+	return &model.Channel{
+		Type:         model.ChannelType(req.Type),
+		Key:          req.Key,
+		BaseURL:      req.BaseURL,
+		Name:         req.Name,
+		Models:       req.Models,
+		ModelMapping: req.ModelMapping,
+		Configs:      model.ChannelConfigs(req.Configs),
+	}
+}
+
+// TestChannelPreview godoc
+//
+//	@Summary		Test channel preview (single model)
+//	@Description	Test a single model in channel without saving to database
+//	@Tags			channel
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request	body		TestSingleModelRequest	true	"Channel test request"
+//	@Success		200		{object}	middleware.APIResponse{data=model.ChannelTest}
+//	@Router			/api/channel/test [post]
+func TestChannelPreview(c *gin.Context) {
+	var req TestSingleModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, middleware.APIResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// 创建临时 Channel 对象（不保存到数据库）
+	channel := &model.Channel{
+		Type:         model.ChannelType(req.Type),
+		Key:          req.Key,
+		BaseURL:      req.BaseURL,
+		Name:         req.Name,
+		Models:       []string{req.Model},
+		ModelMapping: req.ModelMapping,
+		Configs:      model.ChannelConfigs(req.Configs),
+	}
+
+	// 获取模型缓存
+	mc := model.LoadModelCaches()
+
+	// 测试单个模型 (不保存到数据库)
+	ct, err := testSingleModel(mc, channel, req.Model, false)
+	if err != nil {
+		log.Errorf("failed to test channel preview: %s", err.Error())
+		c.JSON(http.StatusOK, middleware.APIResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// 不返回响应体中的敏感信息
+	if ct.Success {
+		ct.Response = ""
+	}
+
+	c.JSON(http.StatusOK, middleware.APIResponse{
+		Success: true,
+		Data:    ct,
+	})
+}
+
+// TestChannelPreviewAll godoc
+//
+//	@Summary		Test channel preview (all models)
+//	@Description	Test all models in channel without saving to database
+//	@Tags			channel
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			stream			query		bool	false	"Stream mode (SSE)"
+//	@Param			request	body		TestChannelRequest	true	"Channel test request"
+//	@Success		200		{object}	middleware.APIResponse{data=[]TestResult}
+//	@Router			/api/channel/test-all [post]
+func TestChannelPreviewAll(c *gin.Context) {
+	var req TestChannelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, middleware.APIResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// 检查是否有模型可测试
+	if len(req.Models) == 0 {
+		c.JSON(http.StatusOK, middleware.APIResponse{
+			Success: false,
+			Message: "no models to test",
+		})
+		return
+	}
+
+	// 创建临时 Channel 对象（不保存到数据库）
+	channel := createTempChannel(&req)
+
+	// 获取模型缓存
+	mc := model.LoadModelCaches()
+
+	isStream := c.Query("stream") == "true"
+
+	results := make([]*TestResult, 0)
+	resultsMutex := sync.Mutex{}
+	hasError := atomic.Bool{}
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5)
+
+	// 随机打乱模型顺序
+	models := slices.Clone(req.Models)
+	rand.Shuffle(len(models), func(i, j int) {
+		models[i], models[j] = models[j], models[i]
+	})
+
+	for _, modelName := range models {
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(model string) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			ct, err := testSingleModel(mc, channel, model, false)
+			result := &TestResult{
+				Success: err == nil,
+			}
+
+			if err != nil {
+				result.Message = fmt.Sprintf(
+					"failed to test channel %s model %s: %s",
+					req.Name,
+					model,
+					err.Error(),
+				)
+				hasError.Store(true)
+			} else {
+				// 不返回成功响应的敏感信息
+				if ct.Success {
+					ct.Response = ""
+				}
+				result.Data = ct
+				if !ct.Success {
+					hasError.Store(true)
+				}
+			}
+
+			resultsMutex.Lock()
+			if isStream {
+				err := render.OpenaiObjectData(c, result)
+				if err != nil {
+					log.Errorf("failed to render result: %s", err.Error())
+				}
+			} else {
+				results = append(results, result)
+			}
+			resultsMutex.Unlock()
+		}(modelName)
+	}
+
+	wg.Wait()
+
+	if !isStream {
+		c.JSON(http.StatusOK, middleware.APIResponse{
+			Success: true,
+			Data:    results,
+		})
 	}
 }

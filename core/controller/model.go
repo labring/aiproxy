@@ -261,16 +261,45 @@ func EnabledModelsSet(c *gin.Context) {
 }
 
 type EnabledModelChannel struct {
-	ID   int               `json:"id"`
-	Type model.ChannelType `json:"type"`
-	Name string            `json:"name"`
+	ID       int               `json:"id"`
+	Type     model.ChannelType `json:"type"`
+	Name     string            `json:"name"`
+	Priority int32             `json:"priority"`
+	Weight   float64           `json:"weight"` // 权重百分比 (0-100)
 }
 
 func newEnabledModelChannel(ch *model.Channel) EnabledModelChannel {
 	return EnabledModelChannel{
-		ID:   ch.ID,
-		Type: ch.Type,
-		Name: ch.Name,
+		ID:       ch.ID,
+		Type:     ch.Type,
+		Name:     ch.Name,
+		Priority: ch.GetPriority(),
+		Weight:   0, // 将在后面计算
+	}
+}
+
+// calculateWeights 计算渠道权重百分比
+// 权重 = 1/priority，然后归一化到百分比
+func calculateWeights(channels []EnabledModelChannel) {
+	if len(channels) == 0 {
+		return
+	}
+
+	// 计算总权重
+	totalWeight := 0.0
+	for _, ch := range channels {
+		if ch.Priority > 0 {
+			totalWeight += 1.0 / float64(ch.Priority)
+		}
+	}
+
+	// 计算每个渠道的百分比
+	if totalWeight > 0 {
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				channels[i].Weight = (1.0 / float64(channels[i].Priority)) / totalWeight * 100
+			}
+		}
 	}
 }
 
@@ -303,6 +332,9 @@ func EnabledModelSets(c *gin.Context) {
 			for i, channel := range channels {
 				chs[i] = newEnabledModelChannel(channel)
 			}
+
+			// 计算每个模型的渠道权重百分比
+			calculateWeights(chs)
 
 			result[model][set] = chs
 		}

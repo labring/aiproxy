@@ -13,7 +13,7 @@ import {
     FormMessage,
 } from '@/components/ui/form'
 import { channelCreateSchema } from '@/validation/channel'
-import { useChannelTypeMetas, useCreateChannel, useUpdateChannel } from '../hooks'
+import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useTestChannelPreviewAll } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import { useTranslation } from 'react-i18next'
 import { ChannelCreateForm } from '@/validation/channel'
@@ -26,6 +26,8 @@ import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnimatedContainer } from '@/components/ui/animation/components/animated-container'
 import { toast } from 'sonner'
+import { FlaskConical, Loader2 } from 'lucide-react'
+import { ChannelTestDialog } from './ChannelTestDialog'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update'
@@ -40,6 +42,7 @@ interface ChannelFormProps {
         models: string[]
         model_mapping?: Record<string, string>
         sets?: string[]
+        priority?: number
     }
 }
 
@@ -56,7 +59,8 @@ export function ChannelForm({
         base_url: '',
         models: [],
         model_mapping: {},
-        sets: []
+        sets: [],
+        priority: 10
     },
 }: ChannelFormProps) {
     const { t } = useTranslation()
@@ -86,6 +90,17 @@ export function ChannelForm({
         error: updateError,
         clearError: clearUpdateError
     } = useUpdateChannel()
+
+    // Test channel hook
+    const {
+        testChannelPreviewAll,
+        cancelTest,
+        isTesting,
+        results: testResults,
+        clearResults: clearTestResults
+    } = useTestChannelPreviewAll()
+
+    const [testDialogOpen, setTestDialogOpen] = useState(false)
 
     // 动态状态
     const isLoading = mode === 'create' ? isCreating : isUpdating
@@ -130,7 +145,8 @@ export function ChannelForm({
             base_url: data.base_url || '',  // Ensure base_url is never undefined for API
             models: data.models || [],
             model_mapping: data.model_mapping || {},
-            sets: data.sets || []
+            sets: data.sets || [],
+            priority: data.priority || 10
         }
 
         console.log('Submitting form data:', { mode, channelId, formData });
@@ -182,6 +198,44 @@ export function ChannelForm({
     // 处理提交按钮点击
     const handleSubmitClick = () => {
         setIsUserSubmitting(true)
+    }
+
+    // 处理测试按钮点击
+    const handleTestClick = () => {
+        const formData = form.getValues()
+
+        // 验证必填字段
+        if (!formData.type) {
+            toast.error('请先选择厂商')
+            return
+        }
+        if (!formData.key) {
+            toast.error('请先填写密钥')
+            return
+        }
+        if (!formData.models || formData.models.length === 0) {
+            toast.error('请先选择要测试的模型')
+            return
+        }
+
+        clearTestResults()
+        setTestDialogOpen(true)
+
+        testChannelPreviewAll({
+            type: formData.type,
+            key: formData.key,
+            base_url: formData.base_url || '',
+            name: formData.name || '',
+            models: formData.models,
+            model_mapping: formData.model_mapping || {},
+            configs: {}
+        })
+    }
+
+    // 处理取消测试
+    const handleCancelTest = () => {
+        cancelTest()
+        setTestDialogOpen(false)
     }
 
     // 获取类型对应的字段提示
@@ -516,11 +570,66 @@ export function ChannelForm({
                                 }}
                             />
 
-                            {/* 提交按钮 */}
-                            <div className="flex justify-end">
-                                <Button 
-                                    type="submit" 
-                                    disabled={isLoading}
+                            {/* 优先级字段 */}
+                            <FormField
+                                control={form.control}
+                                name="priority"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>{t("channel.dialog.priority")}</FormLabel>
+                                            <span className="text-xs text-muted-foreground">{t("common.optional")}</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={1000000}
+                                                placeholder={t("channel.dialog.priorityPlaceholder")}
+                                                {...field}
+                                                value={field.value ?? ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value
+                                                    if (value === '') {
+                                                        field.onChange(undefined)
+                                                    } else {
+                                                        field.onChange(parseInt(value, 10))
+                                                    }
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {t("channel.dialog.priorityHelp")}
+                                        </p>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* 提交和测试按钮 */}
+                            <div className="flex justify-between items-center">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleTestClick}
+                                    disabled={isTesting || isLoading}
+                                    className="flex items-center gap-2"
+                                >
+                                    {isTesting ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            {t("channel.testing")}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FlaskConical className="h-4 w-4" />
+                                            {t("channel.test")}
+                                        </>
+                                    )}
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={isLoading || isTesting}
                                     onClick={handleSubmitClick}
                                 >
                                     {isLoading ? t("channel.dialog.submitting") : mode === 'create' ? t("channel.dialog.create") : t("channel.dialog.update")}
@@ -529,6 +638,15 @@ export function ChannelForm({
                         </form>
                     </Form>
                 )}
+
+                {/* 测试结果对话框 */}
+                <ChannelTestDialog
+                    open={testDialogOpen}
+                    onOpenChange={setTestDialogOpen}
+                    isTesting={isTesting}
+                    results={testResults}
+                    onCancel={handleCancelTest}
+                />
 
                 {/* 创建模型对话框 */}
                 <ModelDialog

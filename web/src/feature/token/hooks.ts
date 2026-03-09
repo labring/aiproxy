@@ -2,7 +2,7 @@
 import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { tokenApi } from '@/api/token'
 import { useState } from 'react'
-import { TokenCreateRequest, TokenStatusRequest } from '@/types/token'
+import { TokenCreateRequest, TokenStatusRequest, TokenUpdateRequest } from '@/types/token'
 import { toast } from 'sonner'
 import { ConstantCategory, getConstant } from '@/constant'
 
@@ -45,7 +45,7 @@ export const useCreateToken = () => {
 
     const mutation = useMutation({
         mutationFn: (data: TokenCreateRequest) => {
-            return tokenApi.createToken(data.name)
+            return tokenApi.createToken(data)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
@@ -120,4 +120,43 @@ export const useUpdateTokenStatus = () => {
         error,
         clearError: () => setError(null),
     }
+}
+
+// 更新Token（包括限额配置）
+export const useUpdateToken = () => {
+    const queryClient = useQueryClient()
+    const [error, setError] = useState<ApiError | null>(null)
+
+    const mutation = useMutation({
+        mutationFn: ({ id, data }: { id: number, data: TokenUpdateRequest }) => {
+            return tokenApi.updateToken(id, data)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tokens'] })
+            setError(null)
+            toast.success('Token更新成功')
+        },
+        onError: (err: ApiError) => {
+            setError(err)
+            toast.error(err.message || 'Token更新失败')
+        },
+    })
+
+    return {
+        updateToken: mutation.mutate,
+        isLoading: mutation.isPending,
+        error,
+        clearError: () => setError(null),
+    }
+}
+
+// 获取单个Token详情
+export const useToken = (id: number) => {
+    return useInfiniteQuery({
+        queryKey: ['token', id],
+        queryFn: () => tokenApi.getToken(id),
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        enabled: id > 0,
+    })
 }

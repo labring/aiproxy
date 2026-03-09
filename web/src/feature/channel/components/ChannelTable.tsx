@@ -5,12 +5,13 @@ import {
     getCoreRowModel,
     ColumnDef,
 } from '@tanstack/react-table'
-import { useChannels, useChannelTypeMetas, useUpdateChannelStatus } from '../hooks'
+import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels } from '../hooks'
+import { channelApi } from '@/api/channel'
 import { Channel } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power
+    PowerOff, Power, FlaskConical
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -21,7 +22,9 @@ import { ChannelDialog } from './ChannelDialog'
 import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
 import { DeleteChannelDialog } from './DeleteChannelDialog'
+import { ChannelTestDialog } from './ChannelTestDialog'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +41,8 @@ export function ChannelTable() {
     const [dialogMode, setDialogMode] = useState<'create' | 'update'>('create')
     const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+    const [testDialogOpen, setTestDialogOpen] = useState(false)
+    const [isTestAll, setIsTestAll] = useState(false)
 
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
@@ -54,6 +59,18 @@ export function ChannelTable() {
 
     // 更新渠道状态
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateChannelStatus()
+
+    // 测试单个渠道
+    const { testChannel, isTesting, results: testResults, clearResults, cancelTest } = useTestChannel()
+
+    // 测试所有渠道
+    const {
+        testAllChannels,
+        isTesting: isTestingAll,
+        results: testAllResults,
+        clearResults: clearTestAllResults,
+        cancelTest: cancelTestAll
+    } = useTestAllChannels()
 
     // 扁平化分页数据
     const flatData = useMemo(() =>
@@ -167,13 +184,13 @@ export function ChannelTable() {
             cell: ({ row }) => {
                 const sets = row.original.sets || [];
                 if (sets.length === 0) return <div className="text-muted-foreground text-xs">-</div>;
-                
+
                 return (
                     <div className="flex flex-wrap gap-1">
                         {sets.map((set, index) => (
-                            <Badge 
-                                key={index} 
-                                variant="secondary" 
+                            <Badge
+                                key={index}
+                                variant="secondary"
                                 className="text-xs py-0 px-2"
                             >
                                 {set}
@@ -182,6 +199,11 @@ export function ChannelTable() {
                     </div>
                 );
             }
+        },
+        {
+            accessorKey: 'priority',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.priority")}</div>,
+            cell: ({ row }) => <div>{row.original.priority || 10}</div>,
         },
         {
             accessorKey: 'request_count',
@@ -221,6 +243,18 @@ export function ChannelTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onClick={() => {
+                                clearResults()
+                                setIsTestAll(false)
+                                setTestDialogOpen(true)
+                                testChannel(row.original.id)
+                            }}
+                            disabled={isTesting}
+                        >
+                            <FlaskConical className="mr-2 h-4 w-4 text-blue-600 dark:text-blue-500" />
+                            {isTesting ? t("channel.testing") : t("channel.test")}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => openUpdateDialog(row.original)}
                         >
@@ -269,6 +303,27 @@ export function ChannelTable() {
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
                     <div className="flex gap-2">
+                        <AnimatedButton>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    clearTestAllResults()
+                                    setIsTestAll(true)
+                                    setTestDialogOpen(true)
+                                    testAllChannels()
+                                }}
+                                disabled={isTestingAll}
+                                className="flex items-center gap-2 justify-center"
+                            >
+                                {isTestingAll ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <FlaskConical className="h-4 w-4" />
+                                )}
+                                {t("channel.testAllChannels")}
+                            </Button>
+                        </AnimatedButton>
                         <AnimatedButton>
                             <Button
                                 variant="outline"
@@ -335,6 +390,52 @@ export function ChannelTable() {
                 onOpenChange={setDeleteDialogOpen}
                 channelId={selectedChannelId}
                 onDeleted={() => setSelectedChannelId(null)}
+            />
+
+            {/* 测试结果对话框 */}
+            <ChannelTestDialog
+                open={testDialogOpen}
+                onOpenChange={(open) => {
+                    setTestDialogOpen(open)
+                    if (!open) {
+                        setIsTestAll(false)
+                    }
+                }}
+                isTesting={isTestAll ? isTestingAll : isTesting}
+                results={isTestAll ? testAllResults : testResults}
+                showChannelInfo={true}
+                onChannelClick={async (channelId: number) => {
+                    // 首先尝试从已加载的数据中查找
+                    let channel = flatData.find(c => c.id === channelId)
+
+                    // 如果没有找到，从后端获取
+                    if (!channel) {
+                        try {
+                            channel = await channelApi.getChannel(channelId)
+                        } catch {
+                            toast.error(t("channel.fetchFailed"))
+                            return
+                        }
+                    }
+
+                    if (channel) {
+                        setSelectedChannel(channel)
+                        setDialogMode('update')
+                        setChannelDialogOpen(true)
+                        // 不关闭测试对话框，保持测试结果
+                    }
+                }}
+                onCancel={() => {
+                    if (isTestAll) {
+                        cancelTestAll()
+                        clearTestAllResults()
+                    } else {
+                        cancelTest()
+                        clearResults()
+                    }
+                    setTestDialogOpen(false)
+                    setIsTestAll(false)
+                }}
             />
         </>
     )

@@ -16,6 +16,8 @@ export interface Channel {
     sets?: string[]
 }
 
+export const DEFAULT_PRIORITY = 10
+
 export interface ChannelTypeMeta {
     name: string
     keyHelp: string
@@ -37,6 +39,7 @@ export interface ChannelCreateRequest {
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]
+    priority?: number
 }
 
 export interface ChannelUpdateRequest {
@@ -47,6 +50,7 @@ export interface ChannelUpdateRequest {
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]
+    priority?: number
 }
 
 export interface ChannelStatusRequest {

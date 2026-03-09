@@ -49,7 +49,8 @@ export function ChannelDialog({
             base_url: channel.base_url,
             models: channel.models || [],
             model_mapping: channel.model_mapping || {},
-            sets: channel.sets || []
+            sets: channel.sets || [],
+            priority: channel.priority
         }
         : {
             type: 0,
@@ -58,7 +59,8 @@ export function ChannelDialog({
             base_url: '',
             models: [],
             model_mapping: {},
-            sets: []
+            sets: [],
+            priority: 10
         }
 
     // Log for debugging

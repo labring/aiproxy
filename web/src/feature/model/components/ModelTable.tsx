@@ -158,8 +158,11 @@ export function ModelTable() {
                             {channel.name}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            ID: {channel.id}, {getChannelTypeName(channel.type)}
+                            ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>
+                          <Badge variant="outline" className="text-xs ml-auto">
+                            {(channel.weight ?? 0).toFixed(1)}%
+                          </Badge>
                         </div>
                       ))}
                     </div>

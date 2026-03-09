@@ -8,7 +8,8 @@ export const channelCreateSchema = z.object({
     base_url: z.string().optional(),
     models: z.array(z.string()).min(1, '至少选择一个模型'),
     model_mapping: z.record(z.string(), z.string()).optional(),
-    sets: z.array(z.string()).optional()
+    sets: z.array(z.string()).optional(),
+    priority: z.number().int().min(1).max(1000000).optional()
 })
 
 export type ChannelCreateForm = z.infer<typeof channelCreateSchema>

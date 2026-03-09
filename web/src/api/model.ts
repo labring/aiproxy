@@ -9,6 +9,8 @@ export interface ModelSetsResponse {
       id: number;
       type: number;
       name: string;
+      priority: number;
+      weight: number; // 权重百分比 (0-100)
     }>;
   };
 }

@@ -10,7 +10,7 @@ import { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw,
-    PowerOff, Power, Copy
+    PowerOff, Power, Copy, Settings
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card } from '@/components/ui/card'
 import { TokenDialog } from './TokenDialog'
+import { TokenQuotaDialog } from './TokenQuotaDialog'
 import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
 import { DeleteTokenDialog } from './DeleteTokenDialog'
@@ -28,13 +29,74 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
+// 计算剩余额度
+const calculateRemainingQuota = (token: Token): { total: number; period: number } => {
+    const total = token.quota > 0 ? Math.max(0, token.quota - token.used_amount) : -1
+    // 周期使用量 = 当前总使用量 - 上次周期更新时的使用量
+    const periodUsed = token.used_amount - (token.period_last_update_amount || 0)
+    const period = token.period_quota > 0 ? Math.max(0, token.period_quota - periodUsed) : -1
+    return { total, period }
+}
+
+// 计算下次刷新时间
+const calculateNextRefreshTime = (token: Token): Date | null => {
+    if (!token.period_quota || token.period_quota <= 0 || !token.period_last_update_time) {
+        return null
+    }
+
+    const lastUpdate = new Date(token.period_last_update_time)
+
+    switch (token.period_type) {
+        case 'daily':
+            // 下一天的同一时间
+            const nextDay = new Date(lastUpdate)
+            nextDay.setDate(nextDay.getDate() + 1)
+            return nextDay
+        case 'weekly':
+            // 7天后
+            const nextWeek = new Date(lastUpdate)
+            nextWeek.setDate(nextWeek.getDate() + 7)
+            return nextWeek
+        case 'monthly':
+        default:
+            // 下个月的同一天
+            const nextMonth = new Date(lastUpdate)
+            nextMonth.setMonth(nextMonth.getMonth() + 1)
+            return nextMonth
+    }
+}
+
+// 格式化剩余时间
+const formatRemainingTime = (targetDate: Date): string => {
+    const now = new Date()
+    const diff = targetDate.getTime() - now.getTime()
+
+    if (diff <= 0) {
+        return "Expired"
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+
+    if (days > 0) {
+        return `${days}d ${hours}h`
+    }
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`
+    }
+    return `${minutes}m`
+}
+
 export function TokenTable() {
     const { t } = useTranslation()
 
     // 状态管理
     const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
+    const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const sentinelRef = useRef<HTMLDivElement>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
 
@@ -100,6 +162,12 @@ export function TokenTable() {
         setDeleteDialogOpen(true)
     }
 
+    // 打开限额配置对话框
+    const openQuotaDialog = (token: Token) => {
+        setSelectedToken(token)
+        setQuotaDialogOpen(true)
+    }
+
     // 更新Token状态
     const handleStatusChange = (id: number, currentStatus: number) => {
         // 状态切换: 2 -> 1 (禁用 -> 启用), 1 -> 2 (启用 -> 禁用)
@@ -127,26 +195,6 @@ export function TokenTable() {
         }, 1000)
     }
 
-    // 格式化日期时间
-    const formatDateTime = (timestamp: number) => {
-        if (timestamp < 0) return t('token.never')
-
-        try {
-            const date = new Date(timestamp)
-            return new Intl.DateTimeFormat('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            }).format(date)
-        } catch (error) {
-            console.error(error)
-            return t('token.invalidDate')
-        }
-    }
-
     // 表格列定义
     const columns: ColumnDef<Token>[] = [
         {
@@ -172,9 +220,66 @@ export function TokenTable() {
             ),
         },
         {
-            accessorKey: 'accessed_at',
-            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.lastUsed")}</div>,
-            cell: ({ row }) => <div>{formatDateTime(row.original.accessed_at)}</div>,
+            accessorKey: 'quota',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.quota.remainingQuota")}</div>,
+            cell: ({ row }) => {
+                const token = row.original
+                const remaining = calculateRemainingQuota(token)
+
+                // 没有设置限额
+                if (remaining.total < 0 && remaining.period < 0) {
+                    return (
+                        <span className="text-muted-foreground text-sm">
+                            {t("token.quota.unlimited")}
+                        </span>
+                    )
+                }
+
+                return (
+                    <div className="text-sm space-y-1">
+                        {token.quota > 0 && (
+                            <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground">Total:</span>
+                                <span className={cn(
+                                    remaining.total < token.quota * 0.1 ? "text-destructive" : "text-emerald-600"
+                                )}>
+                                    {remaining.total.toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+                        {token.period_quota > 0 && (
+                            <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground">Period:</span>
+                                <span className={cn(
+                                    remaining.period < token.period_quota * 0.1 ? "text-destructive" : "text-emerald-600"
+                                )}>
+                                    {remaining.period.toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )
+            },
+        },
+        {
+            accessorKey: 'period_reset',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.quota.nextRefresh")}</div>,
+            cell: ({ row }) => {
+                const token = row.original
+                const nextRefresh = calculateNextRefreshTime(token)
+
+                if (!nextRefresh) {
+                    return (
+                        <span className="text-muted-foreground text-sm">-</span>
+                    )
+                }
+
+                return (
+                    <span className="text-sm">
+                        {formatRemainingTime(nextRefresh)}
+                    </span>
+                )
+            },
         },
         {
             accessorKey: 'request_count',
@@ -219,6 +324,12 @@ export function TokenTable() {
                         >
                             <Copy className="mr-2 h-4 w-4" />
                             {t("token.copyKey")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => openQuotaDialog(row.original)}
+                        >
+                            <Settings className="mr-2 h-4 w-4" />
+                            {t("token.quota.configure")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => handleStatusChange(row.original.id, row.original.status)}
@@ -320,6 +431,13 @@ export function TokenTable() {
             <TokenDialog
                 open={tokenDialogOpen}
                 onOpenChange={setTokenDialogOpen}
+            />
+
+            {/* Token限额配置对话框 */}
+            <TokenQuotaDialog
+                open={quotaDialogOpen}
+                onOpenChange={setQuotaDialogOpen}
+                token={selectedToken}
             />
 
             {/* 删除Token对话框 */}

@@ -55,6 +55,10 @@ func (t *Token) BeforeCreate(_ *gorm.DB) error {
 	if t.Key == "" || len(t.Key) != 48 {
 		t.Key = generateKey()
 	}
+	// Initialize period start time to current time if period quota is set
+	if t.PeriodQuota > 0 && t.PeriodLastUpdateTime.IsZero() {
+		t.PeriodLastUpdateTime = time.Now()
+	}
 	return nil
 }
 
@@ -689,6 +693,12 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		return nil, errors.New("id is empty")
 	}
 
+	// First, get the current token to check if period_last_update_time is already initialized
+	currentToken, err := GetTokenByID(id)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &Token{
 		ID:     id,
 		Status: update.Status,
@@ -719,6 +729,13 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.PeriodQuota = *update.PeriodQuota
 
 		selects = append(selects, "period_quota")
+
+		// Only initialize period_last_update_time if it's not already set in the database
+		// and the request doesn't explicitly set it
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 && currentToken.PeriodLastUpdateTime.IsZero() {
+			token.PeriodLastUpdateTime = time.Now()
+			selects = append(selects, "period_last_update_time")
+		}
 	}
 
 	if update.PeriodType != nil {
@@ -776,6 +793,12 @@ func UpdateGroupToken(
 		return nil, errors.New("id or group is empty")
 	}
 
+	// First, get the current token to check if period_last_update_time is already initialized
+	currentToken, err := GetGroupTokenByID(group, id)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &Token{
 		ID:      id,
 		GroupID: group,
@@ -807,6 +830,13 @@ func UpdateGroupToken(
 		token.PeriodQuota = *update.PeriodQuota
 
 		selects = append(selects, "period_quota")
+
+		// Only initialize period_last_update_time if it's not already set in the database
+		// and the request doesn't explicitly set it
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 && currentToken.PeriodLastUpdateTime.IsZero() {
+			token.PeriodLastUpdateTime = time.Now()
+			selects = append(selects, "period_last_update_time")
+		}
 	}
 
 	if update.PeriodType != nil {
