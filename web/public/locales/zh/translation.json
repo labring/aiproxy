@@ -70,8 +70,10 @@
       "dateRangePlaceholder": "选择日期范围",
       "timespan": "时间粒度",
       "timespanPlaceholder": "选择时间粒度",
+      "timespanMinute": "分钟",
       "timespanHour": "小时",
       "timespanDay": "天",
+      "timespanMonth": "月",
       "search": "搜索",
       "reset": "重置"
     },

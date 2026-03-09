@@ -70,8 +70,10 @@
       "dateRangePlaceholder": "Select date range",
       "timespan": "Time Granularity",
       "timespanPlaceholder": "Select time granularity",
+      "timespanMinute": "Minute",
       "timespanHour": "Hour",
       "timespanDay": "Day",
+      "timespanMonth": "Month",
       "search": "Search",
       "reset": "Reset"
     },

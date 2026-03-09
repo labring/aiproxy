@@ -59,5 +59,5 @@ export interface DashboardFilters {
     start_timestamp?: number
     end_timestamp?: number
     timezone?: string
-    timespan?: 'day' | 'hour'
+    timespan?: 'minute' | 'hour' | 'day' | 'month'
 }

@@ -36,7 +36,7 @@ function fillMissingPeriods(
     }
 
     const timespan = filters.timespan || 'hour'
-    const stepSeconds = timespan === 'day' ? 86400 : 3600
+    const stepSeconds = timespan === 'month' ? 86400 * 30 : timespan === 'day' ? 86400 : timespan === 'minute' ? 60 : 3600
 
     const start = filters.start_timestamp
     const now = Math.floor(Date.now() / 1000)
@@ -83,10 +83,16 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
 
         const dateFormat = (() => {
             const d = new Date(ts.timestamp * 1000)
+            if (timespan === 'month') {
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            }
             if (timespan === 'day') {
                 return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
             }
-            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+            if (timespan === 'minute') {
+                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+            }
+            return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`
         })()
 
         const d = new Date(ts.timestamp * 1000)

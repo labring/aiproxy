@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
-import { Search, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -41,13 +41,11 @@ export function GroupDashboardFilters({
     const [tokenName, setTokenName] = useState(defaultTokenName || '')
     const [model, setModel] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
-    const [timespan, setTimespan] = useState<'day' | 'hour'>('day')
+    const [timespan, setTimespan] = useState<'minute' | 'hour' | 'day' | 'month'>('hour')
 
     const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-
+    const buildFilters = useCallback((): DashboardFilters & { tokenName?: string } => {
         const effectiveTokenName = tokenName === '__all__' ? '' : tokenName
         const effectiveModel = model === '__all__' ? '' : model
 
@@ -65,108 +63,100 @@ export function GroupDashboardFilters({
             endDate.setHours(23, 59, 59, 999)
             filters.end_timestamp = Math.floor(endDate.getTime() / 1000)
         }
-        onFiltersChange(filters)
-    }
+        return filters
+    }, [tokenName, model, dateRange, timespan])
+
+    // Auto-refresh on any filter change
+    useEffect(() => {
+        onFiltersChange(buildFilters())
+    }, [buildFilters]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleReset = () => {
         setTokenName('')
         setModel('')
-        const defaultDateRange = getDefaultDateRange()
-        setDateRange(defaultDateRange)
-        setTimespan('day')
-
-        const filters: DashboardFilters & { tokenName?: string } = {
-            timespan: 'day',
-            timezone: getClientTimezone(),
-            start_timestamp: Math.floor(defaultDateRange.from!.getTime() / 1000),
-            end_timestamp: Math.floor(defaultDateRange.to!.setHours(23, 59, 59, 999) / 1000)
-        }
-        onFiltersChange(filters)
+        setDateRange(getDefaultDateRange())
+        setTimespan('hour')
     }
 
     return (
-        <div className="bg-card border border-border rounded-lg p-4 shadow-none">
-            <form onSubmit={handleSubmit}>
-                <div className="flex items-center gap-4">
-                    {/* Token Name */}
-                    <div className="w-44">
-                        <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
-                            <SelectTrigger className="h-10">
-                                <SelectValue placeholder={t('group.dashboard.tokenNamePlaceholder')} />
+        <div className="bg-card border border-border rounded-lg p-3 shadow-none">
+            <div className="flex items-center gap-2">
+                {/* Token Name */}
+                <div className="w-44 flex-shrink-0">
+                    <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
+                        <SelectTrigger className="h-9">
+                            <SelectValue placeholder={t('group.dashboard.tokenNamePlaceholder')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                            {availableTokenNames.map((name) => (
+                                <SelectItem key={name} value={name}>{name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Model */}
+                {availableModels.length > 0 && (
+                    <div className="w-44 flex-shrink-0">
+                        <Select value={model} onValueChange={setModel} disabled={loading}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder={t('monitor.filters.modelPlaceholder')} />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                {availableTokenNames.map((name) => (
-                                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                                {availableModels.map((m) => (
+                                    <SelectItem key={m} value={m}>{m}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
+                )}
 
-                    {/* Model */}
-                    {availableModels.length > 0 && (
-                        <div className="w-44">
-                            <Select value={model} onValueChange={setModel} disabled={loading}>
-                                <SelectTrigger className="h-10">
-                                    <SelectValue placeholder={t('monitor.filters.modelPlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableModels.map((m) => (
-                                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
+                <div className="flex-1" />
 
-                    {/* Date Range */}
-                    <div className="min-w-48 max-w-72">
-                        <DateRangePicker
-                            value={dateRange}
-                            onChange={setDateRange}
-                            placeholder={t('monitor.filters.dateRangePlaceholder')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
-
-                    {/* Timespan */}
-                    <div className="w-24">
-                        <Select
-                            value={timespan}
-                            onValueChange={(value: 'day' | 'hour') => setTimespan(value)}
-                            disabled={loading}
-                        >
-                            <SelectTrigger className="h-10">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="hour">{t('monitor.filters.timespanHour')}</SelectItem>
-                                <SelectItem value="day">{t('monitor.filters.timespanDay')}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Buttons */}
-                    <div className="flex gap-2 flex-shrink-0">
-                        <Button type="submit" disabled={loading} className="h-10 px-4">
-                            <Search className="h-4 w-4 mr-2" />
-                            {loading ? t('common.loading') : t('monitor.filters.search')}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleReset}
-                            disabled={loading}
-                            className="h-10 px-4"
-                        >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            {t('monitor.filters.reset')}
-                        </Button>
-                    </div>
+                {/* Date Range */}
+                <div className="w-56 flex-shrink-0">
+                    <DateRangePicker
+                        value={dateRange}
+                        onChange={setDateRange}
+                        placeholder={t('monitor.filters.dateRangePlaceholder')}
+                        disabled={loading}
+                        className="h-9"
+                    />
                 </div>
-            </form>
+
+                {/* Timespan */}
+                <div className="w-22 flex-shrink-0">
+                    <Select
+                        value={timespan}
+                        onValueChange={(value: 'minute' | 'hour' | 'day' | 'month') => setTimespan(value)}
+                        disabled={loading}
+                    >
+                        <SelectTrigger className="h-9">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="minute">{t('monitor.filters.timespanMinute')}</SelectItem>
+                            <SelectItem value="hour">{t('monitor.filters.timespanHour')}</SelectItem>
+                            <SelectItem value="day">{t('monitor.filters.timespanDay')}</SelectItem>
+                            <SelectItem value="month">{t('monitor.filters.timespanMonth')}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Reset */}
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    disabled={loading}
+                    className="h-9 px-3 flex-shrink-0"
+                >
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    {t('monitor.filters.reset')}
+                </Button>
+            </div>
         </div>
     )
 }
