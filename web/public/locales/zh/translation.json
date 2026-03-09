@@ -31,7 +31,8 @@
     "no": "否",
     "edit": "编辑",
     "save": "保存",
-    "saving": "保存中..."
+    "saving": "保存中...",
+    "search": "搜索..."
   },
   "error": {
     "loading": "数据加载失败",

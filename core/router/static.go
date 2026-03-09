@@ -76,7 +76,7 @@ func checkNoRouteNotFound(req *http.Request) bool {
 	}
 
 	if strings.HasPrefix(req.URL.Path, "/api") ||
-		strings.HasPrefix(req.URL.Path, "/mcp") ||
+		(strings.HasPrefix(req.URL.Path, "/mcp") && !strings.HasPrefix(req.URL.Path, "/mcp-front")) ||
 		strings.HasPrefix(req.URL.Path, "/v1") {
 		return true
 	}

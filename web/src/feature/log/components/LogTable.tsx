@@ -129,6 +129,25 @@ export function LogTable({
                 },
                 size: 80,
             }),
+            columnHelper.display({
+                id: 'used_amount',
+                header: t('log.usedAmount'),
+                cell: ({ row }) => (
+                    <div className="text-right font-mono">
+                        ${(row.original.used_amount || 0).toFixed(4)}
+                    </div>
+                ),
+                size: 100,
+            }),
+            columnHelper.accessor('group', {
+                header: t('log.group'),
+                cell: (info) => (
+                    <div className="text-sm">
+                        {info.getValue() || '-'}
+                    </div>
+                ),
+                size: 100,
+            }),
             columnHelper.accessor('code', {
                 header: t('log.state'),
                 cell: (info) => {

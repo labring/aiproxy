@@ -1,5 +1,5 @@
 // src/feature/group/hooks.ts
-import { useMutation, useQueryClient, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
 import { useState } from 'react'
 import type {
@@ -9,30 +9,12 @@ import type {
     GroupModelConfigSaveRequest
 } from '@/types/group'
 import { toast } from 'sonner'
-import { ConstantCategory, getConstant } from '@/constant'
 
-// Get groups list (with infinite scroll support)
-export const useGroups = () => {
-    const query = useInfiniteQuery({
-        queryKey: ['groups'],
-        queryFn: ({ pageParam }) => groupApi.getGroups(pageParam as number, getConstant(ConstantCategory.CONFIG, 'DEFAULT_PAGE_SIZE', 20)),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage, allPages) => {
-            if (!lastPage || typeof lastPage.total === 'undefined') {
-                return undefined
-            }
-
-            if (!allPages) {
-                return undefined
-            }
-
-            const loadedItemsCount = allPages.reduce((count, page) => {
-                return count + (page.groups?.length || 0)
-            }, 0)
-
-            return lastPage.total > loadedItemsCount ? allPages.length + 1 : undefined
-        },
-        enabled: true,
+// Get groups list (paginated)
+export const useGroups = (page: number, perPage: number, keyword?: string) => {
+    const query = useQuery({
+        queryKey: ['groups', page, perPage, keyword],
+        queryFn: () => groupApi.getGroups(page, perPage, keyword),
     })
 
     return {

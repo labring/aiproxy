@@ -4,6 +4,7 @@ import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
 import { ModelConfig } from "@/types/model";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   MoreHorizontal,
   Plus,
@@ -11,6 +12,7 @@ import {
   RefreshCcw,
   Pencil,
   FileText,
+  Search,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,6 +56,7 @@ export function ModelTable() {
   const [dialogMode, setDialogMode] = useState<"create" | "update">("create");
   const [selectedModel, setSelectedModel] = useState<ModelConfig | null>(null);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // API Doc drawer state
   const [apiDocOpen, setApiDocOpen] = useState(false);
@@ -71,17 +74,21 @@ export function ModelTable() {
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
 
-  // Sort models by type for stable sorting
+  // Sort and filter models
   const sortedModels = useMemo(() => {
     if (!models) return [];
-    return [...models].sort((a, b) => {
+    let filtered = models;
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      filtered = models.filter(m => m.model.toLowerCase().includes(keyword));
+    }
+    return [...filtered].sort((a, b) => {
       if (a.type === b.type) {
-        // Secondary sort by model name for stability
         return a.model.localeCompare(b.model);
       }
       return a.type - b.type;
     });
-  }, [models]);
+  }, [models, searchKeyword]);
 
   // Get channel type name by type ID
   const getChannelTypeName = (typeId: number): string => {
@@ -370,6 +377,15 @@ export function ModelTable() {
             {t("model.management")}
           </h2>
           <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t("common.search")}
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                className="h-9 w-48 pl-8"
+              />
+            </div>
             <AnimatedButton>
               <Button
                 variant="outline"

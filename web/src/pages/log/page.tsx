@@ -53,6 +53,8 @@ export default function LogPage() {
                 <LogFilters
                     onFiltersChange={handleFiltersChange}
                     loading={isLoading}
+                    availableModels={logData?.models}
+                    availableTokenNames={logData?.token_names}
                     availableChannels={logData?.channels}
                 />
 

@@ -53,6 +53,7 @@ export function GroupLogsTab({ groupId }: GroupLogsTabProps) {
                     loading={isLoading}
                     availableModels={data?.models}
                     availableTokenNames={data?.token_names}
+                    availableChannels={data?.channels}
                 />
             </div>
             <div className="flex-1 min-h-0">

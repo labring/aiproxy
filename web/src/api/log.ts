@@ -27,6 +27,9 @@ export const logApi = {
         if (filters?.code_type && filters.code_type !== 'all') {
             params.append('code_type', filters.code_type)
         }
+        if (filters?.keyword) {
+            params.append('keyword', filters.keyword)
+        }
 
         const queryString = params.toString()
         const url = queryString ? `logs/search?${queryString}` : 'logs/search'
@@ -51,6 +54,9 @@ export const logApi = {
         if (filters?.token_name) {
             params.append('token_name', filters.token_name)
         }
+        if (filters?.channel) {
+            params.append('channel', filters.channel.toString())
+        }
         if (filters?.start_timestamp) {
             params.append('start_timestamp', filters.start_timestamp.toString())
         }
@@ -59,6 +65,9 @@ export const logApi = {
         }
         if (filters?.code_type && filters.code_type !== 'all') {
             params.append('code_type', filters.code_type)
+        }
+        if (filters?.keyword) {
+            params.append('keyword', filters.keyword)
         }
 
         const queryString = params.toString()

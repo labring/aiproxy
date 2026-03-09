@@ -40,18 +40,6 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             display: true,
         },
         {
-            title: t("sidebar.group"),
-            icon: Users,
-            href: ROUTES.GROUP,
-            display: true,
-        },
-        {
-            title: t("sidebar.key"),
-            icon: Bot,
-            href: ROUTES.KEY,
-            display: true,
-        },
-        {
             title: t("sidebar.channel"),
             icon: Database,
             href: ROUTES.CHANNEL,
@@ -64,15 +52,27 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             display: true,
         },
         {
-            title: t("sidebar.mcp"),
-            icon: MessageCircle,
-            href: ROUTES.MCP,
-            display: true,
-        },
-        {
             title: t("sidebar.log"),
             icon: Calendar,
             href: ROUTES.LOG,
+            display: true,
+        },
+        {
+            title: t("sidebar.group"),
+            icon: Users,
+            href: ROUTES.GROUP,
+            display: true,
+        },
+        {
+            title: t("sidebar.key"),
+            icon: Bot,
+            href: ROUTES.KEY,
+            display: true,
+        },
+        {
+            title: t("sidebar.mcp"),
+            icon: MessageCircle,
+            href: ROUTES.MCP,
             display: true,
         },
         {

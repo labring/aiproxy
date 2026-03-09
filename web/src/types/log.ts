@@ -83,6 +83,7 @@ export interface LogFilters {
   model?: string
   token_name?: string
   channel?: number
+  keyword?: string
   start_timestamp?: number
   end_timestamp?: number
   code_type?: 'all' | 'success' | 'error'

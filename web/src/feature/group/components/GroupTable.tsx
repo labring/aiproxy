@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupTable.tsx
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -8,17 +8,18 @@ import {
 import { useGroups, useUpdateGroupStatus } from '../hooks'
 import type { Group } from '@/types/group'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw,
-    PowerOff, Power, Key
+    PowerOff, Power, Key, Search
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Card } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
+import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteGroupDialog } from './DeleteGroupDialog'
 import { GroupDialog } from './GroupDialog'
 import { CreateGroupDialog } from './CreateGroupDialog'
@@ -56,58 +57,34 @@ export function GroupTable() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
-    const sentinelRef = useRef<HTMLDivElement>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+    const [searchInput, setSearchInput] = useState('')
+    const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
+
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchInput(value)
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => {
+            setSearchKeyword(value || undefined)
+            setPage(1)
+        }, 300)
+    }, [])
 
     // Get groups list
     const {
         data,
         isLoading,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
         refetch
-    } = useGroups()
+    } = useGroups(page, pageSize, searchKeyword)
 
     // Update group status
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateGroupStatus()
 
-    // Flatten paginated data
-    const flatData = useMemo(() =>
-        data?.pages.flatMap(page => page.groups) || [],
-        [data]
-    )
-
-    // Optimized infinite scroll implementation
-    useEffect(() => {
-        if (!hasNextPage) return
-
-        const options = {
-            threshold: 0.1,
-            rootMargin: '100px 0px'
-        }
-
-        const handleObserver = (entries: IntersectionObserverEntry[]) => {
-            const [entry] = entries
-            if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-                fetchNextPage()
-            }
-        }
-
-        const observer = new IntersectionObserver(handleObserver, options)
-
-        const sentinel = sentinelRef.current
-        if (sentinel) {
-            observer.observe(sentinel)
-        }
-
-        return () => {
-            if (sentinel) {
-                observer.unobserve(sentinel)
-            }
-            observer.disconnect()
-        }
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    const groups = data?.groups || []
+    const total = data?.total || 0
 
     // Open create group dialog
     const openCreateDialog = () => {
@@ -267,7 +244,7 @@ export function GroupTable() {
 
     // Initialize table
     const table = useReactTable({
-        data: flatData,
+        data: groups,
         columns,
         getCoreRowModel: getCoreRowModel(),
     })
@@ -281,6 +258,15 @@ export function GroupTable() {
                         {t("group.management")}
                     </h2>
                     <div className="flex gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder={t("common.search")}
+                                value={searchInput}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="h-9 w-48 pl-8"
+                            />
+                        </div>
                         <AnimatedButton>
                             <Button
                                 variant="outline"
@@ -309,7 +295,7 @@ export function GroupTable() {
 
                 {/* Table container */}
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto h-full">
+                    <div className="overflow-auto flex-1">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -319,19 +305,16 @@ export function GroupTable() {
                             animatedRows={true}
                             showScrollShadows={true}
                         />
-
-                        {/* Infinite scroll sentinel */}
-                        {hasNextPage && (
-                            <div
-                                ref={sentinelRef}
-                                className="h-5 flex justify-center items-center mt-4"
-                            >
-                                {isFetchingNextPage && (
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                )}
-                            </div>
-                        )}
                     </div>
+
+                    {/* Pagination */}
+                    <ServerPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onPageChange={setPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+                    />
                 </div>
             </Card>
 

@@ -35,13 +35,15 @@ export const channelApi = {
         return response
     },
 
-    getChannels: async (page: number, perPage: number): Promise<ChannelsResponse> => {
-        const response = await get<ChannelsResponse>('channels/search', {
-            params: {
-                p: page,
-                per_page: perPage
-            }
-        })
+    getChannels: async (page: number, perPage: number, keyword?: string): Promise<ChannelsResponse> => {
+        const params: Record<string, string | number> = {
+            p: page,
+            per_page: perPage,
+        }
+        if (keyword) {
+            params.keyword = keyword
+        }
+        const response = await get<ChannelsResponse>('channels/search', { params })
         return response
     },
 

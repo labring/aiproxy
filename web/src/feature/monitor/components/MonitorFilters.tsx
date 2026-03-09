@@ -110,7 +110,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
     const channelOptions = useMemo(() =>
         availableChannels.map(id => ({
             value: String(id),
-            label: channelInfoMap[id]?.name || `#${id}`,
+            label: `${channelInfoMap[id]?.name || `#${id}`} (#${id})`,
         })),
         [availableChannels, channelInfoMap]
     )

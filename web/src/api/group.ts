@@ -12,12 +12,17 @@ import {
 
 export const groupApi = {
     // Get all groups with pagination
-    getGroups: async (page: number, perPage: number, order?: string): Promise<GroupsResponse> => {
+    getGroups: async (page: number, perPage: number, keyword?: string, order?: string): Promise<GroupsResponse> => {
         const params = new URLSearchParams()
         params.append('p', page.toString())
         params.append('per_page', perPage.toString())
         if (order) {
             params.append('order', order)
+        }
+        if (keyword) {
+            params.append('keyword', keyword)
+            const response = await get<GroupsResponse>(`groups/search?${params.toString()}`)
+            return response
         }
         const response = await get<GroupsResponse>(`groups/?${params.toString()}`)
         return response

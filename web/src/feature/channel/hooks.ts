@@ -1,10 +1,9 @@
 // src/feature/channel/hooks.ts
-import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { channelApi, ChannelTestResult } from '@/api/channel'
 import { useState, useCallback } from 'react'
 import { ChannelCreateRequest, ChannelUpdateRequest, ChannelStatusRequest } from '@/types/channel'
 import { toast } from 'sonner'
-import { ConstantCategory, getConstant } from '@/constant'
 
 // 获取渠道类型元数据
 export const useChannelTypeMetas = () => {
@@ -18,31 +17,11 @@ export const useChannelTypeMetas = () => {
     }
 }
 
-// 获取渠道列表（支持无限滚动）
-export const useChannels = () => {
-    const query = useInfiniteQuery({
-        queryKey: ['channels'],
-        queryFn: ({ pageParam }) => channelApi.getChannels(pageParam as number, getConstant(ConstantCategory.CONFIG, 'DEFAULT_PAGE_SIZE', 20)),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage, allPages) => {
-            if (!lastPage || typeof lastPage.total === 'undefined') {
-                return undefined
-            }
-
-            // 检查allPages是否存在
-            if (!allPages) {
-                return undefined
-            }
-
-            // 计算已加载的项目总数
-            const loadedItemsCount = allPages.reduce((count, page) => {
-                return count + (page.channels?.length || 0)
-            }, 0)
-
-            // 如果服务器返回的总数大于已加载的数量，则还有下一页
-            return lastPage.total > loadedItemsCount ? allPages.length + 1 : undefined
-        },
-        enabled: true,
+// 获取渠道列表（分页）
+export const useChannels = (page: number, perPage: number, keyword?: string) => {
+    const query = useQuery({
+        queryKey: ['channels', page, perPage, keyword],
+        queryFn: () => channelApi.getChannels(page, perPage, keyword),
     })
 
     return {

@@ -3,13 +3,15 @@ import { get, post, del, put } from './index'
 import { TokensResponse, Token, TokenStatusRequest, TokenUpdateRequest, TokenCreateRequest } from '@/types/token'
 
 export const tokenApi = {
-    getTokens: async (page: number, perPage: number): Promise<TokensResponse> => {
-        const response = await get<TokensResponse>('tokens/search', {
-            params: {
-                p: page,
-                per_page: perPage
-            }
-        })
+    getTokens: async (page: number, perPage: number, keyword?: string): Promise<TokensResponse> => {
+        const params: Record<string, string | number> = {
+            p: page,
+            per_page: perPage,
+        }
+        if (keyword) {
+            params.keyword = keyword
+        }
+        const response = await get<TokensResponse>('tokens/search', { params })
         return response
     },
 
@@ -44,13 +46,16 @@ export const tokenApi = {
         return
     },
 
-    getGroupTokens: async (group: string, page: number, perPage: number): Promise<TokensResponse> => {
-        const response = await get<TokensResponse>(`token/${group}`, {
-            params: {
-                p: page,
-                per_page: perPage
-            }
-        })
+    getGroupTokens: async (group: string, page: number, perPage: number, keyword?: string): Promise<TokensResponse> => {
+        const params: Record<string, string | number> = {
+            p: page,
+            per_page: perPage,
+        }
+        if (keyword) {
+            params.keyword = keyword
+        }
+        const endpoint = keyword ? `token/${group}/search` : `token/${group}`
+        const response = await get<TokensResponse>(endpoint, { params })
         return response
     },
 

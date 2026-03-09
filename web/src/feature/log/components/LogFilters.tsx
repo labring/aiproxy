@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { Search, RotateCcw } from 'lucide-react'
@@ -12,14 +12,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import type { LogFilters as LogFiltersType } from '@/types/log'
+import { channelApi } from '@/api/channel'
 
 interface LogFiltersProps {
     onFiltersChange: (filters: LogFiltersType) => void
@@ -38,6 +33,35 @@ export function LogFilters({
 }: LogFiltersProps) {
     const { t } = useTranslation()
 
+    // Batch fetch channel names
+    const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
+
+    useEffect(() => {
+        if (!availableChannels || availableChannels.length === 0) return
+        const missing = availableChannels.filter(id => !(id in channelInfoMap))
+        if (missing.length === 0) return
+
+        channelApi.getChannelBatchInfo(missing)
+            .then(infos => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const info of infos) {
+                        next[info.id] = { name: info.name, type: info.type }
+                    }
+                    return next
+                })
+            })
+            .catch(() => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const id of missing) {
+                        if (!(id in next)) next[id] = { name: `#${id}`, type: 0 }
+                    }
+                    return next
+                })
+            })
+    }, [availableChannels]) // eslint-disable-line react-hooks/exhaustive-deps
+
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
         const sevenDaysAgo = new Date()
@@ -48,6 +72,7 @@ export function LogFilters({
     const [model, setModel] = useState('')
     const [tokenName, setTokenName] = useState('')
     const [channel, setChannel] = useState('')
+    const [keyword, setKeyword] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [codeType, setCodeType] = useState<'all' | 'success' | 'error'>('all')
 
@@ -62,6 +87,7 @@ export function LogFilters({
             model: effectiveModel.trim() || undefined,
             token_name: effectiveTokenName.trim() || undefined,
             channel: effectiveChannel ? parseInt(effectiveChannel) : undefined,
+            keyword: keyword.trim() || undefined,
             code_type: codeType,
             page: 1,
             per_page: 10
@@ -83,6 +109,7 @@ export function LogFilters({
         setModel('')
         setTokenName('')
         setChannel('')
+        setKeyword('')
         const defaultDateRange = getDefaultDateRange()
         setDateRange(defaultDateRange)
         setCodeType('all')
@@ -104,8 +131,27 @@ export function LogFilters({
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* Model filter */}
-                    {availableModels && availableModels.length > 0 ? (
+                    {/* Channel filter - leftmost */}
+                    {showChannel && availableChannels!.length > 0 && (
+                        <div className="w-48">
+                            <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableChannels!.map((ch) => (
+                                        <SelectItem key={ch} value={String(ch)}>
+                                            {channelInfoMap[ch]?.name || `#${ch}`} (#{ch})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Model filter - select from API data */}
+                    {availableModels && availableModels.length > 0 && (
                         <div className="w-44">
                             <Select value={model} onValueChange={setModel} disabled={loading}>
                                 <SelectTrigger className="h-9">
@@ -119,67 +165,19 @@ export function LogFilters({
                                 </SelectContent>
                             </Select>
                         </div>
-                    ) : (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className="flex-1 min-w-0">
-                                        <Input
-                                            placeholder={t('log.filters.modelPlaceholder')}
-                                            value={model}
-                                            onChange={(e) => setModel(e.target.value)}
-                                            disabled={loading}
-                                            className="h-9"
-                                        />
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{t('log.filters.modelPlaceholder')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
                     )}
 
                     {/* Token name filter */}
-                    {showTokenName && (
+                    {showTokenName && availableTokenNames!.length > 0 && (
                         <div className="w-44">
-                            {availableTokenNames!.length > 0 ? (
-                                <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
-                                    <SelectTrigger className="h-9">
-                                        <SelectValue placeholder={t('log.filters.tokenNamePlaceholder')} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                        {availableTokenNames!.map((name) => (
-                                            <SelectItem key={name} value={name}>{name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : (
-                                <Input
-                                    placeholder={t('log.filters.tokenNamePlaceholder')}
-                                    value={tokenName}
-                                    onChange={(e) => setTokenName(e.target.value)}
-                                    disabled={loading}
-                                    className="h-9"
-                                />
-                            )}
-                        </div>
-                    )}
-
-                    {/* Channel filter */}
-                    {showChannel && availableChannels!.length > 0 && (
-                        <div className="w-36">
-                            <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                            <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
                                 <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
+                                    <SelectValue placeholder={t('log.filters.tokenNamePlaceholder')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableChannels!.map((ch) => (
-                                        <SelectItem key={ch} value={String(ch)}>
-                                            {t('log.channel')} {ch}
-                                        </SelectItem>
+                                    {availableTokenNames!.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -210,6 +208,17 @@ export function LogFilters({
                             value={dateRange}
                             onChange={setDateRange}
                             placeholder={t('log.filters.dateRangePlaceholder')}
+                            disabled={loading}
+                            className="h-9"
+                        />
+                    </div>
+
+                    {/* Keyword search */}
+                    <div className="w-40">
+                        <Input
+                            placeholder={t('common.search')}
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
                             disabled={loading}
                             className="h-9"
                         />

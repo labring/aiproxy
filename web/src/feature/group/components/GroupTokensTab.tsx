@@ -1,32 +1,32 @@
 // src/feature/group/components/GroupTokensTab.tsx
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     useReactTable,
     getCoreRowModel,
     ColumnDef,
 } from '@tanstack/react-table'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tokenApi } from '@/api/token'
 import type { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
-    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw
+    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, Search
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { DataTable } from '@/components/table/motion-data-table'
+import { ServerPagination } from '@/components/table/server-pagination'
 import { TokenQuotaDialog } from '@/feature/token/components/TokenQuotaDialog'
 import { DeleteTokenDialog } from '@/feature/token/components/DeleteTokenDialog'
 import { CreateGroupTokenDialog } from './CreateGroupTokenDialog'
-import { Loader2 } from 'lucide-react'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { ConstantCategory, getConstant } from '@/constant'
 
 // Mask API key - show prefix and last 4 chars
 const maskApiKey = (key: string): string => {
@@ -95,28 +95,30 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
-    const sentinelRef = useRef<HTMLDivElement>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+    const [searchInput, setSearchInput] = useState('')
+    const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
 
-    const pageSize = getConstant(ConstantCategory.CONFIG, 'DEFAULT_PAGE_SIZE', 20)
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchInput(value)
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => {
+            setSearchKeyword(value || undefined)
+            setPage(1)
+        }, 300)
+    }, [])
 
-    // Get group tokens with infinite scroll
+    // Get group tokens with pagination
     const {
         data,
         isLoading,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
         refetch
-    } = useInfiniteQuery({
-        queryKey: ['groupTokens', groupId],
-        queryFn: ({ pageParam }) => tokenApi.getGroupTokens(groupId, pageParam as number, pageSize),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage, allPages) => {
-            if (!lastPage || typeof lastPage.total === 'undefined') return undefined
-            const loadedItemsCount = allPages.reduce((count, page) => count + (page.tokens?.length || 0), 0)
-            return lastPage.total > loadedItemsCount ? allPages.length + 1 : undefined
-        },
+    } = useQuery({
+        queryKey: ['groupTokens', groupId, page, pageSize, searchKeyword],
+        queryFn: () => tokenApi.getGroupTokens(groupId, page, pageSize, searchKeyword),
         enabled: !!groupId,
     })
 
@@ -134,32 +136,8 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
         },
     })
 
-    // Flatten paginated data
-    const flatData = useMemo(() =>
-        data?.pages.flatMap(page => page.tokens) || [],
-        [data]
-    )
-
-    // Infinite scroll
-    useEffect(() => {
-        if (!hasNextPage) return
-        const handleObserver = (entries: IntersectionObserverEntry[]) => {
-            const [entry] = entries
-            if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-                fetchNextPage()
-            }
-        }
-        const observer = new IntersectionObserver(handleObserver, {
-            threshold: 0.1,
-            rootMargin: '100px 0px'
-        })
-        const sentinel = sentinelRef.current
-        if (sentinel) observer.observe(sentinel)
-        return () => {
-            if (sentinel) observer.unobserve(sentinel)
-            observer.disconnect()
-        }
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    const tokens = data?.tokens || []
+    const total = data?.total || 0
 
     const openDeleteDialog = (id: number) => {
         setSelectedTokenId(id)
@@ -323,7 +301,7 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
     ]
 
     const table = useReactTable({
-        data: flatData,
+        data: tokens,
         columns,
         getCoreRowModel: getCoreRowModel(),
     })
@@ -334,6 +312,15 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
                 {/* Action buttons */}
                 <div className="flex items-center justify-end mb-2">
                     <div className="flex gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                            <Input
+                                placeholder={t("common.search")}
+                                value={searchInput}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="h-8 w-40 pl-8 text-sm"
+                            />
+                        </div>
                         <Button
                             variant="outline"
                             size="sm"
@@ -358,7 +345,7 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
 
                 {/* Table */}
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto h-full">
+                    <div className="overflow-auto flex-1">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -368,14 +355,16 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
                             animatedRows={true}
                             showScrollShadows={true}
                         />
-                        {hasNextPage && (
-                            <div ref={sentinelRef} className="h-5 flex justify-center items-center mt-4">
-                                {isFetchingNextPage && (
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                )}
-                            </div>
-                        )}
                     </div>
+
+                    {/* Pagination */}
+                    <ServerPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onPageChange={setPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+                    />
                 </div>
             </div>
 

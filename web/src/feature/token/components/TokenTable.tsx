@@ -1,5 +1,5 @@
 // src/feature/token/components/TokenTable.tsx
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -10,16 +10,17 @@ import { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Trash2, RefreshCcw,
-    PowerOff, Power, Copy, Settings
+    PowerOff, Power, Copy, Settings, Search
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { TokenQuotaDialog } from './TokenQuotaDialog'
-import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
+import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteTokenDialog } from './DeleteTokenDialog'
 import { useTranslation } from 'react-i18next'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
@@ -28,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
+import { useRef } from 'react'
 
 // 遮蔽 API Key，只显示前缀和最后4位
 const maskApiKey = (key: string): string => {
@@ -40,7 +42,6 @@ const maskApiKey = (key: string): string => {
 // 计算剩余额度
 const calculateRemainingQuota = (token: Token): { total: number; period: number } => {
     const total = token.quota > 0 ? Math.max(0, token.quota - token.used_amount) : -1
-    // 周期使用量 = 当前总使用量 - 上次周期更新时的使用量
     const periodUsed = token.used_amount - (token.period_last_update_amount || 0)
     const period = token.period_quota > 0 ? Math.max(0, token.period_quota - periodUsed) : -1
     return { total, period }
@@ -55,22 +56,22 @@ const calculateNextRefreshTime = (token: Token): Date | null => {
     const lastUpdate = new Date(token.period_last_update_time)
 
     switch (token.period_type) {
-        case 'daily':
-            // 下一天的同一时间
+        case 'daily': {
             const nextDay = new Date(lastUpdate)
             nextDay.setDate(nextDay.getDate() + 1)
             return nextDay
-        case 'weekly':
-            // 7天后
+        }
+        case 'weekly': {
             const nextWeek = new Date(lastUpdate)
             nextWeek.setDate(nextWeek.getDate() + 7)
             return nextWeek
+        }
         case 'monthly':
-        default:
-            // 下个月的同一天
+        default: {
             const nextMonth = new Date(lastUpdate)
             nextMonth.setMonth(nextMonth.getMonth() + 1)
             return nextMonth
+        }
     }
 }
 
@@ -108,59 +109,34 @@ export function TokenTable() {
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
     const [groupDialogTab, setGroupDialogTab] = useState<string>('dashboard')
     const [groupDialogTokenName, setGroupDialogTokenName] = useState<string | undefined>(undefined)
-    const sentinelRef = useRef<HTMLDivElement>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+    const [searchInput, setSearchInput] = useState('')
+    const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
+
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchInput(value)
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => {
+            setSearchKeyword(value || undefined)
+            setPage(1)
+        }, 300)
+    }, [])
 
     // 获取Token列表
     const {
         data,
         isLoading,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
         refetch
-    } = useTokens()
+    } = useTokens(page, pageSize, searchKeyword)
 
     // 更新Token状态
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateTokenStatus()
 
-    // 扁平化分页数据
-    const flatData = useMemo(() =>
-        data?.pages.flatMap(page => page.tokens) || [],
-        [data]
-    )
-
-    // 优化的无限滚动实现
-    useEffect(() => {
-        // 只有当有更多页面可加载时才创建观察器
-        if (!hasNextPage) return
-
-        const options = {
-            threshold: 0.1,
-            rootMargin: '100px 0px'
-        }
-
-        const handleObserver = (entries: IntersectionObserverEntry[]) => {
-            const [entry] = entries
-            if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-                fetchNextPage()
-            }
-        }
-
-        const observer = new IntersectionObserver(handleObserver, options)
-
-        const sentinel = sentinelRef.current
-        if (sentinel) {
-            observer.observe(sentinel)
-        }
-
-        return () => {
-            if (sentinel) {
-                observer.unobserve(sentinel)
-            }
-            observer.disconnect()
-        }
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    const tokens = data?.tokens || []
+    const total = data?.total || 0
 
     // 打开删除对话框
     const openDeleteDialog = (id: number) => {
@@ -176,7 +152,6 @@ export function TokenTable() {
 
     // 更新Token状态
     const handleStatusChange = (id: number, currentStatus: number) => {
-        // 状态切换: 2 -> 1 (禁用 -> 启用), 1 -> 2 (启用 -> 禁用)
         const newStatus = currentStatus === 2 ? 1 : 2
         updateStatus({ id, status: { status: newStatus } })
     }
@@ -194,8 +169,6 @@ export function TokenTable() {
     const refreshTokens = () => {
         setIsRefreshAnimating(true)
         refetch()
-
-        // 停止动画，延迟1秒以匹配动画效果
         setTimeout(() => {
             setIsRefreshAnimating(false)
         }, 1000)
@@ -274,7 +247,6 @@ export function TokenTable() {
                 const token = row.original
                 const remaining = calculateRemainingQuota(token)
 
-                // 没有设置限额
                 if (remaining.total < 0 && remaining.period < 0) {
                     return (
                         <span
@@ -462,7 +434,7 @@ export function TokenTable() {
 
     // 初始化表格
     const table = useReactTable({
-        data: flatData,
+        data: tokens,
         columns,
         getCoreRowModel: getCoreRowModel(),
     })
@@ -470,12 +442,21 @@ export function TokenTable() {
     return (
         <>
             <Card className="border-none shadow-none p-6 flex flex-col h-full">
-                {/* 标题和操作按钮 - 固定在顶部 */}
+                {/* 标题和操作按钮 */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
                         {t("token.management")}
                     </h2>
                     <div className="flex gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder={t("common.search")}
+                                value={searchInput}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="h-9 w-48 pl-8"
+                            />
+                        </div>
                         <AnimatedButton>
                             <Button
                                 variant="outline"
@@ -492,9 +473,9 @@ export function TokenTable() {
                     </div>
                 </div>
 
-                {/* 表格容器 - 设置固定高度和滚动 */}
+                {/* 表格容器 */}
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto h-full">
+                    <div className="overflow-auto flex-1">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -504,17 +485,16 @@ export function TokenTable() {
                             animatedRows={true}
                             showScrollShadows={true}
                         />
-
-                        {/* 无限滚动监测元素 - 在滚动区域内 */}
-                        {hasNextPage && <div
-                            ref={sentinelRef}
-                            className="h-5 flex justify-center items-center mt-4"
-                        >
-                            {isFetchingNextPage && (
-                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            )}
-                        </div>}
                     </div>
+
+                    {/* 分页 */}
+                    <ServerPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onPageChange={setPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+                    />
                 </div>
             </Card>
 

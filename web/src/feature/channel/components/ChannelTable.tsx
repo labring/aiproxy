@@ -1,5 +1,5 @@
 // src/feature/channel/components/ChannelTable.tsx
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -12,16 +12,18 @@ import { Channel } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, ChevronDown, ChevronRight
+    PowerOff, Power, FlaskConical, ChevronDown, ChevronRight, Search
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { ChannelDialog } from './ChannelDialog'
 import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
+import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteChannelDialog } from './DeleteChannelDialog'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { useTranslation } from 'react-i18next'
@@ -40,13 +42,26 @@ export function ChannelTable() {
     const [channelDialogOpen, setChannelDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null)
-    const sentinelRef = useRef<HTMLDivElement>(null)
     const [dialogMode, setDialogMode] = useState<'create' | 'update'>('create')
     const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [testDialogOpen, setTestDialogOpen] = useState(false)
     const [isTestAll, setIsTestAll] = useState(false)
     const [expandedModels, setExpandedModels] = useState<Record<number, boolean>>({})
+    const [searchInput, setSearchInput] = useState('')
+    const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
+
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchInput(value)
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => {
+            setSearchKeyword(value || undefined)
+            setPage(1)
+        }, 300)
+    }, [])
 
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
@@ -55,11 +70,8 @@ export function ChannelTable() {
     const {
         data,
         isLoading,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
         refetch
-    } = useChannels()
+    } = useChannels(page, pageSize, searchKeyword)
 
     // 更新渠道状态
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateChannelStatus()
@@ -76,42 +88,8 @@ export function ChannelTable() {
         cancelTest: cancelTestAll
     } = useTestAllChannels()
 
-    // 扁平化分页数据
-    const flatData = useMemo(() =>
-        (data?.pages.flatMap(page => page.channels) || []).filter(channel => channel != null),
-        [data]
-    )
-
-    // 优化的无限滚动实现
-    useEffect(() => {
-        if (!hasNextPage) return
-
-        const options = {
-            threshold: 0.1,
-            rootMargin: '100px 0px'
-        }
-
-        const handleObserver = (entries: IntersectionObserverEntry[]) => {
-            const [entry] = entries
-            if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-                fetchNextPage()
-            }
-        }
-
-        const observer = new IntersectionObserver(handleObserver, options)
-
-        const sentinel = sentinelRef.current
-        if (sentinel) {
-            observer.observe(sentinel)
-        }
-
-        return () => {
-            if (sentinel) {
-                observer.unobserve(sentinel)
-            }
-            observer.disconnect()
-        }
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    const channels = (data?.channels || []).filter(channel => channel != null)
+    const total = data?.total || 0
 
     // 打开创建渠道对话框
     const openCreateDialog = () => {
@@ -405,7 +383,7 @@ export function ChannelTable() {
 
     // 初始化表格
     const table = useReactTable({
-        data: flatData,
+        data: channels,
         columns,
         getCoreRowModel: getCoreRowModel(),
     })
@@ -413,10 +391,19 @@ export function ChannelTable() {
     return (
         <>
             <Card className="border-none shadow-none p-6 flex flex-col h-full">
-                {/* 标题和操作按钮 - 固定在顶部 */}
+                {/* 标题和操作按钮 */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
                     <div className="flex gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder={t("common.search")}
+                                value={searchInput}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="h-9 w-48 pl-8"
+                            />
+                        </div>
                         <AnimatedButton>
                             <Button
                                 variant="outline"
@@ -464,9 +451,9 @@ export function ChannelTable() {
                     </div>
                 </div>
 
-                {/* 表格容器 - 设置固定高度和滚动 */}
+                {/* 表格容器 */}
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto h-full">
+                    <div className="overflow-auto flex-1">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -476,17 +463,16 @@ export function ChannelTable() {
                             animatedRows={true}
                             showScrollShadows={true}
                         />
-
-                        {/* 无限滚动监测元素 - 在滚动区域内 */}
-                        {hasNextPage && <div
-                            ref={sentinelRef}
-                            className="h-5 flex justify-center items-center mt-4"
-                        >
-                            {isFetchingNextPage && (
-                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            )}
-                        </div>}
                     </div>
+
+                    {/* 分页 */}
+                    <ServerPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onPageChange={setPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+                    />
                 </div>
             </Card>
 
@@ -519,10 +505,8 @@ export function ChannelTable() {
                 results={isTestAll ? testAllResults : testResults}
                 showChannelInfo={true}
                 onChannelClick={async (channelId: number) => {
-                    // 首先尝试从已加载的数据中查找
-                    let channel = flatData.find(c => c.id === channelId)
+                    let channel = channels.find(c => c.id === channelId)
 
-                    // 如果没有找到，从后端获取
                     if (!channel) {
                         try {
                             channel = await channelApi.getChannel(channelId)

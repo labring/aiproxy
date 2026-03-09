@@ -31,7 +31,8 @@
     "no": "No",
     "edit": "Edit",
     "save": "Save",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "search": "Search..."
   },
   "error": {
     "loading": "Failed to load data",
