@@ -131,10 +131,7 @@ export function GroupTable() {
             accessorKey: 'id',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.name")}</div>,
             cell: ({ row }) => (
-                <div
-                    className="font-medium cursor-pointer hover:text-primary"
-                    onClick={() => openDetailDialog(row.original.id)}
-                >
+                <div className="font-medium">
                     {row.original.id}
                 </div>
             ),
@@ -305,6 +302,7 @@ export function GroupTable() {
                             fixedHeader={true}
                             animatedRows={true}
                             showScrollShadows={true}
+                            onRowClick={(group) => openDetailDialog(group.id)}
                         />
                     </div>
 

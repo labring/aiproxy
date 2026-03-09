@@ -12,7 +12,7 @@ import { Channel } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, ChevronDown, ChevronRight, Search
+    PowerOff, Power, FlaskConical, Search
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -31,6 +31,11 @@ import { toast } from 'sonner'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { Badge } from '@/components/ui/badge'
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
 
@@ -47,7 +52,6 @@ export function ChannelTable() {
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [testDialogOpen, setTestDialogOpen] = useState(false)
     const [isTestAll, setIsTestAll] = useState(false)
-    const [expandedModels, setExpandedModels] = useState<Record<number, boolean>>({})
     const [searchInput, setSearchInput] = useState('')
     const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -141,11 +145,6 @@ export function ChannelTable() {
         return meta ? meta.name : String(typeId)
     }
 
-    // 切换模型展开
-    const toggleModels = (channelId: number) => {
-        setExpandedModels(prev => ({ ...prev, [channelId]: !prev[channelId] }))
-    }
-
     // 可点击单元格样式
     const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
@@ -230,42 +229,34 @@ export function ChannelTable() {
         {
             accessorKey: 'models',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
-            size: 200,
-            maxSize: 200,
             cell: ({ row }) => {
                 const models = row.original.models || []
-                const isExpanded = expandedModels[row.original.id]
                 if (models.length === 0) return <div className="text-muted-foreground text-xs">-</div>
 
                 return (
-                    <div style={{ maxWidth: 200 }} className="overflow-hidden">
-                        <div
-                            className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-sm"
-                            onClick={() => toggleModels(row.original.id)}
-                        >
-                            {isExpanded
-                                ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                                : <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                            }
-                            <span>{models.length} {t("channel.modelsCount")}</span>
-                        </div>
-                        {isExpanded && (
-                            <div
-                                className="mt-1 flex flex-wrap gap-1 cursor-pointer max-h-32 overflow-y-auto"
-                                onClick={() => openUpdateDialog(row.original)}
-                            >
-                                {models.map((model, index) => (
-                                    <Badge
-                                        key={index}
-                                        variant="outline"
-                                        className="text-xs py-0 px-1.5 font-mono truncate max-w-[180px]"
-                                    >
-                                        {model}
-                                    </Badge>
-                                ))}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button className="text-sm hover:text-primary transition-colors cursor-pointer">
+                                {models.length} {t("channel.modelsCount")}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-3" align="start">
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">{t("channel.models")} ({models.length})</h4>
+                                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+                                    {models.map((model, index) => (
+                                        <Badge
+                                            key={index}
+                                            variant="outline"
+                                            className="text-xs py-0.5 px-1.5 font-mono w-fit"
+                                        >
+                                            {model}
+                                        </Badge>
+                                    ))}
+                                </div>
                             </div>
-                        )}
-                    </div>
+                        </PopoverContent>
+                    </Popover>
                 )
             }
         },
@@ -385,7 +376,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, expandedModels, isTesting, isStatusUpdating])
+    ], [t, isTesting, isStatusUpdating])
 
     // 初始化表格
     const table = useReactTable({

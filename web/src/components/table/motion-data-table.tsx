@@ -23,6 +23,7 @@ interface DataTableProps<TData, TValue> {
     fixedHeader?: boolean
     animatedRows?: boolean
     showScrollShadows?: boolean
+    onRowClick?: (row: TData) => void
 }
 
 // 加载状态骨架屏组件
@@ -88,6 +89,7 @@ export function DataTable<TData, TValue>({
     fixedHeader = false,
     animatedRows = false,
     showScrollShadows = true,
+    onRowClick,
 }: DataTableProps<TData, TValue>) {
     // 用于跟踪已渲染行的ref
     const rowsRef = useRef<HTMLElement[]>([])
@@ -178,11 +180,13 @@ export function DataTable<TData, TValue>({
                     ref={el => observeRow(el, rowIndex)}
                     className={cn(
                         animatedRows && "transition-opacity duration-300",
-                        animatedRows && !isInView ? "opacity-0" : "opacity-100"
+                        animatedRows && !isInView ? "opacity-0" : "opacity-100",
+                        onRowClick && "cursor-pointer"
                     )}
                     style={{
                         transitionDelay: animatedRows ? staggerDelay : '0ms'
                     }}
+                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                 >
                     {row.getVisibleCells().map((cell) => (
                         <TableCell
