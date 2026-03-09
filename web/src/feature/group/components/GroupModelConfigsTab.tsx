@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupModelConfigsTab.tsx
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { Combobox } from '@/components/ui/combobox'
 import {
     Dialog,
     DialogContent,
@@ -27,9 +28,10 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, RefreshCcw, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search } from 'lucide-react'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { useGroupModelConfigs } from '../hooks'
+import { useModels } from '@/feature/model/hooks'
 import type { GroupModelConfig, GroupModelConfigSaveRequest } from '@/types/group'
 import type { ModelPrice } from '@/types/model'
 import { PriceFormFields } from '@/components/price/PriceFormFields'
@@ -54,6 +56,23 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
+    const { data: systemModels } = useModels()
+    const [searchKeyword, setSearchKeyword] = useState('')
+
+    const filteredData = useMemo(() => {
+        if (!data) return []
+        if (!searchKeyword) return data
+        const keyword = searchKeyword.toLowerCase()
+        return data.filter(c => c.model.toLowerCase().includes(keyword))
+    }, [data, searchKeyword])
+
+    const modelOptions = useMemo(() => {
+        if (!systemModels) return []
+        const existingModels = new Set(data?.map(c => c.model) || [])
+        return systemModels
+            .map(m => ({ value: m.model, label: m.model }))
+            .filter(o => !existingModels.has(o.value))
+    }, [systemModels, data])
 
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -186,7 +205,16 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         <>
             <div className="space-y-4">
                 {/* Header */}
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-between">
+                    <div className="relative w-64">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder={t('common.search')}
+                            value={searchKeyword}
+                            onChange={(e) => setSearchKeyword(e.target.value)}
+                            className="pl-9 h-9"
+                        />
+                    </div>
                     <div className="flex gap-2">
                         <Button
                             variant="outline"
@@ -227,7 +255,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data?.map((config) => (
+                                {filteredData.map((config) => (
                                     <tr key={config.model} className="border-t hover:bg-muted/50 transition-colors">
                                         <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
                                         <td className="px-4 py-3 text-sm">
@@ -278,7 +306,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                         </td>
                                     </tr>
                                 ))}
-                                {(!data || data.length === 0) && (
+                                {filteredData.length === 0 && (
                                     <tr>
                                         <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
@@ -307,12 +335,20 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         {/* Model name */}
                         <div className="space-y-2">
                             <Label>{t('model.modelName')}</Label>
-                            <Input
-                                value={formModel}
-                                onChange={(e) => setFormModel(e.target.value)}
-                                placeholder={t('model.dialog.modelNamePlaceholder')}
-                                disabled={!isCreating}
-                            />
+                            {isCreating ? (
+                                <Combobox
+                                    options={modelOptions}
+                                    value={formModel}
+                                    onValueChange={setFormModel}
+                                    placeholder={t('model.dialog.modelNamePlaceholder')}
+                                    emptyText={t('common.noResult')}
+                                />
+                            ) : (
+                                <Input
+                                    value={formModel}
+                                    disabled
+                                />
+                            )}
                         </div>
 
                         {/* Override Limit */}

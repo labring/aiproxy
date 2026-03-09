@@ -352,6 +352,18 @@ export function ChannelForm({
                                 }}
                             />
 
+                            {/* Readme */}
+                            {(() => {
+                                const typeId = Number(form.watch('type'))
+                                const meta = typeId ? typeMetas[String(typeId)] : null
+                                if (!meta?.readme) return null
+                                return (
+                                    <div className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground whitespace-pre-line">
+                                        {meta.readme}
+                                    </div>
+                                )
+                            })()}
+
                             {/* 名称字段 */}
                             <FormField
                                 control={form.control}
@@ -522,6 +534,7 @@ export function ChannelForm({
                                 render={({ field }) => {
                                     const typeId = Number(form.getValues('type'))
                                     const { defaultBaseUrl } = getTypeHelp(typeId)
+                                    const hasCustomUrl = !!(field.value && field.value.trim())
 
                                     return (
                                         <FormItem>
@@ -536,6 +549,11 @@ export function ChannelForm({
                                                     value={field.value || ''}
                                                 />
                                             </FormControl>
+                                            {hasCustomUrl && defaultBaseUrl && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    {t("channel.dialog.defaultBaseUrl")}: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{defaultBaseUrl}</code>
+                                                </p>
+                                            )}
                                             <p className="text-xs text-muted-foreground mt-1">
                                                 {t("channel.dialog.baseUrlOptionalHelp")}
                                             </p>

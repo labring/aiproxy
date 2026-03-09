@@ -102,6 +102,7 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                     <MonitorCharts
                         chartData={data.chartData}
                         modelRanking={data.modelRanking}
+                        detailRanking={data.detailRanking}
                         hasModelFilter={!!filters.model}
                         loading={isLoading}
                     />

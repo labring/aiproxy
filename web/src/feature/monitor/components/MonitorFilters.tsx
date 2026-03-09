@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { RotateCcw } from 'lucide-react'
@@ -12,8 +12,10 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { DashboardFilters } from '@/types/dashboard'
 import { channelApi } from '@/api/channel'
+import { useChannelTypeMetas } from '@/feature/channel/hooks'
 
 interface MonitorFiltersProps {
     onFiltersChange: (filters: DashboardFilters) => void
@@ -25,6 +27,7 @@ interface MonitorFiltersProps {
 
 export function MonitorFilters({ onFiltersChange, loading = false, availableModels = [], availableChannels = [], defaultChannel }: MonitorFiltersProps) {
     const { t } = useTranslation()
+    const { data: typeMetas } = useChannelTypeMetas()
 
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
@@ -90,8 +93,13 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         return filters
     }, [model, channel, dateRange, timespan])
 
-    // Auto-refresh on any filter change
+    // Auto-refresh on filter change (skip initial mount - page provides initial filters)
+    const isFirstRender = useRef(true)
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false
+            return
+        }
         onFiltersChange(buildFilters())
     }, [buildFilters]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -102,12 +110,14 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         setTimespan('hour')
     }
 
+    const getTypeName = (type: number) => typeMetas?.[type]?.name || ''
+
     return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-none">
             <div className="flex items-center gap-2">
-                {/* Channel 选择器 */}
+                {/* Channel */}
                 {availableChannels.length > 0 && (
-                    <div className="w-48 flex-shrink-0">
+                    <div className="w-56 flex-shrink-0">
                         <Select value={channel} onValueChange={setChannel} disabled={loading}>
                             <SelectTrigger className="h-9">
                                 <SelectValue placeholder={t('monitor.filters.channelPlaceholder')} />
@@ -116,7 +126,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                                 <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
                                 {availableChannels.map((id) => (
                                     <SelectItem key={id} value={String(id)}>
-                                        {channelInfoMap[id]?.name || `#${id}`} (#{id})
+                                        <ChannelLabel id={id} info={channelInfoMap[id]} typeName={getTypeName(channelInfoMap[id]?.type)} compact />
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -124,7 +134,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                     </div>
                 )}
 
-                {/* Model 选择器 */}
+                {/* Model */}
                 {availableModels.length > 0 && (
                     <div className="w-44 flex-shrink-0">
                         <Select value={model} onValueChange={setModel} disabled={loading}>
@@ -143,7 +153,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
 
                 <div className="flex-1" />
 
-                {/* 日期范围 */}
+                {/* Date range */}
                 <div className="w-56 flex-shrink-0">
                     <DateRangePicker
                         value={dateRange}
@@ -154,7 +164,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                     />
                 </div>
 
-                {/* 时间粒度 */}
+                {/* Timespan */}
                 <div className="w-22 flex-shrink-0">
                     <Select
                         value={timespan}
@@ -173,7 +183,7 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                     </Select>
                 </div>
 
-                {/* 重置 */}
+                {/* Reset */}
                 <Button
                     type="button"
                     variant="outline"

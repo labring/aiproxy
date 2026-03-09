@@ -22,9 +22,35 @@ export interface DashboardV2Result {
     chartData: ChartDataPoint[]
     aggregates: DashboardAggregates
     modelRanking: ModelSummary[]
+    detailRanking: ModelSummary[]
     channels: number[]
     models: string[]
     tokenNames: string[]
+}
+
+function alignTimestamp(timestamp: number, timespan: string, tz?: string): number {
+    const d = new Date(timestamp * 1000)
+    if (timespan === 'month') {
+        d.setDate(1)
+        d.setHours(0, 0, 0, 0)
+    } else if (timespan === 'day') {
+        d.setHours(0, 0, 0, 0)
+    } else if (timespan === 'hour') {
+        d.setMinutes(0, 0, 0)
+    } else if (timespan === 'minute') {
+        d.setSeconds(0, 0)
+    }
+    return Math.floor(d.getTime() / 1000)
+}
+
+function nextPeriod(timestamp: number, timespan: string): number {
+    if (timespan === 'month') {
+        const d = new Date(timestamp * 1000)
+        d.setMonth(d.getMonth() + 1)
+        return Math.floor(d.getTime() / 1000)
+    }
+    const stepSeconds = timespan === 'day' ? 86400 : timespan === 'minute' ? 60 : 3600
+    return timestamp + stepSeconds
 }
 
 function fillMissingPeriods(
@@ -36,9 +62,8 @@ function fillMissingPeriods(
     }
 
     const timespan = filters.timespan || 'hour'
-    const stepSeconds = timespan === 'month' ? 86400 * 30 : timespan === 'day' ? 86400 : timespan === 'minute' ? 60 : 3600
 
-    const start = filters.start_timestamp
+    const start = alignTimestamp(filters.start_timestamp, timespan)
     const now = Math.floor(Date.now() / 1000)
     const end = Math.min(filters.end_timestamp, now)
 
@@ -48,7 +73,7 @@ function fillMissingPeriods(
     }
 
     const result: TimeSeriesPoint[] = []
-    for (let t = start; t <= end; t += stepSeconds) {
+    for (let t = start; t <= end; t = nextPeriod(t, timespan)) {
         result.push(existingMap.get(t) || { timestamp: t, summary: [] })
     }
 
@@ -140,10 +165,32 @@ function computeDashboardResult(
         max_tpm: 0,
     }
 
-    const rankingMap = new Map<string, ModelSummary>()
+    // Top-level ranking: always aggregate by model only
+    const modelRankMap = new Map<string, ModelSummary>()
+    // Detail ranking: aggregate by channel_id + token_name + model
+    const detailRankMap = new Map<string, ModelSummary>()
     const channelSet = new Set<number>()
     const modelSet = new Set<string>()
     const tokenNameSet = new Set<string>()
+
+    function mergeInto(map: Map<string, ModelSummary>, key: string, s: ModelSummary) {
+        const existing = map.get(key)
+        if (existing) {
+            existing.request_count += s.request_count
+            existing.exception_count += s.exception_count
+            existing.used_amount += s.used_amount
+            existing.total_time_milliseconds += s.total_time_milliseconds
+            existing.total_ttfb_milliseconds += s.total_ttfb_milliseconds
+            existing.input_tokens += s.input_tokens
+            existing.output_tokens += s.output_tokens
+            existing.cached_tokens += s.cached_tokens
+            existing.total_tokens += s.total_tokens
+            if (s.max_rpm > existing.max_rpm) existing.max_rpm = s.max_rpm
+            if (s.max_tpm > existing.max_tpm) existing.max_tpm = s.max_tpm
+        } else {
+            map.set(key, { ...s })
+        }
+    }
 
     for (const ts of timeSeries) {
         for (const s of ts.summary) {
@@ -163,42 +210,29 @@ function computeDashboardResult(
             if (s.model) modelSet.add(s.model)
             if (s.token_name) tokenNameSet.add(s.token_name)
 
-            // Global dashboard: group by model (channel_id varies per model)
-            // Group dashboard: group by token_name + model
-            const rankKey = isGroup && s.token_name
-                ? `${s.token_name}\0${s.model}`
-                : s.model
+            // Top-level: by model only
+            mergeInto(modelRankMap, s.model, s)
 
-            const existing = rankingMap.get(rankKey)
-            if (existing) {
-                existing.request_count += s.request_count
-                existing.exception_count += s.exception_count
-                existing.used_amount += s.used_amount
-                existing.total_time_milliseconds += s.total_time_milliseconds
-                existing.total_ttfb_milliseconds += s.total_ttfb_milliseconds
-                existing.input_tokens += s.input_tokens
-                existing.output_tokens += s.output_tokens
-                existing.cached_tokens += s.cached_tokens
-                existing.total_tokens += s.total_tokens
-                if (s.max_rpm > existing.max_rpm) existing.max_rpm = s.max_rpm
-                if (s.max_tpm > existing.max_tpm) existing.max_tpm = s.max_tpm
-            } else {
-                rankingMap.set(rankKey, { ...s })
-            }
+            // Detail: by channel_id + token_name + model
+            const detailKey = `${s.channel_id || 0}\0${s.token_name || ''}\0${s.model}`
+            mergeInto(detailRankMap, detailKey, s)
         }
     }
 
-    const modelRanking = [...rankingMap.values()].sort((a, b) => {
+    const sortRanking = (arr: ModelSummary[]) => arr.sort((a, b) => {
         if (b.used_amount !== a.used_amount) return b.used_amount - a.used_amount
         if (b.request_count !== a.request_count) return b.request_count - a.request_count
         return a.model.localeCompare(b.model)
     })
 
+    const modelRanking = sortRanking([...modelRankMap.values()])
+    const detailRanking = sortRanking([...detailRankMap.values()])
+
     const channels = [...channelSet].sort((a, b) => a - b)
     const models = [...new Set(modelRanking.map(m => m.model))]
     const tokenNames = [...tokenNameSet].sort()
 
-    return { timeSeries: filled, chartData, aggregates: agg, modelRanking, channels, models, tokenNames }
+    return { timeSeries: filled, chartData, aggregates: agg, modelRanking, detailRanking, channels, models, tokenNames }
 }
 
 export const useDashboard = (filters?: DashboardFilters) => {

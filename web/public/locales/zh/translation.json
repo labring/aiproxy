@@ -602,6 +602,7 @@
       "baseUrl": "基础 URL",
       "baseUrlPlaceholder": "输入基础 URL",
       "baseUrlOptionalHelp": "当不填写时，将使用厂商默认地址",
+      "defaultBaseUrl": "默认地址",
       "models": "模型",
       "selectModels": "选择模型",
       "createModel": "创建模型",

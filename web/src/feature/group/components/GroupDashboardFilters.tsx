@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { RotateCcw } from 'lucide-react'
@@ -66,8 +66,13 @@ export function GroupDashboardFilters({
         return filters
     }, [tokenName, model, dateRange, timespan])
 
-    // Auto-refresh on any filter change
+    // Auto-refresh on filter change (skip initial mount - page provides initial filters)
+    const isFirstRender = useRef(true)
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false
+            return
+        }
         onFiltersChange(buildFilters())
     }, [buildFilters]) // eslint-disable-line react-hooks/exhaustive-deps
 

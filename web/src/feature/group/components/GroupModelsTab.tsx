@@ -1,9 +1,11 @@
 // src/feature/group/components/GroupModelsTab.tsx
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '@/api/dashboard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
     Table,
     TableBody,
@@ -14,7 +16,7 @@ import {
 } from '@/components/ui/table'
 import { PriceDisplay } from '@/components/price/PriceDisplay'
 import { toast } from 'sonner'
-import { Copy } from 'lucide-react'
+import { Copy, Search } from 'lucide-react'
 
 interface GroupModelsTabProps {
     groupId: string
@@ -22,12 +24,20 @@ interface GroupModelsTabProps {
 
 export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
     const { t } = useTranslation()
+    const [searchKeyword, setSearchKeyword] = useState('')
 
     const { data: models, isLoading, error } = useQuery({
         queryKey: ['groupModels', groupId],
         queryFn: () => dashboardApi.getGroupModels(groupId),
         enabled: !!groupId,
     })
+
+    const filteredModels = useMemo(() => {
+        if (!models) return []
+        if (!searchKeyword) return models
+        const keyword = searchKeyword.toLowerCase()
+        return models.filter(m => m.model.toLowerCase().includes(keyword))
+    }, [models, searchKeyword])
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -64,59 +74,79 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
     }
 
     return (
-        <div className="rounded-md border">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>{t('group.models.model')}</TableHead>
-                        <TableHead>{t('group.models.type')}</TableHead>
-                        <TableHead>{t('group.models.rpm')}</TableHead>
-                        <TableHead>{t('group.models.tpm')}</TableHead>
-                        <TableHead>{t('group.price.title')}</TableHead>
-                        <TableHead>{t('group.models.plugins')}</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {models.map((model) => (
-                        <TableRow key={model.model}>
-                            <TableCell>
-                                <button
-                                    className="font-mono text-sm hover:underline cursor-pointer text-left"
-                                    onClick={() => copyToClipboard(model.model)}
-                                >
-                                    <span className="flex items-center gap-1">
-                                        {model.model}
-                                        <Copy className="h-3 w-3 text-muted-foreground" />
-                                    </span>
-                                </button>
-                            </TableCell>
-                            <TableCell>
-                                <Badge variant="outline">
-                                    {t(`modeType.${model.type}` as never)}
-                                </Badge>
-                            </TableCell>
-                            <TableCell>{model.rpm || '-'}</TableCell>
-                            <TableCell>{model.tpm || '-'}</TableCell>
-                            <TableCell>
-                                <PriceDisplay price={model.price} />
-                            </TableCell>
-                            <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                    {model.enabled_plugins && model.enabled_plugins.length > 0 ? (
-                                        model.enabled_plugins.map((plugin) => (
-                                            <Badge key={plugin} variant="secondary" className="text-xs">
-                                                {plugin}
-                                            </Badge>
-                                        ))
-                                    ) : (
-                                        <span className="text-muted-foreground text-sm">-</span>
-                                    )}
-                                </div>
-                            </TableCell>
+        <div className="space-y-4">
+            {/* Search */}
+            <div className="relative w-64">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder={t('common.search')}
+                    value={searchKeyword}
+                    onChange={(e) => setSearchKeyword(e.target.value)}
+                    className="pl-9 h-9"
+                />
+            </div>
+
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>{t('group.models.model')}</TableHead>
+                            <TableHead>{t('group.models.type')}</TableHead>
+                            <TableHead>{t('group.models.rpm')}</TableHead>
+                            <TableHead>{t('group.models.tpm')}</TableHead>
+                            <TableHead>{t('group.price.title')}</TableHead>
+                            <TableHead>{t('group.models.plugins')}</TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {filteredModels.map((model) => (
+                            <TableRow key={model.model}>
+                                <TableCell>
+                                    <button
+                                        className="font-mono text-sm hover:underline cursor-pointer text-left"
+                                        onClick={() => copyToClipboard(model.model)}
+                                    >
+                                        <span className="flex items-center gap-1">
+                                            {model.model}
+                                            <Copy className="h-3 w-3 text-muted-foreground" />
+                                        </span>
+                                    </button>
+                                </TableCell>
+                                <TableCell>
+                                    <Badge variant="outline">
+                                        {t(`modeType.${model.type}` as never)}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>{model.rpm || '-'}</TableCell>
+                                <TableCell>{model.tpm || '-'}</TableCell>
+                                <TableCell>
+                                    <PriceDisplay price={model.price} />
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex flex-wrap gap-1">
+                                        {model.enabled_plugins && model.enabled_plugins.length > 0 ? (
+                                            model.enabled_plugins.map((plugin) => (
+                                                <Badge key={plugin} variant="secondary" className="text-xs">
+                                                    {plugin}
+                                                </Badge>
+                                            ))
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">-</span>
+                                        )}
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {filteredModels.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                                    {t('common.noResult')}
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
         </div>
     )
 }

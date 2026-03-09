@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
-import { Search, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,8 +13,10 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
 import type { LogFilters as LogFiltersType } from '@/types/log'
 import { channelApi } from '@/api/channel'
+import { useChannelTypeMetas } from '@/feature/channel/hooks'
 
 interface LogFiltersProps {
     onFiltersChange: (filters: LogFiltersType) => void
@@ -36,6 +38,7 @@ export function LogFilters({
     defaultTokenName = '',
 }: LogFiltersProps) {
     const { t } = useTranslation()
+    const { data: typeMetas } = useChannelTypeMetas()
 
     // Batch fetch channel names
     const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
@@ -107,11 +110,16 @@ export function LogFilters({
         return filters
     }, [model, tokenName, channel, keyword, dateRange, codeType])
 
-    // Auto-refresh on filter change, but debounce keyword input
+    // Auto-refresh on filter change (skip initial mount), debounce keyword input
     const debounceRef = useRef<ReturnType<typeof setTimeout>>()
     const prevKeywordRef = useRef(keyword)
+    const isFirstRender = useRef(true)
 
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false
+            return
+        }
         // If only keyword changed, debounce
         if (prevKeywordRef.current !== keyword) {
             prevKeywordRef.current = keyword
@@ -137,9 +145,11 @@ export function LogFilters({
     const showChannel = !!availableChannels && availableChannels.length > 0
     const showTokenName = !!availableTokenNames && availableTokenNames.length > 0
 
+    const getTypeName = (type: number) => typeMetas?.[type]?.name || ''
+
     // Channel filter
     const channelFilter = showChannel && (
-        <div className="w-48 flex-shrink-0">
+        <div className="w-56 flex-shrink-0">
             <Select value={channel} onValueChange={setChannel} disabled={loading}>
                 <SelectTrigger className="h-9">
                     <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
@@ -148,7 +158,7 @@ export function LogFilters({
                     <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
                     {availableChannels!.map((ch) => (
                         <SelectItem key={ch} value={String(ch)}>
-                            {channelInfoMap[ch]?.name || `#${ch}`} (#{ch})
+                            <ChannelLabel id={ch} info={channelInfoMap[ch]} typeName={getTypeName(channelInfoMap[ch]?.type)} compact />
                         </SelectItem>
                     ))}
                 </SelectContent>

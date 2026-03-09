@@ -19,10 +19,19 @@ export interface Channel {
 
 export const DEFAULT_PRIORITY = 10
 
+export interface ChannelConfigTemplate {
+    name: string
+    description: string
+    example?: string
+    required: boolean
+}
+
 export interface ChannelTypeMeta {
     name: string
     keyHelp: string
     defaultBaseUrl: string
+    readme?: string
+    configs?: Record<string, ChannelConfigTemplate>
 }
 
 export type ChannelTypeMetaMap = Record<string, ChannelTypeMeta>

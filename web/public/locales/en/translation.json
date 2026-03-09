@@ -576,6 +576,7 @@
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "Enter base URL",
       "baseUrlOptionalHelp": "When left empty, the provider's default URL will be used",
+      "defaultBaseUrl": "Default URL",
       "models": "Models",
       "selectModels": "Select models",
       "createModel": "Create Model",

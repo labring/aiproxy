@@ -5,6 +5,11 @@ import { Separator } from '@/components/ui/separator'
 import { JsonViewer } from './JsonViewer'
 import { useLogDetail } from '@/feature/log/hooks'
 import type { LogRecord, LogRequestDetail } from '@/types/log'
+import { channelApi } from '@/api/channel'
+import { useChannelTypeMetas } from '@/feature/channel/hooks'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
+import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
+import type { Channel } from '@/types/channel'
 
 // Format price with unit
 const formatPrice = (price: number, unit: number): string => {
@@ -15,6 +20,27 @@ const formatPrice = (price: number, unit: number): string => {
 
 export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
     const { t } = useTranslation()
+    const { data: typeMetas } = useChannelTypeMetas()
+    const [channelInfo, setChannelInfo] = useState<{ name: string; type: number } | null>(null)
+    const [channelDialogOpen, setChannelDialogOpen] = useState(false)
+    const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
+
+    const openChannelEdit = (channelId: number) => {
+        channelApi.getChannel(channelId).then(channel => {
+            setEditingChannel(channel)
+            setChannelDialogOpen(true)
+        }).catch(() => {})
+    }
+
+    useEffect(() => {
+        if (!log.channel) return
+        channelApi.getChannelBatchInfo([log.channel])
+            .then(infos => {
+                if (infos.length > 0) setChannelInfo({ name: infos[0].name, type: infos[0].type })
+            })
+            .catch(() => {})
+    }, [log.channel])
+
     const needsDetail = !!log.request_detail
     const [requestDetail, setRequestDetail] = useState<LogRequestDetail | null>(null)
 
@@ -58,7 +84,18 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                         <div><span className="font-medium">{t('log.group')}:</span> {log.group || '-'}</div>
                         <div><span className="font-medium">{t('log.keyName')}:</span> {log.token_name || '-'}</div>
                         <div><span className="font-medium">{t('log.model')}:</span> {log.model || '-'}</div>
-                        <div><span className="font-medium">{t('log.channel')}:</span> {log.channel}</div>
+                        <div className="flex items-center gap-1">
+                            <span className="font-medium">{t('log.channel')}:</span>
+                            {log.channel ? (
+                                <ChannelLabel
+                                    id={log.channel}
+                                    info={channelInfo || undefined}
+                                    typeName={channelInfo ? typeMetas?.[channelInfo.type]?.name : undefined}
+                                    compact
+                                    onClick={() => openChannelEdit(log.channel)}
+                                />
+                            ) : '-'}
+                        </div>
                         <div><span className="font-medium">{t('log.mode')}:</span> {t(`modeType.${log.mode}`, { defaultValue: log.mode?.toString() || '-' })}</div>
                         <div><span className="font-medium">{t('log.user')}:</span> {log.user || '-'}</div>
                         <div><span className="font-medium">{t('log.ip')}:</span> {log.ip || '-'}</div>
@@ -191,6 +228,15 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                         )}
                     </div>
                 </div>
+            )}
+
+            {editingChannel && (
+                <ChannelDialog
+                    open={channelDialogOpen}
+                    onOpenChange={setChannelDialogOpen}
+                    mode="update"
+                    channel={editingChannel}
+                />
             )}
         </div>
     )

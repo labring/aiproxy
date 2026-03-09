@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { EChartsOption } from 'echarts'
 
@@ -7,10 +7,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useTheme } from '@/handler/ThemeContext'
 import { ChartDataPoint, ModelSummary } from '@/types/dashboard'
 import { cn } from '@/lib/utils'
+import { ChevronRight } from 'lucide-react'
+import { channelApi } from '@/api/channel'
+import { useChannelTypeMetas } from '@/feature/channel/hooks'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
+import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
+import type { Channel } from '@/types/channel'
 
 interface MonitorChartsProps {
     chartData: ChartDataPoint[]
     modelRanking: ModelSummary[]
+    detailRanking?: ModelSummary[]
     hasModelFilter?: boolean
     loading?: boolean
 }
@@ -62,9 +69,23 @@ function ChartBox({ title, children, rightSlot, className }: {
     )
 }
 
-export function MonitorCharts({ chartData, modelRanking, hasModelFilter = false, loading = false }: MonitorChartsProps) {
+export function MonitorCharts({ chartData, modelRanking, detailRanking = [], hasModelFilter = false, loading = false }: MonitorChartsProps) {
     const { t } = useTranslation()
     const { theme } = useTheme()
+    const { data: typeMetas } = useChannelTypeMetas()
+
+    // Channel edit dialog state
+    const [channelDialogOpen, setChannelDialogOpen] = useState(false)
+    const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
+
+    const openChannelEdit = (channelId: number) => {
+        channelApi.getChannel(channelId)
+            .then(channel => {
+                setEditingChannel(channel)
+                setChannelDialogOpen(true)
+            })
+            .catch(() => {})
+    }
 
     const [requestsMode, setRequestsMode] = useState<DisplayMode>('incremental')
     const [tokensMode, setTokensMode] = useState<DisplayMode>('incremental')
@@ -181,25 +202,89 @@ export function MonitorCharts({ chartData, modelRanking, hasModelFilter = false,
         }
     }
 
-    // Data table - detect if token_name column should be shown
-    const showTokenName = useMemo(() => {
-        return (modelRanking || []).some(m => !!m.token_name)
-    }, [modelRanking])
+    const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
 
-    const tableData = useMemo(() => {
-        return (modelRanking || []).map(m => {
-            const successCalls = m.request_count - m.exception_count
-            return {
-                model: m.model,
-                tokenName: m.token_name || '',
-                totalCalls: m.request_count,
-                errorCalls: m.exception_count,
-                usedAmount: m.used_amount,
-                avgResponseTime: successCalls > 0 ? m.total_time_milliseconds / successCalls : 0,
-                avgTtfb: successCalls > 0 ? m.total_ttfb_milliseconds / successCalls : 0,
-            }
+    const toggleExpand = (model: string) => {
+        setExpandedModels(prev => {
+            const next = new Set(prev)
+            if (next.has(model)) next.delete(model)
+            else next.add(model)
+            return next
         })
-    }, [modelRanking])
+    }
+
+    interface TableRow {
+        model: string
+        tokenName: string
+        channelId: number
+        totalCalls: number
+        errorCalls: number
+        usedAmount: number
+        avgResponseTime: number
+        avgTtfb: number
+    }
+
+    const toRow = (m: ModelSummary): TableRow => {
+        const successCalls = m.request_count - m.exception_count
+        return {
+            model: m.model,
+            tokenName: m.token_name || '',
+            channelId: m.channel_id || 0,
+            totalCalls: m.request_count,
+            errorCalls: m.exception_count,
+            usedAmount: m.used_amount,
+            avgResponseTime: successCalls > 0 ? m.total_time_milliseconds / successCalls : 0,
+            avgTtfb: successCalls > 0 ? m.total_ttfb_milliseconds / successCalls : 0,
+        }
+    }
+
+    const tableData = useMemo(() => (modelRanking || []).map(toRow), [modelRanking])
+
+    // Build detail rows grouped by model
+    const detailByModel = useMemo(() => {
+        const map = new Map<string, TableRow[]>()
+        for (const m of detailRanking) {
+            const rows = map.get(m.model) || []
+            rows.push(toRow(m))
+            map.set(m.model, rows)
+        }
+        return map
+    }, [detailRanking])
+
+    const hasDetailData = detailRanking.length > 0
+
+    // Batch fetch channel info for detail rows
+    const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
+    const detailChannelIds = useMemo(() => {
+        const ids = new Set<number>()
+        for (const m of detailRanking) {
+            if (m.channel_id) ids.add(m.channel_id)
+        }
+        return [...ids]
+    }, [detailRanking])
+
+    useEffect(() => {
+        if (detailChannelIds.length === 0) return
+        const missing = detailChannelIds.filter(id => !(id in channelInfoMap))
+        if (missing.length === 0) return
+        channelApi.getChannelBatchInfo(missing)
+            .then(infos => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const info of infos) next[info.id] = { name: info.name, type: info.type }
+                    return next
+                })
+            })
+            .catch(() => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const id of missing) {
+                        if (!(id in next)) next[id] = { name: `#${id}`, type: 0 }
+                    }
+                    return next
+                })
+            })
+    }, [detailChannelIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
     if (loading) {
         return (
@@ -322,9 +407,6 @@ export function MonitorCharts({ chartData, modelRanking, hasModelFilter = false,
                             <thead>
                                 <tr className="border-b bg-muted/50">
                                     <th className="text-left p-3 font-medium text-muted-foreground">{t('monitor.table.model')}</th>
-                                    {showTokenName && (
-                                        <th className="text-left p-3 font-medium text-muted-foreground">{t('monitor.table.tokenName')}</th>
-                                    )}
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.totalCalls')}</th>
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.errorCalls')}</th>
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.cost')}</th>
@@ -333,24 +415,86 @@ export function MonitorCharts({ chartData, modelRanking, hasModelFilter = false,
                                 </tr>
                             </thead>
                             <tbody>
-                                {tableData.map((row, idx) => (
-                                    <tr key={`${row.tokenName}\0${row.model}\0${idx}`} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                                        <td className="p-3 font-medium truncate max-w-[200px]">{row.model}</td>
-                                        {showTokenName && (
-                                            <td className="p-3 truncate max-w-[150px] text-muted-foreground">{row.tokenName || '-'}</td>
-                                        )}
-                                        <td className="p-3 text-right text-blue-600 dark:text-blue-400">{row.totalCalls.toLocaleString()}</td>
-                                        <td className="p-3 text-right text-red-600 dark:text-red-400">{row.errorCalls.toLocaleString()}</td>
-                                        <td className="p-3 text-right">${row.usedAmount.toFixed(4)}</td>
-                                        <td className="p-3 text-right">{row.avgResponseTime > 0 ? `${row.avgResponseTime.toFixed(0)} ms` : '-'}</td>
-                                        <td className="p-3 text-right">{row.avgTtfb > 0 ? `${row.avgTtfb.toFixed(0)} ms` : '-'}</td>
-                                    </tr>
-                                ))}
+                                {tableData.map((row) => {
+                                    const details = detailByModel.get(row.model) || []
+                                    const expandable = hasDetailData && details.length > 0
+                                    const isExpanded = expandedModels.has(row.model)
+                                    return (
+                                        <Fragment key={row.model}>
+                                            <tr
+                                                className={cn(
+                                                    "border-b last:border-b-0 transition-colors",
+                                                    expandable ? "cursor-pointer hover:bg-muted/30" : "hover:bg-muted/30",
+                                                    isExpanded && "bg-muted/20"
+                                                )}
+                                                onClick={expandable ? () => toggleExpand(row.model) : undefined}
+                                            >
+                                                <td className="p-3 font-medium truncate max-w-[200px]">
+                                                    <div className="flex items-center gap-1.5">
+                                                        {expandable && (
+                                                            <ChevronRight className={cn(
+                                                                "h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0",
+                                                                isExpanded && "rotate-90"
+                                                            )} />
+                                                        )}
+                                                        {!expandable && hasDetailData && (
+                                                            <span className="w-3.5 shrink-0" />
+                                                        )}
+                                                        {row.model}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3 text-right text-blue-600 dark:text-blue-400">{row.totalCalls.toLocaleString()}</td>
+                                                <td className="p-3 text-right text-red-600 dark:text-red-400">{row.errorCalls.toLocaleString()}</td>
+                                                <td className="p-3 text-right">${row.usedAmount.toFixed(4)}</td>
+                                                <td className="p-3 text-right">{row.avgResponseTime > 0 ? `${row.avgResponseTime.toFixed(0)} ms` : '-'}</td>
+                                                <td className="p-3 text-right">{row.avgTtfb > 0 ? `${row.avgTtfb.toFixed(0)} ms` : '-'}</td>
+                                            </tr>
+                                            {isExpanded && details.map((detail, idx) => (
+                                                <tr
+                                                    key={`${row.model}-${idx}`}
+                                                    className={cn(
+                                                        "border-b last:border-b-0 bg-muted/10",
+                                                        detail.channelId && "cursor-pointer hover:bg-muted/30"
+                                                    )}
+                                                    onClick={detail.channelId ? () => openChannelEdit(detail.channelId) : undefined}
+                                                >
+                                                    <td className="p-3 pl-9 text-muted-foreground text-xs max-w-[280px]">
+                                                        <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                                            {detail.channelId ? (
+                                                                <ChannelLabel
+                                                                    id={detail.channelId}
+                                                                    info={channelInfoMap[detail.channelId]}
+                                                                    typeName={typeMetas?.[channelInfoMap[detail.channelId]?.type]?.name}
+                                                                    compact
+                                                                />
+                                                            ) : null}
+                                                            {detail.channelId && detail.tokenName ? <span>/</span> : null}
+                                                            {detail.tokenName || (!detail.channelId ? row.model : null)}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3 text-right text-xs text-blue-600 dark:text-blue-400">{detail.totalCalls.toLocaleString()}</td>
+                                                    <td className="p-3 text-right text-xs text-red-600 dark:text-red-400">{detail.errorCalls.toLocaleString()}</td>
+                                                    <td className="p-3 text-right text-xs">${detail.usedAmount.toFixed(4)}</td>
+                                                    <td className="p-3 text-right text-xs">{detail.avgResponseTime > 0 ? `${detail.avgResponseTime.toFixed(0)} ms` : '-'}</td>
+                                                    <td className="p-3 text-right text-xs">{detail.avgTtfb > 0 ? `${detail.avgTtfb.toFixed(0)} ms` : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </Fragment>
+                                    )
+                                })}
                             </tbody>
                         </table>
                     </div>
                 </div>
             )}
+
+            {/* Channel edit dialog */}
+            <ChannelDialog
+                open={channelDialogOpen}
+                onOpenChange={setChannelDialogOpen}
+                mode="update"
+                channel={editingChannel}
+            />
         </div>
     )
 }
