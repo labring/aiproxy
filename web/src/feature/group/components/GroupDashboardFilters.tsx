@@ -89,21 +89,19 @@ export function GroupDashboardFilters({
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-4">
                     {/* Token Name */}
-                    {availableTokenNames.length > 0 && (
-                        <div className="w-44">
-                            <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
-                                <SelectTrigger className="h-10">
-                                    <SelectValue placeholder={t('group.dashboard.tokenNamePlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableTokenNames.map((name) => (
-                                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
+                    <div className="w-44">
+                        <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
+                            <SelectTrigger className="h-10">
+                                <SelectValue placeholder={t('group.dashboard.tokenNamePlaceholder')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                {availableTokenNames.map((name) => (
+                                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     {/* Model */}
                     {availableModels.length > 0 && (

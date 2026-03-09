@@ -1,40 +1,56 @@
-export interface ChartDataPoint {
-    cache_creation_tokens: number
-    cached_tokens: number
-    exception_count: number
-    input_tokens: number
-    max_rpm: number
-    max_rps: number
-    max_tpm: number
-    max_tps: number
-    output_tokens: number
-    request_count: number
-    timestamp: number
-    total_tokens: number
+export interface ModelSummary {
+    timestamp?: number
+    channel_id?: number
+    group_id?: string
+    token_name?: string
+    model: string
     used_amount: number
+    total_time_milliseconds: number
+    total_ttfb_milliseconds: number
+    request_count: number
+    retry_count: number
+    exception_count: number
+    status_4xx_count: number
+    status_5xx_count: number
+    status_400_count: number
+    status_429_count: number
+    status_500_count: number
+    cache_hit_count: number
+    input_tokens: number
+    image_input_tokens: number
+    audio_input_tokens: number
+    output_tokens: number
+    image_output_tokens: number
+    cached_tokens: number
+    cache_creation_tokens: number
+    reasoning_tokens: number
+    total_tokens: number
     web_search_count: number
+    max_rpm: number
+    max_tpm: number
 }
 
-export interface DashboardData {
-    cache_creation_tokens: number
-    cached_tokens: number
-    channels: number[]
-    chart_data: ChartDataPoint[]
-    exception_count: number
-    input_tokens: number
-    max_rpm: number
-    max_rps: number
-    max_tpm: number
-    max_tps: number
-    models: string[]
-    token_names: string[]
-    output_tokens: number
-    rpm: number
-    total_count: number
-    total_tokens: number
-    tpm: number
-    used_amount: number
-    web_search_count: number
+export interface TimeSeriesPoint {
+    timestamp: number
+    summary: ModelSummary[]
+}
+
+export interface ChartDataPoint {
+    x: string
+    xLabel: string
+    timestamp: number
+    totalCalls: number
+    errorCalls: number
+    errorRate: number
+    inputTokens: number
+    outputTokens: number
+    cachedTokens: number
+    totalTokens: number
+    usedAmount: number
+    avgResponseTime: number
+    avgTtfb: number
+    maxRpm: number
+    maxTpm: number
 }
 
 export interface DashboardFilters {

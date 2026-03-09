@@ -80,27 +80,51 @@
       "totalRequestsTooltip": "Total number of requests in the time range",
       "errorCount": "Error Count",
       "errorCountTooltip": "Number of exception requests in the time range",
+      "errorRate": "Error Rate",
+      "usedAmount": "Used Amount",
+      "usedAmountTooltip": "Total cost in the time range",
+      "avgLatency": "Avg Latency",
+      "avgLatencyTooltip": "Average request latency in milliseconds",
       "currentRpm": "Current RPM",
       "currentRpmTooltip": "Requests Per Minute",
       "currentTpm": "Current TPM",
       "currentTpmTooltip": "Tokens Per Minute",
+      "maxRpm": "Max RPM",
+      "maxRpmTooltip": "Maximum requests per minute in the time range",
+      "maxTpm": "Max TPM",
+      "maxTpmTooltip": "Maximum tokens per minute in the time range",
       "outputTokens": "Output Tokens",
       "outputTokensTooltip": "Total output tokens in the time range",
       "fullValue": "Full Value"
     },
     "charts": {
-      "tokensChart": {
-        "cacheCreationTokens": "Cache Creation Tokens",
-        "cachedTokens": "Cached Tokens",
-        "inputTokens": "Input Tokens",
-        "outputTokens": "Output Tokens",
-        "totalTokens": "Total Tokens",
-        "webSearchCount": "Web Search Count"
-      },
-      "requestsChart": {
-        "requestCount": "Request Count",
-        "exceptionCount": "Exception Count"
+      "totalCalls": "Total Calls",
+      "errorCalls": "Error Calls",
+      "errorRate": "Error Rate",
+      "tokenUsage": "Token Usage",
+      "costTrend": "Cost",
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfb": "Avg TTFB",
+      "maxRpm": "Max RPM",
+      "maxTpm": "Max TPM",
+      "modelRanking": "Model Ranking",
+      "incremental": "Incremental",
+      "cumulative": "Cumulative",
+      "tokenTypes": {
+        "total": "Total",
+        "input": "Input",
+        "output": "Output",
+        "cached": "Cached"
       }
+    },
+    "table": {
+      "model": "Model",
+      "tokenName": "Token Name",
+      "totalCalls": "Total Calls",
+      "errorCalls": "Error Calls",
+      "cost": "Cost",
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfb": "Avg TTFB"
     }
   },
   "table": {

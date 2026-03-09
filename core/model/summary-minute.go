@@ -650,7 +650,7 @@ func GetGroupTimeSeriesModelData(
 		}
 
 		if timeSpan != TimeSpanHour {
-			rawData = aggregatToSpan(rawData, timeSpan, timezone)
+			rawData = aggregatToSpanGroup(rawData, timeSpan, timezone)
 		}
 	}
 

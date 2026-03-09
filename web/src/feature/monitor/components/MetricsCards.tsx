@@ -5,7 +5,10 @@ import {
     AlertTriangle,
     BarChart3,
     Zap,
-    MessageSquare
+    DollarSign,
+    Clock,
+    TrendingUp,
+    Gauge
 } from 'lucide-react'
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,12 +19,12 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { DashboardData } from '@/types/dashboard'
+import type { DashboardV2Result } from '@/feature/monitor/hooks'
 import { cn } from '@/lib/utils'
 import { TFunction } from 'i18next'
 
 interface MetricsCardsProps {
-    data: DashboardData
+    data: DashboardV2Result
     loading?: boolean
 }
 
@@ -33,10 +36,11 @@ interface MetricCardProps {
     tooltip?: string
     bgColor?: string
     iconColor?: string
+    subtitle?: string
     t?: TFunction
 }
 
-function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor, t }: MetricCardProps) {
+function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor, subtitle, t }: MetricCardProps) {
     const formattedValue = typeof value === 'number' ? value.toLocaleString() : value
 
     const cardContent = (
@@ -57,6 +61,11 @@ function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor
                     <div className="text-2xl font-bold text-foreground truncate">
                         {formattedValue}
                     </div>
+                    {subtitle && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                            {subtitle}
+                        </div>
+                    )}
                 </div>
             </CardHeader>
         </Card>
@@ -90,8 +99,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
 
     if (loading) {
         return (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                {Array.from({ length: 5 }).map((_, index) => (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, index) => (
                     <Card key={index} className="border-0 shadow-sm h-28 dark:bg-card">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
                             <div className="p-2">
@@ -108,11 +117,22 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
         )
     }
 
+    const agg = data.aggregates
+
+    const errorRate = agg.request_count > 0
+        ? ((agg.exception_count / agg.request_count) * 100).toFixed(1)
+        : '0.0'
+
+    const avgLatency = agg.request_count > 0
+        ? Math.round(agg.total_time_milliseconds / agg.request_count)
+        : 0
+
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Row 1 */}
             <MetricCard
                 title={t('monitor.metrics.totalRequests')}
-                value={data.total_count}
+                value={agg.request_count}
                 icon={<Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
@@ -121,7 +141,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.errorCount')}
-                value={data.exception_count}
+                value={agg.exception_count}
+                subtitle={`${t('monitor.metrics.errorRate')}: ${errorRate}%`}
                 icon={<AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />}
                 bgColor="bg-orange-50 dark:bg-orange-950/30"
                 iconColor="bg-orange-100 dark:bg-orange-900/50"
@@ -129,8 +150,27 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 t={t}
             />
             <MetricCard
+                title={t('monitor.metrics.usedAmount')}
+                value={`$${agg.used_amount.toFixed(4)}`}
+                icon={<DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />}
+                bgColor="bg-green-50 dark:bg-green-950/30"
+                iconColor="bg-green-100 dark:bg-green-900/50"
+                tooltip={t('monitor.metrics.usedAmountTooltip')}
+                t={t}
+            />
+            <MetricCard
+                title={t('monitor.metrics.avgLatency')}
+                value={`${avgLatency.toLocaleString()} ms`}
+                icon={<Clock className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                bgColor="bg-cyan-50 dark:bg-cyan-950/30"
+                iconColor="bg-cyan-100 dark:bg-cyan-900/50"
+                tooltip={t('monitor.metrics.avgLatencyTooltip')}
+                t={t}
+            />
+            {/* Row 2 */}
+            <MetricCard
                 title={t('monitor.metrics.currentRpm')}
-                value={data.rpm}
+                value={agg.max_rpm}
                 icon={<BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
@@ -139,7 +179,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.currentTpm')}
-                value={data.tpm}
+                value={agg.max_tpm}
                 icon={<Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
                 bgColor="bg-purple-50 dark:bg-purple-950/30"
                 iconColor="bg-purple-100 dark:bg-purple-900/50"
@@ -147,14 +187,23 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 t={t}
             />
             <MetricCard
-                title={t('monitor.metrics.outputTokens')}
-                value={data.output_tokens}
-                icon={<MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />}
-                bgColor="bg-green-50 dark:bg-green-950/30"
-                iconColor="bg-green-100 dark:bg-green-900/50"
-                tooltip={t('monitor.metrics.outputTokensTooltip')}
+                title={t('monitor.metrics.maxRpm')}
+                value={agg.max_rpm}
+                icon={<TrendingUp className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />}
+                bgColor="bg-indigo-50 dark:bg-indigo-950/30"
+                iconColor="bg-indigo-100 dark:bg-indigo-900/50"
+                tooltip={t('monitor.metrics.maxRpmTooltip')}
+                t={t}
+            />
+            <MetricCard
+                title={t('monitor.metrics.maxTpm')}
+                value={agg.max_tpm}
+                icon={<Gauge className="h-5 w-5 text-rose-600 dark:text-rose-400" />}
+                bgColor="bg-rose-50 dark:bg-rose-950/30"
+                iconColor="bg-rose-100 dark:bg-rose-900/50"
+                tooltip={t('monitor.metrics.maxTpmTooltip')}
                 t={t}
             />
         </div>
     )
-} 
+}

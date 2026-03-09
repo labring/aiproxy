@@ -80,27 +80,51 @@
       "totalRequestsTooltip": "统计时间范围内的总请求次数",
       "errorCount": "错误数",
       "errorCountTooltip": "统计时间范围内的异常请求次数",
+      "errorRate": "错误率",
+      "usedAmount": "消费金额",
+      "usedAmountTooltip": "统计时间范围内的总消费金额",
+      "avgLatency": "平均延迟",
+      "avgLatencyTooltip": "平均请求延迟（毫秒）",
       "currentRpm": "当前 RPM",
       "currentRpmTooltip": "每分钟请求数（Requests Per Minute）",
       "currentTpm": "当前 TPM",
       "currentTpmTooltip": "每分钟 Token 数（Tokens Per Minute）",
+      "maxRpm": "最大 RPM",
+      "maxRpmTooltip": "统计时间范围内的最大每分钟请求数",
+      "maxTpm": "最大 TPM",
+      "maxTpmTooltip": "统计时间范围内的最大每分钟 Token 数",
       "outputTokens": "输出 Token 数",
       "outputTokensTooltip": "统计时间范围内的输出 Token 总数",
       "fullValue": "完整值"
     },
     "charts": {
-      "tokensChart": {
-        "cacheCreationTokens": "缓存创建 Tokens",
-        "cachedTokens": "缓存 Tokens",
-        "inputTokens": "输入 Tokens",
-        "outputTokens": "输出 Tokens",
-        "totalTokens": "总 Tokens",
-        "webSearchCount": "搜索次数"
-      },
-      "requestsChart": {
-        "requestCount": "请求数量",
-        "exceptionCount": "异常数量"
+      "totalCalls": "总调用量",
+      "errorCalls": "错误调用",
+      "errorRate": "错误率",
+      "tokenUsage": "Token 用量",
+      "costTrend": "消费",
+      "avgResponseTime": "平均响应时间",
+      "avgTtfb": "平均首字节时间",
+      "maxRpm": "最大 RPM",
+      "maxTpm": "最大 TPM",
+      "modelRanking": "模型排行",
+      "incremental": "增量",
+      "cumulative": "累计",
+      "tokenTypes": {
+        "total": "全部",
+        "input": "输入",
+        "output": "输出",
+        "cached": "缓存"
       }
+    },
+    "table": {
+      "model": "模型",
+      "tokenName": "令牌名称",
+      "totalCalls": "总调用量",
+      "errorCalls": "错误调用",
+      "cost": "消费",
+      "avgResponseTime": "平均响应时间",
+      "avgTtfb": "平均首字节时间"
     }
   },
   "table": {

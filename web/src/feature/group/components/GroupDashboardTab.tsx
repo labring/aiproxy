@@ -1,9 +1,8 @@
 // src/feature/group/components/GroupDashboardTab.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BarChart3 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
-import { dashboardApi } from '@/api/dashboard'
+import { useGroupDashboard } from '@/feature/monitor/hooks'
 import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
 import { GroupDashboardFilters } from './GroupDashboardFilters'
@@ -34,16 +33,20 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
 
     const [filters, setFilters] = useState<DashboardFilters & { tokenName?: string }>(getDefaultFilters())
 
-    // Fetch group dashboard data
-    const { data, isLoading, error, refetch } = useQuery({
-        queryKey: ['groupDashboard', groupId, filters],
-        queryFn: () => dashboardApi.getDashboardByGroup(groupId, filters),
-        refetchInterval: 5 * 60 * 1000,
-        refetchOnWindowFocus: true,
-        retry: false,
-    })
+    const { data, isLoading, error, refetch } = useGroupDashboard(groupId, filters)
 
-    // Auto refresh
+    // Preserve the full list of available token names and models across filter changes
+    const availableTokenNamesRef = useRef<string[]>([])
+    const availableModelsRef = useRef<string[]>([])
+    useEffect(() => {
+        if (data?.tokenNames && data.tokenNames.length > 0) {
+            availableTokenNamesRef.current = data.tokenNames
+        }
+        if (data?.models && data.models.length > 0) {
+            availableModelsRef.current = data.models
+        }
+    }, [data?.tokenNames, data?.models])
+
     useEffect(() => {
         const interval = setInterval(() => {
             refetch()
@@ -56,8 +59,7 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
         setFilters(newFilters)
     }
 
-    const chartData = data?.chart_data || []
-    const hasChartData = chartData.length > 0
+    const hasData = (data?.chartData?.length ?? 0) > 0
 
     if (error) {
         return (
@@ -69,19 +71,17 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
 
     return (
         <div className="space-y-4">
-            {/* Filters */}
             <GroupDashboardFilters
                 onFiltersChange={handleFiltersChange}
                 loading={isLoading}
-                availableModels={data?.models}
-                availableTokenNames={data?.token_names}
+                availableModels={data?.models ?? availableModelsRef.current}
+                availableTokenNames={data?.tokenNames ?? availableTokenNamesRef.current}
                 defaultTokenName={initialTokenName}
             />
 
-            {/* Metrics cards */}
             {isLoading ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                    {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {Array.from({ length: 8 }).map((_, i) => (
                         <Skeleton key={i} className="h-28 rounded-lg" />
                     ))}
                 </div>
@@ -89,18 +89,26 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                 data && <MetricsCards data={data} loading={isLoading} />
             )}
 
-            {/* Charts */}
             {isLoading ? (
                 <div className="space-y-4">
-                    <Skeleton className="h-64 rounded-lg" />
-                    <Skeleton className="h-64 rounded-lg" />
+                    <Skeleton className="h-[300px] rounded-lg" />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <Skeleton className="h-[300px] rounded-lg" />
+                        <Skeleton className="h-[300px] rounded-lg" />
+                    </div>
                 </div>
             ) : (
-                data && hasChartData && <MonitorCharts chartData={chartData} loading={isLoading} />
+                data && hasData && (
+                    <MonitorCharts
+                        chartData={data.chartData}
+                        modelRanking={data.modelRanking}
+                        hasModelFilter={!!filters.model}
+                        loading={isLoading}
+                    />
+                )
             )}
 
-            {/* Empty state */}
-            {data && !hasChartData && !isLoading && (
+            {data && !hasData && !isLoading && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-medium text-muted-foreground mb-2">
