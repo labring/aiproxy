@@ -58,6 +58,7 @@ export interface LogRecord {
   request_at: string
   request_detail: LogRequestDetail
   request_id: string
+  upstream_id: string
   retry_at: string
   retry_times: number
   token_id: number
@@ -79,8 +80,9 @@ export interface LogResponse {
 
 // 日志过滤器
 export interface LogFilters {
-  keyName?: string // token name
   model?: string
+  token_name?: string
+  channel?: number
   start_timestamp?: number
   end_timestamp?: number
   code_type?: 'all' | 'success' | 'error'
@@ -90,5 +92,5 @@ export interface LogFilters {
 
 // 日志列表请求参数
 export interface LogListParams extends LogFilters {
-  group?: string // 当keyName有值时，group = keyName
-} 
+  group?: string
+}

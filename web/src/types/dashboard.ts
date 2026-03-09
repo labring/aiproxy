@@ -37,10 +37,10 @@ export interface DashboardData {
 }
 
 export interface DashboardFilters {
-    keyName?: string
     model?: string
+    channel?: number
     start_timestamp?: number
     end_timestamp?: number
     timezone?: string
     timespan?: 'day' | 'hour'
-} 
+}

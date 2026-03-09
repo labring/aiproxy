@@ -39,6 +39,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChannelDialog } from "@/feature/channel/components/ChannelDialog";
+import { Channel } from "@/types/channel";
+import { channelApi } from "@/api/channel";
+import { toast } from "sonner";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -53,6 +57,10 @@ export function ModelTable() {
 
   // API Doc drawer state
   const [apiDocOpen, setApiDocOpen] = useState(false);
+
+  // Channel edit dialog state
+  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
   // Get models list
   const { data: models, isLoading, error, isError, refetch } = useModels();
@@ -91,7 +99,16 @@ export function ModelTable() {
         <div className="font-medium py-3.5">{t("model.modelName")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">{row.original.model}</div>
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => {
+            navigator.clipboard.writeText(row.original.model).then(() => {
+              toast.success(t("common.copied"));
+            });
+          }}
+        >
+          {row.original.model}
+        </div>
       ),
     },
     {
@@ -100,7 +117,10 @@ export function ModelTable() {
         <div className="font-medium py-3.5">{t("model.modelType")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => openUpdateDialog(row.original)}
+        >
           {/* @ts-expect-error 动态翻译键 */}
           {t(`modeType.${row.original.type}`)}
         </div>
@@ -149,10 +169,19 @@ export function ModelTable() {
                       {t("model.availableChannels")}
                     </h4>
                     <div className="flex flex-col gap-1">
-                      {channels.map((channel) => (
+                      {[...channels].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).map((channel) => (
                         <div
                           key={channel.id}
-                          className="flex items-center gap-2"
+                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
+                          onClick={async () => {
+                            try {
+                              const fullChannel = await channelApi.getChannel(channel.id);
+                              setSelectedChannel(fullChannel);
+                              setChannelDialogOpen(true);
+                            } catch {
+                              toast.error(t("channel.fetchFailed"));
+                            }
+                          }}
                         >
                           <Badge variant="secondary" className="text-xs">
                             {channel.name}
@@ -183,7 +212,10 @@ export function ModelTable() {
         const plugin = row.original.plugin;
         if (!plugin) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
@@ -209,19 +241,25 @@ export function ModelTable() {
 
         if (enabledPlugins.length === 0) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
         }
 
         return (
-          <div className="flex flex-wrap gap-1">
+          <div
+            className="flex flex-wrap gap-1 cursor-pointer"
+            onClick={() => openUpdateDialog(row.original)}
+          >
             {enabledPlugins.map((pluginName) => (
               <Badge
                 key={pluginName}
                 variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
               >
                 {pluginName}
               </Badge>
@@ -407,6 +445,14 @@ export function ModelTable() {
           modelConfig={selectedModel}
         />
       )}
+
+      {/* Channel Edit Dialog */}
+      <ChannelDialog
+        open={channelDialogOpen}
+        onOpenChange={setChannelDialogOpen}
+        mode="update"
+        channel={selectedChannel}
+      />
     </>
   );
 }

@@ -15,6 +15,9 @@ export const logApi = {
         if (filters?.model) {
             params.append('model_name', filters.model)
         }
+        if (filters?.channel) {
+            params.append('channel', filters.channel.toString())
+        }
         if (filters?.start_timestamp) {
             params.append('start_timestamp', filters.start_timestamp.toString())
         }
@@ -45,8 +48,8 @@ export const logApi = {
         if (filters?.model) {
             params.append('model_name', filters.model)
         }
-        if (filters?.keyName) {
-            params.append('token_name', filters.keyName)
+        if (filters?.token_name) {
+            params.append('token_name', filters.token_name)
         }
         if (filters?.start_timestamp) {
             params.append('start_timestamp', filters.start_timestamp.toString())
@@ -65,15 +68,9 @@ export const logApi = {
         return response
     },
 
-    // 根据条件获取日志数据 - 统一入口
+    // 获取全局日志数据
     getLogData: async (filters?: LogFilters): Promise<LogResponse> => {
-        if (filters?.keyName) {
-            // 有keyName时使用分组API
-            return logApi.getLogsByGroup(filters.keyName, filters)
-        } else {
-            // 没有keyName时使用全局API
-            return logApi.getLogs(filters)
-        }
+        return logApi.getLogs(filters)
     },
     
     // 获取日志详情

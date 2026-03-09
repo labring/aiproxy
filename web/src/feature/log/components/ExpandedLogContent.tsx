@@ -6,37 +6,37 @@ import { JsonViewer } from './JsonViewer'
 import { useLogDetail } from '@/feature/log/hooks'
 import type { LogRecord, LogRequestDetail } from '@/types/log'
 
-// 日志详情组件 - 处理每行的展开内容
+// Format price with unit
+const formatPrice = (price: number, unit: number): string => {
+    if (!price) return '-'
+    if (unit > 0) return `${price}/${unit}`
+    return price.toString()
+}
+
 export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
     const { t } = useTranslation()
     const needsDetail = !!log.request_detail
     const [requestDetail, setRequestDetail] = useState<LogRequestDetail | null>(null)
-    
-    // 每一行都有自己的query
-    const { 
-        data: logDetail, 
-        isLoading: isLoadingDetail, 
-        error: logDetailError 
+
+    const {
+        data: logDetail,
+        isLoading: isLoadingDetail,
+        error: logDetailError
     } = useLogDetail(needsDetail ? log.id : null)
-    
-    // 当获取到数据时更新本地state
+
     useEffect(() => {
         if (logDetail) {
             setRequestDetail(logDetail)
         }
     }, [logDetail])
-    
-    // 当前的请求体和响应体
+
     const requestBody = needsDetail && requestDetail ? requestDetail.request_body : null
     const responseBody = needsDetail && requestDetail ? requestDetail.response_body : null
-    // 截断状态
     const requestTruncated = needsDetail && requestDetail ? requestDetail.request_body_truncated : false
     const responseTruncated = needsDetail && requestDetail ? requestDetail.response_body_truncated : false
-    // 加载中或出错
     const isLoadingData = needsDetail && isLoadingDetail
     const hasError = needsDetail && logDetailError
-    
-    // 计算请求耗时
+
     const calculateDuration = () => {
         if (!log.request_at || !log.created_at) return '-'
         const requestAt = new Date(log.request_at)
@@ -44,26 +44,31 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
         const duration = (createdAt.getTime() - requestAt.getTime()) / 1000
         return `${duration.toFixed(2)}s`
     }
-    
+
     return (
         <div className="p-4 space-y-4 bg-muted/50 border-t">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* 基本信息 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Basic info */}
                 <div className="space-y-2">
                     <h4 className="font-semibold text-sm">{t('log.basicInfo')}</h4>
                     <div className="space-y-1 text-sm">
                         <div><span className="font-medium">{t('log.id')}:</span> {log.id}</div>
-                        <div><span className="font-medium">{t('log.requestId')}:</span> {log.request_id}</div>
+                        <div><span className="font-medium">{t('log.requestId')}:</span> {log.request_id || '-'}</div>
+                        <div><span className="font-medium">{t('log.upstreamId')}:</span> {log.upstream_id || '-'}</div>
+                        <div><span className="font-medium">{t('log.group')}:</span> {log.group || '-'}</div>
                         <div><span className="font-medium">{t('log.keyName')}:</span> {log.token_name || '-'}</div>
                         <div><span className="font-medium">{t('log.model')}:</span> {log.model || '-'}</div>
                         <div><span className="font-medium">{t('log.channel')}:</span> {log.channel}</div>
+                        <div><span className="font-medium">{t('log.mode')}:</span> {t(`modeType.${log.mode}`, { defaultValue: log.mode?.toString() || '-' })}</div>
                         <div><span className="font-medium">{t('log.user')}:</span> {log.user || '-'}</div>
-                        <div><span className="font-medium">{t('log.ip')}:</span> {log.ip}</div>
-                        <div><span className="font-medium">{t('log.endpoint')}:</span> {log.endpoint}</div>
+                        <div><span className="font-medium">{t('log.ip')}:</span> {log.ip || '-'}</div>
+                        <div><span className="font-medium">{t('log.endpoint')}:</span> {log.endpoint || '-'}</div>
+                        <div><span className="font-medium">{t('log.usedAmount')}:</span> {log.used_amount ? `$${log.used_amount.toFixed(6)}` : '-'}</div>
+                        {log.content && <div><span className="font-medium">{t('log.content')}:</span> {log.content}</div>}
                     </div>
                 </div>
 
-                {/* Token信息 */}
+                {/* Token usage info */}
                 <div className="space-y-2">
                     <h4 className="font-semibold text-sm">{t('log.tokenInfo')}</h4>
                     <div className="space-y-1 text-sm">
@@ -78,7 +83,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                     </div>
                 </div>
 
-                {/* 时间信息 */}
+                {/* Time info */}
                 <div className="space-y-2">
                     <h4 className="font-semibold text-sm">{t('log.timeInfo')}</h4>
                     <div className="space-y-1 text-sm">
@@ -90,11 +95,43 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                         <div><span className="font-medium">{t('log.ttfb')}:</span> {log.ttfb_milliseconds || 0}ms</div>
                     </div>
                 </div>
+
+                {/* Price info */}
+                <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">{t('log.priceInfo')}</h4>
+                    <div className="space-y-1 text-sm">
+                        <div><span className="font-medium">{t('log.inputPrice')}:</span> {formatPrice(log.price?.input_price, log.price?.input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.outputPrice')}:</span> {formatPrice(log.price?.output_price, log.price?.output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.cacheCreationPrice')}:</span> {formatPrice(log.price?.cache_creation_price, log.price?.cache_creation_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.cachedPrice')}:</span> {formatPrice(log.price?.cached_price, log.price?.cached_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.imageInputPrice')}:</span> {formatPrice(log.price?.image_input_price, log.price?.image_input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.perRequestPrice')}:</span> {log.price?.per_request_price || '-'}</div>
+                        <div><span className="font-medium">{t('log.thinkingPrice')}:</span> {formatPrice(log.price?.thinking_mode_output_price, log.price?.thinking_mode_output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.webSearchPrice')}:</span> {formatPrice(log.price?.web_search_price, log.price?.web_search_price_unit)}</div>
+                    </div>
+                </div>
             </div>
+
+            {/* Metadata */}
+            {log.metadata && Object.keys(log.metadata).length > 0 && (
+                <>
+                    <Separator />
+                    <div className="space-y-2">
+                        <h4 className="font-semibold text-sm">{t('log.metadata')}</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(log.metadata).map(([key, value]) => (
+                                <span key={key} className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs">
+                                    <span className="font-medium">{key}:</span>&nbsp;{value}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
 
             <Separator />
 
-            {/* 请求和响应内容 */}
+            {/* Request and response body */}
             {needsDetail && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div>
@@ -157,4 +194,4 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
             )}
         </div>
     )
-} 
+}

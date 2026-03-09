@@ -50,7 +50,12 @@ export default function MonitorPage() {
     return (
         <div className="flex-1 space-y-4 p-6">
             {/* 过滤器 */}
-            <MonitorFilters onFiltersChange={handleFiltersChange} loading={isLoading} />
+            <MonitorFilters
+                onFiltersChange={handleFiltersChange}
+                loading={isLoading}
+                availableModels={data?.models}
+                availableChannels={data?.channels}
+            />
 
             {/* 错误显示 - 使用 AdvancedErrorDisplay 组件 */}
             {error && (

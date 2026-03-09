@@ -42,5 +42,25 @@ export const tokenApi = {
     updateTokenStatus: async (id: number, status: TokenStatusRequest): Promise<void> => {
         await post(`tokens/${id}/status`, status)
         return
+    },
+
+    getGroupTokens: async (group: string, page: number, perPage: number): Promise<TokensResponse> => {
+        const response = await get<TokensResponse>(`token/${group}`, {
+            params: {
+                p: page,
+                per_page: perPage
+            }
+        })
+        return response
+    },
+
+    createGroupToken: async (group: string, data: TokenCreateRequest): Promise<Token> => {
+        const response = await post<Token>(`token/${group}`, {
+            name: data.name,
+            quota: data.quota,
+            period_quota: data.period_quota,
+            period_type: data.period_type,
+        })
+        return response
     }
 }

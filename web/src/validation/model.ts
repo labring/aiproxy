@@ -69,6 +69,67 @@ const pluginSchema = z.object({
     }).optional(),
 }).optional()
 
+// Price condition schema
+const priceConditionSchema = z.object({
+    input_token_min: z.number().optional(),
+    input_token_max: z.number().optional(),
+    output_token_min: z.number().optional(),
+    output_token_max: z.number().optional(),
+    start_time: z.number().optional(),
+    end_time: z.number().optional(),
+})
+
+// Price schema (used for conditional prices)
+const basePriceSchema = z.object({
+    input_price: z.number().optional(),
+    input_price_unit: z.number().optional(),
+    output_price: z.number().optional(),
+    output_price_unit: z.number().optional(),
+    per_request_price: z.number().optional(),
+    cached_price: z.number().optional(),
+    cached_price_unit: z.number().optional(),
+    cache_creation_price: z.number().optional(),
+    cache_creation_price_unit: z.number().optional(),
+    image_input_price: z.number().optional(),
+    image_input_price_unit: z.number().optional(),
+    image_output_price: z.number().optional(),
+    image_output_price_unit: z.number().optional(),
+    audio_input_price: z.number().optional(),
+    audio_input_price_unit: z.number().optional(),
+    thinking_mode_output_price: z.number().optional(),
+    thinking_mode_output_price_unit: z.number().optional(),
+    web_search_price: z.number().optional(),
+    web_search_price_unit: z.number().optional(),
+})
+
+const conditionalPriceSchema = z.object({
+    condition: priceConditionSchema,
+    price: basePriceSchema,
+})
+
+export const priceSchema = z.object({
+    input_price: z.number().optional(),
+    input_price_unit: z.number().optional(),
+    output_price: z.number().optional(),
+    output_price_unit: z.number().optional(),
+    per_request_price: z.number().optional(),
+    cached_price: z.number().optional(),
+    cached_price_unit: z.number().optional(),
+    cache_creation_price: z.number().optional(),
+    cache_creation_price_unit: z.number().optional(),
+    image_input_price: z.number().optional(),
+    image_input_price_unit: z.number().optional(),
+    image_output_price: z.number().optional(),
+    image_output_price_unit: z.number().optional(),
+    audio_input_price: z.number().optional(),
+    audio_input_price_unit: z.number().optional(),
+    thinking_mode_output_price: z.number().optional(),
+    thinking_mode_output_price_unit: z.number().optional(),
+    web_search_price: z.number().optional(),
+    web_search_price_unit: z.number().optional(),
+    conditional_prices: z.array(conditionalPriceSchema).optional(),
+}).optional()
+
 export const modelCreateSchema = z.object({
     model: z.string().min(1, 'Model name is required'),
     type: z.number().min(0, 'Type is required'),
@@ -78,6 +139,7 @@ export const modelCreateSchema = z.object({
     timeout: z.number().nonnegative('Timeout must be a non-negative number').optional(),
     max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
     force_save_detail: z.boolean().optional(),
+    price: priceSchema,
     plugin: pluginSchema,
 })
 

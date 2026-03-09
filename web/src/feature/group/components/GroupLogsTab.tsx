@@ -1,35 +1,37 @@
+// src/feature/group/components/GroupLogsTab.tsx
 import { useState } from 'react'
-
-import { useLogs } from '@/feature/log/hooks'
-import { LogFilters } from '@/feature/log/components/LogFilters'
+import { useQuery } from '@tanstack/react-query'
+import { logApi } from '@/api/log'
 import { LogTable } from '@/feature/log/components/LogTable'
-import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
+import { LogFilters } from '@/feature/log/components/LogFilters'
 import type { LogFilters as LogFiltersType } from '@/types/log'
 
-export default function LogPage() {
+interface GroupLogsTabProps {
+    groupId: string
+}
 
+export function GroupLogsTab({ groupId }: GroupLogsTabProps) {
     const getDefaultFilters = (): LogFiltersType => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
-
         return {
             code_type: 'all',
             page: 1,
             per_page: 10,
             start_timestamp: sevenDaysAgo.getTime(),
-            end_timestamp: today.setHours(23, 59, 59, 999)
+            end_timestamp: new Date(today.setHours(23, 59, 59, 999)).getTime(),
         }
     }
 
     const [filters, setFilters] = useState<LogFiltersType>(getDefaultFilters())
 
-    const {
-        data: logData,
-        isLoading,
-        error,
-        refetch
-    } = useLogs(filters)
+    const { data, isLoading } = useQuery({
+        queryKey: ['groupLogs', groupId, filters],
+        queryFn: () => logApi.getLogsByGroup(groupId, filters),
+        refetchOnWindowFocus: true,
+        retry: false,
+    })
 
     const handleFiltersChange = (newFilters: LogFiltersType) => {
         setFilters(newFilters)
@@ -43,34 +45,20 @@ export default function LogPage() {
         setFilters(prev => ({ ...prev, per_page: pageSize, page: 1 }))
     }
 
-    const handleRetry = () => {
-        refetch()
-    }
-
     return (
-        <div className="h-screen flex flex-col">
-            <div className="flex-shrink-0 p-6 pb-2">
+        <div className="flex flex-col h-full gap-2">
+            <div className="flex-shrink-0">
                 <LogFilters
                     onFiltersChange={handleFiltersChange}
                     loading={isLoading}
-                    availableChannels={logData?.channels}
+                    availableModels={data?.models}
+                    availableTokenNames={data?.token_names}
                 />
-
-                {error && (
-                    <div className="mt-6">
-                        <AdvancedErrorDisplay
-                            error={error}
-                            onRetry={handleRetry}
-                            useCardStyle={true}
-                        />
-                    </div>
-                )}
             </div>
-
-            <div className="flex-1 px-6 pb-6 min-h-0">
+            <div className="flex-1 min-h-0">
                 <LogTable
-                    data={logData?.logs || []}
-                    total={logData?.total || 0}
+                    data={data?.logs || []}
+                    total={data?.total || 0}
                     loading={isLoading}
                     page={filters.page || 1}
                     pageSize={filters.per_page || 10}

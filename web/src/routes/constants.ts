@@ -2,6 +2,7 @@ export const BASE_PATH = '/' as const
 
 export const ROUTES = {
     MONITOR: "/monitor",
+    GROUP: "/group",
     KEY: "/key",
     CHANNEL: "/channel",
     MODEL: "/model",

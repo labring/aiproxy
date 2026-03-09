@@ -1,10 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { Search, RotateCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
     Select,
     SelectContent,
@@ -12,74 +11,82 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import { DashboardFilters } from '@/types/dashboard'
+import { Combobox } from '@/components/ui/combobox'
+import { channelApi } from '@/api/channel'
 
 interface MonitorFiltersProps {
     onFiltersChange: (filters: DashboardFilters) => void
     loading?: boolean
+    availableModels?: string[]
+    availableChannels?: number[]
 }
 
-export function MonitorFilters({ onFiltersChange, loading = false }: MonitorFiltersProps) {
+export function MonitorFilters({ onFiltersChange, loading = false, availableModels = [], availableChannels = [] }: MonitorFiltersProps) {
     const { t } = useTranslation()
 
-    // 计算默认日期范围（当前时间往前7天）
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
-
-        return {
-            from: sevenDaysAgo,
-            to: today
-        }
+        return { from: sevenDaysAgo, to: today }
     }
 
-    const [keyName, setKeyName] = useState('')
     const [model, setModel] = useState('')
+    const [channel, setChannel] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [timespan, setTimespan] = useState<'day' | 'hour'>('day')
 
-    // 获取客户端时区
-    const getClientTimezone = () => {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone
-    }
+    // Fetch channel names for the IDs returned by dashboard
+    const [channelNames, setChannelNames] = useState<Record<number, string>>({})
 
-    // 处理表单提交
+    useEffect(() => {
+        if (availableChannels.length === 0) return
+        // Only fetch names we don't already have
+        const missing = availableChannels.filter(id => !(id in channelNames))
+        if (missing.length === 0) return
+
+        Promise.all(
+            missing.map(id =>
+                channelApi.getChannel(id)
+                    .then(ch => ({ id, name: ch.name }))
+                    .catch(() => ({ id, name: `#${id}` }))
+            )
+        ).then(results => {
+            setChannelNames(prev => {
+                const next = { ...prev }
+                for (const r of results) next[r.id] = r.name
+                return next
+            })
+        })
+    }, [availableChannels]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
         const filters: DashboardFilters = {
-            keyName: keyName.trim() || undefined,
-            model: model.trim() || undefined,
+            model: model || undefined,
+            channel: channel ? Number(channel) : undefined,
             timespan,
             timezone: getClientTimezone(),
         }
-
-        // 处理日期范围
         if (dateRange?.from) {
             filters.start_timestamp = Math.floor(dateRange.from.getTime() / 1000)
         }
         if (dateRange?.to) {
-            // 将结束时间设置为当天的 23:59:59
             const endDate = new Date(dateRange.to)
             endDate.setHours(23, 59, 59, 999)
             filters.end_timestamp = Math.floor(endDate.getTime() / 1000)
         }
-
         onFiltersChange(filters)
     }
 
-    // 重置过滤器
     const handleReset = () => {
-        setKeyName('')
         setModel('')
+        setChannel('')
         const defaultDateRange = getDefaultDateRange()
         setDateRange(defaultDateRange)
         setTimespan('day')
@@ -93,52 +100,53 @@ export function MonitorFilters({ onFiltersChange, loading = false }: MonitorFilt
         onFiltersChange(filters)
     }
 
+    const modelOptions = useMemo(() =>
+        availableModels.map(m => ({ value: m, label: m })),
+        [availableModels]
+    )
+
+    const channelOptions = useMemo(() =>
+        availableChannels.map(id => ({
+            value: String(id),
+            label: channelNames[id] || `#${id}`,
+        })),
+        [availableChannels, channelNames]
+    )
+
     return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-4">
-                    {/* Key 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('monitor.filters.keyPlaceholder')}
-                                        value={keyName}
-                                        onChange={(e) => setKeyName(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('monitor.filters.keyPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    {/* Model 选择器 */}
+                    <div className="flex-1 min-w-0">
+                        <Combobox
+                            options={modelOptions}
+                            value={model}
+                            onValueChange={setModel}
+                            placeholder={t('monitor.filters.modelPlaceholder')}
+                            searchPlaceholder={t('monitor.filters.modelPlaceholder')}
+                            emptyText={t('common.noResult')}
+                            disabled={loading}
+                            className="h-10"
+                        />
+                    </div>
 
-                    {/* Model 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('monitor.filters.modelPlaceholder')}
-                                        value={model}
-                                        onChange={(e) => setModel(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('monitor.filters.modelPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    {/* Channel 选择器 */}
+                    <div className="flex-1 min-w-0">
+                        <Combobox
+                            options={channelOptions}
+                            value={channel}
+                            onValueChange={setChannel}
+                            placeholder={t('monitor.filters.channelPlaceholder')}
+                            searchPlaceholder={t('monitor.filters.channelPlaceholder')}
+                            emptyText={t('common.noResult')}
+                            disabled={loading}
+                            className="h-10"
+                        />
+                    </div>
 
-                    {/* 日期范围过滤器 */}
-                    <div className="min-w-48  max-w-72">
+                    {/* 日期范围 */}
+                    <div className="min-w-48 max-w-72">
                         <DateRangePicker
                             value={dateRange}
                             onChange={setDateRange}
@@ -148,7 +156,7 @@ export function MonitorFilters({ onFiltersChange, loading = false }: MonitorFilt
                         />
                     </div>
 
-                    {/* 时间粒度过滤器 */}
+                    {/* 时间粒度 */}
                     <div className="w-24">
                         <Select
                             value={timespan}
@@ -186,4 +194,4 @@ export function MonitorFilters({ onFiltersChange, loading = false }: MonitorFilt
             </form>
         </div>
     )
-} 
+}

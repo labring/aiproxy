@@ -1,12 +1,16 @@
 import { get } from './index'
 import { DashboardData, DashboardFilters } from '@/types/dashboard'
+import type { GroupDashboardModel } from '@/types/group'
 
 export const dashboardApi = {
     getDashboard: async (filters?: DashboardFilters): Promise<DashboardData> => {
         const params = new URLSearchParams()
-        
+
         if (filters?.model) {
             params.append('model', filters.model)
+        }
+        if (filters?.channel) {
+            params.append('channel', filters.channel.toString())
         }
         if (filters?.start_timestamp) {
             params.append('start_timestamp', filters.start_timestamp.toString())
@@ -28,14 +32,17 @@ export const dashboardApi = {
         return response
     },
 
-    getDashboardByGroup: async (group: string, filters?: DashboardFilters): Promise<DashboardData> => {
+    getDashboardByGroup: async (group: string, filters?: DashboardFilters & { tokenName?: string }): Promise<DashboardData> => {
         const params = new URLSearchParams()
-        
-        if (filters?.keyName) {
-            params.append('token_name', filters.keyName)
+
+        if (filters?.tokenName) {
+            params.append('token_name', filters.tokenName)
         }
         if (filters?.model) {
             params.append('model', filters.model)
+        }
+        if (filters?.channel) {
+            params.append('channel', filters.channel.toString())
         }
         if (filters?.start_timestamp) {
             params.append('start_timestamp', filters.start_timestamp.toString())
@@ -58,10 +65,11 @@ export const dashboardApi = {
     },
 
     getDashboardData: async (filters?: DashboardFilters): Promise<DashboardData> => {
-        if (filters?.keyName) {
-            return dashboardApi.getDashboardByGroup(filters.keyName, filters)
-        } else {
-            return dashboardApi.getDashboard(filters)
-        }
+        return dashboardApi.getDashboard(filters)
+    },
+
+    getGroupModels: async (group: string): Promise<GroupDashboardModel[]> => {
+        const response = await get<GroupDashboardModel[]>(`dashboard/${group}/models`)
+        return response
     }
 } 

@@ -13,6 +13,7 @@ import {
     Github,
     LogOut,
     MessageCircle,
+    Users,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
@@ -36,6 +37,12 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             title: t("sidebar.monitor"),
             icon: BarChart2,
             href: ROUTES.MONITOR,
+            display: true,
+        },
+        {
+            title: t("sidebar.group"),
+            icon: Users,
+            href: ROUTES.GROUP,
             display: true,
         },
         {
@@ -87,6 +94,7 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
 
 interface SidebarDisplayConfig {
     monitor?: boolean
+    group?: boolean
     key?: boolean
     channel?: boolean
     model?: boolean
@@ -113,6 +121,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
     const sidebarItems = createSidebarConfig(t).map((item) => {
         // Determine which config property based on path name
         let configKey: keyof SidebarDisplayConfig = "monitor"
+        if (item.href === ROUTES.GROUP) configKey = "group"
         if (item.href === ROUTES.KEY) configKey = "key"
         if (item.href === ROUTES.CHANNEL) configKey = "channel"
         if (item.href === ROUTES.MODEL) configKey = "model"

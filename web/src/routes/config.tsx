@@ -11,6 +11,7 @@ import TokenPage from "@/pages/token/page"
 import MonitorPage from "@/pages/monitor/page"
 import LogPage from "@/pages/log/page"
 import MCPPage from "@/pages/mcp/page"
+import GroupPage from "@/pages/group/page"
 
 // import layout component directly
 import { RootLayout } from "@/components/layout/RootLayOut"
@@ -49,6 +50,10 @@ export function useRoutes(): RouteObject[] {
                 {
                     path: ROUTES.MONITOR,
                     element: <MonitorPage />,
+                },
+                {
+                    path: ROUTES.GROUP,
+                    element: <GroupPage />,
                 },
                 {
                     path: ROUTES.KEY,

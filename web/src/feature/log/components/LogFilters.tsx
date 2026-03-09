@@ -19,51 +19,58 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
-import type { LogFilters } from '@/types/log'
+import type { LogFilters as LogFiltersType } from '@/types/log'
 
 interface LogFiltersProps {
-    onFiltersChange: (filters: LogFilters) => void
+    onFiltersChange: (filters: LogFiltersType) => void
     loading?: boolean
+    availableModels?: string[]
+    availableTokenNames?: string[]
+    availableChannels?: number[]
 }
 
-export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps) {
+export function LogFilters({
+    onFiltersChange,
+    loading = false,
+    availableModels,
+    availableTokenNames,
+    availableChannels,
+}: LogFiltersProps) {
     const { t } = useTranslation()
 
-    // 计算默认日期范围（当前时间往前7天）
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
-
-        return {
-            from: sevenDaysAgo,
-            to: today
-        }
+        return { from: sevenDaysAgo, to: today }
     }
 
-    const [keyName, setKeyName] = useState('')
     const [model, setModel] = useState('')
+    const [tokenName, setTokenName] = useState('')
+    const [channel, setChannel] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [codeType, setCodeType] = useState<'all' | 'success' | 'error'>('all')
 
-    // 处理表单提交
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
-        const filters: LogFilters = {
-            keyName: keyName.trim() || undefined,
-            model: model.trim() || undefined,
+        const effectiveModel = model === '__all__' ? '' : model
+        const effectiveTokenName = tokenName === '__all__' ? '' : tokenName
+        const effectiveChannel = channel === '__all__' ? '' : channel
+
+        const filters: LogFiltersType = {
+            model: effectiveModel.trim() || undefined,
+            token_name: effectiveTokenName.trim() || undefined,
+            channel: effectiveChannel ? parseInt(effectiveChannel) : undefined,
             code_type: codeType,
-            page: 1, // 重置到第一页
+            page: 1,
             per_page: 10
         }
 
-        // 处理日期范围
         if (dateRange?.from) {
             filters.start_timestamp = dateRange.from.getTime()
         }
         if (dateRange?.to) {
-            // 将结束时间设置为当天的 23:59:59
             const endDate = new Date(dateRange.to)
             endDate.setHours(23, 59, 59, 999)
             filters.end_timestamp = endDate.getTime()
@@ -72,15 +79,15 @@ export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps
         onFiltersChange(filters)
     }
 
-    // 重置过滤器
     const handleReset = () => {
-        setKeyName('')
         setModel('')
+        setTokenName('')
+        setChannel('')
         const defaultDateRange = getDefaultDateRange()
         setDateRange(defaultDateRange)
         setCodeType('all')
 
-        const filters: LogFilters = {
+        const filters: LogFiltersType = {
             code_type: 'all',
             page: 1,
             per_page: 10,
@@ -90,58 +97,103 @@ export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps
         onFiltersChange(filters)
     }
 
+    const showTokenName = !!availableTokenNames
+    const showChannel = !!availableChannels
+
     return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
-                <div className="flex items-center gap-4">
-                    {/* Key Name 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('log.filters.keyPlaceholder')}
-                                        value={keyName}
-                                        onChange={(e) => setKeyName(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('log.filters.keyPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                <div className="flex items-center gap-3 flex-wrap">
+                    {/* Model filter */}
+                    {availableModels && availableModels.length > 0 ? (
+                        <div className="w-44">
+                            <Select value={model} onValueChange={setModel} disabled={loading}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={t('log.filters.modelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableModels.map((m) => (
+                                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    ) : (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex-1 min-w-0">
+                                        <Input
+                                            placeholder={t('log.filters.modelPlaceholder')}
+                                            value={model}
+                                            onChange={(e) => setModel(e.target.value)}
+                                            disabled={loading}
+                                            className="h-9"
+                                        />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{t('log.filters.modelPlaceholder')}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
 
-                    {/* Model 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('log.filters.modelPlaceholder')}
-                                        value={model}
-                                        onChange={(e) => setModel(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('log.filters.modelPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    {/* Token name filter */}
+                    {showTokenName && (
+                        <div className="w-44">
+                            {availableTokenNames!.length > 0 ? (
+                                <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder={t('log.filters.tokenNamePlaceholder')} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                        {availableTokenNames!.map((name) => (
+                                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Input
+                                    placeholder={t('log.filters.tokenNamePlaceholder')}
+                                    value={tokenName}
+                                    onChange={(e) => setTokenName(e.target.value)}
+                                    disabled={loading}
+                                    className="h-9"
+                                />
+                            )}
+                        </div>
+                    )}
 
-                    {/* 状态过滤器 */}
-                    <div className="w-32">
+                    {/* Channel filter */}
+                    {showChannel && availableChannels!.length > 0 && (
+                        <div className="w-36">
+                            <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableChannels!.map((ch) => (
+                                        <SelectItem key={ch} value={String(ch)}>
+                                            {t('log.channel')} {ch}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Status filter */}
+                    <div className="w-28">
                         <Select
                             value={codeType}
                             onValueChange={(value: 'all' | 'success' | 'error') => setCodeType(value)}
                             disabled={loading}
                         >
-                            <SelectTrigger className="h-10">
+                            <SelectTrigger className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -152,21 +204,21 @@ export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps
                         </Select>
                     </div>
 
-                    {/* 日期范围过滤器 */}
-                    <div className="min-w-48 max-w-72">
+                    {/* Date range */}
+                    <div className="min-w-44 max-w-64">
                         <DateRangePicker
                             value={dateRange}
                             onChange={setDateRange}
                             placeholder={t('log.filters.dateRangePlaceholder')}
                             disabled={loading}
-                            className="h-10"
+                            className="h-9"
                         />
                     </div>
 
-                    {/* 操作按钮 */}
+                    {/* Action buttons */}
                     <div className="flex gap-2 flex-shrink-0">
-                        <Button type="submit" disabled={loading} className="h-10 px-4">
-                            <Search className="h-4 w-4 mr-2" />
+                        <Button type="submit" disabled={loading} className="h-9 px-3" size="sm">
+                            <Search className="h-3.5 w-3.5 mr-1.5" />
                             {loading ? t('common.loading') : t('log.filters.search')}
                         </Button>
                         <Button
@@ -174,9 +226,10 @@ export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps
                             variant="outline"
                             onClick={handleReset}
                             disabled={loading}
-                            className="h-10 px-4"
+                            className="h-9 px-3"
+                            size="sm"
                         >
-                            <RotateCcw className="h-4 w-4 mr-2" />
+                            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                             {t('log.filters.reset')}
                         </Button>
                     </div>
@@ -184,4 +237,4 @@ export function LogFilters({ onFiltersChange, loading = false }: LogFiltersProps
             </form>
         </div>
     )
-} 
+}

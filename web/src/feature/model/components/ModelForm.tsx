@@ -27,11 +27,12 @@ import { modelCreateSchema } from '@/validation/model'
 import { useCreateModel, useUpdateModel } from '../hooks'
 import { useTranslation } from 'react-i18next'
 import { ModelCreateForm } from '@/validation/model'
-import { Plugin, EngineConfig } from '@/types/model'
+import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest } from '@/types/model'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { useState } from 'react'
 import { ENV } from '@/utils/env'
+import { PriceFormFields } from '@/components/price/PriceFormFields'
 import { ValidationErrorDisplay } from '@/components/common/error/validationErrorDisplay'
 
 interface ModelFormProps {
@@ -46,6 +47,7 @@ interface ModelFormProps {
         timeout?: number
         max_error_rate?: number
         force_save_detail?: boolean
+        price?: ModelPrice
         plugin?: Plugin
     }
 }
@@ -60,7 +62,8 @@ export function ModelForm({
 }: ModelFormProps) {
     const { t } = useTranslation()
 
-    // Plugin configuration expanded states
+    // Collapsible expanded states
+    const [priceExpanded, setPriceExpanded] = useState(false)
     const [cachePluginExpanded, setCachePluginExpanded] = useState(false)
     const [webSearchPluginExpanded, setWebSearchPluginExpanded] = useState(false)
 
@@ -97,6 +100,7 @@ export function ModelForm({
             timeout: defaultValues.timeout,
             max_error_rate: defaultValues.max_error_rate,
             force_save_detail: defaultValues.force_save_detail ?? false,
+            price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
                 "web-search": { enable: false, search_from: [], ...defaultValues.plugin?.["web-search"] },
@@ -281,18 +285,23 @@ export function ModelForm({
             })
         }
 
+        // Clean price data - remove zero/undefined values
+        const cleanPrice = (p: ModelPrice | undefined) => {
+            if (!p) return undefined
+            const cleaned: Record<string, unknown> = {}
+            for (const [k, v] of Object.entries(p)) {
+                if (k === 'conditional_prices') {
+                    if (Array.isArray(v) && v.length > 0) cleaned[k] = v
+                } else if (v !== undefined && v !== 0) {
+                    cleaned[k] = v
+                }
+            }
+            return Object.keys(cleaned).length > 0 ? cleaned : undefined
+        }
+        const priceData = cleanPrice(data.price as ModelPrice | undefined)
+
         // Prepare data for API - 如果没有启用的插件，则不传递 plugin 字段
-        const formData: { 
-            model?: string; 
-            type: number; 
-            rpm?: number;
-            tpm?: number;
-            retry_times?: number;
-            timeout?: number;
-            max_error_rate?: number;
-            force_save_detail?: boolean;
-            plugin?: Plugin 
-        } = {
+        const formData: Omit<ModelCreateRequest, 'model'> = {
             type: Number(data.type),
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
@@ -300,6 +309,7 @@ export function ModelForm({
             ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
             ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
+            ...(priceData && { price: priceData }),
             ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
         }
 
@@ -314,6 +324,7 @@ export function ModelForm({
                 ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
                 ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
+                ...(priceData && { price: priceData }),
                 ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
             }, {
                 onSuccess: () => {
@@ -535,13 +546,30 @@ export function ModelForm({
                         )}
                     />
 
+                    {/* Price Configuration Section */}
+                    <Collapsible open={priceExpanded} onOpenChange={setPriceExpanded}>
+                        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="text-left">
+                                <h3 className="text-sm font-medium">{t("group.price.title")}</h3>
+                                <p className="text-xs text-muted-foreground">{t("group.price.description")}</p>
+                            </div>
+                            {priceExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-3 px-1">
+                            <PriceFormFields
+                                price={(form.watch('price') || {}) as ModelPrice}
+                                onChange={(p) => form.setValue('price', p as ModelCreateForm['price'])}
+                            />
+                        </CollapsibleContent>
+                    </Collapsible>
+
                     {/* Plugin Configuration Section */}
                     <div className="space-y-6">
                         <div>
                             <h3 className="text-lg font-medium">{t("model.dialog.pluginConfiguration")}</h3>
                             <p className="text-sm text-muted-foreground">{t("model.dialog.pluginConfigurationDescription")}</p>
                         </div>
-                        
+
                         <hr className="border-border" />
 
                         {/* Cache Plugin */}
