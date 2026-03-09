@@ -162,7 +162,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.usedAmount')}
-                value={`$${agg.used_amount.toFixed(4)}`}
+                value={`$${(agg.used_amount || 0).toFixed(4)}`}
                 icon={<DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />}
                 bgColor="bg-green-50 dark:bg-green-950/30"
                 iconColor="bg-green-100 dark:bg-green-900/50"

@@ -108,6 +108,10 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const webSearchCount = summary.reduce((acc, s) => acc + (s.web_search_count || 0), 0)
         const usedAmount = summary.reduce((acc, s) => acc + (s.used_amount || 0), 0)
 
+        // Non-overlapping text portions (subtract sub-categories from totals)
+        const textInputTokens = Math.max(0, inputTokens - imageInputTokens - audioInputTokens - cachedTokens - cacheCreationTokens)
+        const textOutputTokens = Math.max(0, outputTokens - imageOutputTokens)
+
         const status2xxCount = summary.reduce((acc, s) => acc + (s.status_2xx_count || 0), 0)
         const status4xxCount = summary.reduce((acc, s) => acc + (s.status_4xx_count || 0), 0)
         const status5xxCount = summary.reduce((acc, s) => acc + (s.status_5xx_count || 0), 0)
@@ -163,9 +167,11 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             status500Count,
             retryCount,
             inputTokens,
+            textInputTokens,
             imageInputTokens,
             audioInputTokens,
             outputTokens,
+            textOutputTokens,
             imageOutputTokens,
             cachedTokens,
             cacheCreationTokens,
@@ -220,17 +226,17 @@ function computeDashboardResult(
     function mergeInto(map: Map<string, ModelSummary>, key: string, s: ModelSummary) {
         const existing = map.get(key)
         if (existing) {
-            existing.request_count += s.request_count
-            existing.exception_count += s.exception_count
-            existing.used_amount += s.used_amount
-            existing.total_time_milliseconds += s.total_time_milliseconds
-            existing.total_ttfb_milliseconds += s.total_ttfb_milliseconds
-            existing.input_tokens += s.input_tokens
-            existing.output_tokens += s.output_tokens
-            existing.cached_tokens += s.cached_tokens
-            existing.total_tokens += s.total_tokens
-            if (s.max_rpm > existing.max_rpm) existing.max_rpm = s.max_rpm
-            if (s.max_tpm > existing.max_tpm) existing.max_tpm = s.max_tpm
+            existing.request_count += (s.request_count || 0)
+            existing.exception_count += (s.exception_count || 0)
+            existing.used_amount += (s.used_amount || 0)
+            existing.total_time_milliseconds += (s.total_time_milliseconds || 0)
+            existing.total_ttfb_milliseconds += (s.total_ttfb_milliseconds || 0)
+            existing.input_tokens += (s.input_tokens || 0)
+            existing.output_tokens += (s.output_tokens || 0)
+            existing.cached_tokens += (s.cached_tokens || 0)
+            existing.total_tokens += (s.total_tokens || 0)
+            if ((s.max_rpm || 0) > existing.max_rpm) existing.max_rpm = s.max_rpm
+            if ((s.max_tpm || 0) > existing.max_tpm) existing.max_tpm = s.max_tpm
         } else {
             map.set(key, { ...s })
         }
@@ -238,21 +244,21 @@ function computeDashboardResult(
 
     for (const ts of timeSeries) {
         for (const s of ts.summary) {
-            agg.request_count += s.request_count
-            agg.exception_count += s.exception_count
-            agg.used_amount += s.used_amount
-            agg.total_time_milliseconds += s.total_time_milliseconds
-            agg.total_ttfb_milliseconds += s.total_ttfb_milliseconds
-            agg.input_tokens += s.input_tokens
-            agg.output_tokens += s.output_tokens
+            agg.request_count += (s.request_count || 0)
+            agg.exception_count += (s.exception_count || 0)
+            agg.used_amount += (s.used_amount || 0)
+            agg.total_time_milliseconds += (s.total_time_milliseconds || 0)
+            agg.total_ttfb_milliseconds += (s.total_ttfb_milliseconds || 0)
+            agg.input_tokens += (s.input_tokens || 0)
+            agg.output_tokens += (s.output_tokens || 0)
             agg.cached_tokens += (s.cached_tokens || 0)
             agg.cache_creation_tokens += (s.cache_creation_tokens || 0)
             agg.cache_hit_count += (s.cache_hit_count || 0)
             agg.cache_creation_count += (s.cache_creation_count || 0)
-            agg.total_tokens += s.total_tokens
+            agg.total_tokens += (s.total_tokens || 0)
             agg.web_search_count += (s.web_search_count || 0)
-            if (s.max_rpm > agg.max_rpm) agg.max_rpm = s.max_rpm
-            if (s.max_tpm > agg.max_tpm) agg.max_tpm = s.max_tpm
+            if ((s.max_rpm || 0) > agg.max_rpm) agg.max_rpm = s.max_rpm
+            if ((s.max_tpm || 0) > agg.max_tpm) agg.max_tpm = s.max_tpm
 
             // Top-level: by model only
             mergeInto(modelRankMap, s.model, s)

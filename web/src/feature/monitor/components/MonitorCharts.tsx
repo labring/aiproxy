@@ -318,62 +318,21 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                             const callsSeries = [
                                 {
                                     name: t('monitor.charts.totalCalls'),
-                                    type: 'line' as const,
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 2, color: '#3b82f6' },
-                                    itemStyle: { color: '#3b82f6' },
-                                    areaStyle: {
-                                        color: {
-                                            type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1,
-                                            colorStops: [
-                                                { offset: 0, color: '#3b82f6' + (isDarkMode ? '30' : '20') },
-                                                { offset: 1, color: '#3b82f605' },
-                                            ],
-                                        },
-                                    },
+                                    color: '#3b82f6',
                                     data: makeData('totalCalls', requestsMode),
                                 },
                                 {
                                     name: t('monitor.charts.errorCalls'),
-                                    type: 'line' as const,
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 2, color: '#ef4444' },
-                                    itemStyle: { color: '#ef4444' },
-                                    areaStyle: {
-                                        color: {
-                                            type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1,
-                                            colorStops: [
-                                                { offset: 0, color: '#ef4444' + (isDarkMode ? '30' : '20') },
-                                                { offset: 1, color: '#ef444405' },
-                                            ],
-                                        },
-                                    },
+                                    color: '#ef4444',
                                     data: makeData('errorCalls', requestsMode),
                                 },
-                            ]
-                            if (!isGroup) {
-                                callsSeries.push({
+                                ...(!isGroup ? [{
                                     name: t('monitor.charts.retryCount'),
-                                    type: 'line' as const,
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 2, color: '#8b5cf6' },
-                                    itemStyle: { color: '#8b5cf6' },
-                                    areaStyle: {
-                                        color: {
-                                            type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1,
-                                            colorStops: [
-                                                { offset: 0, color: '#8b5cf6' + (isDarkMode ? '30' : '20') },
-                                                { offset: 1, color: '#8b5cf605' },
-                                            ],
-                                        },
-                                    },
+                                    color: '#8b5cf6',
                                     data: makeData('retryCount', requestsMode),
-                                })
-                            }
-                            const colors = isGroup ? ['#3b82f6', '#ef4444'] : ['#3b82f6', '#ef4444', '#8b5cf6']
+                                }] : []),
+                            ]
+                            const colors = callsSeries.map(s => s.color)
                             return {
                                 backgroundColor: 'transparent',
                                 color: colors,
@@ -417,7 +376,24 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     axisTick: { show: false },
                                     splitLine: { lineStyle: { color: themeColors.splitLineColor, type: 'dashed' } },
                                 },
-                                series: callsSeries,
+                                series: callsSeries.map(s => ({
+                                    name: s.name,
+                                    type: 'line' as const,
+                                    smooth: true,
+                                    showSymbol: false,
+                                    lineStyle: { width: 2, color: s.color },
+                                    itemStyle: { color: s.color },
+                                    areaStyle: {
+                                        color: {
+                                            type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1,
+                                            colorStops: [
+                                                { offset: 0, color: s.color + (isDarkMode ? '30' : '20') },
+                                                { offset: 1, color: s.color + '05' },
+                                            ],
+                                        },
+                                    },
+                                    data: s.data,
+                                })),
                                 animation: true,
                                 animationDuration: 600,
                             }
@@ -438,133 +414,75 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
             {/* HTTP Status - full width */}
             <ChartBox title={t('monitor.charts.httpStatus')}>
                 <EChart
-                        option={{
-                            backgroundColor: 'transparent',
-                            tooltip: {
-                                trigger: 'axis',
-                                backgroundColor: themeColors.tooltipBg,
-                                borderColor: themeColors.tooltipBorder,
-                                borderWidth: 1,
-                                borderRadius: 8,
-                                textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                                formatter: (params: any) => {
-                                    const ps = Array.isArray(params) ? params : [params]
-                                    const idx = ps[0]?.dataIndex
-                                    const point = chartData[idx]
-                                    let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
-                                    for (const p of ps) {
-                                        if (p.value > 0) {
-                                            html += `<div>${p.marker} ${p.seriesName}: ${Number(p.value).toLocaleString()}</div>`
+                        option={(() => {
+                            const statusSeries: { name: string; color: string; data: number[] }[] = [
+                                { name: '2xx', color: '#22c55e', data: chartData.map(d => d.status2xxCount) },
+                                { name: '400', color: '#f59e0b', data: chartData.map(d => d.status400Count) },
+                                { name: '429', color: '#f97316', data: chartData.map(d => d.status429Count) },
+                                { name: t('monitor.charts.other4xx'), color: '#eab308', data: chartData.map(d => Math.max(0, d.status4xxCount - d.status400Count - d.status429Count)) },
+                                { name: '500', color: '#ef4444', data: chartData.map(d => d.status500Count) },
+                                { name: t('monitor.charts.other5xx'), color: '#dc2626', data: chartData.map(d => Math.max(0, d.status5xxCount - d.status500Count)) },
+                                { name: t('monitor.charts.statusOther'), color: '#6b7280', data: chartData.map(d => d.statusOtherCount) },
+                            ]
+                            return {
+                                backgroundColor: 'transparent',
+                                color: statusSeries.map(s => s.color),
+                                tooltip: {
+                                    trigger: 'axis',
+                                    backgroundColor: themeColors.tooltipBg,
+                                    borderColor: themeColors.tooltipBorder,
+                                    borderWidth: 1,
+                                    borderRadius: 8,
+                                    textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
+                                    formatter: (params: any) => {
+                                        const ps = Array.isArray(params) ? params : [params]
+                                        const idx = ps[0]?.dataIndex
+                                        const point = chartData[idx]
+                                        let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
+                                        for (const p of ps) {
+                                            if (p.value > 0) {
+                                                html += `<div>${p.marker} ${p.seriesName}: ${Number(p.value).toLocaleString()}</div>`
+                                            }
                                         }
+                                        html += '</div>'
+                                        return html
                                     }
-                                    html += '</div>'
-                                    return html
-                                }
-                            },
-                            color: ['#22c55e', '#f59e0b', '#f97316', '#eab308', '#ef4444', '#dc2626', '#6b7280'],
-                            legend: {
-                                bottom: 0,
-                                textStyle: { color: themeColors.textColor, fontSize: 11 },
-                                itemWidth: 12, itemHeight: 8,
-                            },
-                            grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
-                            xAxis: {
-                                type: 'category',
-                                boundaryGap: false,
-                                data: xLabels,
-                                axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                                axisLabel: { color: themeColors.textColor, fontSize: 11 },
-                                axisTick: { show: false },
-                            },
-                            yAxis: {
-                                type: 'value',
-                                axisLine: { show: false },
-                                axisLabel: { color: themeColors.textColor, fontSize: 11, formatter: defaultAxisFormatter },
-                                axisTick: { show: false },
-                                splitLine: { lineStyle: { color: themeColors.splitLineColor, type: 'dashed' } },
-                            },
-                            series: [
-                                {
-                                    name: '2xx',
-                                    type: 'line',
-                                    stack: 'status',
+                                },
+                                legend: {
+                                    bottom: 0,
+                                    textStyle: { color: themeColors.textColor, fontSize: 11 },
+                                    itemWidth: 12, itemHeight: 8,
+                                },
+                                grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                                xAxis: {
+                                    type: 'category',
+                                    boundaryGap: false,
+                                    data: xLabels,
+                                    axisLine: { lineStyle: { color: themeColors.axisLineColor } },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                    axisTick: { show: false },
+                                },
+                                yAxis: {
+                                    type: 'value',
+                                    axisLine: { show: false },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11, formatter: defaultAxisFormatter },
+                                    axisTick: { show: false },
+                                    splitLine: { lineStyle: { color: themeColors.splitLineColor, type: 'dashed' } },
+                                },
+                                series: statusSeries.map(s => ({
+                                    name: s.name,
+                                    type: 'line' as const,
                                     smooth: true,
                                     showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#22c55e' },
-                                    itemStyle: { color: '#22c55e' },
-                                    areaStyle: { color: '#22c55e' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => d.status2xxCount),
-                                },
-                                {
-                                    name: '400',
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#f59e0b' },
-                                    itemStyle: { color: '#f59e0b' },
-                                    areaStyle: { color: '#f59e0b' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => d.status400Count),
-                                },
-                                {
-                                    name: '429',
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#f97316' },
-                                    itemStyle: { color: '#f97316' },
-                                    areaStyle: { color: '#f97316' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => d.status429Count),
-                                },
-                                {
-                                    name: t('monitor.charts.other4xx'),
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#eab308' },
-                                    itemStyle: { color: '#eab308' },
-                                    areaStyle: { color: '#eab308' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => Math.max(0, d.status4xxCount - d.status400Count - d.status429Count)),
-                                },
-                                {
-                                    name: '500',
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#ef4444' },
-                                    itemStyle: { color: '#ef4444' },
-                                    areaStyle: { color: '#ef4444' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => d.status500Count),
-                                },
-                                {
-                                    name: t('monitor.charts.other5xx'),
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#dc2626' },
-                                    itemStyle: { color: '#dc2626' },
-                                    areaStyle: { color: '#dc2626' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => Math.max(0, d.status5xxCount - d.status500Count)),
-                                },
-                                {
-                                    name: t('monitor.charts.statusOther'),
-                                    type: 'line',
-                                    stack: 'status',
-                                    smooth: true,
-                                    showSymbol: false,
-                                    lineStyle: { width: 1.5, color: '#6b7280' },
-                                    itemStyle: { color: '#6b7280' },
-                                    areaStyle: { color: '#6b7280' + (isDarkMode ? '40' : '30') },
-                                    data: chartData.map(d => d.statusOtherCount),
-                                },
-                            ],
-                            animation: true,
-                            animationDuration: 600,
-                        }}
+                                    lineStyle: { width: 1.5, color: s.color },
+                                    itemStyle: { color: s.color },
+                                    areaStyle: { color: s.color + (isDarkMode ? '40' : '30') },
+                                    data: s.data,
+                                })),
+                                animation: true,
+                                animationDuration: 600,
+                            }
+                        })()}
                         style={{ width: '100%', height: '100%' }}
                     />
             </ChartBox>
@@ -588,14 +506,13 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                     <EChart
                         option={(() => {
                             const tokenSeries: { key: keyof ChartDataPoint; name: string; color: string }[] = [
-                                { key: 'inputTokens', name: t('monitor.charts.tokensBreakdown.input'), color: '#3b82f6' },
-                                { key: 'imageInputTokens', name: t('monitor.charts.tokensBreakdown.imageInput'), color: '#06b6d4' },
-                                { key: 'audioInputTokens', name: t('monitor.charts.tokensBreakdown.audioInput'), color: '#8b5cf6' },
-                                { key: 'outputTokens', name: t('monitor.charts.tokensBreakdown.output'), color: '#10b981' },
-                                { key: 'imageOutputTokens', name: t('monitor.charts.tokensBreakdown.imageOutput'), color: '#14b8a6' },
-                                { key: 'reasoningTokens', name: t('monitor.charts.tokensBreakdown.reasoning'), color: '#f59e0b' },
+                                { key: 'textInputTokens', name: t('monitor.charts.tokensBreakdown.input'), color: '#3b82f6' },
                                 { key: 'cachedTokens', name: t('monitor.charts.tokensBreakdown.cached'), color: '#6366f1' },
                                 { key: 'cacheCreationTokens', name: t('monitor.charts.tokensBreakdown.cacheCreation'), color: '#a78bfa' },
+                                { key: 'imageInputTokens', name: t('monitor.charts.tokensBreakdown.imageInput'), color: '#06b6d4' },
+                                { key: 'audioInputTokens', name: t('monitor.charts.tokensBreakdown.audioInput'), color: '#8b5cf6' },
+                                { key: 'textOutputTokens', name: t('monitor.charts.tokensBreakdown.output'), color: '#10b981' },
+                                { key: 'imageOutputTokens', name: t('monitor.charts.tokensBreakdown.imageOutput'), color: '#14b8a6' },
                             ]
                             // Filter out series that have no data at all
                             const activeSeries = tokenSeries.filter(s =>
@@ -649,7 +566,6 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 series: activeSeries.map(s => ({
                                     name: s.name,
                                     type: 'line' as const,
-                                    stack: 'tokens',
                                     smooth: true,
                                     showSymbol: false,
                                     lineStyle: { width: 1.5, color: s.color },
