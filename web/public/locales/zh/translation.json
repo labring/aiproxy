@@ -206,6 +206,7 @@
     "noResults": "未找到模型",
     "apiDetails": "API 详情",
     "pluginInfo": "插件信息",
+    "priceColumn": "价格",
     "noPluginConfigured": "未配置插件",
     "pluginEnabled": "已启用",
     "pluginDisabled": "已禁用",

@@ -67,9 +67,6 @@ export function ChannelForm({
     const [modelDialogOpen, setModelDialogOpen] = useState(false)
     const [isUserSubmitting, setIsUserSubmitting] = useState(false)
 
-    // Log component props for debugging
-    console.log('ChannelForm rendered with props:', { mode, channelId, hasChannel: !!channel });
-
     // 获取渠道类型元数据
     const { data: typeMetas, isLoading: isTypeMetasLoading } = useChannelTypeMetas()
 
@@ -128,7 +125,6 @@ export function ChannelForm({
     const handleFormSubmit = (data: ChannelCreateForm) => {
         // 只有在用户主动提交时才处理
         if (!isUserSubmitting) {
-            console.log('Form submission prevented - not explicitly triggered by user')
             return
         }
         
@@ -149,49 +145,28 @@ export function ChannelForm({
             priority: data.priority || 10
         }
 
-        console.log('Submitting form data:', { mode, channelId, formData });
-        console.dir({ mode, channelId, formData }, { depth: null });
-
         if (mode === 'create') {
             createChannel(formData, {
                 onSuccess: () => {
-                    console.log('Channel created successfully');
                     form.reset()
                     if (onSuccess) onSuccess()
                 },
-                onError: (error) => {
-                    console.error('Failed to create channel:', error);
-                }
             })
         } else if (mode === 'update') {
-            // Check for channelId
             if (!channelId) {
-                console.error('Cannot update: missing channelId');
                 toast.error('更新失败：缺少渠道ID');
                 return;
             }
 
-            console.log('Updating channel with ID:', channelId);
-            // Use explicit typing to ensure id is a number
-            const updateId: number = typeof channelId === 'string' ? parseInt(channelId) : channelId;
-            
-            updateChannel({ 
-                id: updateId, 
-                data: formData 
+            updateChannel({
+                id: channelId,
+                data: formData
             }, {
                 onSuccess: () => {
-                    console.log('Channel updated successfully');
-                    toast.success('渠道更新成功');
                     form.reset()
                     if (onSuccess) onSuccess()
                 },
-                onError: (error) => {
-                    console.error('Failed to update channel:', error);
-                    toast.error('更新渠道失败');
-                }
             })
-        } else {
-            console.error('Unknown mode:', mode);
         }
     }
 

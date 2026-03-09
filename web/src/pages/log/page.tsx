@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 
 import { useLogs } from '@/feature/log/hooks'
 import { LogFilters } from '@/feature/log/components/LogFilters'
 import { LogTable } from '@/feature/log/components/LogTable'
+import { GroupDialog } from '@/feature/group/components/GroupDialog'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import type { LogFilters as LogFiltersType } from '@/types/log'
 
@@ -23,6 +24,11 @@ export default function LogPage() {
     }
 
     const [filters, setFilters] = useState<LogFiltersType>(getDefaultFilters())
+
+    // GroupDialog 状态
+    const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+    const [groupDialogGroupId, setGroupDialogGroupId] = useState<string | null>(null)
+    const [groupDialogTokenName, setGroupDialogTokenName] = useState<string | undefined>()
 
     const {
         data: logData,
@@ -47,8 +53,15 @@ export default function LogPage() {
         refetch()
     }
 
+    // 点击 group/token_name → 打开 GroupDialog 的日志标签
+    const handleOpenGroupLog = useCallback((group: string, tokenName?: string) => {
+        setGroupDialogGroupId(group)
+        setGroupDialogTokenName(tokenName)
+        setGroupDialogOpen(true)
+    }, [])
+
     return (
-        <div className="h-screen flex flex-col">
+        <div className="h-full flex flex-col">
             <div className="flex-shrink-0 p-6 pb-2">
                 <LogFilters
                     onFiltersChange={handleFiltersChange}
@@ -78,8 +91,18 @@ export default function LogPage() {
                     pageSize={filters.per_page || 10}
                     onPageChange={handlePageChange}
                     onPageSizeChange={handlePageSizeChange}
+                    onOpenGroupLog={handleOpenGroupLog}
                 />
             </div>
+
+            {/* 点击 group/token_name 打开 GroupDialog 日志标签 */}
+            <GroupDialog
+                open={groupDialogOpen}
+                onOpenChange={setGroupDialogOpen}
+                groupId={groupDialogGroupId}
+                initialTab="logs"
+                initialTokenName={groupDialogTokenName}
+            />
         </div>
     )
 }

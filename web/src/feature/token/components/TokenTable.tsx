@@ -1,5 +1,5 @@
 // src/feature/token/components/TokenTable.tsx
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -135,7 +135,7 @@ export function TokenTable() {
     // 更新Token状态
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateTokenStatus()
 
-    const tokens = data?.tokens || []
+    const tokens = useMemo(() => data?.tokens || [], [data?.tokens])
     const total = data?.total || 0
 
     // 打开删除对话框
@@ -175,7 +175,8 @@ export function TokenTable() {
     }
 
     // 表格列定义
-    const columns: ColumnDef<Token>[] = [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const columns: ColumnDef<Token>[] = useMemo(() => [
         {
             accessorKey: 'name',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.name")}</div>,
@@ -430,7 +431,7 @@ export function TokenTable() {
                 </DropdownMenu>
             ),
         },
-    ]
+    ], [t, isStatusUpdating])
 
     // 初始化表格
     const table = useReactTable({

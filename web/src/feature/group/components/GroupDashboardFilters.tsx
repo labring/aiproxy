@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { Search, RotateCcw } from 'lucide-react'
@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import { DashboardFilters } from '@/types/dashboard'
-import { Combobox } from '@/components/ui/combobox'
 
 interface GroupDashboardFiltersProps {
     onFiltersChange: (filters: DashboardFilters & { tokenName?: string }) => void
@@ -49,9 +48,12 @@ export function GroupDashboardFilters({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
+        const effectiveTokenName = tokenName === '__all__' ? '' : tokenName
+        const effectiveModel = model === '__all__' ? '' : model
+
         const filters: DashboardFilters & { tokenName?: string } = {
-            tokenName: tokenName || undefined,
-            model: model || undefined,
+            tokenName: effectiveTokenName || undefined,
+            model: effectiveModel || undefined,
             timespan,
             timezone: getClientTimezone(),
         }
@@ -82,45 +84,43 @@ export function GroupDashboardFilters({
         onFiltersChange(filters)
     }
 
-    const tokenNameOptions = useMemo(() =>
-        availableTokenNames.map(name => ({ value: name, label: name })),
-        [availableTokenNames]
-    )
-
-    const modelOptions = useMemo(() =>
-        availableModels.map(m => ({ value: m, label: m })),
-        [availableModels]
-    )
-
     return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-4">
                     {/* Token Name */}
-                    <div className="flex-1 min-w-0">
-                        <Combobox
-                            options={tokenNameOptions}
-                            value={tokenName}
-                            onValueChange={setTokenName}
-                            placeholder={t('group.dashboard.tokenNamePlaceholder')}
-                            emptyText={t('common.noResult')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
+                    {availableTokenNames.length > 0 && (
+                        <div className="w-44">
+                            <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue placeholder={t('group.dashboard.tokenNamePlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableTokenNames.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Model */}
-                    <div className="flex-1 min-w-0">
-                        <Combobox
-                            options={modelOptions}
-                            value={model}
-                            onValueChange={setModel}
-                            placeholder={t('monitor.filters.modelPlaceholder')}
-                            emptyText={t('common.noResult')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
+                    {availableModels.length > 0 && (
+                        <div className="w-44">
+                            <Select value={model} onValueChange={setModel} disabled={loading}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue placeholder={t('monitor.filters.modelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableModels.map((m) => (
+                                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Date Range */}
                     <div className="min-w-48 max-w-72">

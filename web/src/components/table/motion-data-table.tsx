@@ -11,7 +11,7 @@ import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { TableScrollContainer } from "@/components/ui/animation/components/table-scroll"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 
 interface DataTableProps<TData, TValue> {
     table: TableType<TData>
@@ -92,46 +92,62 @@ export function DataTable<TData, TValue>({
     // 用于跟踪已渲染行的ref
     const rowsRef = useRef<HTMLElement[]>([])
     const [inViewRows, setInViewRows] = useState<Set<string>>(new Set())
+    const observerRef = useRef<IntersectionObserver | null>(null)
 
     // 提取复杂表达式为变量
     const tableRows = table.getRowModel().rows
+    const tableRowCount = tableRows.length
 
-    // 监听滚动以检测哪些行在视口中
+    // 用数据指纹检测数据变化（分页切换、排序等），而不仅仅是行数变化
+    const dataKey = useMemo(() => {
+        if (tableRowCount === 0) return ''
+        return `${tableRows[0].id}-${tableRows[tableRowCount - 1].id}-${tableRowCount}`
+    }, [tableRows, tableRowCount])
+
+    // 数据变化时重置已显示行集合
+    useEffect(() => {
+        if (!animatedRows) return
+        setInViewRows(new Set())
+    }, [dataKey, animatedRows])
+
+    // 创建并维护 IntersectionObserver（仅创建一次）
     useEffect(() => {
         if (!animatedRows) return
 
-        // 仅在表格数据变化时清空引用数组，不重新分配
-        if (rowsRef.current.length > tableRows.length) {
-            rowsRef.current.length = tableRows.length
-        }
-
-        const observer = new IntersectionObserver(
+        observerRef.current = new IntersectionObserver(
             (entries) => {
+                const newIds: string[] = []
                 entries.forEach(entry => {
-                    const rowId = entry.target.getAttribute('data-row-id')
-                    if (rowId) {
-                        setInViewRows(prev => {
-                            const updated = new Set(prev)
-                            if (entry.isIntersecting) {
-                                updated.add(rowId)
-                            }
-                            return updated
-                        })
+                    if (entry.isIntersecting) {
+                        const rowId = entry.target.getAttribute('data-row-id')
+                        if (rowId) newIds.push(rowId)
                     }
                 })
+                if (newIds.length > 0) {
+                    setInViewRows(prev => {
+                        const toAdd = newIds.filter(id => !prev.has(id))
+                        if (toAdd.length === 0) return prev
+                        const updated = new Set(prev)
+                        toAdd.forEach(id => updated.add(id))
+                        return updated
+                    })
+                }
             },
             { threshold: 0.1 }
         )
 
-        // 直接观察现有行
-        rowsRef.current.forEach(row => {
-            if (row) observer.observe(row)
-        })
-
         return () => {
-            observer.disconnect()
+            observerRef.current?.disconnect()
+            observerRef.current = null
         }
-    }, [tableRows, animatedRows])
+    }, [animatedRows])
+
+    // 当行 DOM 元素挂载时，通过 ref callback 注册观察
+    const observeRow = (el: HTMLElement | null, rowIndex: number) => {
+        if (!el || !animatedRows) return
+        rowsRef.current[rowIndex] = el
+        observerRef.current?.observe(el)
+    }
 
     // 渲染表格主体内容
     const renderTableBody = () => {
@@ -149,26 +165,30 @@ export function DataTable<TData, TValue>({
         return table.getRowModel().rows.map((row, rowIndex) => {
             const isInView = inViewRows.has(row.id) || !animatedRows
 
+            // 初始加载时前 15 行有交错延迟，滚动进入视口的行立即显示
+            const staggerDelay = !isInView
+                ? `${Math.min(rowIndex, 15) * 30}ms`
+                : '0ms'
+
             return (
                 <TableRow
                     key={row.id}
                     data-row-id={row.id}
                     data-state={row.getIsSelected() && "selected"}
-                    ref={el => {
-                        if (el && animatedRows) {
-                            rowsRef.current[rowIndex] = el
-                        }
-                    }}
+                    ref={el => observeRow(el, rowIndex)}
                     className={cn(
                         animatedRows && "transition-opacity duration-300",
                         animatedRows && !isInView ? "opacity-0" : "opacity-100"
                     )}
                     style={{
-                        transitionDelay: animatedRows ? `${rowIndex * 30}ms` : '0ms'
+                        transitionDelay: animatedRows ? staggerDelay : '0ms'
                     }}
                 >
                     {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                            key={cell.id}
+                            style={cell.column.columnDef.maxSize ? { width: cell.column.getSize(), maxWidth: cell.column.columnDef.maxSize, overflow: 'hidden' } : undefined}
+                        >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
                     ))}
@@ -183,7 +203,10 @@ export function DataTable<TData, TValue>({
             {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
+                        <TableHead
+                            key={header.id}
+                            style={header.column.columnDef.maxSize ? { width: header.getSize(), maxWidth: header.column.columnDef.maxSize } : undefined}
+                        >
                             {header.isPlaceholder
                                 ? null
                                 : flexRender(

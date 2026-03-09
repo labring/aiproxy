@@ -94,7 +94,7 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
                                 </TabsContent>
 
                                 <TabsContent value="logs" className="h-full m-0">
-                                    {groupId && <GroupLogsTab groupId={groupId} />}
+                                    {groupId && <GroupLogsTab groupId={groupId} initialTokenName={initialTab === 'logs' ? initialTokenName : undefined} />}
                                 </TabsContent>
                             </div>
                         </Tabs>

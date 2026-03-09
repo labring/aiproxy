@@ -1,5 +1,5 @@
 // src/feature/channel/components/ChannelTable.tsx
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -88,7 +88,10 @@ export function ChannelTable() {
         cancelTest: cancelTestAll
     } = useTestAllChannels()
 
-    const channels = (data?.channels || []).filter(channel => channel != null)
+    const channels = useMemo(
+        () => (data?.channels || []).filter(channel => channel != null),
+        [data?.channels]
+    )
     const total = data?.total || 0
 
     // 打开创建渠道对话框
@@ -148,7 +151,8 @@ export function ChannelTable() {
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
 
     // 表格列定义
-    const columns: ColumnDef<Channel>[] = [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const columns: ColumnDef<Channel>[] = useMemo(() => [
         {
             accessorKey: 'id',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.id")}</div>,
@@ -226,13 +230,15 @@ export function ChannelTable() {
         {
             accessorKey: 'models',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
+            size: 200,
+            maxSize: 200,
             cell: ({ row }) => {
                 const models = row.original.models || []
                 const isExpanded = expandedModels[row.original.id]
                 if (models.length === 0) return <div className="text-muted-foreground text-xs">-</div>
 
                 return (
-                    <div className="max-w-xs">
+                    <div style={{ maxWidth: 200 }} className="overflow-hidden">
                         <div
                             className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-sm"
                             onClick={() => toggleModels(row.original.id)}
@@ -245,14 +251,14 @@ export function ChannelTable() {
                         </div>
                         {isExpanded && (
                             <div
-                                className="mt-1 flex flex-wrap gap-1 cursor-pointer"
+                                className="mt-1 flex flex-wrap gap-1 cursor-pointer max-h-32 overflow-y-auto"
                                 onClick={() => openUpdateDialog(row.original)}
                             >
                                 {models.map((model, index) => (
                                     <Badge
                                         key={index}
                                         variant="outline"
-                                        className="text-xs py-0 px-1.5 font-mono"
+                                        className="text-xs py-0 px-1.5 font-mono truncate max-w-[180px]"
                                     >
                                         {model}
                                     </Badge>
@@ -379,7 +385,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ]
+    ], [t, expandedModels, isTesting, isStatusUpdating])
 
     // 初始化表格
     const table = useReactTable({

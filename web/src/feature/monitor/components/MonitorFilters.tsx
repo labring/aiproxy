@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
 import { Search, RotateCcw } from 'lucide-react'
@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import { DashboardFilters } from '@/types/dashboard'
-import { Combobox } from '@/components/ui/combobox'
 import { channelApi } from '@/api/channel'
 
 interface MonitorFiltersProps {
@@ -74,9 +73,12 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
+        const effectiveModel = model === '__all__' ? '' : model
+        const effectiveChannel = channel === '__all__' ? '' : channel
+
         const filters: DashboardFilters = {
-            model: model || undefined,
-            channel: channel ? Number(channel) : undefined,
+            model: effectiveModel || undefined,
+            channel: effectiveChannel ? Number(effectiveChannel) : undefined,
             timespan,
             timezone: getClientTimezone(),
         }
@@ -107,48 +109,45 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
         onFiltersChange(filters)
     }
 
-    const channelOptions = useMemo(() =>
-        availableChannels.map(id => ({
-            value: String(id),
-            label: `${channelInfoMap[id]?.name || `#${id}`} (#${id})`,
-        })),
-        [availableChannels, channelInfoMap]
-    )
-
-    const modelOptions = useMemo(() =>
-        availableModels.map(m => ({ value: m, label: m })),
-        [availableModels]
-    )
-
     return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-4">
                     {/* Channel 选择器 */}
-                    <div className="flex-1 min-w-0">
-                        <Combobox
-                            options={channelOptions}
-                            value={channel}
-                            onValueChange={setChannel}
-                            placeholder={t('monitor.filters.channelPlaceholder')}
-                            emptyText={t('common.noResult')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
+                    {availableChannels.length > 0 && (
+                        <div className="w-48">
+                            <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue placeholder={t('monitor.filters.channelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableChannels.map((id) => (
+                                        <SelectItem key={id} value={String(id)}>
+                                            {channelInfoMap[id]?.name || `#${id}`} (#{id})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Model 选择器 */}
-                    <div className="flex-1 min-w-0">
-                        <Combobox
-                            options={modelOptions}
-                            value={model}
-                            onValueChange={setModel}
-                            placeholder={t('monitor.filters.modelPlaceholder')}
-                            emptyText={t('common.noResult')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
+                    {availableModels.length > 0 && (
+                        <div className="w-44">
+                            <Select value={model} onValueChange={setModel} disabled={loading}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue placeholder={t('monitor.filters.modelPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                    {availableModels.map((m) => (
+                                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* 日期范围 */}
                     <div className="min-w-48 max-w-72">

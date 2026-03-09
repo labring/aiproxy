@@ -23,7 +23,7 @@ export function RootLayout() {
       />
 
       <main className={cn("flex-1 flex flex-col overflow-hidden transition-all duration-300")}>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-hidden">
           <Outlet />
         </div>
       </main>

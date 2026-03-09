@@ -8,14 +8,16 @@ import type { LogFilters as LogFiltersType } from '@/types/log'
 
 interface GroupLogsTabProps {
     groupId: string
+    initialTokenName?: string
 }
 
-export function GroupLogsTab({ groupId }: GroupLogsTabProps) {
+export function GroupLogsTab({ groupId, initialTokenName }: GroupLogsTabProps) {
     const getDefaultFilters = (): LogFiltersType => {
         const today = new Date()
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(today.getDate() - 7)
         return {
+            token_name: initialTokenName || undefined,
             code_type: 'all',
             page: 1,
             per_page: 10,
@@ -54,6 +56,8 @@ export function GroupLogsTab({ groupId }: GroupLogsTabProps) {
                     availableModels={data?.models}
                     availableTokenNames={data?.token_names}
                     availableChannels={data?.channels}
+                    tokenNameFirst
+                    defaultTokenName={initialTokenName}
                 />
             </div>
             <div className="flex-1 min-h-0">

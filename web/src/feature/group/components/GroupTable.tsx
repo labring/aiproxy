@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupTable.tsx
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -83,7 +83,7 @@ export function GroupTable() {
     // Update group status
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateGroupStatus()
 
-    const groups = data?.groups || []
+    const groups = useMemo(() => data?.groups || [], [data?.groups])
     const total = data?.total || 0
 
     // Open create group dialog
@@ -125,7 +125,8 @@ export function GroupTable() {
     }
 
     // Table column definitions
-    const columns: ColumnDef<Group>[] = [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const columns: ColumnDef<Group>[] = useMemo(() => [
         {
             accessorKey: 'id',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.name")}</div>,
@@ -240,7 +241,7 @@ export function GroupTable() {
                 </DropdownMenu>
             ),
         },
-    ]
+    ], [t, isStatusUpdating])
 
     // Initialize table
     const table = useReactTable({

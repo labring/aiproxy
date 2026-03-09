@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
 import { ModelConfig } from "@/types/model";
+import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -99,7 +100,8 @@ export function ModelTable() {
   };
 
   // Create table columns
-  const columns: ColumnDef<ModelConfig>[] = [
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
     {
       accessorKey: "model",
       header: () => (
@@ -275,16 +277,13 @@ export function ModelTable() {
         );
       },
     },
-    // {
-    //     accessorKey: 'owner',
-    //     header: () => <div className="font-medium py-3.5">{t("model.owner")}</div>,
-    //     cell: ({ row }) => <div>{row.original.owner}</div>,
-    // },
-    // {
-    //     accessorKey: 'rpm',
-    //     header: () => <div className="font-medium py-3.5">{t("model.rpm")}</div>,
-    //     cell: ({ row }) => <div>{row.original.rpm}</div>,
-    // },
+    {
+      accessorKey: "price",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.priceColumn")}</div>
+      ),
+      cell: ({ row }) => <PriceDisplay price={row.original.price} />,
+    },
     {
       id: "actions",
       cell: ({ row }) => (
@@ -313,7 +312,7 @@ export function ModelTable() {
         </DropdownMenu>
       ),
     },
-  ];
+  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas]);
 
   // Initialize table
   const table = useReactTable({

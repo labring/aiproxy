@@ -22,6 +22,8 @@ interface LogFiltersProps {
     availableModels?: string[]
     availableTokenNames?: string[]
     availableChannels?: number[]
+    tokenNameFirst?: boolean
+    defaultTokenName?: string
 }
 
 export function LogFilters({
@@ -30,6 +32,8 @@ export function LogFilters({
     availableModels,
     availableTokenNames,
     availableChannels,
+    tokenNameFirst = false,
+    defaultTokenName = '',
 }: LogFiltersProps) {
     const { t } = useTranslation()
 
@@ -70,7 +74,7 @@ export function LogFilters({
     }
 
     const [model, setModel] = useState('')
-    const [tokenName, setTokenName] = useState('')
+    const [tokenName, setTokenName] = useState(defaultTokenName)
     const [channel, setChannel] = useState('')
     const [keyword, setKeyword] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
@@ -124,64 +128,71 @@ export function LogFilters({
         onFiltersChange(filters)
     }
 
-    const showTokenName = !!availableTokenNames
-    const showChannel = !!availableChannels
+    const showChannel = !!availableChannels && availableChannels.length > 0
+    const showTokenName = !!availableTokenNames && availableTokenNames.length > 0
+
+    // Channel filter
+    const channelFilter = showChannel && (
+        <div className="w-48">
+            <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                    {availableChannels!.map((ch) => (
+                        <SelectItem key={ch} value={String(ch)}>
+                            {channelInfoMap[ch]?.name || `#${ch}`} (#{ch})
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+
+    // Model filter - 始终显示
+    const modelFilter = (
+        <div className="w-44">
+            <Select value={model} onValueChange={setModel} disabled={loading}>
+                <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t('log.filters.modelPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                    {(availableModels || []).map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+
+    // Token name filter
+    const tokenNameFilter = showTokenName && (
+        <div className="w-44">
+            <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
+                <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t('log.filters.tokenNamePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                    {availableTokenNames!.map((name) => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
 
     return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-none">
             <form onSubmit={handleSubmit}>
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* Channel filter - leftmost */}
-                    {showChannel && availableChannels!.length > 0 && (
-                        <div className="w-48">
-                            <Select value={channel} onValueChange={setChannel} disabled={loading}>
-                                <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableChannels!.map((ch) => (
-                                        <SelectItem key={ch} value={String(ch)}>
-                                            {channelInfoMap[ch]?.name || `#${ch}`} (#{ch})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Model filter - select from API data */}
-                    {availableModels && availableModels.length > 0 && (
-                        <div className="w-44">
-                            <Select value={model} onValueChange={setModel} disabled={loading}>
-                                <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={t('log.filters.modelPlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableModels.map((m) => (
-                                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Token name filter */}
-                    {showTokenName && availableTokenNames!.length > 0 && (
-                        <div className="w-44">
-                            <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
-                                <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={t('log.filters.tokenNamePlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
-                                    {availableTokenNames!.map((name) => (
-                                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {/* 根据 tokenNameFirst 控制顺序 */}
+                    {tokenNameFirst ? (
+                        <>{tokenNameFilter}{channelFilter}{modelFilter}</>
+                    ) : (
+                        <>{channelFilter}{modelFilter}{tokenNameFilter}</>
                     )}
 
                     {/* Status filter */}
