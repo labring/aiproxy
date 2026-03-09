@@ -10,6 +10,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/patrickmn/go-cache"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 )
 
@@ -46,11 +47,20 @@ func getToken(ctx context.Context, adcJSON string) (string, error) {
 		return "", fmt.Errorf("failed to decode credentials file: %w", err)
 	}
 
+	creds, err := google.CredentialsFromJSONWithParams( //nolint:staticcheck // credentials are from admin-configured service accounts
+		ctx,
+		conv.StringToBytes(adcJSON),
+		google.CredentialsParams{
+			Scopes: []string{defaultScope},
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
 	c, err := credentials.NewIamCredentialsClient(
 		ctx,
-		option.WithCredentialsJSON(
-			conv.StringToBytes(adcJSON),
-		),
+		option.WithCredentials(creds),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create client: %w", err)

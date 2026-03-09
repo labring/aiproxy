@@ -564,9 +564,11 @@ func GetDashboardV2Data(
 
 	g.Go(func() error {
 		var err error
+
 		timeSeries, err = GetTimeSeriesModelData(
 			channelID, modelName, start, end, timeSpan, timezone, fields,
 		)
+
 		return err
 	})
 
@@ -577,12 +579,14 @@ func GetDashboardV2Data(
 
 	g.Go(func() error {
 		var err error
+
 		channels, err = GetUsedChannels(start, end)
 		return err
 	})
 
 	g.Go(func() error {
 		var err error
+
 		models, err = GetUsedModels(start, end)
 		return err
 	})
@@ -621,9 +625,11 @@ func GetGroupDashboardV2Data(
 
 	g.Go(func() error {
 		var err error
+
 		timeSeries, err = GetGroupTimeSeriesModelData(
 			group, tokenName, modelName, start, end, timeSpan, timezone, fields,
 		)
+
 		return err
 	})
 
@@ -634,12 +640,14 @@ func GetGroupDashboardV2Data(
 
 	g.Go(func() error {
 		var err error
+
 		models, err = GetGroupUsedModels(group, tokenName, start, end)
 		return err
 	})
 
 	g.Go(func() error {
 		var err error
+
 		tokenNames, err = GetGroupUsedTokenNames(group, start, end)
 		return err
 	})
@@ -692,9 +700,11 @@ func getCurrentRPM(channelID int, modelName string) (int64, int64) {
 					if channelID != 0 {
 						db = db.Where("channel_id = ?", channelID)
 					}
+
 					if modelName != "" {
 						db = db.Where("model = ?", modelName)
 					}
+
 					return db
 				}),
 		).
@@ -741,9 +751,11 @@ func getGroupCurrentRPM(group, tokenName, modelName string) (int64, int64) {
 					if tokenName != "" {
 						db = db.Where("token_name = ?", tokenName)
 					}
+
 					if modelName != "" {
 						db = db.Where("model = ?", modelName)
 					}
+
 					return db
 				}),
 		).

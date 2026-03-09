@@ -63,6 +63,7 @@ export interface ChartDataPoint {
     cachedTokens: number
     cacheCreationTokens: number
     cacheHitCount: number
+    cacheCreationCount: number
     reasoningTokens: number
     totalTokens: number
     webSearchCount: number

@@ -103,6 +103,7 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const cachedTokens = summary.reduce((acc, s) => acc + (s.cached_tokens || 0), 0)
         const cacheCreationTokens = summary.reduce((acc, s) => acc + (s.cache_creation_tokens || 0), 0)
         const cacheHitCount = summary.reduce((acc, s) => acc + (s.cache_hit_count || 0), 0)
+        const cacheCreationCount = summary.reduce((acc, s) => acc + (s.cache_creation_count || 0), 0)
         const reasoningTokens = summary.reduce((acc, s) => acc + (s.reasoning_tokens || 0), 0)
         const totalTokens = summary.reduce((acc, s) => acc + (s.total_tokens || 0), 0)
         const webSearchCount = summary.reduce((acc, s) => acc + (s.web_search_count || 0), 0)
@@ -176,6 +177,7 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             cachedTokens,
             cacheCreationTokens,
             cacheHitCount,
+            cacheCreationCount,
             reasoningTokens,
             totalTokens,
             webSearchCount,

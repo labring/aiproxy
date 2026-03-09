@@ -85,7 +85,7 @@ func (p *StreamableProxy) handleGetRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
 		r.Context(),
 		http.MethodGet,
 		backendInfo,
@@ -195,7 +195,7 @@ func (p *StreamableProxy) handlePostRequest(w http.ResponseWriter, r *http.Reque
 	sessionID := parts[1]
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
 		r.Context(),
 		http.MethodPost,
 		backend,
@@ -292,7 +292,7 @@ func (p *StreamableProxy) handleDeleteRequest(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
 		r.Context(),
 		http.MethodDelete,
 		backendInfo,

@@ -2,9 +2,11 @@ package ipblack
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -14,12 +16,19 @@ const (
 func redisSetIPBlack(ctx context.Context, ip string, duration time.Duration) (bool, error) {
 	key := common.RedisKeyf(ipBlackKey, ip)
 
-	success, err := common.RDB.SetNX(ctx, key, duration.Seconds(), duration).Result()
+	_, err := common.RDB.SetArgs(ctx, key, duration.Seconds(), redis.SetArgs{Mode: "NX", TTL: duration}).
+		Result()
+	if errors.Is(err, redis.Nil) {
+		// Key already exists, IP is already blocked
+		return true, nil
+	}
+
 	if err != nil {
 		return false, err
 	}
 
-	return !success, nil
+	// Key was set successfully, IP was not previously blocked
+	return false, nil
 }
 
 func redisGetIPIsBlock(ctx context.Context, ip string) (bool, error) {

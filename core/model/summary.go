@@ -21,23 +21,49 @@ type SummarySelectFields []string
 // allSummaryFields contains all available summary field names
 var allSummaryFields = []string{
 	// Count fields
-	"request_count", "retry_count", "exception_count",
-	"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
-	"status400_count", "status429_count", "status500_count", "cache_hit_count", "cache_creation_count",
+	"request_count",
+	"retry_count",
+	"exception_count",
+	"status2xx_count",
+	"status4xx_count",
+	"status5xx_count",
+	"status_other_count",
+	"status400_count",
+	"status429_count",
+	"status500_count",
+	"cache_hit_count",
+	"cache_creation_count",
 	// Usage fields
-	"input_tokens", "image_input_tokens", "audio_input_tokens",
-	"output_tokens", "image_output_tokens", "cached_tokens",
-	"cache_creation_tokens", "total_tokens", "web_search_count",
+	"input_tokens",
+	"image_input_tokens",
+	"audio_input_tokens",
+	"output_tokens",
+	"image_output_tokens",
+	"cached_tokens",
+	"cache_creation_tokens",
+	"total_tokens",
+	"web_search_count",
 	// Other fields
-	"used_amount", "total_time_milliseconds", "total_ttfb_milliseconds",
+	"used_amount",
+	"total_time_milliseconds",
+	"total_ttfb_milliseconds",
 }
 
 // summaryFieldGroups maps group names to their fields
 var summaryFieldGroups = map[string][]string{
 	"count": {
-		"request_count", "retry_count", "exception_count",
-		"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
-		"status400_count", "status429_count", "status500_count", "cache_hit_count", "cache_creation_count",
+		"request_count",
+		"retry_count",
+		"exception_count",
+		"status2xx_count",
+		"status4xx_count",
+		"status5xx_count",
+		"status_other_count",
+		"status400_count",
+		"status429_count",
+		"status500_count",
+		"cache_hit_count",
+		"cache_creation_count",
 	},
 	"usage": {
 		"input_tokens", "image_input_tokens", "audio_input_tokens",
@@ -205,16 +231,16 @@ type SummaryUnique struct {
 }
 
 type Count struct {
-	RequestCount     int64         `json:"request_count"`
-	RetryCount       ZeroNullInt64 `json:"retry_count"`
-	ExceptionCount   ZeroNullInt64 `json:"exception_count"`
-	Status2xxCount   ZeroNullInt64 `json:"status_2xx_count"`
-	Status4xxCount   ZeroNullInt64 `json:"status_4xx_count"`
-	Status5xxCount   ZeroNullInt64 `json:"status_5xx_count"`
-	StatusOtherCount ZeroNullInt64 `json:"status_other_count"`
-	Status400Count   ZeroNullInt64 `json:"status_400_count"`
-	Status429Count   ZeroNullInt64 `json:"status_429_count"`
-	Status500Count   ZeroNullInt64 `json:"status_500_count"`
+	RequestCount       int64         `json:"request_count"`
+	RetryCount         ZeroNullInt64 `json:"retry_count"`
+	ExceptionCount     ZeroNullInt64 `json:"exception_count"`
+	Status2xxCount     ZeroNullInt64 `json:"status_2xx_count"`
+	Status4xxCount     ZeroNullInt64 `json:"status_4xx_count"`
+	Status5xxCount     ZeroNullInt64 `json:"status_5xx_count"`
+	StatusOtherCount   ZeroNullInt64 `json:"status_other_count"`
+	Status400Count     ZeroNullInt64 `json:"status_400_count"`
+	Status429Count     ZeroNullInt64 `json:"status_429_count"`
+	Status500Count     ZeroNullInt64 `json:"status_500_count"`
 	CacheHitCount      ZeroNullInt64 `json:"cache_hit_count"`
 	CacheCreationCount ZeroNullInt64 `json:"cache_creation_count"`
 }
@@ -238,6 +264,7 @@ func (c *Count) AddRequest(status int, isRetry bool) {
 		if status == http.StatusBadRequest {
 			c.Status400Count++
 		}
+
 		if status == http.StatusTooManyRequests {
 			c.Status429Count++
 		}

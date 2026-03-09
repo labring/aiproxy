@@ -9,7 +9,6 @@ import {
     Clock,
     Coins,
     Database,
-    Search,
 } from 'lucide-react'
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -136,6 +135,10 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
         ? Math.round(agg.total_time_milliseconds / agg.request_count)
         : 0
 
+    const avgTtfb = agg.request_count > 0
+        ? Math.round(agg.total_ttfb_milliseconds / agg.request_count)
+        : 0
+
     const cacheHitRate = agg.request_count > 0
         ? ((agg.cache_hit_count / agg.request_count) * 100).toFixed(1)
         : '0.0'
@@ -215,12 +218,12 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 tooltip={t('monitor.metrics.cacheHitCountTooltip')}
             />
             <MetricCard
-                title={t('monitor.metrics.webSearchCount')}
-                value={agg.web_search_count}
-                icon={<Search className="h-5 w-5 text-sky-600 dark:text-sky-400" />}
+                title={t('monitor.metrics.avgTtfb')}
+                value={`${avgTtfb.toLocaleString()} ms`}
+                icon={<Zap className="h-5 w-5 text-sky-600 dark:text-sky-400" />}
                 bgColor="bg-sky-50 dark:bg-sky-950/30"
                 iconColor="bg-sky-100 dark:bg-sky-900/50"
-                tooltip={t('monitor.metrics.webSearchCountTooltip')}
+                tooltip={t('monitor.metrics.avgTtfbTooltip')}
             />
         </div>
     )

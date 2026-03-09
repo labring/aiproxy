@@ -211,7 +211,7 @@ func writeToEnvFile(envFile, key, value string) error {
 		content += "\n"
 	}
 
-	return os.WriteFile(
+	return os.WriteFile( //nolint:gosec // envFile is an internal config path
 		envFile,
 		[]byte(content),
 		0o600,

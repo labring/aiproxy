@@ -331,6 +331,21 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     color: '#8b5cf6',
                                     data: makeData('retryCount', requestsMode),
                                 }] : []),
+                                {
+                                    name: t('monitor.charts.cacheHitCount'),
+                                    color: '#14b8a6',
+                                    data: makeData('cacheHitCount', requestsMode),
+                                },
+                                {
+                                    name: t('monitor.charts.cacheCreationCount'),
+                                    color: '#6366f1',
+                                    data: makeData('cacheCreationCount', requestsMode),
+                                },
+                                {
+                                    name: t('monitor.charts.webSearchCount'),
+                                    color: '#0ea5e9',
+                                    data: makeData('webSearchCount', requestsMode),
+                                },
                             ]
                             const colors = callsSeries.map(s => s.color)
                             return {
@@ -581,22 +596,6 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                     />
                 )}
             </ChartBox>
-
-            {/* Cache Hits + Web Search - 2 columns */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <ChartBox title={t('monitor.charts.cacheHits')}>
-                    <EChart
-                        option={buildAreaChart('cacheHitCount', '#14b8a6', 'incremental')}
-                        style={{ width: '100%', height: '100%' }}
-                    />
-                </ChartBox>
-                <ChartBox title={t('monitor.charts.webSearchCount')}>
-                    <EChart
-                        option={buildAreaChart('webSearchCount', '#0ea5e9', 'incremental')}
-                        style={{ width: '100%', height: '100%' }}
-                    />
-                </ChartBox>
-            </div>
 
             {/* Cost - full width */}
             <ChartBox
