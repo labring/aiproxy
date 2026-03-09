@@ -101,16 +101,33 @@
       "totalTokensTooltip": "Total tokens consumed in the time range",
       "outputTokens": "Output Tokens",
       "outputTokensTooltip": "Total output tokens in the time range",
+      "cacheHitCount": "Cache Hits",
+      "cacheHitCountTooltip": "Number of requests that hit cache in the time range",
+      "cacheHitRate": "Hit Rate",
+      "cacheCreationCount": "Creations",
+      "cachedTokens": "Cached Tokens",
+      "cachedTokensTooltip": "Tokens served from cache in the time range",
+      "cacheCreationTokens": "Creation",
+      "webSearchCount": "Web Searches",
+      "webSearchCountTooltip": "Number of web searches performed in the time range",
       "fullValue": "Full Value"
     },
     "charts": {
       "incremental": "Incremental",
       "cumulative": "Cumulative",
       "tokenTypes": {
-        "total": "Total",
+        "breakdown": "Breakdown",
+        "total": "Total"
+      },
+      "tokensBreakdown": {
         "input": "Input",
+        "imageInput": "Image Input",
+        "audioInput": "Audio Input",
         "output": "Output",
-        "cached": "Cached"
+        "imageOutput": "Image Output",
+        "reasoning": "Reasoning",
+        "cached": "Cached",
+        "cacheCreation": "Cache Creation"
       },
       "totalCalls": "Total Calls",
       "errorCalls": "Error Calls",
@@ -122,6 +139,8 @@
       "statusOther": "Other",
       "retryCount": "Retry Count",
       "tokenUsage": "Token Usage",
+      "cacheHits": "Cache Hits",
+      "webSearchCount": "Web Searches",
       "costTrend": "Cost",
       "avgResponseTime": "Avg Response Time",
       "avgTtfb": "Avg TTFB",

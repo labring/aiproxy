@@ -24,7 +24,7 @@ interface MonitorChartsProps {
 }
 
 type DisplayMode = 'incremental' | 'cumulative'
-type TokenType = 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedTokens'
+type TokenChartMode = 'breakdown' | 'total'
 
 function ToggleGroup({ value, onChange, options }: {
     value: string
@@ -90,7 +90,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
 
     const [requestsMode, setRequestsMode] = useState<DisplayMode>('incremental')
     const [tokensMode, setTokensMode] = useState<DisplayMode>('incremental')
-    const [tokenType, setTokenType] = useState<TokenType>('totalTokens')
+    const [tokenChartMode, setTokenChartMode] = useState<TokenChartMode>('breakdown')
     const [costMode, setCostMode] = useState<DisplayMode>('incremental')
 
     const isDarkMode = useMemo(() => {
@@ -115,11 +115,9 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
         { label: t('monitor.charts.cumulative'), value: 'cumulative' },
     ], [t])
 
-    const tokenOptions = useMemo(() => [
-        { label: t('monitor.charts.tokenTypes.total'), value: 'totalTokens' },
-        { label: t('monitor.charts.tokenTypes.input'), value: 'inputTokens' },
-        { label: t('monitor.charts.tokenTypes.output'), value: 'outputTokens' },
-        { label: t('monitor.charts.tokenTypes.cached'), value: 'cachedTokens' },
+    const tokenChartOptions = useMemo(() => [
+        { label: t('monitor.charts.tokenTypes.breakdown'), value: 'breakdown' },
+        { label: t('monitor.charts.tokenTypes.total'), value: 'total' },
     ], [t])
 
     function makeData(key: keyof ChartDataPoint, mode: DisplayMode): number[] {
@@ -571,21 +569,118 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                     />
             </ChartBox>
 
-            {/* Token Usage - full width with type switcher */}
+            {/* Token Usage - full width with breakdown/total switcher */}
             <ChartBox
                 title={t('monitor.charts.tokenUsage')}
                 rightSlot={
                     <>
-                        <ToggleGroup value={tokenType} onChange={(v) => setTokenType(v as TokenType)} options={tokenOptions} />
+                        <ToggleGroup value={tokenChartMode} onChange={(v) => setTokenChartMode(v as TokenChartMode)} options={tokenChartOptions} />
                         <ToggleGroup value={tokensMode} onChange={(v) => setTokensMode(v as DisplayMode)} options={modeOptions} />
                     </>
                 }
             >
-                <EChart
-                    option={buildAreaChart(tokenType, '#3b82f6', tokensMode)}
-                    style={{ width: '100%', height: '100%' }}
-                />
+                {tokenChartMode === 'total' ? (
+                    <EChart
+                        option={buildAreaChart('totalTokens', '#3b82f6', tokensMode)}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                ) : (
+                    <EChart
+                        option={(() => {
+                            const tokenSeries: { key: keyof ChartDataPoint; name: string; color: string }[] = [
+                                { key: 'inputTokens', name: t('monitor.charts.tokensBreakdown.input'), color: '#3b82f6' },
+                                { key: 'imageInputTokens', name: t('monitor.charts.tokensBreakdown.imageInput'), color: '#06b6d4' },
+                                { key: 'audioInputTokens', name: t('monitor.charts.tokensBreakdown.audioInput'), color: '#8b5cf6' },
+                                { key: 'outputTokens', name: t('monitor.charts.tokensBreakdown.output'), color: '#10b981' },
+                                { key: 'imageOutputTokens', name: t('monitor.charts.tokensBreakdown.imageOutput'), color: '#14b8a6' },
+                                { key: 'reasoningTokens', name: t('monitor.charts.tokensBreakdown.reasoning'), color: '#f59e0b' },
+                                { key: 'cachedTokens', name: t('monitor.charts.tokensBreakdown.cached'), color: '#6366f1' },
+                                { key: 'cacheCreationTokens', name: t('monitor.charts.tokensBreakdown.cacheCreation'), color: '#a78bfa' },
+                            ]
+                            // Filter out series that have no data at all
+                            const activeSeries = tokenSeries.filter(s =>
+                                chartData.some(d => (d[s.key] as number) > 0)
+                            )
+                            return {
+                                backgroundColor: 'transparent',
+                                color: activeSeries.map(s => s.color),
+                                tooltip: {
+                                    trigger: 'axis',
+                                    backgroundColor: themeColors.tooltipBg,
+                                    borderColor: themeColors.tooltipBorder,
+                                    borderWidth: 1,
+                                    borderRadius: 8,
+                                    textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
+                                    formatter: (params: any) => {
+                                        const ps = Array.isArray(params) ? params : [params]
+                                        const idx = ps[0]?.dataIndex
+                                        const point = chartData[idx]
+                                        let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
+                                        for (const p of ps) {
+                                            if (p.value > 0) {
+                                                html += `<div>${p.marker} ${p.seriesName}: ${Number(p.value).toLocaleString()}</div>`
+                                            }
+                                        }
+                                        html += '</div>'
+                                        return html
+                                    }
+                                },
+                                legend: {
+                                    bottom: 0,
+                                    textStyle: { color: themeColors.textColor, fontSize: 11 },
+                                    itemWidth: 12, itemHeight: 8,
+                                },
+                                grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                                xAxis: {
+                                    type: 'category',
+                                    boundaryGap: false,
+                                    data: xLabels,
+                                    axisLine: { lineStyle: { color: themeColors.axisLineColor } },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                    axisTick: { show: false },
+                                },
+                                yAxis: {
+                                    type: 'value',
+                                    axisLine: { show: false },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11, formatter: defaultAxisFormatter },
+                                    axisTick: { show: false },
+                                    splitLine: { lineStyle: { color: themeColors.splitLineColor, type: 'dashed' } },
+                                },
+                                series: activeSeries.map(s => ({
+                                    name: s.name,
+                                    type: 'line' as const,
+                                    stack: 'tokens',
+                                    smooth: true,
+                                    showSymbol: false,
+                                    lineStyle: { width: 1.5, color: s.color },
+                                    itemStyle: { color: s.color },
+                                    areaStyle: { color: s.color + (isDarkMode ? '40' : '30') },
+                                    data: makeData(s.key, tokensMode),
+                                })),
+                                animation: true,
+                                animationDuration: 600,
+                            }
+                        })()}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                )}
             </ChartBox>
+
+            {/* Cache Hits + Web Search - 2 columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ChartBox title={t('monitor.charts.cacheHits')}>
+                    <EChart
+                        option={buildAreaChart('cacheHitCount', '#14b8a6', 'incremental')}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                </ChartBox>
+                <ChartBox title={t('monitor.charts.webSearchCount')}>
+                    <EChart
+                        option={buildAreaChart('webSearchCount', '#0ea5e9', 'incremental')}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                </ChartBox>
+            </div>
 
             {/* Cost - full width */}
             <ChartBox

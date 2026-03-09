@@ -101,6 +101,15 @@
       "totalTokensTooltip": "统计时间范围内消耗的总 Token 数",
       "outputTokens": "输出 Token 数",
       "outputTokensTooltip": "统计时间范围内的输出 Token 总数",
+      "cacheHitCount": "缓存命中",
+      "cacheHitCountTooltip": "统计时间范围内命中缓存的请求数",
+      "cacheHitRate": "命中率",
+      "cacheCreationCount": "创建次数",
+      "cachedTokens": "缓存 Token",
+      "cachedTokensTooltip": "统计时间范围内从缓存获取的 Token 数",
+      "cacheCreationTokens": "创建",
+      "webSearchCount": "联网搜索",
+      "webSearchCountTooltip": "统计时间范围内执行的联网搜索次数",
       "fullValue": "完整值"
     },
     "charts": {
@@ -114,6 +123,8 @@
       "statusOther": "其他",
       "retryCount": "重试次数",
       "tokenUsage": "Token 用量",
+      "cacheHits": "缓存命中",
+      "webSearchCount": "联网搜索",
       "costTrend": "消费",
       "avgResponseTime": "平均响应时间",
       "avgTtfb": "平均首字节时间",
@@ -123,10 +134,18 @@
       "incremental": "增量",
       "cumulative": "累计",
       "tokenTypes": {
-        "total": "全部",
-        "input": "输入",
-        "output": "输出",
-        "cached": "缓存"
+        "breakdown": "明细",
+        "total": "总量"
+      },
+      "tokensBreakdown": {
+        "input": "文本输入",
+        "imageInput": "图片输入",
+        "audioInput": "音频输入",
+        "output": "文本输出",
+        "imageOutput": "图片输出",
+        "reasoning": "推理",
+        "cached": "缓存命中",
+        "cacheCreation": "缓存创建"
       }
     },
     "table": {

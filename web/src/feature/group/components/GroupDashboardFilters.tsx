@@ -33,9 +33,9 @@ export function GroupDashboardFilters({
 
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(today.getDate() - 7)
-        return { from: sevenDaysAgo, to: today }
+        const oneDayAgo = new Date()
+        oneDayAgo.setDate(today.getDate() - 1)
+        return { from: oneDayAgo, to: today }
     }
 
     const [tokenName, setTokenName] = useState(defaultTokenName || '')

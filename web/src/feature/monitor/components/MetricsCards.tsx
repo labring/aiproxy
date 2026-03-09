@@ -7,9 +7,9 @@ import {
     Zap,
     DollarSign,
     Clock,
-    TrendingUp,
-    Gauge,
-    Coins
+    Coins,
+    Database,
+    Search,
 } from 'lucide-react'
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -109,7 +109,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
     if (loading) {
         return (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 8 }).map((_, index) => (
+                {Array.from({ length: 9 }).map((_, index) => (
                     <Card key={index} className="border-0 shadow-sm h-28 dark:bg-card">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
                             <div className="p-2">
@@ -136,9 +136,13 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
         ? Math.round(agg.total_time_milliseconds / agg.request_count)
         : 0
 
+    const cacheHitRate = agg.request_count > 0
+        ? ((agg.cache_hit_count / agg.request_count) * 100).toFixed(1)
+        : '0.0'
+
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {/* Row 1 */}
+            {/* Row 1: Core metrics */}
             <MetricCard
                 title={t('monitor.metrics.totalRequests')}
                 value={agg.request_count}
@@ -146,7 +150,6 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
                 tooltip={t('monitor.metrics.totalRequestsTooltip')}
-
             />
             <MetricCard
                 title={t('monitor.metrics.errorCount')}
@@ -156,7 +159,6 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-orange-50 dark:bg-orange-950/30"
                 iconColor="bg-orange-100 dark:bg-orange-900/50"
                 tooltip={t('monitor.metrics.errorCountTooltip')}
-
             />
             <MetricCard
                 title={t('monitor.metrics.usedAmount')}
@@ -165,54 +167,25 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-green-50 dark:bg-green-950/30"
                 iconColor="bg-green-100 dark:bg-green-900/50"
                 tooltip={t('monitor.metrics.usedAmountTooltip')}
-
             />
-            <MetricCard
-                title={t('monitor.metrics.totalTokens')}
-                value={agg.total_tokens}
-                icon={<Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
-                bgColor="bg-amber-50 dark:bg-amber-950/30"
-                iconColor="bg-amber-100 dark:bg-amber-900/50"
-                tooltip={t('monitor.metrics.totalTokensTooltip')}
-            />
-            {/* Row 2 */}
+            {/* Row 2: Throughput & Latency */}
             <MetricCard
                 title={t('monitor.metrics.currentRpm')}
                 value={agg.current_rpm}
-                subtitle={`${t('monitor.metrics.avgRpm')}: ${formatCompact(agg.avg_rpm)}`}
-                icon={<BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
-                bgColor="bg-blue-50 dark:bg-blue-950/30"
-                iconColor="bg-blue-100 dark:bg-blue-900/50"
+                subtitle={`${t('monitor.metrics.avgRpm')}: ${formatCompact(agg.avg_rpm)} | Max: ${formatCompact(agg.max_rpm)}`}
+                icon={<BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />}
+                bgColor="bg-indigo-50 dark:bg-indigo-950/30"
+                iconColor="bg-indigo-100 dark:bg-indigo-900/50"
                 tooltip={t('monitor.metrics.currentRpmTooltip')}
-
             />
             <MetricCard
                 title={t('monitor.metrics.currentTpm')}
                 value={agg.current_tpm}
-                subtitle={`${t('monitor.metrics.avgTpm')}: ${formatCompact(agg.avg_tpm)}`}
+                subtitle={`${t('monitor.metrics.avgTpm')}: ${formatCompact(agg.avg_tpm)} | Max: ${formatCompact(agg.max_tpm)}`}
                 icon={<Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
                 bgColor="bg-purple-50 dark:bg-purple-950/30"
                 iconColor="bg-purple-100 dark:bg-purple-900/50"
                 tooltip={t('monitor.metrics.currentTpmTooltip')}
-
-            />
-            <MetricCard
-                title={t('monitor.metrics.maxRpm')}
-                value={agg.max_rpm}
-                icon={<TrendingUp className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />}
-                bgColor="bg-indigo-50 dark:bg-indigo-950/30"
-                iconColor="bg-indigo-100 dark:bg-indigo-900/50"
-                tooltip={t('monitor.metrics.maxRpmTooltip')}
-
-            />
-            <MetricCard
-                title={t('monitor.metrics.maxTpm')}
-                value={agg.max_tpm}
-                icon={<Gauge className="h-5 w-5 text-rose-600 dark:text-rose-400" />}
-                bgColor="bg-rose-50 dark:bg-rose-950/30"
-                iconColor="bg-rose-100 dark:bg-rose-900/50"
-                tooltip={t('monitor.metrics.maxTpmTooltip')}
-
             />
             <MetricCard
                 title={t('monitor.metrics.avgLatency')}
@@ -221,7 +194,33 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-cyan-50 dark:bg-cyan-950/30"
                 iconColor="bg-cyan-100 dark:bg-cyan-900/50"
                 tooltip={t('monitor.metrics.avgLatencyTooltip')}
-
+            />
+            {/* Row 3: Tokens & Cache */}
+            <MetricCard
+                title={t('monitor.metrics.totalTokens')}
+                value={agg.total_tokens}
+                subtitle={`${t('monitor.metrics.cachedTokens')}: ${formatCompact(agg.cached_tokens)}`}
+                icon={<Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
+                bgColor="bg-amber-50 dark:bg-amber-950/30"
+                iconColor="bg-amber-100 dark:bg-amber-900/50"
+                tooltip={t('monitor.metrics.totalTokensTooltip')}
+            />
+            <MetricCard
+                title={t('monitor.metrics.cacheHitCount')}
+                value={agg.cache_hit_count}
+                subtitle={`${t('monitor.metrics.cacheHitRate')}: ${cacheHitRate}% | ${t('monitor.metrics.cacheCreationCount')}: ${formatCompact(agg.cache_creation_count)}`}
+                icon={<Database className="h-5 w-5 text-teal-600 dark:text-teal-400" />}
+                bgColor="bg-teal-50 dark:bg-teal-950/30"
+                iconColor="bg-teal-100 dark:bg-teal-900/50"
+                tooltip={t('monitor.metrics.cacheHitCountTooltip')}
+            />
+            <MetricCard
+                title={t('monitor.metrics.webSearchCount')}
+                value={agg.web_search_count}
+                icon={<Search className="h-5 w-5 text-sky-600 dark:text-sky-400" />}
+                bgColor="bg-sky-50 dark:bg-sky-950/30"
+                iconColor="bg-sky-100 dark:bg-sky-900/50"
+                tooltip={t('monitor.metrics.webSearchCountTooltip')}
             />
         </div>
     )

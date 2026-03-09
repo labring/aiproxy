@@ -12,7 +12,11 @@ export interface DashboardAggregates {
     input_tokens: number
     output_tokens: number
     cached_tokens: number
+    cache_creation_tokens: number
+    cache_hit_count: number
+    cache_creation_count: number
     total_tokens: number
+    web_search_count: number
     current_rpm: number
     current_tpm: number
     avg_rpm: number
@@ -92,9 +96,16 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const errorRate = totalCalls === 0 ? 0 : Number(((errorCalls / totalCalls) * 100).toFixed(1))
 
         const inputTokens = summary.reduce((acc, s) => acc + (s.input_tokens || 0), 0)
+        const imageInputTokens = summary.reduce((acc, s) => acc + (s.image_input_tokens || 0), 0)
+        const audioInputTokens = summary.reduce((acc, s) => acc + (s.audio_input_tokens || 0), 0)
         const outputTokens = summary.reduce((acc, s) => acc + (s.output_tokens || 0), 0)
+        const imageOutputTokens = summary.reduce((acc, s) => acc + (s.image_output_tokens || 0), 0)
         const cachedTokens = summary.reduce((acc, s) => acc + (s.cached_tokens || 0), 0)
+        const cacheCreationTokens = summary.reduce((acc, s) => acc + (s.cache_creation_tokens || 0), 0)
+        const cacheHitCount = summary.reduce((acc, s) => acc + (s.cache_hit_count || 0), 0)
+        const reasoningTokens = summary.reduce((acc, s) => acc + (s.reasoning_tokens || 0), 0)
         const totalTokens = summary.reduce((acc, s) => acc + (s.total_tokens || 0), 0)
+        const webSearchCount = summary.reduce((acc, s) => acc + (s.web_search_count || 0), 0)
         const usedAmount = summary.reduce((acc, s) => acc + (s.used_amount || 0), 0)
 
         const status2xxCount = summary.reduce((acc, s) => acc + (s.status_2xx_count || 0), 0)
@@ -152,9 +163,16 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             status500Count,
             retryCount,
             inputTokens,
+            imageInputTokens,
+            audioInputTokens,
             outputTokens,
+            imageOutputTokens,
             cachedTokens,
+            cacheCreationTokens,
+            cacheHitCount,
+            reasoningTokens,
             totalTokens,
+            webSearchCount,
             usedAmount,
             avgResponseTime,
             avgTtfb,
@@ -181,7 +199,11 @@ function computeDashboardResult(
         input_tokens: 0,
         output_tokens: 0,
         cached_tokens: 0,
+        cache_creation_tokens: 0,
+        cache_hit_count: 0,
+        cache_creation_count: 0,
         total_tokens: 0,
+        web_search_count: 0,
         current_rpm: 0,
         current_tpm: 0,
         avg_rpm: 0,
@@ -194,9 +216,6 @@ function computeDashboardResult(
     const modelRankMap = new Map<string, ModelSummary>()
     // Detail ranking: aggregate by channel_id + token_name + model
     const detailRankMap = new Map<string, ModelSummary>()
-    const channelSet = new Set<number>()
-    const modelSet = new Set<string>()
-    const tokenNameSet = new Set<string>()
 
     function mergeInto(map: Map<string, ModelSummary>, key: string, s: ModelSummary) {
         const existing = map.get(key)
@@ -226,14 +245,14 @@ function computeDashboardResult(
             agg.total_ttfb_milliseconds += s.total_ttfb_milliseconds
             agg.input_tokens += s.input_tokens
             agg.output_tokens += s.output_tokens
-            agg.cached_tokens += s.cached_tokens
+            agg.cached_tokens += (s.cached_tokens || 0)
+            agg.cache_creation_tokens += (s.cache_creation_tokens || 0)
+            agg.cache_hit_count += (s.cache_hit_count || 0)
+            agg.cache_creation_count += (s.cache_creation_count || 0)
             agg.total_tokens += s.total_tokens
+            agg.web_search_count += (s.web_search_count || 0)
             if (s.max_rpm > agg.max_rpm) agg.max_rpm = s.max_rpm
             if (s.max_tpm > agg.max_tpm) agg.max_tpm = s.max_tpm
-
-            if (s.channel_id) channelSet.add(s.channel_id)
-            if (s.model) modelSet.add(s.model)
-            if (s.token_name) tokenNameSet.add(s.token_name)
 
             // Top-level: by model only
             mergeInto(modelRankMap, s.model, s)
@@ -245,14 +264,17 @@ function computeDashboardResult(
     }
 
     // Current RPM/TPM: from backend
-    agg.current_rpm = response.current_rpm || 0
-    agg.current_tpm = response.current_tpm || 0
+    agg.current_rpm = response.rpm || 0
+    agg.current_tpm = response.tpm || 0
 
-    // Avg RPM/TPM: total / minutes in range
-    if (filters?.start_timestamp && filters?.end_timestamp) {
-        const minutes = Math.max(1, (filters.end_timestamp - filters.start_timestamp) / 60)
-        agg.avg_rpm = Math.round(agg.request_count / minutes)
-        agg.avg_tpm = Math.round(agg.total_tokens / minutes)
+    // Avg RPM/TPM: total / active minutes (only periods with data)
+    const activePoints = timeSeries.filter(ts => ts.summary && ts.summary.length > 0).length
+    if (activePoints > 0) {
+        const timespan = filters?.timespan || 'hour'
+        const minutesPerPoint = timespan === 'month' ? 43200 : timespan === 'day' ? 1440 : timespan === 'minute' ? 1 : 60
+        const activeMinutes = Math.max(1, activePoints * minutesPerPoint)
+        agg.avg_rpm = Math.round(agg.request_count / activeMinutes)
+        agg.avg_tpm = Math.round(agg.total_tokens / activeMinutes)
     }
 
     const sortRanking = (arr: ModelSummary[]) => arr.sort((a, b) => {
@@ -264,9 +286,9 @@ function computeDashboardResult(
     const modelRanking = sortRanking([...modelRankMap.values()])
     const detailRanking = sortRanking([...detailRankMap.values()])
 
-    const channels = [...channelSet].sort((a, b) => a - b)
-    const models = [...new Set(modelRanking.map(m => m.model))]
-    const tokenNames = [...tokenNameSet].sort()
+    const channels = response.channels || []
+    const models = response.models || []
+    const tokenNames = response.token_names || []
 
     return { timeSeries: filled, chartData, aggregates: agg, modelRanking, detailRanking, channels, models, tokenNames }
 }

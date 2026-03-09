@@ -18,6 +18,7 @@ export interface ModelSummary {
     status_429_count: number
     status_500_count: number
     cache_hit_count: number
+    cache_creation_count: number
     input_tokens: number
     image_input_tokens: number
     audio_input_tokens: number
@@ -53,9 +54,16 @@ export interface ChartDataPoint {
     status500Count: number
     retryCount: number
     inputTokens: number
+    imageInputTokens: number
+    audioInputTokens: number
     outputTokens: number
+    imageOutputTokens: number
     cachedTokens: number
+    cacheCreationTokens: number
+    cacheHitCount: number
+    reasoningTokens: number
     totalTokens: number
+    webSearchCount: number
     usedAmount: number
     avgResponseTime: number
     avgTtfb: number
@@ -65,10 +73,11 @@ export interface ChartDataPoint {
 
 export interface DashboardV2Response {
     time_series: TimeSeriesPoint[]
-    current_rpm: number
-    current_tpm: number
     rpm: number
     tpm: number
+    channels?: number[]
+    models?: string[]
+    token_names?: string[]
 }
 
 export interface DashboardFilters {

@@ -19,14 +19,14 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
 
     const getDefaultFilters = (): DashboardFilters & { tokenName?: string } => {
         const today = new Date()
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(today.getDate() - 7)
+        const oneDayAgo = new Date()
+        oneDayAgo.setDate(today.getDate() - 1)
 
         return {
             tokenName: initialTokenName || undefined,
             timespan: 'hour',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            start_timestamp: Math.floor(sevenDaysAgo.getTime() / 1000),
+            start_timestamp: Math.floor(oneDayAgo.getTime() / 1000),
             end_timestamp: Math.floor(today.setHours(23, 59, 59, 999) / 1000)
         }
     }

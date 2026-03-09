@@ -23,7 +23,7 @@ var allSummaryFields = []string{
 	// Count fields
 	"request_count", "retry_count", "exception_count",
 	"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
-	"status400_count", "status429_count", "status500_count", "cache_hit_count",
+	"status400_count", "status429_count", "status500_count", "cache_hit_count", "cache_creation_count",
 	// Usage fields
 	"input_tokens", "image_input_tokens", "audio_input_tokens",
 	"output_tokens", "image_output_tokens", "cached_tokens",
@@ -37,7 +37,7 @@ var summaryFieldGroups = map[string][]string{
 	"count": {
 		"request_count", "retry_count", "exception_count",
 		"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
-		"status400_count", "status429_count", "status500_count", "cache_hit_count",
+		"status400_count", "status429_count", "status500_count", "cache_hit_count", "cache_creation_count",
 	},
 	"usage": {
 		"input_tokens", "image_input_tokens", "audio_input_tokens",
@@ -215,7 +215,8 @@ type Count struct {
 	Status400Count   ZeroNullInt64 `json:"status_400_count"`
 	Status429Count   ZeroNullInt64 `json:"status_429_count"`
 	Status500Count   ZeroNullInt64 `json:"status_500_count"`
-	CacheHitCount    ZeroNullInt64 `json:"cache_hit_count"`
+	CacheHitCount      ZeroNullInt64 `json:"cache_hit_count"`
+	CacheCreationCount ZeroNullInt64 `json:"cache_creation_count"`
 }
 
 func (c *Count) AddRequest(status int, isRetry bool) {
@@ -262,6 +263,7 @@ func (c *Count) Add(other Count) {
 	c.Status429Count += other.Status429Count
 	c.Status500Count += other.Status500Count
 	c.CacheHitCount += other.CacheHitCount
+	c.CacheCreationCount += other.CacheCreationCount
 }
 
 type SummaryData struct {
@@ -427,6 +429,13 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		data["cache_hit_count"] = gorm.Expr(
 			fmt.Sprintf("COALESCE(%s.cache_hit_count, 0) + ?", tableName),
 			d.CacheHitCount,
+		)
+	}
+
+	if d.CacheCreationCount > 0 {
+		data["cache_creation_count"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cache_creation_count, 0) + ?", tableName),
+			d.CacheCreationCount,
 		)
 	}
 

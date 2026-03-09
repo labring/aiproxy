@@ -14,14 +14,14 @@ interface GroupLogsTabProps {
 export function GroupLogsTab({ groupId, initialTokenName }: GroupLogsTabProps) {
     const getDefaultFilters = (): LogFiltersType => {
         const today = new Date()
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(today.getDate() - 7)
+        const oneDayAgo = new Date()
+        oneDayAgo.setDate(today.getDate() - 1)
         return {
             token_name: initialTokenName || undefined,
             code_type: 'all',
             page: 1,
             per_page: 10,
-            start_timestamp: sevenDaysAgo.getTime(),
+            start_timestamp: oneDayAgo.getTime(),
             end_timestamp: new Date(today.setHours(23, 59, 59, 999)).getTime(),
         }
     }

@@ -533,10 +533,15 @@ type TimeSummaryDataV2 struct {
 
 type DashboardV2Response struct {
 	TimeSeries []TimeSummaryDataV2 `json:"time_series"`
-	CurrentRPM int64               `json:"current_rpm"`
-	CurrentTPM int64               `json:"current_tpm"`
 	RPM        int64               `json:"rpm"`
 	TPM        int64               `json:"tpm"`
+	Channels   []int               `json:"channels,omitempty"`
+	Models     []string            `json:"models,omitempty"`
+}
+
+type GroupDashboardV2Response struct {
+	DashboardV2Response
+	TokenNames []string `json:"token_names"`
 }
 
 func GetDashboardV2Data(
@@ -551,17 +556,17 @@ func GetDashboardV2Data(
 		timeSeries []TimeSummaryDataV2
 		currentRPM int64
 		currentTPM int64
+		channels   []int
+		models     []string
 	)
 
 	g := new(errgroup.Group)
 
 	g.Go(func() error {
 		var err error
-
 		timeSeries, err = GetTimeSeriesModelData(
 			channelID, modelName, start, end, timeSpan, timezone, fields,
 		)
-
 		return err
 	})
 
@@ -570,14 +575,28 @@ func GetDashboardV2Data(
 		return nil
 	})
 
+	g.Go(func() error {
+		var err error
+		channels, err = GetUsedChannels(start, end)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		models, err = GetUsedModels(start, end)
+		return err
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	return &DashboardV2Response{
 		TimeSeries: timeSeries,
-		CurrentRPM: currentRPM,
-		CurrentTPM: currentTPM,
+		RPM:        currentRPM,
+		TPM:        currentTPM,
+		Channels:   channels,
+		Models:     models,
 	}, nil
 }
 
@@ -589,22 +608,22 @@ func GetGroupDashboardV2Data(
 	timeSpan TimeSpanType,
 	timezone *time.Location,
 	fields SummarySelectFields,
-) (*DashboardV2Response, error) {
+) (*GroupDashboardV2Response, error) {
 	var (
 		timeSeries []TimeSummaryDataV2
 		currentRPM int64
 		currentTPM int64
+		models     []string
+		tokenNames []string
 	)
 
 	g := new(errgroup.Group)
 
 	g.Go(func() error {
 		var err error
-
 		timeSeries, err = GetGroupTimeSeriesModelData(
 			group, tokenName, modelName, start, end, timeSpan, timezone, fields,
 		)
-
 		return err
 	})
 
@@ -613,14 +632,30 @@ func GetGroupDashboardV2Data(
 		return nil
 	})
 
+	g.Go(func() error {
+		var err error
+		models, err = GetGroupUsedModels(group, tokenName, start, end)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		tokenNames, err = GetGroupUsedTokenNames(group, start, end)
+		return err
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	return &DashboardV2Response{
-		TimeSeries: timeSeries,
-		CurrentRPM: currentRPM,
-		CurrentTPM: currentTPM,
+	return &GroupDashboardV2Response{
+		DashboardV2Response: DashboardV2Response{
+			TimeSeries: timeSeries,
+			RPM:        currentRPM,
+			TPM:        currentTPM,
+			Models:     models,
+		},
+		TokenNames: tokenNames,
 	}, nil
 }
 

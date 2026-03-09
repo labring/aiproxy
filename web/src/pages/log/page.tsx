@@ -11,14 +11,14 @@ export default function LogPage() {
 
     const getDefaultFilters = (): LogFiltersType => {
         const today = new Date()
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(today.getDate() - 7)
+        const oneDayAgo = new Date()
+        oneDayAgo.setDate(today.getDate() - 1)
 
         return {
             code_type: 'all',
             page: 1,
             per_page: 10,
-            start_timestamp: sevenDaysAgo.getTime(),
+            start_timestamp: oneDayAgo.getTime(),
             end_timestamp: today.setHours(23, 59, 59, 999)
         }
     }
