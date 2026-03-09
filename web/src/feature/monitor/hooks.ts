@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '@/api/dashboard'
-import { DashboardFilters, TimeSeriesPoint, ModelSummary, ChartDataPoint } from '@/types/dashboard'
+import { DashboardFilters, DashboardV2Response, TimeSeriesPoint, ModelSummary, ChartDataPoint } from '@/types/dashboard'
 
 export interface DashboardAggregates {
     request_count: number
@@ -13,6 +13,10 @@ export interface DashboardAggregates {
     output_tokens: number
     cached_tokens: number
     total_tokens: number
+    current_rpm: number
+    current_tpm: number
+    avg_rpm: number
+    avg_tpm: number
     max_rpm: number
     max_tpm: number
 }
@@ -93,6 +97,15 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const totalTokens = summary.reduce((acc, s) => acc + (s.total_tokens || 0), 0)
         const usedAmount = summary.reduce((acc, s) => acc + (s.used_amount || 0), 0)
 
+        const status2xxCount = summary.reduce((acc, s) => acc + (s.status_2xx_count || 0), 0)
+        const status4xxCount = summary.reduce((acc, s) => acc + (s.status_4xx_count || 0), 0)
+        const status5xxCount = summary.reduce((acc, s) => acc + (s.status_5xx_count || 0), 0)
+        const statusOtherCount = summary.reduce((acc, s) => acc + (s.status_other_count || 0), 0)
+        const status400Count = summary.reduce((acc, s) => acc + (s.status_400_count || 0), 0)
+        const status429Count = summary.reduce((acc, s) => acc + (s.status_429_count || 0), 0)
+        const status500Count = summary.reduce((acc, s) => acc + (s.status_500_count || 0), 0)
+        const retryCount = summary.reduce((acc, s) => acc + (s.retry_count || 0), 0)
+
         const successCalls = totalCalls - errorCalls
         const totalTime = summary.reduce((acc, s) => acc + (s.total_time_milliseconds || 0), 0)
         const totalTtfb = summary.reduce((acc, s) => acc + (s.total_ttfb_milliseconds || 0), 0)
@@ -130,6 +143,14 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             totalCalls,
             errorCalls,
             errorRate,
+            status2xxCount,
+            status4xxCount,
+            status5xxCount,
+            statusOtherCount,
+            status400Count,
+            status429Count,
+            status500Count,
+            retryCount,
             inputTokens,
             outputTokens,
             cachedTokens,
@@ -144,9 +165,10 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
 }
 
 function computeDashboardResult(
-    timeSeries: TimeSeriesPoint[],
+    response: DashboardV2Response,
     filters?: DashboardFilters,
 ): DashboardV2Result {
+    const timeSeries = response.time_series || []
     const filled = fillMissingPeriods(timeSeries, filters)
     const chartData = toChartData(filled, filters?.timespan, !!filters?.model)
 
@@ -160,6 +182,10 @@ function computeDashboardResult(
         output_tokens: 0,
         cached_tokens: 0,
         total_tokens: 0,
+        current_rpm: 0,
+        current_tpm: 0,
+        avg_rpm: 0,
+        avg_tpm: 0,
         max_rpm: 0,
         max_tpm: 0,
     }
@@ -216,6 +242,17 @@ function computeDashboardResult(
             const detailKey = `${s.channel_id || 0}\0${s.token_name || ''}\0${s.model}`
             mergeInto(detailRankMap, detailKey, s)
         }
+    }
+
+    // Current RPM/TPM: from backend
+    agg.current_rpm = response.current_rpm || 0
+    agg.current_tpm = response.current_tpm || 0
+
+    // Avg RPM/TPM: total / minutes in range
+    if (filters?.start_timestamp && filters?.end_timestamp) {
+        const minutes = Math.max(1, (filters.end_timestamp - filters.start_timestamp) / 60)
+        agg.avg_rpm = Math.round(agg.request_count / minutes)
+        agg.avg_tpm = Math.round(agg.total_tokens / minutes)
     }
 
     const sortRanking = (arr: ModelSummary[]) => arr.sort((a, b) => {

@@ -10,8 +10,10 @@ export interface ModelSummary {
     request_count: number
     retry_count: number
     exception_count: number
+    status_2xx_count: number
     status_4xx_count: number
     status_5xx_count: number
+    status_other_count: number
     status_400_count: number
     status_429_count: number
     status_500_count: number
@@ -42,6 +44,14 @@ export interface ChartDataPoint {
     totalCalls: number
     errorCalls: number
     errorRate: number
+    status2xxCount: number
+    status4xxCount: number
+    status5xxCount: number
+    statusOtherCount: number
+    status400Count: number
+    status429Count: number
+    status500Count: number
+    retryCount: number
     inputTokens: number
     outputTokens: number
     cachedTokens: number
@@ -51,6 +61,14 @@ export interface ChartDataPoint {
     avgTtfb: number
     maxRpm: number
     maxTpm: number
+}
+
+export interface DashboardV2Response {
+    time_series: TimeSeriesPoint[]
+    current_rpm: number
+    current_tpm: number
+    rpm: number
+    tpm: number
 }
 
 export interface DashboardFilters {

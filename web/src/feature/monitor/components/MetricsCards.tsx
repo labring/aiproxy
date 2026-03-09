@@ -8,7 +8,8 @@ import {
     DollarSign,
     Clock,
     TrendingUp,
-    Gauge
+    Gauge,
+    Coins
 } from 'lucide-react'
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,7 +22,7 @@ import {
 } from '@/components/ui/tooltip'
 import type { DashboardV2Result } from '@/feature/monitor/hooks'
 import { cn } from '@/lib/utils'
-import { TFunction } from 'i18next'
+
 
 interface MetricsCardsProps {
     data: DashboardV2Result
@@ -37,11 +38,19 @@ interface MetricCardProps {
     bgColor?: string
     iconColor?: string
     subtitle?: string
-    t?: TFunction
 }
 
-function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor, subtitle, t }: MetricCardProps) {
-    const formattedValue = typeof value === 'number' ? value.toLocaleString() : value
+function formatCompact(v: number): string {
+    if (v >= 1000000000) return (v / 1000000000).toFixed(2).replace(/\.?0+$/, '') + 'B'
+    if (v >= 1000000) return (v / 1000000).toFixed(2).replace(/\.?0+$/, '') + 'M'
+    if (v >= 10000) return (v / 1000).toFixed(1).replace(/\.?0+$/, '') + 'K'
+    return v.toLocaleString()
+}
+
+function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor, subtitle }: MetricCardProps) {
+    const fullValue = typeof value === 'number' ? value.toLocaleString() : value
+    const formattedValue = typeof value === 'number' ? formatCompact(value) : value
+    const isAbbreviated = typeof value === 'number' && value >= 10000
 
     const cardContent = (
         <Card className={cn(
@@ -80,9 +89,9 @@ function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor
                     </TooltipTrigger>
                     <TooltipContent>
                         <p>{tooltip}</p>
-                        {t && (
+                        {isAbbreviated && (
                             <p className="text-xs text-foreground mt-1">
-                                {t('monitor.metrics.fullValue')}: {formattedValue}
+                                {fullValue}
                             </p>
                         )}
                     </TooltipContent>
@@ -99,7 +108,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
 
     if (loading) {
         return (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 8 }).map((_, index) => (
                     <Card key={index} className="border-0 shadow-sm h-28 dark:bg-card">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
@@ -128,7 +137,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
         : 0
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {/* Row 1 */}
             <MetricCard
                 title={t('monitor.metrics.totalRequests')}
@@ -137,7 +146,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
                 tooltip={t('monitor.metrics.totalRequestsTooltip')}
-                t={t}
+
             />
             <MetricCard
                 title={t('monitor.metrics.errorCount')}
@@ -147,7 +156,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-orange-50 dark:bg-orange-950/30"
                 iconColor="bg-orange-100 dark:bg-orange-900/50"
                 tooltip={t('monitor.metrics.errorCountTooltip')}
-                t={t}
+
             />
             <MetricCard
                 title={t('monitor.metrics.usedAmount')}
@@ -156,35 +165,36 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-green-50 dark:bg-green-950/30"
                 iconColor="bg-green-100 dark:bg-green-900/50"
                 tooltip={t('monitor.metrics.usedAmountTooltip')}
-                t={t}
+
             />
             <MetricCard
-                title={t('monitor.metrics.avgLatency')}
-                value={`${avgLatency.toLocaleString()} ms`}
-                icon={<Clock className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                bgColor="bg-cyan-50 dark:bg-cyan-950/30"
-                iconColor="bg-cyan-100 dark:bg-cyan-900/50"
-                tooltip={t('monitor.metrics.avgLatencyTooltip')}
-                t={t}
+                title={t('monitor.metrics.totalTokens')}
+                value={agg.total_tokens}
+                icon={<Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
+                bgColor="bg-amber-50 dark:bg-amber-950/30"
+                iconColor="bg-amber-100 dark:bg-amber-900/50"
+                tooltip={t('monitor.metrics.totalTokensTooltip')}
             />
             {/* Row 2 */}
             <MetricCard
                 title={t('monitor.metrics.currentRpm')}
-                value={agg.max_rpm}
+                value={agg.current_rpm}
+                subtitle={`${t('monitor.metrics.avgRpm')}: ${formatCompact(agg.avg_rpm)}`}
                 icon={<BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
                 tooltip={t('monitor.metrics.currentRpmTooltip')}
-                t={t}
+
             />
             <MetricCard
                 title={t('monitor.metrics.currentTpm')}
-                value={agg.max_tpm}
+                value={agg.current_tpm}
+                subtitle={`${t('monitor.metrics.avgTpm')}: ${formatCompact(agg.avg_tpm)}`}
                 icon={<Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
                 bgColor="bg-purple-50 dark:bg-purple-950/30"
                 iconColor="bg-purple-100 dark:bg-purple-900/50"
                 tooltip={t('monitor.metrics.currentTpmTooltip')}
-                t={t}
+
             />
             <MetricCard
                 title={t('monitor.metrics.maxRpm')}
@@ -193,7 +203,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-indigo-50 dark:bg-indigo-950/30"
                 iconColor="bg-indigo-100 dark:bg-indigo-900/50"
                 tooltip={t('monitor.metrics.maxRpmTooltip')}
-                t={t}
+
             />
             <MetricCard
                 title={t('monitor.metrics.maxTpm')}
@@ -202,7 +212,16 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 bgColor="bg-rose-50 dark:bg-rose-950/30"
                 iconColor="bg-rose-100 dark:bg-rose-900/50"
                 tooltip={t('monitor.metrics.maxTpmTooltip')}
-                t={t}
+
+            />
+            <MetricCard
+                title={t('monitor.metrics.avgLatency')}
+                value={`${avgLatency.toLocaleString()} ms`}
+                icon={<Clock className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                bgColor="bg-cyan-50 dark:bg-cyan-950/30"
+                iconColor="bg-cyan-100 dark:bg-cyan-900/50"
+                tooltip={t('monitor.metrics.avgLatencyTooltip')}
+
             />
         </div>
     )

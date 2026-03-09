@@ -183,7 +183,7 @@ func (l *LarkOnCall) Alert(key string, persistDuration time.Duration, title, mes
 	// Schedule alert after remaining duration
 	ctx, cancel := context.WithCancel(
 		context.Background(),
-	) //nolint:gosec // cancel is stored in l.alerts and called when the alert is cleared
+	)
 	l.alerts[key] = cancel
 
 	go func() {

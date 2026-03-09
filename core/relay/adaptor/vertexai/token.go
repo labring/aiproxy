@@ -50,7 +50,7 @@ func getToken(ctx context.Context, adcJSON string) (string, error) {
 		ctx,
 		option.WithCredentialsJSON(
 			conv.StringToBytes(adcJSON),
-		), //nolint:staticcheck // WithCredentialsJSON alternative requires significant refactor
+		),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create client: %w", err)

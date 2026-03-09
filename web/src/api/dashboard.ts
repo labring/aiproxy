@@ -1,5 +1,5 @@
 import { get } from './index'
-import { TimeSeriesPoint, DashboardFilters } from '@/types/dashboard'
+import { DashboardV2Response, DashboardFilters } from '@/types/dashboard'
 import type { GroupDashboardModel } from '@/types/group'
 
 function buildParams(filters?: DashboardFilters & { tokenName?: string }): string {
@@ -15,20 +15,16 @@ function buildParams(filters?: DashboardFilters & { tokenName?: string }): strin
 }
 
 export const dashboardApi = {
-    getDashboard: async (filters?: DashboardFilters): Promise<TimeSeriesPoint[]> => {
+    getDashboardData: async (filters?: DashboardFilters): Promise<DashboardV2Response> => {
         const queryString = buildParams(filters)
         const url = queryString ? `dashboardv2/?${queryString}` : 'dashboardv2/'
-        return get<TimeSeriesPoint[]>(url)
+        return get<DashboardV2Response>(url)
     },
 
-    getDashboardByGroup: async (group: string, filters?: DashboardFilters & { tokenName?: string }): Promise<TimeSeriesPoint[]> => {
+    getDashboardByGroup: async (group: string, filters?: DashboardFilters & { tokenName?: string }): Promise<DashboardV2Response> => {
         const queryString = buildParams(filters)
         const url = queryString ? `dashboardv2/${group}?${queryString}` : `dashboardv2/${group}`
-        return get<TimeSeriesPoint[]>(url)
-    },
-
-    getDashboardData: async (filters?: DashboardFilters): Promise<TimeSeriesPoint[]> => {
-        return dashboardApi.getDashboard(filters)
+        return get<DashboardV2Response>(url)
     },
 
     getGroupModels: async (group: string): Promise<GroupDashboardModel[]> => {

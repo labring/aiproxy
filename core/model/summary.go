@@ -22,8 +22,8 @@ type SummarySelectFields []string
 var allSummaryFields = []string{
 	// Count fields
 	"request_count", "retry_count", "exception_count",
-	"status4xx_count", "status5xx_count", "status400_count",
-	"status429_count", "status500_count", "cache_hit_count",
+	"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
+	"status400_count", "status429_count", "status500_count", "cache_hit_count",
 	// Usage fields
 	"input_tokens", "image_input_tokens", "audio_input_tokens",
 	"output_tokens", "image_output_tokens", "cached_tokens",
@@ -36,8 +36,8 @@ var allSummaryFields = []string{
 var summaryFieldGroups = map[string][]string{
 	"count": {
 		"request_count", "retry_count", "exception_count",
-		"status4xx_count", "status5xx_count", "status400_count",
-		"status429_count", "status500_count", "cache_hit_count",
+		"status2xx_count", "status4xx_count", "status5xx_count", "status_other_count",
+		"status400_count", "status429_count", "status500_count", "cache_hit_count",
 	},
 	"usage": {
 		"input_tokens", "image_input_tokens", "audio_input_tokens",
@@ -205,15 +205,17 @@ type SummaryUnique struct {
 }
 
 type Count struct {
-	RequestCount   int64         `json:"request_count"`
-	RetryCount     ZeroNullInt64 `json:"retry_count"`
-	ExceptionCount ZeroNullInt64 `json:"exception_count"`
-	Status4xxCount ZeroNullInt64 `json:"status_4xx_count"`
-	Status5xxCount ZeroNullInt64 `json:"status_5xx_count"`
-	Status400Count ZeroNullInt64 `json:"status_400_count"`
-	Status429Count ZeroNullInt64 `json:"status_429_count"`
-	Status500Count ZeroNullInt64 `json:"status_500_count"`
-	CacheHitCount  ZeroNullInt64 `json:"cache_hit_count"`
+	RequestCount     int64         `json:"request_count"`
+	RetryCount       ZeroNullInt64 `json:"retry_count"`
+	ExceptionCount   ZeroNullInt64 `json:"exception_count"`
+	Status2xxCount   ZeroNullInt64 `json:"status_2xx_count"`
+	Status4xxCount   ZeroNullInt64 `json:"status_4xx_count"`
+	Status5xxCount   ZeroNullInt64 `json:"status_5xx_count"`
+	StatusOtherCount ZeroNullInt64 `json:"status_other_count"`
+	Status400Count   ZeroNullInt64 `json:"status_400_count"`
+	Status429Count   ZeroNullInt64 `json:"status_429_count"`
+	Status500Count   ZeroNullInt64 `json:"status_500_count"`
+	CacheHitCount    ZeroNullInt64 `json:"cache_hit_count"`
 }
 
 func (c *Count) AddRequest(status int, isRetry bool) {
@@ -227,24 +229,24 @@ func (c *Count) AddRequest(status int, isRetry bool) {
 		c.RetryCount++
 	}
 
-	if status >= 400 && status < 500 {
+	switch {
+	case status >= 200 && status < 300:
+		c.Status2xxCount++
+	case status >= 400 && status < 500:
 		c.Status4xxCount++
-	}
-
-	if status >= 500 && status < 600 {
+		if status == http.StatusBadRequest {
+			c.Status400Count++
+		}
+		if status == http.StatusTooManyRequests {
+			c.Status429Count++
+		}
+	case status >= 500 && status < 600:
 		c.Status5xxCount++
-	}
-
-	if status == http.StatusBadRequest {
-		c.Status400Count++
-	}
-
-	if status == http.StatusTooManyRequests {
-		c.Status429Count++
-	}
-
-	if status == http.StatusInternalServerError {
-		c.Status500Count++
+		if status == http.StatusInternalServerError {
+			c.Status500Count++
+		}
+	default:
+		c.StatusOtherCount++
 	}
 }
 
@@ -252,8 +254,10 @@ func (c *Count) Add(other Count) {
 	c.RequestCount += other.RequestCount
 	c.RetryCount += other.RetryCount
 	c.ExceptionCount += other.ExceptionCount
+	c.Status2xxCount += other.Status2xxCount
 	c.Status4xxCount += other.Status4xxCount
 	c.Status5xxCount += other.Status5xxCount
+	c.StatusOtherCount += other.StatusOtherCount
 	c.Status400Count += other.Status400Count
 	c.Status429Count += other.Status429Count
 	c.Status500Count += other.Status500Count
@@ -292,6 +296,13 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		)
 	}
 
+	if d.Status2xxCount > 0 {
+		data["status2xx_count"] = gorm.Expr(
+			tableName+".status2xx_count + ?",
+			d.Status2xxCount,
+		)
+	}
+
 	if d.Status4xxCount > 0 {
 		data["status4xx_count"] = gorm.Expr(
 			tableName+".status4xx_count + ?",
@@ -303,6 +314,13 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		data["status5xx_count"] = gorm.Expr(
 			tableName+".status5xx_count + ?",
 			d.Status5xxCount,
+		)
+	}
+
+	if d.StatusOtherCount > 0 {
+		data["status_other_count"] = gorm.Expr(
+			tableName+".status_other_count + ?",
+			d.StatusOtherCount,
 		)
 	}
 
@@ -912,9 +930,11 @@ func GetDashboardData(
 	}
 
 	var (
-		chartData []ChartData
-		channels  []int
-		models    []string
+		chartData  []ChartData
+		channels   []int
+		models     []string
+		currentRPM int64
+		currentTPM int64
 	)
 
 	g := new(errgroup.Group)
@@ -940,6 +960,11 @@ func GetDashboardData(
 		return err
 	})
 
+	g.Go(func() error {
+		currentRPM, currentTPM = getCurrentRPM(channelID, modelName)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
@@ -947,6 +972,8 @@ func GetDashboardData(
 	dashboardResponse := sumDashboardResponse(chartData)
 	dashboardResponse.Channels = channels
 	dashboardResponse.Models = models
+	dashboardResponse.RPM = currentRPM
+	dashboardResponse.TPM = currentTPM
 
 	return &dashboardResponse, nil
 }
@@ -987,6 +1014,8 @@ func GetGroupDashboardData(
 		chartData  []ChartData
 		tokenNames []string
 		models     []string
+		currentRPM int64
+		currentTPM int64
 	)
 
 	g := new(errgroup.Group)
@@ -1022,12 +1051,19 @@ func GetGroupDashboardData(
 		return err
 	})
 
+	g.Go(func() error {
+		currentRPM, currentTPM = getGroupCurrentRPM(group, tokenName, modelName)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	dashboardResponse := sumDashboardResponse(chartData)
 	dashboardResponse.Models = models
+	dashboardResponse.RPM = currentRPM
+	dashboardResponse.TPM = currentTPM
 
 	return &GroupDashboardResponse{
 		DashboardResponse: dashboardResponse,

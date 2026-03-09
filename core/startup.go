@@ -215,7 +215,7 @@ func writeToEnvFile(envFile, key, value string) error {
 		envFile,
 		[]byte(content),
 		0o600,
-	) //nolint:gosec // envFile path is from internal configuration
+	)
 }
 
 func ensureAdminKey() error {

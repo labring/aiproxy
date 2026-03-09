@@ -377,9 +377,11 @@ func getDashboardDataMinute(
 	}
 
 	var (
-		chartData []ChartData
-		channels  []int
-		models    []string
+		chartData  []ChartData
+		channels   []int
+		models     []string
+		currentRPM int64
+		currentTPM int64
 	)
 
 	g := new(errgroup.Group)
@@ -408,6 +410,11 @@ func getDashboardDataMinute(
 		return err
 	})
 
+	g.Go(func() error {
+		currentRPM, currentTPM = getCurrentRPM(channelID, modelName)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
@@ -415,6 +422,8 @@ func getDashboardDataMinute(
 	dashboardResponse := sumDashboardResponse(chartData)
 	dashboardResponse.Channels = channels
 	dashboardResponse.Models = models
+	dashboardResponse.RPM = currentRPM
+	dashboardResponse.TPM = currentTPM
 
 	return &dashboardResponse, nil
 }
@@ -442,6 +451,8 @@ func getGroupDashboardDataMinute(
 		chartData  []ChartData
 		tokenNames []string
 		models     []string
+		currentRPM int64
+		currentTPM int64
 	)
 
 	g := new(errgroup.Group)
@@ -477,12 +488,19 @@ func getGroupDashboardDataMinute(
 		return err
 	})
 
+	g.Go(func() error {
+		currentRPM, currentTPM = getGroupCurrentRPM(group, tokenName, modelName)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	dashboardResponse := sumDashboardResponse(chartData)
 	dashboardResponse.Models = models
+	dashboardResponse.RPM = currentRPM
+	dashboardResponse.TPM = currentTPM
 
 	return &GroupDashboardResponse{
 		DashboardResponse: dashboardResponse,
@@ -511,6 +529,195 @@ type SummaryDataV2 struct {
 type TimeSummaryDataV2 struct {
 	Timestamp int64           `json:"timestamp"`
 	Summary   []SummaryDataV2 `json:"summary"`
+}
+
+type DashboardV2Response struct {
+	TimeSeries []TimeSummaryDataV2 `json:"time_series"`
+	CurrentRPM int64               `json:"current_rpm"`
+	CurrentTPM int64               `json:"current_tpm"`
+	RPM        int64               `json:"rpm"`
+	TPM        int64               `json:"tpm"`
+}
+
+func GetDashboardV2Data(
+	channelID int,
+	modelName string,
+	start, end time.Time,
+	timeSpan TimeSpanType,
+	timezone *time.Location,
+	fields SummarySelectFields,
+) (*DashboardV2Response, error) {
+	var (
+		timeSeries []TimeSummaryDataV2
+		currentRPM int64
+		currentTPM int64
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		timeSeries, err = GetTimeSeriesModelData(
+			channelID, modelName, start, end, timeSpan, timezone, fields,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		currentRPM, currentTPM = getCurrentRPM(channelID, modelName)
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &DashboardV2Response{
+		TimeSeries: timeSeries,
+		CurrentRPM: currentRPM,
+		CurrentTPM: currentTPM,
+	}, nil
+}
+
+func GetGroupDashboardV2Data(
+	group string,
+	tokenName string,
+	modelName string,
+	start, end time.Time,
+	timeSpan TimeSpanType,
+	timezone *time.Location,
+	fields SummarySelectFields,
+) (*DashboardV2Response, error) {
+	var (
+		timeSeries []TimeSummaryDataV2
+		currentRPM int64
+		currentTPM int64
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		timeSeries, err = GetGroupTimeSeriesModelData(
+			group, tokenName, modelName, start, end, timeSpan, timezone, fields,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		currentRPM, currentTPM = getGroupCurrentRPM(group, tokenName, modelName)
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &DashboardV2Response{
+		TimeSeries: timeSeries,
+		CurrentRPM: currentRPM,
+		CurrentTPM: currentTPM,
+	}, nil
+}
+
+func getCurrentRPM(channelID int, modelName string) (int64, int64) {
+	now := time.Now()
+	recentStart := now.Add(-2 * time.Minute).Unix()
+	recentEnd := now.Unix()
+
+	query := LogDB.Model(&SummaryMinute{}).
+		Where("minute_timestamp >= ? AND minute_timestamp <= ?", recentStart, recentEnd)
+
+	if channelID != 0 {
+		query = query.Where("channel_id = ?", channelID)
+	}
+
+	if modelName != "" {
+		query = query.Where("model = ?", modelName)
+	}
+
+	type Result struct {
+		RPM int64 `json:"rpm"`
+		TPM int64 `json:"tpm"`
+	}
+
+	var result Result
+
+	err := query.
+		Select("SUM(request_count) as rpm, SUM(total_tokens) as tpm").
+		Where("minute_timestamp = (?)",
+			LogDB.Model(&SummaryMinute{}).
+				Select("MAX(minute_timestamp)").
+				Where("minute_timestamp >= ? AND minute_timestamp <= ?", recentStart, recentEnd).
+				Scopes(func(db *gorm.DB) *gorm.DB {
+					if channelID != 0 {
+						db = db.Where("channel_id = ?", channelID)
+					}
+					if modelName != "" {
+						db = db.Where("model = ?", modelName)
+					}
+					return db
+				}),
+		).
+		Find(&result).Error
+	if err != nil {
+		return 0, 0
+	}
+
+	return result.RPM, result.TPM
+}
+
+func getGroupCurrentRPM(group, tokenName, modelName string) (int64, int64) {
+	now := time.Now()
+	recentStart := now.Add(-2 * time.Minute).Unix()
+	recentEnd := now.Unix()
+
+	query := LogDB.Model(&GroupSummaryMinute{}).
+		Where("group_id = ?", group).
+		Where("minute_timestamp >= ? AND minute_timestamp <= ?", recentStart, recentEnd)
+
+	if tokenName != "" {
+		query = query.Where("token_name = ?", tokenName)
+	}
+
+	if modelName != "" {
+		query = query.Where("model = ?", modelName)
+	}
+
+	type Result struct {
+		RPM int64 `json:"rpm"`
+		TPM int64 `json:"tpm"`
+	}
+
+	var result Result
+
+	err := query.
+		Select("SUM(request_count) as rpm, SUM(total_tokens) as tpm").
+		Where("minute_timestamp = (?)",
+			LogDB.Model(&GroupSummaryMinute{}).
+				Select("MAX(minute_timestamp)").
+				Where("group_id = ?", group).
+				Where("minute_timestamp >= ? AND minute_timestamp <= ?", recentStart, recentEnd).
+				Scopes(func(db *gorm.DB) *gorm.DB {
+					if tokenName != "" {
+						db = db.Where("token_name = ?", tokenName)
+					}
+					if modelName != "" {
+						db = db.Where("model = ?", modelName)
+					}
+					return db
+				}),
+		).
+		Find(&result).Error
+	if err != nil {
+		return 0, 0
+	}
+
+	return result.RPM, result.TPM
 }
 
 func GetTimeSeriesModelData(

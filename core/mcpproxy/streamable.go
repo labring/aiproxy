@@ -90,7 +90,7 @@ func (p *StreamableProxy) handleGetRequest(w http.ResponseWriter, r *http.Reques
 		http.MethodGet,
 		backendInfo,
 		nil,
-	) //nolint:gosec // proxy forwards requests to configured backend URL
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return
@@ -200,7 +200,7 @@ func (p *StreamableProxy) handlePostRequest(w http.ResponseWriter, r *http.Reque
 		http.MethodPost,
 		backend,
 		r.Body,
-	) //nolint:gosec // proxy forwards requests to configured backend URL
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return
@@ -297,7 +297,7 @@ func (p *StreamableProxy) handleDeleteRequest(w http.ResponseWriter, r *http.Req
 		http.MethodDelete,
 		backendInfo,
 		nil,
-	) //nolint:gosec // proxy forwards requests to configured backend URL
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return

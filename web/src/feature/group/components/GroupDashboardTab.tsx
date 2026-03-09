@@ -104,6 +104,7 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                         modelRanking={data.modelRanking}
                         detailRanking={data.detailRanking}
                         hasModelFilter={!!filters.model}
+                        isGroup={true}
                         loading={isLoading}
                     />
                 )
