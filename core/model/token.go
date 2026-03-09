@@ -59,6 +59,7 @@ func (t *Token) BeforeCreate(_ *gorm.DB) error {
 	if t.PeriodQuota > 0 && t.PeriodLastUpdateTime.IsZero() {
 		t.PeriodLastUpdateTime = time.Now()
 	}
+
 	return nil
 }
 
@@ -732,8 +733,10 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 
 		// Only initialize period_last_update_time if it's not already set in the database
 		// and the request doesn't explicitly set it
-		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 && currentToken.PeriodLastUpdateTime.IsZero() {
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 &&
+			currentToken.PeriodLastUpdateTime.IsZero() {
 			token.PeriodLastUpdateTime = time.Now()
+
 			selects = append(selects, "period_last_update_time")
 		}
 	}
@@ -833,8 +836,10 @@ func UpdateGroupToken(
 
 		// Only initialize period_last_update_time if it's not already set in the database
 		// and the request doesn't explicitly set it
-		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 && currentToken.PeriodLastUpdateTime.IsZero() {
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 &&
+			currentToken.PeriodLastUpdateTime.IsZero() {
 			token.PeriodLastUpdateTime = time.Now()
+
 			selects = append(selects, "period_last_update_time")
 		}
 	}

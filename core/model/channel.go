@@ -82,9 +82,11 @@ func (c *Channel) GetPriority() int32 {
 	if c.Priority == 0 {
 		return DefaultPriority
 	}
+
 	if c.Priority > MaxPriority {
 		return MaxPriority
 	}
+
 	return c.Priority
 }
 
@@ -562,7 +564,15 @@ func GetChannelsBasicInfoByIDs(ids []int) ([]*ChannelBasicInfo, error) {
 	if len(ids) == 0 {
 		return []*ChannelBasicInfo{}, nil
 	}
+
 	var result []*ChannelBasicInfo
-	err := DB.Unscoped().Model(&Channel{}).Select("id", "name", "type").Where("id IN ?", ids).Find(&result).Error
+
+	err := DB.Unscoped().
+		Model(&Channel{}).
+		Select("id", "name", "type").
+		Where("id IN ?", ids).
+		Find(&result).
+		Error
+
 	return result, err
 }

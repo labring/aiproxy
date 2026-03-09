@@ -125,8 +125,14 @@ func SetAPIRouter(router *gin.Engine) {
 			channelRoute.DELETE("/:id", controller.DeleteChannel)
 			channelRoute.GET("/:id/test", controller.TestChannelModels)
 			channelRoute.GET("/:id/test/*model", controller.TestChannel)
-			channelRoute.POST("/test-preview", controller.TestChannelPreview)     // 测试未保存的渠道配置（单个模型）
-			channelRoute.POST("/test-preview-all", controller.TestChannelPreviewAll) // 测试未保存的渠道配置（所有模型）
+			channelRoute.POST(
+				"/test-preview",
+				controller.TestChannelPreview,
+			) // 测试未保存的渠道配置（单个模型）
+			channelRoute.POST(
+				"/test-preview-all",
+				controller.TestChannelPreviewAll,
+			) // 测试未保存的渠道配置（所有模型）
 			channelRoute.GET("/:id/update_balance", controller.UpdateChannelBalance)
 		}
 

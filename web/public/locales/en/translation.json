@@ -70,8 +70,10 @@
       "dateRangePlaceholder": "Select date range",
       "timespan": "Time Granularity",
       "timespanPlaceholder": "Select time granularity",
+      "timespanMinute": "Minute",
       "timespanHour": "Hour",
       "timespanDay": "Day",
+      "timespanMonth": "Month",
       "search": "Search",
       "reset": "Reset"
     },
@@ -80,15 +82,42 @@
       "totalRequestsTooltip": "Total number of requests in the time range",
       "errorCount": "Error Count",
       "errorCountTooltip": "Number of exception requests in the time range",
+      "errorRate": "Error Rate",
+      "usedAmount": "Used Amount",
+      "usedAmountTooltip": "Total used amount in the time range",
+      "avgLatency": "Avg Latency",
+      "avgLatencyTooltip": "Average request latency (ms)",
       "currentRpm": "Current RPM",
       "currentRpmTooltip": "Requests Per Minute",
       "currentTpm": "Current TPM",
       "currentTpmTooltip": "Tokens Per Minute",
+      "maxRpm": "Max RPM",
+      "maxRpmTooltip": "Maximum requests per minute in the time range",
+      "maxTpm": "Max TPM",
+      "maxTpmTooltip": "Maximum tokens per minute in the time range",
       "outputTokens": "Output Tokens",
       "outputTokensTooltip": "Total output tokens in the time range",
       "fullValue": "Full Value"
     },
     "charts": {
+      "incremental": "Incremental",
+      "cumulative": "Cumulative",
+      "tokenTypes": {
+        "total": "Total",
+        "input": "Input",
+        "output": "Output",
+        "cached": "Cached"
+      },
+      "totalCalls": "Total Calls",
+      "errorCalls": "Error Calls",
+      "errorRate": "Error Rate",
+      "tokenUsage": "Token Usage",
+      "costTrend": "Cost",
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfb": "Avg TTFB",
+      "maxRpm": "Max RPM",
+      "maxTpm": "Max TPM",
+      "modelRanking": "Model Ranking",
       "tokensChart": {
         "cacheCreationTokens": "Cache Creation Tokens",
         "cachedTokens": "Cached Tokens",
@@ -101,6 +130,14 @@
         "requestCount": "Request Count",
         "exceptionCount": "Exception Count"
       }
+    },
+    "table": {
+      "model": "Model",
+      "totalCalls": "Total Calls",
+      "errorCalls": "Error Calls",
+      "cost": "Cost",
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfb": "Avg TTFB"
     }
   },
   "table": {
@@ -215,6 +252,7 @@
     "streamFakePlugin": "Stream Fake",
     "accessibleSets": "Accessible Sets",
     "loading": "Loading...",
+    "priceColumn": "Price",
     "noChannel": "No available channels",
     "availableChannels": "Available Channels",
     "dialog": {

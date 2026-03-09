@@ -629,22 +629,22 @@ func AutoTestBannedModels() {
 // TestChannelRequest 用于测试未保存的渠道配置
 // 尽可能接近 Channel 结构
 type TestChannelRequest struct {
-	Type         int                `json:"type" binding:"required"`
-	Key          string             `json:"key" binding:"required"`
-	BaseURL      string             `json:"base_url"`
-	Name         string             `json:"name"`
-	Models       []string           `json:"models"`
-	ModelMapping map[string]string  `json:"model_mapping"`
-	Configs      map[string]any     `json:"configs"`
+	Type         int               `json:"type"          binding:"required"`
+	Key          string            `json:"key"           binding:"required"`
+	BaseURL      string            `json:"base_url"`
+	Name         string            `json:"name"`
+	Models       []string          `json:"models"`
+	ModelMapping map[string]string `json:"model_mapping"`
+	Configs      map[string]any    `json:"configs"`
 }
 
 // TestSingleModelRequest 测试单个模型的请求
 type TestSingleModelRequest struct {
-	Type         int               `json:"type" binding:"required"`
-	Key          string            `json:"key" binding:"required"`
+	Type         int               `json:"type"          binding:"required"`
+	Key          string            `json:"key"           binding:"required"`
 	BaseURL      string            `json:"base_url"`
 	Name         string            `json:"name"`
-	Model        string            `json:"model" binding:"required"`
+	Model        string            `json:"model"         binding:"required"`
 	ModelMapping map[string]string `json:"model_mapping"`
 	Configs      map[string]any    `json:"configs"`
 }
@@ -680,6 +680,7 @@ func TestChannelPreview(c *gin.Context) {
 			Success: false,
 			Message: err.Error(),
 		})
+
 		return
 	}
 
@@ -705,6 +706,7 @@ func TestChannelPreview(c *gin.Context) {
 			Success: false,
 			Message: err.Error(),
 		})
+
 		return
 	}
 
@@ -738,6 +740,7 @@ func TestChannelPreviewAll(c *gin.Context) {
 			Success: false,
 			Message: err.Error(),
 		})
+
 		return
 	}
 
@@ -747,6 +750,7 @@ func TestChannelPreviewAll(c *gin.Context) {
 			Success: false,
 			Message: "no models to test",
 		})
+
 		return
 	}
 
@@ -763,6 +767,7 @@ func TestChannelPreviewAll(c *gin.Context) {
 	hasError := atomic.Bool{}
 
 	var wg sync.WaitGroup
+
 	semaphore := make(chan struct{}, 5)
 
 	// 随机打乱模型顺序
@@ -773,6 +778,7 @@ func TestChannelPreviewAll(c *gin.Context) {
 
 	for _, modelName := range models {
 		wg.Add(1)
+
 		semaphore <- struct{}{}
 
 		go func(model string) {
@@ -791,12 +797,14 @@ func TestChannelPreviewAll(c *gin.Context) {
 					model,
 					err.Error(),
 				)
+
 				hasError.Store(true)
 			} else {
 				// 不返回成功响应的敏感信息
 				if ct.Success {
 					ct.Response = ""
 				}
+
 				result.Data = ct
 				if !ct.Success {
 					hasError.Store(true)

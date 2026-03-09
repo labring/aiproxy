@@ -111,7 +111,7 @@ export function LogFilters({
     }, [model, tokenName, channel, keyword, dateRange, codeType])
 
     // Auto-refresh on filter change (skip initial mount), debounce keyword input
-    const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
     const prevKeywordRef = useRef(keyword)
     const isFirstRender = useRef(true)
 

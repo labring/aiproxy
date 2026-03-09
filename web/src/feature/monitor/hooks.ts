@@ -28,7 +28,7 @@ export interface DashboardV2Result {
     tokenNames: string[]
 }
 
-function alignTimestamp(timestamp: number, timespan: string, tz?: string): number {
+function alignTimestamp(timestamp: number, timespan: string): number {
     const d = new Date(timestamp * 1000)
     if (timespan === 'month') {
         d.setDate(1)
@@ -146,7 +146,6 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
 function computeDashboardResult(
     timeSeries: TimeSeriesPoint[],
     filters?: DashboardFilters,
-    isGroup?: boolean,
 ): DashboardV2Result {
     const filled = fillMissingPeriods(timeSeries, filters)
     const chartData = toChartData(filled, filters?.timespan, !!filters?.model)
@@ -246,7 +245,7 @@ export const useDashboard = (filters?: DashboardFilters) => {
 
     const result = useMemo(() => {
         if (!query.data) return undefined
-        return computeDashboardResult(query.data, filters, false)
+        return computeDashboardResult(query.data, filters)
     }, [query.data, filters])
 
     return {
@@ -266,7 +265,7 @@ export const useGroupDashboard = (group: string, filters?: DashboardFilters & { 
 
     const result = useMemo(() => {
         if (!query.data) return undefined
-        return computeDashboardResult(query.data, filters, true)
+        return computeDashboardResult(query.data, filters)
     }, [query.data, filters])
 
     return {

@@ -49,8 +49,7 @@ interface ChannelFormProps {
 export function ChannelForm({
     mode = 'create',
     channelId,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    channel,
+    channel: _channel,
     onSuccess,
     defaultValues = {
         type: 0,
