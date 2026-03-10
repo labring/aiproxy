@@ -124,18 +124,28 @@ jobs:
           echo "TAG_NAME=${tag_name}" >> $GITHUB_OUTPUT
 
       - name: Release
-        uses: softprops/action-gh-release@v2
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false
-          prerelease: ${{ steps.release_meta.outputs.PRERELEASE }}
-          append_body: false
-          fail_on_unmatched_files: true
-          name: ${{ steps.release_meta.outputs.RELEASE_NAME }}
-          tag_name: ${{ steps.release_meta.outputs.TAG_NAME }}
-          files: |
-            core/aiproxy-${{ matrix.targets.GOOS }}-${{ matrix.targets.GOARCH }}${{ matrix.targets.EXT }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          asset_file="core/aiproxy-${{ matrix.targets.GOOS }}-${{ matrix.targets.GOARCH }}${{ matrix.targets.EXT }}"
+          prerelease_flag=""
+
+          test -f "${asset_file}"
+
+          if [[ "${{ steps.release_meta.outputs.PRERELEASE }}" == "true" ]]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          gh release create "${{ steps.release_meta.outputs.TAG_NAME }}" \
+            --title "${{ steps.release_meta.outputs.RELEASE_NAME }}" \
+            --verify-tag \
+            --generate-notes \
+            ${prerelease_flag} \
+            "${asset_file}" \
+          || gh release upload "${{ steps.release_meta.outputs.TAG_NAME }}" "${asset_file}"
 
   build-docker-images:
     name: Build Docker Images
