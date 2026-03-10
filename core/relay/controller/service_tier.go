@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -9,6 +11,9 @@ import (
 func GetRequestServiceTier(c *gin.Context) (string, error) {
 	node, err := common.UnmarshalRequest2NodeReusable(c.Request, "service_tier")
 	if err != nil {
+		if errors.Is(err, ast.ErrNotExist) {
+			return "", nil
+		}
 		return "", err
 	}
 
