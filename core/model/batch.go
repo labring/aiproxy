@@ -365,6 +365,7 @@ func BatchRecordLogs(
 	upstreamID string,
 	serviceTier string,
 	summaryServiceTier string,
+	summaryClaudeLongContext bool,
 ) (err error) {
 	if now.IsZero() {
 		now = time.Now()
@@ -439,6 +440,7 @@ func BatchRecordLogs(
 		usage,
 		amount,
 		summaryServiceTier,
+		summaryClaudeLongContext,
 	)
 
 	return err
@@ -458,6 +460,7 @@ func BatchUpdateSummary(
 	usage Usage,
 	amount Amount,
 	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if now.IsZero() {
 		now = time.Now()
@@ -482,6 +485,7 @@ func BatchUpdateSummary(
 			usage,
 			!downstreamResult,
 			serviceTier,
+			summaryClaudeLongContext,
 		)
 
 		updateSummaryDataMinute(
@@ -495,6 +499,7 @@ func BatchUpdateSummary(
 			usage,
 			!downstreamResult,
 			serviceTier,
+			summaryClaudeLongContext,
 		)
 	}
 
@@ -519,6 +524,7 @@ func BatchUpdateSummary(
 			amount,
 			usage,
 			serviceTier,
+			summaryClaudeLongContext,
 		)
 
 		updateGroupSummaryDataMinute(
@@ -532,6 +538,7 @@ func BatchUpdateSummary(
 			amount,
 			usage,
 			serviceTier,
+			summaryClaudeLongContext,
 		)
 	}
 }
@@ -604,6 +611,7 @@ func updateGroupSummaryData(
 	amount Amount,
 	usage Usage,
 	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -640,6 +648,11 @@ func updateGroupSummaryData(
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
 	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+	if summaryClaudeLongContext {
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
@@ -659,6 +672,7 @@ func updateGroupSummaryDataMinute(
 	amount Amount,
 	usage Usage,
 	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -695,6 +709,11 @@ func updateGroupSummaryDataMinute(
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
 	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+	if summaryClaudeLongContext {
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
@@ -716,6 +735,7 @@ func updateSummaryData(
 	usage Usage,
 	isRetry bool,
 	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -751,6 +771,11 @@ func updateSummaryData(
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
 	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+	if summaryClaudeLongContext {
+		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
+		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++
@@ -772,6 +797,7 @@ func updateSummaryDataMinute(
 	usage Usage,
 	isRetry bool,
 	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -807,6 +833,11 @@ func updateSummaryDataMinute(
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
 	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+	if summaryClaudeLongContext {
+		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
+		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++

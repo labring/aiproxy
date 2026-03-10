@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -48,6 +49,7 @@ interface ModelFormProps {
         max_error_rate?: number
         force_save_detail?: boolean
         summary_service_tier?: boolean
+        summary_claude_long_context?: boolean
         price?: ModelPrice
         plugin?: Plugin
     }
@@ -102,6 +104,7 @@ export function ModelForm({
             max_error_rate: defaultValues.max_error_rate,
             force_save_detail: defaultValues.force_save_detail ?? false,
             summary_service_tier: defaultValues.summary_service_tier ?? false,
+            summary_claude_long_context: defaultValues.summary_claude_long_context ?? false,
             price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
@@ -312,6 +315,7 @@ export function ModelForm({
             ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
             ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
+            ...(data.summary_claude_long_context !== undefined && { summary_claude_long_context: data.summary_claude_long_context }),
             ...(priceData && { price: priceData }),
             ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
         }
@@ -328,6 +332,7 @@ export function ModelForm({
                 ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
                 ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
+                ...(data.summary_claude_long_context !== undefined && { summary_claude_long_context: data.summary_claude_long_context }),
                 ...(priceData && { price: priceData }),
                 ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
             }, {
@@ -539,7 +544,10 @@ export function ModelForm({
                         name="force_save_detail"
                         render={({ field }) => (
                             <FormItem className="flex flex-row items-center justify-between py-2">
-                                <FormLabel>{t("model.dialog.forceSaveDetail")}</FormLabel>
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.forceSaveDetail")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.forceSaveDetailDescription")}</FormDescription>
+                                </div>
                                 <FormControl>
                                     <Switch
                                         checked={field.value}
@@ -556,7 +564,29 @@ export function ModelForm({
                         name="summary_service_tier"
                         render={({ field }) => (
                             <FormItem className="flex flex-row items-center justify-between py-2">
-                                <FormLabel>{t("model.dialog.recordServiceTier")}</FormLabel>
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.recordServiceTier")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.recordServiceTierDescription")}</FormDescription>
+                                </div>
+                                <FormControl>
+                                    <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="summary_claude_long_context"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between py-2">
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.recordClaudeLongContext")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.recordClaudeLongContextDescription")}</FormDescription>
+                                </div>
                                 <FormControl>
                                     <Switch
                                         checked={field.value}

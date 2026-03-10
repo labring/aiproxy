@@ -466,6 +466,9 @@ type SaveGroupModelConfigRequest struct {
 
 	OverrideSummaryServiceTier bool `json:"override_summary_service_tier"`
 	SummaryServiceTier         bool `json:"summary_service_tier"`
+
+	OverrideSummaryClaudeLongContext bool `json:"override_summary_claude_long_context"`
+	SummaryClaudeLongContext         bool `json:"summary_claude_long_context"`
 }
 
 func (r *SaveGroupModelConfigRequest) ToGroupModelConfig(groupID string) model.GroupModelConfig {
@@ -484,10 +487,12 @@ func (r *SaveGroupModelConfigRequest) ToGroupModelConfig(groupID string) model.G
 		OverrideRetryTimes: r.OverrideRetryTimes,
 		RetryTimes:         r.RetryTimes,
 
-		OverrideForceSaveDetail:    r.OverrideForceSaveDetail,
-		ForceSaveDetail:            r.ForceSaveDetail,
-		OverrideSummaryServiceTier: r.OverrideSummaryServiceTier,
-		SummaryServiceTier:         r.SummaryServiceTier,
+		OverrideForceSaveDetail:          r.OverrideForceSaveDetail,
+		ForceSaveDetail:                  r.ForceSaveDetail,
+		OverrideSummaryServiceTier:       r.OverrideSummaryServiceTier,
+		SummaryServiceTier:               r.SummaryServiceTier,
+		OverrideSummaryClaudeLongContext: r.OverrideSummaryClaudeLongContext,
+		SummaryClaudeLongContext:         r.SummaryClaudeLongContext,
 	}
 }
 

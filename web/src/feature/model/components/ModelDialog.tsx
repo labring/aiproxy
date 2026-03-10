@@ -50,6 +50,7 @@ export function ModelDialog({
             max_error_rate: model.max_error_rate,
             force_save_detail: model.force_save_detail,
             summary_service_tier: model.summary_service_tier ?? false,
+            summary_claude_long_context: model.summary_claude_long_context ?? false,
             price: model.price,
             plugin: model.plugin
         }

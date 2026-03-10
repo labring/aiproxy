@@ -64,6 +64,7 @@ export interface ModelConfig {
     max_error_rate?: number
     force_save_detail?: boolean
     summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
     plugin: Plugin
 }
 
@@ -141,6 +142,7 @@ export interface ModelCreateRequest {
     max_error_rate?: number
     force_save_detail?: boolean
     summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
     price?: ModelPrice | Record<string, unknown>
     plugin?: Plugin
 }

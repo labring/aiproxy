@@ -517,6 +517,7 @@ type SummaryDataV2 struct {
 	SummaryDataSet
 	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty" gorm:"embedded;embeddedPrefix:service_tier_flex_"`
 	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty" gorm:"embedded;embeddedPrefix:claude_long_context_"`
 
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`

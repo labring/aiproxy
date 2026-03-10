@@ -52,6 +52,8 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
     force_save_detail: false,
     override_summary_service_tier: false,
     summary_service_tier: false,
+    override_summary_claude_long_context: false,
+    summary_claude_long_context: false,
 })
 
 export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
@@ -94,6 +96,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [formForceSaveDetail, setFormForceSaveDetail] = useState(false)
     const [formOverrideSummaryServiceTier, setFormOverrideSummaryServiceTier] = useState(false)
     const [formSummaryServiceTier, setFormSummaryServiceTier] = useState(false)
+    const [formOverrideSummaryClaudeLongContext, setFormOverrideSummaryClaudeLongContext] = useState(false)
+    const [formSummaryClaudeLongContext, setFormSummaryClaudeLongContext] = useState(false)
     const [formOverridePrice, setFormOverridePrice] = useState(false)
     const [formPrice, setFormPrice] = useState<ModelPrice>({})
 
@@ -137,6 +141,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormForceSaveDetail(config.force_save_detail)
             setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
             setFormSummaryServiceTier(config.summary_service_tier)
+            setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
+            setFormSummaryClaudeLongContext(config.summary_claude_long_context)
             setFormOverridePrice(config.override_price)
             setFormPrice(config.price || {})
         } else {
@@ -151,6 +157,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormForceSaveDetail(defaults.force_save_detail!)
             setFormOverrideSummaryServiceTier(defaults.override_summary_service_tier!)
             setFormSummaryServiceTier(defaults.summary_service_tier!)
+            setFormOverrideSummaryClaudeLongContext(defaults.override_summary_claude_long_context!)
+            setFormSummaryClaudeLongContext(defaults.summary_claude_long_context!)
             setFormOverridePrice(false)
             setFormPrice({})
         }
@@ -190,6 +198,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             force_save_detail: formForceSaveDetail,
             override_summary_service_tier: formOverrideSummaryServiceTier,
             summary_service_tier: formSummaryServiceTier,
+            override_summary_claude_long_context: formOverrideSummaryClaudeLongContext,
+            summary_claude_long_context: formSummaryClaudeLongContext,
             override_price: formOverridePrice,
             ...(formOverridePrice && { price: formPrice }),
         }
@@ -262,6 +272,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.retryTimes')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.forceSaveDetail')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordServiceTier')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordClaudeLongContext')}</th>
                                     <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.actions')}</th>
                                 </tr>
                             </thead>
@@ -302,6 +313,13 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                                 </Badge>
                                             ) : '-'}
                                         </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            {config.override_summary_claude_long_context ? (
+                                                <Badge variant={config.summary_claude_long_context ? 'default' : 'secondary'} className="text-xs">
+                                                    {config.summary_claude_long_context ? t('common.yes') : t('common.no')}
+                                                </Badge>
+                                            ) : '-'}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-right">
                                             <div className="flex items-center justify-end gap-1">
                                                 <Button
@@ -326,7 +344,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>
@@ -453,6 +471,21 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             <div className="flex items-center gap-2 pl-4">
                                 <Label>{t('model.recordServiceTier')}</Label>
                                 <Switch checked={formSummaryServiceTier} onCheckedChange={setFormSummaryServiceTier} />
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideRecordClaudeLongContext')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRecordClaudeLongContextDesc')}</p>
+                            </div>
+                            <Switch checked={formOverrideSummaryClaudeLongContext} onCheckedChange={setFormOverrideSummaryClaudeLongContext} />
+                        </div>
+
+                        {formOverrideSummaryClaudeLongContext && (
+                            <div className="flex items-center gap-2 pl-4">
+                                <Label>{t('model.recordClaudeLongContext')}</Label>
+                                <Switch checked={formSummaryClaudeLongContext} onCheckedChange={setFormSummaryClaudeLongContext} />
                             </div>
                         )}
 

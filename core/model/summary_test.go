@@ -11,7 +11,7 @@ import (
 
 func TestParseSummaryFields_ServiceTierBreakdownFields(t *testing.T) {
 	got := model.ParseSummaryFields(
-		"service_tier_flex_request_count,service_tier_priority_used_amount,count",
+		"service_tier_flex_request_count,service_tier_priority_used_amount,claude_long_context_total_tokens,count",
 	)
 	if got == nil {
 		t.Fatal("ParseSummaryFields returned nil")
@@ -22,6 +22,8 @@ func TestParseSummaryFields_ServiceTierBreakdownFields(t *testing.T) {
 		"service_tier_flex_request_count",
 		"service_tier_priority_used_amount",
 		"service_tier_priority_cache_hit_count",
+		"claude_long_context_total_tokens",
+		"claude_long_context_cache_hit_count",
 	}
 
 	for _, field := range wantContains {
@@ -39,6 +41,81 @@ func TestParseSummaryFields_ServiceTierBreakdownFields(t *testing.T) {
 		if slices.Contains(got, field) {
 			t.Fatalf("ParseSummaryFields result %v should not contain %q", got, field)
 		}
+	}
+}
+
+func TestSummaryDataAddClaudeLongContextBreakdown(t *testing.T) {
+	usage := model.Usage{
+		InputTokens:         210000,
+		OutputTokens:        20,
+		TotalTokens:         210020,
+		CachedTokens:        100,
+		CacheCreationTokens: 200,
+	}
+	amount := model.Amount{
+		InputAmount:  1.5,
+		OutputAmount: 2.5,
+		UsedAmount:   4,
+	}
+
+	var data model.SummaryData
+	data.AddClaudeLongContextBreakdown(usage, amount, true, 429)
+
+	if got := data.ClaudeLongContext.RequestCount; got != 1 {
+		t.Fatalf("claude long context request count = %d, want 1", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.TotalTokens); got != 210020 {
+		t.Fatalf("claude long context total tokens = %d, want 210020", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.CacheHitCount); got != 1 {
+		t.Fatalf("claude long context cache hit count = %d, want 1", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.CacheCreationCount); got != 1 {
+		t.Fatalf("claude long context cache creation count = %d, want 1", got)
+	}
+
+	if got := data.ClaudeLongContext.UsedAmount; got != 4 {
+		t.Fatalf("claude long context used amount = %v, want 4", got)
+	}
+}
+
+func TestIsClaudeLongContextSummary(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		usage    model.Usage
+		expected bool
+	}{
+		{
+			name:     "claude model over threshold",
+			model:    "claude-3-7-sonnet",
+			usage:    model.Usage{InputTokens: 200001},
+			expected: true,
+		},
+		{
+			name:     "claude model at threshold",
+			model:    "claude-3-7-sonnet",
+			usage:    model.Usage{InputTokens: 200000},
+			expected: false,
+		},
+		{
+			name:     "non claude model over threshold",
+			model:    "gpt-4.1",
+			usage:    model.Usage{InputTokens: 300000},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := model.IsClaudeLongContextSummary(tt.model, tt.usage)
+			if got != tt.expected {
+				t.Fatalf("IsClaudeLongContextSummary() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }
 

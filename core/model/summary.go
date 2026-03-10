@@ -62,6 +62,9 @@ var (
 		"service_tier_flex",
 		"service_tier_priority",
 	}
+	extraSummaryPrefixes = []string{
+		"claude_long_context",
+	}
 )
 
 func buildPrefixedSummaryFields(prefix string, fields []string) []string {
@@ -109,6 +112,21 @@ var allSummaryFields = func() []string {
 			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
 	}
 
+	for _, prefix := range extraSummaryPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
 	return concatSummaryFields(
 		countFields,
 		usageFields,
@@ -125,6 +143,21 @@ var summaryFieldGroups = func() map[string][]string {
 	timeFields := append([]string{}, baseTimeSummaryFields...)
 
 	for _, prefix := range serviceTierPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
+	for _, prefix := range extraSummaryPrefixes {
 		countFields = append(
 			countFields,
 			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
@@ -387,7 +420,10 @@ type SummaryData struct {
 	SummaryDataSet
 	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
 	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 }
+
+const ClaudeLongContextInputTokensThreshold = int64(200000)
 
 func (d *SummaryData) AddServiceTierBreakdown(
 	serviceTier string,
@@ -424,6 +460,29 @@ func (d *SummaryData) Add(other SummaryData) {
 	d.SummaryDataSet.Add(other.SummaryDataSet)
 	d.ServiceTierFlex.Add(other.ServiceTierFlex)
 	d.ServiceTierPriority.Add(other.ServiceTierPriority)
+	d.ClaudeLongContext.Add(other.ClaudeLongContext)
+}
+
+func IsClaudeLongContextSummary(modelName string, usage Usage) bool {
+	return strings.Contains(strings.ToLower(modelName), "claude") &&
+		int64(usage.InputTokens) > ClaudeLongContextInputTokensThreshold
+}
+
+func (d *SummaryData) AddClaudeLongContextBreakdown(
+	usage Usage,
+	amount Amount,
+	isRetry bool,
+	status int,
+) {
+	d.ClaudeLongContext.Count.AddRequest(status, isRetry)
+	if usage.CachedTokens > 0 {
+		d.ClaudeLongContext.CacheHitCount++
+	}
+	if usage.CacheCreationTokens > 0 {
+		d.ClaudeLongContext.CacheCreationCount++
+	}
+	d.ClaudeLongContext.Usage.Add(usage)
+	d.ClaudeLongContext.Amount.Add(amount)
 }
 
 func normalizeSummaryServiceTier(serviceTier string) string {
@@ -606,6 +665,26 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		data["service_tier_priority_total_ttfb_milliseconds"] = gorm.Expr(
 			tableName+".service_tier_priority_total_ttfb_milliseconds + ?",
 			d.ServiceTierPriority.TotalTTFBMilliseconds,
+		)
+	}
+	appendSummaryCountUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Count)
+	appendSummaryUsageUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Usage)
+	appendSummaryAmountUpdateData(
+		data,
+		tableName,
+		"claude_long_context_",
+		d.ClaudeLongContext.Amount,
+	)
+	if d.ClaudeLongContext.TotalTimeMilliseconds > 0 {
+		data["claude_long_context_total_time_milliseconds"] = gorm.Expr(
+			tableName+".claude_long_context_total_time_milliseconds + ?",
+			d.ClaudeLongContext.TotalTimeMilliseconds,
+		)
+	}
+	if d.ClaudeLongContext.TotalTTFBMilliseconds > 0 {
+		data["claude_long_context_total_ttfb_milliseconds"] = gorm.Expr(
+			tableName+".claude_long_context_total_ttfb_milliseconds + ?",
+			d.ClaudeLongContext.TotalTTFBMilliseconds,
 		)
 	}
 
@@ -954,6 +1033,7 @@ type ChartData struct {
 	SummaryDataSet
 	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
 	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 }
 
 type DashboardResponse struct {
@@ -969,6 +1049,7 @@ type DashboardResponse struct {
 	SummaryDataSet
 	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
 	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 
 	Channels []int    `json:"channels,omitempty"`
 	Models   []string `json:"models,omitempty"`

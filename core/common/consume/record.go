@@ -29,6 +29,8 @@ func recordConsume(
 	if !meta.ModelConfig.ShouldSummaryServiceTier() {
 		summaryServiceTier = ""
 	}
+	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
+		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
 
 	return model.BatchRecordLogs(
 		now,
@@ -57,6 +59,7 @@ func recordConsume(
 		upstreamID,
 		serviceTier,
 		summaryServiceTier,
+		summaryClaudeLongContext,
 	)
 }
 
@@ -73,6 +76,8 @@ func recordSummary(
 	if !meta.ModelConfig.ShouldSummaryServiceTier() {
 		serviceTier = ""
 	}
+	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
+		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
 
 	model.BatchUpdateSummary(
 		now,
@@ -88,5 +93,6 @@ func recordSummary(
 		usage,
 		amount,
 		serviceTier,
+		summaryClaudeLongContext,
 	)
 }
