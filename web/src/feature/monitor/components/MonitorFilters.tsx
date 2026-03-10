@@ -1,10 +1,9 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DateRange } from 'react-day-picker'
-import { Search, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
     Select,
     SelectContent,
@@ -12,178 +11,190 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { DashboardFilters } from '@/types/dashboard'
+import { channelApi } from '@/api/channel'
+import { useChannelTypeMetas } from '@/feature/channel/hooks'
 
 interface MonitorFiltersProps {
     onFiltersChange: (filters: DashboardFilters) => void
     loading?: boolean
+    availableModels?: string[]
+    availableChannels?: number[]
+    defaultChannel?: number
 }
 
-export function MonitorFilters({ onFiltersChange, loading = false }: MonitorFiltersProps) {
+export function MonitorFilters({ onFiltersChange, loading = false, availableModels = [], availableChannels = [], defaultChannel }: MonitorFiltersProps) {
     const { t } = useTranslation()
+    const { data: typeMetas } = useChannelTypeMetas()
 
-    // 计算默认日期范围（当前时间往前7天）
     const getDefaultDateRange = (): DateRange => {
         const today = new Date()
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(today.getDate() - 7)
-
-        return {
-            from: sevenDaysAgo,
-            to: today
-        }
+        const oneDayAgo = new Date()
+        oneDayAgo.setDate(today.getDate() - 1)
+        return { from: oneDayAgo, to: today }
     }
 
-    const [keyName, setKeyName] = useState('')
     const [model, setModel] = useState('')
+    const [channel, setChannel] = useState(defaultChannel ? String(defaultChannel) : '')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
-    const [timespan, setTimespan] = useState<'day' | 'hour'>('day')
+    const [timespan, setTimespan] = useState<'minute' | 'hour' | 'day' | 'month'>('hour')
 
-    // 获取客户端时区
-    const getClientTimezone = () => {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone
-    }
+    // Batch fetch channel names
+    const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
 
-    // 处理表单提交
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
+    useEffect(() => {
+        if (availableChannels.length === 0) return
+        const missing = availableChannels.filter(id => !(id in channelInfoMap))
+        if (missing.length === 0) return
+
+        channelApi.getChannelBatchInfo(missing)
+            .then(infos => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const info of infos) {
+                        next[info.id] = { name: info.name, type: info.type }
+                    }
+                    return next
+                })
+            })
+            .catch(() => {
+                setChannelInfoMap(prev => {
+                    const next = { ...prev }
+                    for (const id of missing) {
+                        if (!(id in next)) next[id] = { name: `#${id}`, type: 0 }
+                    }
+                    return next
+                })
+            })
+    }, [availableChannels]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    const buildFilters = useCallback((): DashboardFilters => {
+        const effectiveModel = model === '__all__' ? '' : model
+        const effectiveChannel = channel === '__all__' ? '' : channel
 
         const filters: DashboardFilters = {
-            keyName: keyName.trim() || undefined,
-            model: model.trim() || undefined,
+            model: effectiveModel || undefined,
+            channel: effectiveChannel ? Number(effectiveChannel) : undefined,
             timespan,
             timezone: getClientTimezone(),
         }
-
-        // 处理日期范围
         if (dateRange?.from) {
             filters.start_timestamp = Math.floor(dateRange.from.getTime() / 1000)
         }
         if (dateRange?.to) {
-            // 将结束时间设置为当天的 23:59:59
             const endDate = new Date(dateRange.to)
             endDate.setHours(23, 59, 59, 999)
             filters.end_timestamp = Math.floor(endDate.getTime() / 1000)
         }
+        return filters
+    }, [model, channel, dateRange, timespan])
 
-        onFiltersChange(filters)
-    }
-
-    // 重置过滤器
-    const handleReset = () => {
-        setKeyName('')
-        setModel('')
-        const defaultDateRange = getDefaultDateRange()
-        setDateRange(defaultDateRange)
-        setTimespan('day')
-
-        const filters: DashboardFilters = {
-            timespan: 'day',
-            timezone: getClientTimezone(),
-            start_timestamp: Math.floor(defaultDateRange.from!.getTime() / 1000),
-            end_timestamp: Math.floor(defaultDateRange.to!.setHours(23, 59, 59, 999) / 1000)
+    // Auto-refresh on filter change (skip initial mount - page provides initial filters)
+    const isFirstRender = useRef(true)
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false
+            return
         }
-        onFiltersChange(filters)
+        onFiltersChange(buildFilters())
+    }, [buildFilters]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleReset = () => {
+        setModel('')
+        setChannel('')
+        setDateRange(getDefaultDateRange())
+        setTimespan('hour')
     }
+
+    const getTypeName = (type: number) => typeMetas?.[type]?.name || ''
 
     return (
-        <div className="bg-card border border-border rounded-lg p-4 shadow-none">
-            <form onSubmit={handleSubmit}>
-                <div className="flex items-center gap-4">
-                    {/* Key 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('monitor.filters.keyPlaceholder')}
-                                        value={keyName}
-                                        onChange={(e) => setKeyName(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('monitor.filters.keyPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-
-                    {/* Model 过滤器 */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex-1 min-w-0">
-                                    <Input
-                                        placeholder={t('monitor.filters.modelPlaceholder')}
-                                        value={model}
-                                        onChange={(e) => setModel(e.target.value)}
-                                        disabled={loading}
-                                        className="h-10"
-                                    />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('monitor.filters.modelPlaceholder')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-
-                    {/* 日期范围过滤器 */}
-                    <div className="min-w-48  max-w-72">
-                        <DateRangePicker
-                            value={dateRange}
-                            onChange={setDateRange}
-                            placeholder={t('monitor.filters.dateRangePlaceholder')}
-                            disabled={loading}
-                            className="h-10"
-                        />
-                    </div>
-
-                    {/* 时间粒度过滤器 */}
-                    <div className="w-24">
-                        <Select
-                            value={timespan}
-                            onValueChange={(value: 'day' | 'hour') => setTimespan(value)}
-                            disabled={loading}
-                        >
-                            <SelectTrigger className="h-10">
-                                <SelectValue />
+        <div className="bg-card border border-border rounded-lg p-3 shadow-none">
+            <div className="flex items-center gap-2">
+                {/* Channel */}
+                {availableChannels.length > 0 && (
+                    <div className="w-56 flex-shrink-0">
+                        <Select value={channel} onValueChange={setChannel} disabled={loading}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder={t('monitor.filters.channelPlaceholder')} />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="hour">{t('monitor.filters.timespanHour')}</SelectItem>
-                                <SelectItem value="day">{t('monitor.filters.timespanDay')}</SelectItem>
+                                <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                {availableChannels.map((id) => (
+                                    <SelectItem key={id} value={String(id)}>
+                                        <ChannelLabel id={id} info={channelInfoMap[id]} typeName={getTypeName(channelInfoMap[id]?.type)} compact />
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
+                )}
 
-                    {/* 操作按钮 */}
-                    <div className="flex gap-2 flex-shrink-0">
-                        <Button type="submit" disabled={loading} className="h-10 px-4">
-                            <Search className="h-4 w-4 mr-2" />
-                            {loading ? t('common.loading') : t('monitor.filters.search')}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleReset}
-                            disabled={loading}
-                            className="h-10 px-4"
-                        >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            {t('monitor.filters.reset')}
-                        </Button>
+                {/* Model */}
+                {availableModels.length > 0 && (
+                    <div className="w-44 flex-shrink-0">
+                        <Select value={model} onValueChange={setModel} disabled={loading}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder={t('monitor.filters.modelPlaceholder')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">{t('log.filters.statusAll')}</SelectItem>
+                                {availableModels.map((m) => (
+                                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
+                )}
+
+                <div className="flex-1" />
+
+                {/* Date range */}
+                <div className="w-56 flex-shrink-0">
+                    <DateRangePicker
+                        value={dateRange}
+                        onChange={setDateRange}
+                        placeholder={t('monitor.filters.dateRangePlaceholder')}
+                        disabled={loading}
+                        className="h-9"
+                    />
                 </div>
-            </form>
+
+                {/* Timespan */}
+                <div className="w-22 flex-shrink-0">
+                    <Select
+                        value={timespan}
+                        onValueChange={(value: 'minute' | 'hour' | 'day' | 'month') => setTimespan(value)}
+                        disabled={loading}
+                    >
+                        <SelectTrigger className="h-9">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="minute">{t('monitor.filters.timespanMinute')}</SelectItem>
+                            <SelectItem value="hour">{t('monitor.filters.timespanHour')}</SelectItem>
+                            <SelectItem value="day">{t('monitor.filters.timespanDay')}</SelectItem>
+                            <SelectItem value="month">{t('monitor.filters.timespanMonth')}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Reset */}
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    disabled={loading}
+                    className="h-9 px-3 flex-shrink-0"
+                >
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    {t('monitor.filters.reset')}
+                </Button>
+            </div>
         </div>
     )
-} 
+}

@@ -1,5 +1,5 @@
 // src/feature/channel/components/ChannelForm.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
     FormMessage,
 } from '@/components/ui/form'
 import { channelCreateSchema } from '@/validation/channel'
-import { useChannelTypeMetas, useCreateChannel, useUpdateChannel } from '../hooks'
+import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import { useTranslation } from 'react-i18next'
 import { ChannelCreateForm } from '@/validation/channel'
@@ -26,6 +26,9 @@ import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnimatedContainer } from '@/components/ui/animation/components/animated-container'
 import { toast } from 'sonner'
+import { FlaskConical, Loader2, Info } from 'lucide-react'
+import { ChannelTestDialog } from './ChannelTestDialog'
+import { Badge } from '@/components/ui/badge'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update'
@@ -40,14 +43,14 @@ interface ChannelFormProps {
         models: string[]
         model_mapping?: Record<string, string>
         sets?: string[]
+        priority?: number
     }
 }
 
 export function ChannelForm({
     mode = 'create',
     channelId,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    channel,
+    channel: _channel,
     onSuccess,
     defaultValues = {
         type: 0,
@@ -56,15 +59,19 @@ export function ChannelForm({
         base_url: '',
         models: [],
         model_mapping: {},
-        sets: []
+        sets: [],
+        priority: 10
     },
 }: ChannelFormProps) {
     const { t } = useTranslation()
     const [modelDialogOpen, setModelDialogOpen] = useState(false)
     const [isUserSubmitting, setIsUserSubmitting] = useState(false)
 
-    // Log component props for debugging
-    console.log('ChannelForm rendered with props:', { mode, channelId, hasChannel: !!channel });
+    // Determine initial useDefaultModels state
+    const initialUseDefault = mode === 'create'
+        ? true
+        : (!defaultValues.models || defaultValues.models.length === 0)
+    const [useDefaultModels, setUseDefaultModels] = useState(initialUseDefault)
 
     // 获取渠道类型元数据
     const { data: typeMetas, isLoading: isTypeMetasLoading } = useChannelTypeMetas()
@@ -87,6 +94,17 @@ export function ChannelForm({
         clearError: clearUpdateError
     } = useUpdateChannel()
 
+    // Test channel hook
+    const {
+        testChannelPreviewAll,
+        cancelTest,
+        isTesting,
+        results: testResults,
+        clearResults: clearTestResults
+    } = useTestChannelPreviewAll()
+
+    const [testDialogOpen, setTestDialogOpen] = useState(false)
+
     // 动态状态
     const isLoading = mode === 'create' ? isCreating : isUpdating
     const error = mode === 'create' ? createError : updateError
@@ -95,8 +113,29 @@ export function ChannelForm({
     // 表单设置
     const form = useForm<ChannelCreateForm>({
         resolver: zodResolver(channelCreateSchema),
-        defaultValues,
+        defaultValues: {
+            ...defaultValues,
+            useDefaultModels: initialUseDefault,
+        },
     })
+
+    const watchedType = form.watch('type')
+
+    // Fetch default models for the selected channel type
+    const { data: defaultModelsData, isLoading: isDefaultModelsLoading } = useChannelDefaultModels(watchedType)
+
+    const hasDefaults = !!(defaultModelsData?.models && defaultModelsData.models.length > 0)
+
+    // When no defaults exist or still loading, force custom mode
+    useEffect(() => {
+        if (watchedType > 0 && !isDefaultModelsLoading && !hasDefaults) {
+            setUseDefaultModels(false)
+            form.setValue('useDefaultModels', false)
+        }
+    }, [watchedType, isDefaultModelsLoading, hasDefaults, form])
+
+    // Effective flag: only use default mode when defaults actually exist
+    const effectiveUseDefault = useDefaultModels && hasDefaults
 
     // 防止意外的表单提交
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -113,75 +152,121 @@ export function ChannelForm({
     const handleFormSubmit = (data: ChannelCreateForm) => {
         // 只有在用户主动提交时才处理
         if (!isUserSubmitting) {
-            console.log('Form submission prevented - not explicitly triggered by user')
             return
         }
-        
+
         setIsUserSubmitting(false) // 重置状态
 
         // 清除之前的错误
         if (clearError) clearError()
 
-        // 准备提交数据
+        // 准备提交数据 - when using defaults, send empty models/mapping
         const formData = {
             type: data.type,
             name: data.name,
             key: data.key,
-            base_url: data.base_url || '',  // Ensure base_url is never undefined for API
-            models: data.models || [],
-            model_mapping: data.model_mapping || {},
-            sets: data.sets || []
+            base_url: data.base_url || '',
+            models: effectiveUseDefault ? [] : (data.models || []),
+            model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
+            sets: data.sets || [],
+            priority: data.priority || 10
         }
-
-        console.log('Submitting form data:', { mode, channelId, formData });
-        console.dir({ mode, channelId, formData }, { depth: null });
 
         if (mode === 'create') {
             createChannel(formData, {
                 onSuccess: () => {
-                    console.log('Channel created successfully');
                     form.reset()
                     if (onSuccess) onSuccess()
                 },
-                onError: (error) => {
-                    console.error('Failed to create channel:', error);
-                }
             })
         } else if (mode === 'update') {
-            // Check for channelId
             if (!channelId) {
-                console.error('Cannot update: missing channelId');
                 toast.error('更新失败：缺少渠道ID');
                 return;
             }
 
-            console.log('Updating channel with ID:', channelId);
-            // Use explicit typing to ensure id is a number
-            const updateId: number = typeof channelId === 'string' ? parseInt(channelId) : channelId;
-            
-            updateChannel({ 
-                id: updateId, 
-                data: formData 
+            updateChannel({
+                id: channelId,
+                data: formData
             }, {
                 onSuccess: () => {
-                    console.log('Channel updated successfully');
-                    toast.success('渠道更新成功');
                     form.reset()
                     if (onSuccess) onSuccess()
                 },
-                onError: (error) => {
-                    console.error('Failed to update channel:', error);
-                    toast.error('更新渠道失败');
-                }
             })
-        } else {
-            console.error('Unknown mode:', mode);
         }
     }
 
     // 处理提交按钮点击
     const handleSubmitClick = () => {
         setIsUserSubmitting(true)
+    }
+
+    // Handle toggle between default and custom models
+    const handleToggleDefaultModels = (useDefault: boolean) => {
+        setUseDefaultModels(useDefault)
+        form.setValue('useDefaultModels', useDefault)
+
+        if (useDefault) {
+            // Switching to default: clear models and mapping
+            form.setValue('models', [])
+            form.setValue('model_mapping', {})
+        } else {
+            // Switching to custom: pre-populate with defaults if available
+            if (defaultModelsData?.models && defaultModelsData.models.length > 0) {
+                form.setValue('models', [...defaultModelsData.models])
+                if (defaultModelsData.mapping && Object.keys(defaultModelsData.mapping).length > 0) {
+                    form.setValue('model_mapping', { ...defaultModelsData.mapping })
+                }
+            }
+        }
+    }
+
+    // 处理测试按钮点击
+    const handleTestClick = () => {
+        const formData = form.getValues()
+
+        // 验证必填字段
+        if (!formData.type) {
+            toast.error('请先选择厂商')
+            return
+        }
+        if (!formData.key) {
+            toast.error('请先填写密钥')
+            return
+        }
+
+        // When using defaults, use default models for testing
+        const testModels = effectiveUseDefault
+            ? (defaultModelsData?.models || [])
+            : (formData.models || [])
+        const testMapping = effectiveUseDefault
+            ? (defaultModelsData?.mapping || {})
+            : (formData.model_mapping || {})
+
+        if (testModels.length === 0) {
+            toast.error('请先选择要测试的模型')
+            return
+        }
+
+        clearTestResults()
+        setTestDialogOpen(true)
+
+        testChannelPreviewAll({
+            type: formData.type,
+            key: formData.key,
+            base_url: formData.base_url || '',
+            name: formData.name || '',
+            models: testModels,
+            model_mapping: testMapping,
+            configs: {}
+        })
+    }
+
+    // 处理取消测试
+    const handleCancelTest = () => {
+        cancelTest()
+        setTestDialogOpen(false)
     }
 
     // 获取类型对应的字段提示
@@ -242,6 +327,82 @@ export function ChannelForm({
         </div>
     )
 
+    // Render the default models read-only preview (only called when hasDefaults is true)
+    const renderDefaultModelsPreview = () => {
+        return (
+            <div className="space-y-3">
+                <div className="rounded-lg border border-dashed border-primary/20 bg-muted/30 p-4">
+                    <div className="flex flex-wrap gap-1.5">
+                        {defaultModelsData!.models.map((model) => (
+                            <Badge
+                                key={model}
+                                variant="secondary"
+                                className="text-xs font-mono"
+                            >
+                                {model}
+                            </Badge>
+                        ))}
+                    </div>
+                </div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Info className="h-3.5 w-3.5" />
+                    {t('channel.dialog.defaultModelsHint')}
+                </p>
+                {/* Show default mapping if exists */}
+                {defaultModelsData!.mapping && Object.keys(defaultModelsData!.mapping).length > 0 && (
+                    <div className="space-y-2">
+                        <FormLabel className="text-sm">{t('channel.dialog.defaultModelMapping')}</FormLabel>
+                        <div className="rounded-lg border border-dashed border-primary/20 bg-muted/30 p-3">
+                            <div className="space-y-1">
+                                {Object.entries(defaultModelsData!.mapping).map(([from, to]) => (
+                                    <div key={from} className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+                                        <span>{from}</span>
+                                        <span className="text-muted-foreground/50">&rarr;</span>
+                                        <span>{to}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // Render the model mode toggle — only when defaults exist for this type
+    const renderModelModeToggle = () => {
+        if (watchedType === 0) return null
+        if (isDefaultModelsLoading) return <Skeleton className="h-10 w-full rounded-lg" />
+        if (!hasDefaults) return null
+
+        return (
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1">
+                <button
+                    type="button"
+                    onClick={() => handleToggleDefaultModels(true)}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                        effectiveUseDefault
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                    {t('channel.dialog.useDefaultModels')}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleToggleDefaultModels(false)}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                        !effectiveUseDefault
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                    {t('channel.dialog.customModels')}
+                </button>
+            </div>
+        )
+    }
+
     return (
         <AnimatedContainer>
             <div>
@@ -249,8 +410,8 @@ export function ChannelForm({
                     renderFormSkeleton()
                 ) : (
                     <Form {...form}>
-                        <form 
-                            onSubmit={form.handleSubmit(handleFormSubmit)} 
+                        <form
+                            onSubmit={form.handleSubmit(handleFormSubmit)}
                             onKeyDown={handleKeyDown}
                             className="space-y-6"
                         >
@@ -294,6 +455,9 @@ export function ChannelForm({
                                                         field.onChange(Number(channelType))
                                                         form.setValue('models', [])
                                                         form.setValue('model_mapping', {})
+                                                        // Reset to default mode when changing type
+                                                        setUseDefaultModels(true)
+                                                        form.setValue('useDefaultModels', true)
                                                     }
                                                 }
                                             }}
@@ -323,6 +487,18 @@ export function ChannelForm({
                                 }}
                             />
 
+                            {/* Readme */}
+                            {(() => {
+                                const typeId = Number(form.watch('type'))
+                                const meta = typeId ? typeMetas[String(typeId)] : null
+                                if (!meta?.readme) return null
+                                return (
+                                    <div className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground whitespace-pre-line">
+                                        {meta.readme}
+                                    </div>
+                                )
+                            })()}
+
                             {/* 名称字段 */}
                             <FormField
                                 control={form.control}
@@ -338,96 +514,108 @@ export function ChannelForm({
                                 )}
                             />
 
-                            {/* 模型选择字段 */}
-                            <FormField
-                                control={form.control}
-                                name="models"
-                                render={({ field }) => {
-                                    const allModels = models.map((model) => model.model)
+                            {/* 模型选择字段 - with default/custom toggle */}
+                            <div className="space-y-3">
+                                {/* Only show outer label when toggle is visible (defaults exist) */}
+                                {hasDefaults && <FormLabel>{t("channel.dialog.models")}</FormLabel>}
+                                {renderModelModeToggle()}
 
-                                    const handleModelFilteredDropdownItems = (
-                                        dropdownItems: string[],
-                                        selectedItems: string[],
-                                        inputValue: string
-                                    ) => {
-                                        const lowerCasedInputValue = inputValue.toLowerCase()
+                                {effectiveUseDefault ? (
+                                    renderDefaultModelsPreview()
+                                ) : (
+                                    <>
+                                        <FormField
+                                            control={form.control}
+                                            name="models"
+                                            render={({ field }) => {
+                                                const allModels = models.map((model) => model.model)
 
-                                        // 过滤匹配的模型
-                                        const filteredModels = dropdownItems.filter(
-                                            (item) =>
-                                                !selectedItems.includes(item) &&
-                                                item.toLowerCase().includes(lowerCasedInputValue)
-                                        )
+                                                const handleModelFilteredDropdownItems = (
+                                                    dropdownItems: string[],
+                                                    selectedItems: string[],
+                                                    inputValue: string
+                                                ) => {
+                                                    const lowerCasedInputValue = inputValue.toLowerCase()
 
-                                        // 始终添加"创建新模型"选项作为第一个选项
-                                        const createNewOption = t('model.dialog.createDescription')
-
-                                        // 只在搜索为空或选项匹配"创建"相关文字时显示创建选项
-                                        if (!inputValue || createNewOption.toLowerCase().includes(lowerCasedInputValue)) {
-                                            return [createNewOption, ...filteredModels]
-                                        }
-
-                                        return filteredModels
-                                    }
-
-                                    return (
-                                        <MultiSelectCombobox<string>
-                                            dropdownItems={allModels}
-                                            selectedItems={field.value || []}
-                                            setSelectedItems={(modelsOrFunction) => {
-                                                // Ensure we're working with array
-                                                const models = Array.isArray(modelsOrFunction) ? modelsOrFunction : []
-
-                                                // Now we can use includes safely
-                                                if (models.includes(t('model.dialog.createDescription'))) {
-                                                    const filteredModels = models.filter(m => m !== t('model.dialog.createDescription'))
-                                                    field.onChange(filteredModels)
-                                                    setModelDialogOpen(true)
-                                                } else {
-                                                    field.onChange(models)
-                                                }
-                                            }}
-                                            handleFilteredDropdownItems={handleModelFilteredDropdownItems}
-                                            handleDropdownItemDisplay={(item) => {
-                                                // 为"创建新模型"选项添加特殊样式
-                                                if (item === t('model.dialog.createDescription')) {
-                                                    return (
-                                                        <div className="flex items-center gap-2 text-primary">
-                                                            <span className="flex h-4 w-4 items-center justify-center rounded-full border border-primary">
-                                                                <span className="text-xs">+</span>
-                                                            </span>
-                                                            {item}
-                                                        </div>
+                                                    // 过滤匹配的模型
+                                                    const filteredModels = dropdownItems.filter(
+                                                        (item) =>
+                                                            !selectedItems.includes(item) &&
+                                                            item.toLowerCase().includes(lowerCasedInputValue)
                                                     )
+
+                                                    // 始终添加"创建新模型"选项作为第一个选项
+                                                    const createNewOption = t('model.dialog.createDescription')
+
+                                                    // 只在搜索为空或选项匹配"创建"相关文字时显示创建选项
+                                                    if (!inputValue || createNewOption.toLowerCase().includes(lowerCasedInputValue)) {
+                                                        return [createNewOption, ...filteredModels]
+                                                    }
+
+                                                    return filteredModels
                                                 }
-                                                return item
-                                            }}
-                                            handleSelectedItemDisplay={(item) => {
-                                                return item
+
+                                                return (
+                                                    <MultiSelectCombobox<string>
+                                                        dropdownItems={allModels}
+                                                        selectedItems={field.value || []}
+                                                        setSelectedItems={(modelsOrFunction) => {
+                                                            // Ensure we're working with array
+                                                            const models = Array.isArray(modelsOrFunction) ? modelsOrFunction : []
+
+                                                            // Now we can use includes safely
+                                                            if (models.includes(t('model.dialog.createDescription'))) {
+                                                                const filteredModels = models.filter(m => m !== t('model.dialog.createDescription'))
+                                                                field.onChange(filteredModels)
+                                                                setModelDialogOpen(true)
+                                                            } else {
+                                                                field.onChange(models)
+                                                            }
+                                                        }}
+                                                        handleFilteredDropdownItems={handleModelFilteredDropdownItems}
+                                                        handleDropdownItemDisplay={(item) => {
+                                                            // 为"创建新模型"选项添加特殊样式
+                                                            if (item === t('model.dialog.createDescription')) {
+                                                                return (
+                                                                    <div className="flex items-center gap-2 text-primary">
+                                                                        <span className="flex h-4 w-4 items-center justify-center rounded-full border border-primary">
+                                                                            <span className="text-xs">+</span>
+                                                                        </span>
+                                                                        {item}
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            return item
+                                                        }}
+                                                        handleSelectedItemDisplay={(item) => {
+                                                            return item
+                                                        }}
+                                                    />
+                                                )
                                             }}
                                         />
-                                    )
-                                }}
-                            />
 
-                            {/* 模型映射字段 */}
-                            <FormField
-                                control={form.control}
-                                name="model_mapping"
-                                render={({ field }) => {
-                                    const selectedModels = form.watch('models')
+                                        {/* 模型映射字段 */}
+                                        <FormField
+                                            control={form.control}
+                                            name="model_mapping"
+                                            render={({ field }) => {
+                                                const selectedModels = form.watch('models')
 
-                                    return (
-                                        <ConstructMappingComponent
-                                            mapKeys={selectedModels}
-                                            mapData={field.value as Record<string, string>}
-                                            setMapData={(mapping) => {
-                                                field.onChange(mapping)
+                                                return (
+                                                    <ConstructMappingComponent
+                                                        mapKeys={selectedModels}
+                                                        mapData={field.value as Record<string, string>}
+                                                        setMapData={(mapping) => {
+                                                            field.onChange(mapping)
+                                                        }}
+                                                    />
+                                                )
                                             }}
                                         />
-                                    )
-                                }}
-                            />
+                                    </>
+                                )}
+                            </div>
 
                             {/* 分组字段 */}
                             <FormField
@@ -493,6 +681,7 @@ export function ChannelForm({
                                 render={({ field }) => {
                                     const typeId = Number(form.getValues('type'))
                                     const { defaultBaseUrl } = getTypeHelp(typeId)
+                                    const hasCustomUrl = !!(field.value && field.value.trim())
 
                                     return (
                                         <FormItem>
@@ -507,6 +696,11 @@ export function ChannelForm({
                                                     value={field.value || ''}
                                                 />
                                             </FormControl>
+                                            {hasCustomUrl && defaultBaseUrl && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    {t("channel.dialog.defaultBaseUrl")}: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{defaultBaseUrl}</code>
+                                                </p>
+                                            )}
                                             <p className="text-xs text-muted-foreground mt-1">
                                                 {t("channel.dialog.baseUrlOptionalHelp")}
                                             </p>
@@ -516,11 +710,66 @@ export function ChannelForm({
                                 }}
                             />
 
-                            {/* 提交按钮 */}
-                            <div className="flex justify-end">
-                                <Button 
-                                    type="submit" 
-                                    disabled={isLoading}
+                            {/* 优先级字段 */}
+                            <FormField
+                                control={form.control}
+                                name="priority"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>{t("channel.dialog.priority")}</FormLabel>
+                                            <span className="text-xs text-muted-foreground">{t("common.optional")}</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={1000000}
+                                                placeholder={t("channel.dialog.priorityPlaceholder")}
+                                                {...field}
+                                                value={field.value ?? ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value
+                                                    if (value === '') {
+                                                        field.onChange(undefined)
+                                                    } else {
+                                                        field.onChange(parseInt(value, 10))
+                                                    }
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {t("channel.dialog.priorityHelp")}
+                                        </p>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* 提交和测试按钮 */}
+                            <div className="flex justify-between items-center">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleTestClick}
+                                    disabled={isTesting || isLoading}
+                                    className="flex items-center gap-2"
+                                >
+                                    {isTesting ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            {t("channel.testing")}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FlaskConical className="h-4 w-4" />
+                                            {t("channel.test")}
+                                        </>
+                                    )}
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={isLoading || isTesting}
                                     onClick={handleSubmitClick}
                                 >
                                     {isLoading ? t("channel.dialog.submitting") : mode === 'create' ? t("channel.dialog.create") : t("channel.dialog.update")}
@@ -529,6 +778,15 @@ export function ChannelForm({
                         </form>
                     </Form>
                 )}
+
+                {/* 测试结果对话框 */}
+                <ChannelTestDialog
+                    open={testDialogOpen}
+                    onOpenChange={setTestDialogOpen}
+                    isTesting={isTesting}
+                    results={testResults}
+                    onCancel={handleCancelTest}
+                />
 
                 {/* 创建模型对话框 */}
                 <ModelDialog

@@ -1,6 +1,7 @@
 package common_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,14 +31,14 @@ func TestGetLogFields(t *testing.T) {
 func TestLogger(t *testing.T) {
 	convey.Convey("Logger Context", t, func() {
 		convey.Convey("GetLoggerFromReq should create new logger if missing", func() {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			logger := common.GetLoggerFromReq(req)
 			convey.So(logger, convey.ShouldNotBeNil)
 			convey.So(logger.Data, convey.ShouldNotBeNil)
 		})
 
 		convey.Convey("SetLogger should store logger in context", func() {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			entry := common.NewLogger()
 			common.SetLogger(req, entry)
 
@@ -48,7 +49,12 @@ func TestLogger(t *testing.T) {
 		convey.Convey("GetLogger should work with Gin context", func() {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/",
+				nil,
+			)
 
 			logger := common.GetLogger(c)
 			convey.So(logger, convey.ShouldNotBeNil)

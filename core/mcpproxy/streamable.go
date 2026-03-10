@@ -85,7 +85,12 @@ func (p *StreamableProxy) handleGetRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, backendInfo, nil)
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
+		r.Context(),
+		http.MethodGet,
+		backendInfo,
+		nil,
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return
@@ -104,7 +109,7 @@ func (p *StreamableProxy) handleGetRequest(w http.ResponseWriter, r *http.Reques
 
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 
-	//nolint:bodyclose
+	//nolint:bodyclose,gosec // proxy forwards requests to configured backend URL
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to connect to backend", http.StatusInternalServerError)
@@ -190,7 +195,12 @@ func (p *StreamableProxy) handlePostRequest(w http.ResponseWriter, r *http.Reque
 	sessionID := parts[1]
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, backend, r.Body)
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
+		r.Context(),
+		http.MethodPost,
+		backend,
+		r.Body,
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return
@@ -206,7 +216,7 @@ func (p *StreamableProxy) handlePostRequest(w http.ResponseWriter, r *http.Reque
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 
-	//nolint:bodyclose
+	//nolint:bodyclose,gosec // proxy forwards requests to configured backend URL
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to connect to backend", http.StatusInternalServerError)
@@ -282,7 +292,12 @@ func (p *StreamableProxy) handleDeleteRequest(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create a request to the backend
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, backendInfo, nil)
+	req, err := http.NewRequestWithContext( //nolint:gosec // backend URL is from trusted store
+		r.Context(),
+		http.MethodDelete,
+		backendInfo,
+		nil,
+	)
 	if err != nil {
 		http.Error(w, "Failed to create backend request", http.StatusInternalServerError)
 		return
@@ -304,7 +319,7 @@ func (p *StreamableProxy) handleDeleteRequest(w http.ResponseWriter, r *http.Req
 		Timeout: time.Second * 10,
 	}
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // proxy forwards requests to configured backend URL
 	if err != nil {
 		http.Error(w, "Failed to connect to backend", http.StatusInternalServerError)
 		return
@@ -341,7 +356,7 @@ func (p *StreamableProxy) proxyInitialOrNoSessionRequest(w http.ResponseWriter, 
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 
-	//nolint:bodyclose
+	//nolint:bodyclose,gosec // proxy forwards requests to configured backend URL
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to connect to backend", http.StatusInternalServerError)

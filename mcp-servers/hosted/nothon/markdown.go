@@ -535,7 +535,7 @@ func getPropertyDetails(prop DatabasePropertyConfig) string {
 	switch prop.Type {
 	case "select", "multi_select":
 		if prop.Select != nil {
-			var options []string
+			options := make([]string, 0, len(prop.Select.Options))
 			for _, option := range prop.Select.Options {
 				options = append(options, option.Name)
 			}

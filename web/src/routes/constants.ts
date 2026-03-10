@@ -2,11 +2,12 @@ export const BASE_PATH = '/' as const
 
 export const ROUTES = {
     MONITOR: "/monitor",
+    GROUP: "/group",
     KEY: "/key",
     CHANNEL: "/channel",
     MODEL: "/model",
     LOG: "/log",
-    MCP: "/mcp",
+    MCP: "/mcp-front",
 } as const
 
 export type RouteKey = keyof typeof ROUTES

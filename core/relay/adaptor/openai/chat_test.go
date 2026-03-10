@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -148,7 +149,7 @@ func TestConvertChatCompletionWithToolsRequiredField(t *testing.T) {
 			reqBody, err := json.Marshal(tt.inputRequest)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(
+			req, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/v1/chat/completions",
 				bytes.NewReader(reqBody),
@@ -308,7 +309,7 @@ func TestConvertChatCompletionToResponsesRequest(t *testing.T) {
 			reqBody, err := json.Marshal(tt.inputRequest)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(
+			req, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/v1/chat/completions",
 				bytes.NewReader(reqBody),
@@ -451,13 +452,6 @@ func TestConvertResponsesToChatCompletionResponse(t *testing.T) {
 	}
 }
 
-// Helper function
-//
-//go:fix inline
-func floatPtr(f float64) *float64 {
-	return new(f)
-}
-
 // mockReadCloser is a helper to create a ReadCloser from a Reader
 type mockReadCloser struct {
 	*bytes.Reader
@@ -584,7 +578,7 @@ func TestConvertChatCompletionsRequest_WithToolsRequiredField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpReq := httptest.NewRequest(
+			httpReq, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/v1/chat/completions",
 				bytes.NewReader([]byte(tt.request)),

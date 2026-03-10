@@ -1,36 +1,15 @@
 // src/feature/token/hooks.ts
-import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { tokenApi } from '@/api/token'
 import { useState } from 'react'
-import { TokenCreateRequest, TokenStatusRequest } from '@/types/token'
+import { TokenCreateRequest, TokenStatusRequest, TokenUpdateRequest } from '@/types/token'
 import { toast } from 'sonner'
-import { ConstantCategory, getConstant } from '@/constant'
 
-// 获取Token列表（支持无限滚动）
-export const useTokens = () => {
-    const query = useInfiniteQuery({
-        queryKey: ['tokens'],
-        queryFn: ({ pageParam }) => tokenApi.getTokens(pageParam as number, getConstant(ConstantCategory.CONFIG, 'DEFAULT_PAGE_SIZE', 20)),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage, allPages) => {
-            if (!lastPage || typeof lastPage.total === 'undefined') {
-                return undefined
-            }
-
-            // 检查allPages是否存在
-            if (!allPages) {
-                return undefined
-            }
-
-            // 计算已加载的项目总数
-            const loadedItemsCount = allPages.reduce((count, page) => {
-                return count + (page.tokens?.length || 0)
-            }, 0)
-
-            // 如果服务器返回的总数大于已加载的数量，则还有下一页
-            return lastPage.total > loadedItemsCount ? allPages.length + 1 : undefined
-        },
-        enabled: true,
+// 获取Token列表（分页）
+export const useTokens = (page: number, perPage: number, keyword?: string) => {
+    const query = useQuery({
+        queryKey: ['tokens', page, perPage, keyword],
+        queryFn: () => tokenApi.getTokens(page, perPage, keyword),
     })
 
     return {
@@ -45,7 +24,7 @@ export const useCreateToken = () => {
 
     const mutation = useMutation({
         mutationFn: (data: TokenCreateRequest) => {
-            return tokenApi.createToken(data.name)
+            return tokenApi.createToken(data)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
@@ -116,6 +95,34 @@ export const useUpdateTokenStatus = () => {
 
     return {
         updateStatus: mutation.mutate,
+        isLoading: mutation.isPending,
+        error,
+        clearError: () => setError(null),
+    }
+}
+
+// 更新Token（包括限额配置）
+export const useUpdateToken = () => {
+    const queryClient = useQueryClient()
+    const [error, setError] = useState<ApiError | null>(null)
+
+    const mutation = useMutation({
+        mutationFn: ({ id, data }: { id: number, data: TokenUpdateRequest }) => {
+            return tokenApi.updateToken(id, data)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tokens'] })
+            setError(null)
+            toast.success('Token更新成功')
+        },
+        onError: (err: ApiError) => {
+            setError(err)
+            toast.error(err.message || 'Token更新失败')
+        },
+    })
+
+    return {
+        updateToken: mutation.mutate,
         isLoading: mutation.isPending,
         error,
         clearError: () => setError(null),

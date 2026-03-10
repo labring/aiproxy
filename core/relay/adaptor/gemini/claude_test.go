@@ -2,6 +2,7 @@ package gemini_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -50,7 +51,12 @@ func TestClaudeHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/",
+				nil,
+			)
 
 			usage, handlerErr := gemini.ClaudeHandler(meta, c, httpResp)
 			convey.So(handlerErr, convey.ShouldBeNil)
@@ -105,7 +111,12 @@ func TestClaudeHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/",
+				nil,
+			)
 
 			usage, handlerErr := gemini.ClaudeHandler(meta, c, httpResp)
 			convey.So(handlerErr, convey.ShouldBeNil)
@@ -164,7 +175,12 @@ func TestClaudeStreamHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			c.Request, _ = http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/",
+				nil,
+			)
 
 			_, err := gemini.ClaudeStreamHandler(meta, c, httpResp)
 			convey.So(err, convey.ShouldBeNil)

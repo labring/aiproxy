@@ -412,14 +412,14 @@ const (
 )
 
 type GetLogsResult struct {
-	Logs     []*Log `json:"logs"`
-	Total    int64  `json:"total"`
-	Channels []int  `json:"channels,omitempty"`
+	Logs     []*Log   `json:"logs"`
+	Total    int64    `json:"total"`
+	Channels []int    `json:"channels,omitempty"`
+	Models   []string `json:"models,omitempty"`
 }
 
 type GetGroupLogsResult struct {
 	GetLogsResult
-	Models     []string `json:"models"`
 	TokenNames []string `json:"token_names"`
 }
 
@@ -730,10 +730,10 @@ func GetGroupLogs(
 
 	return &GetGroupLogsResult{
 		GetLogsResult: GetLogsResult{
-			Logs:  logs,
-			Total: total,
+			Logs:   logs,
+			Total:  total,
+			Models: models,
 		},
-		Models:     models,
 		TokenNames: tokenNames,
 	}, nil
 }
@@ -984,6 +984,7 @@ func SearchLogs(
 		total    int64
 		logs     []*Log
 		channels []int
+		models   []string
 	)
 
 	g := new(errgroup.Group)
@@ -1022,6 +1023,13 @@ func SearchLogs(
 		return err
 	})
 
+	g.Go(func() error {
+		var err error
+
+		models, err = GetUsedModels(startTimestamp, endTimestamp)
+		return err
+	})
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
@@ -1030,6 +1038,7 @@ func SearchLogs(
 		Logs:     logs,
 		Total:    total,
 		Channels: channels,
+		Models:   models,
 	}
 
 	return result, nil
@@ -1113,10 +1122,10 @@ func SearchGroupLogs(
 
 	result := &GetGroupLogsResult{
 		GetLogsResult: GetLogsResult{
-			Logs:  logs,
-			Total: total,
+			Logs:   logs,
+			Total:  total,
+			Models: models,
 		},
-		Models:     models,
 		TokenNames: tokenNames,
 	}
 

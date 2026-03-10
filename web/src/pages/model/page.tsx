@@ -5,7 +5,7 @@ import { ModelTable } from '@/feature/model/components/ModelTable'
 export default function ModelPage() {
     return (
         <AnimatedRoute>
-            <div className="container mx-auto">
+            <div className="h-full">
                 <ModelTable />
             </div>
         </AnimatedRoute>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     createColumnHelper,
@@ -11,9 +11,13 @@ import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ExpandedLogContent } from './ExpandedLogContent'
+import { toast } from 'sonner'
 import type { LogRecord } from '@/types/log'
 
 const columnHelper = createColumnHelper<LogRecord>()
+
+// 点击 group/token_name 时不展开行的列 ID
+const NON_EXPAND_COLUMNS = new Set(['details', 'group', 'token_name', 'model'])
 
 interface LogTableProps {
     data: LogRecord[]
@@ -23,6 +27,7 @@ interface LogTableProps {
     pageSize: number
     onPageChange: (page: number) => void
     onPageSizeChange: (pageSize: number) => void
+    onOpenGroupLog?: (group: string, tokenName?: string) => void
 }
 
 // 使用一个单独的组件来处理每行的展开内容，这样每一行都有自己的state
@@ -34,6 +39,7 @@ export function LogTable({
     pageSize,
     onPageChange,
     onPageSizeChange,
+    onOpenGroupLog,
 }: LogTableProps) {
     const { t } = useTranslation()
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -47,6 +53,16 @@ export function LogTable({
         }
         setExpandedRows(newExpanded)
     }
+
+    const copyToClipboard = useCallback((text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            toast.success(t('common.copied'))
+        }).catch(() => {
+            toast.error(t('common.copyFailed'))
+        })
+    }, [t])
+
+    const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
 
     const columns = useMemo(
         () => [
@@ -69,22 +85,53 @@ export function LogTable({
                 ),
                 size: 40,
             }),
+            columnHelper.accessor('group', {
+                header: t('log.group'),
+                cell: (info) => {
+                    const value = info.getValue()
+                    if (!value) return <div className="text-sm text-muted-foreground">-</div>
+                    return (
+                        <div
+                            className={`text-sm font-medium ${clickableCell}`}
+                            onClick={() => onOpenGroupLog?.(value)}
+                        >
+                            {value}
+                        </div>
+                    )
+                },
+                size: 100,
+            }),
             columnHelper.accessor('token_name', {
                 header: t('log.keyName'),
-                cell: (info) => (
-                    <div className="font-medium text-foreground">
-                        {info.getValue() || '-'}
-                    </div>
-                ),
+                cell: (info) => {
+                    const value = info.getValue()
+                    const group = info.row.original.group
+                    if (!value) return <div className="font-medium text-muted-foreground">-</div>
+                    return (
+                        <div
+                            className={`font-medium ${clickableCell}`}
+                            onClick={() => group && onOpenGroupLog?.(group, value)}
+                        >
+                            {value}
+                        </div>
+                    )
+                },
                 size: 150,
             }),
             columnHelper.accessor('model', {
                 header: t('log.model'),
-                cell: (info) => (
-                    <div className="font-mono text-sm">
-                        {info.getValue() || '-'}
-                    </div>
-                ),
+                cell: (info) => {
+                    const value = info.getValue()
+                    if (!value) return <div className="font-mono text-sm text-muted-foreground">-</div>
+                    return (
+                        <div
+                            className={`font-mono text-sm ${clickableCell}`}
+                            onClick={() => copyToClipboard(value)}
+                        >
+                            {value}
+                        </div>
+                    )
+                },
                 size: 120,
             }),
             columnHelper.display({
@@ -129,6 +176,16 @@ export function LogTable({
                 },
                 size: 80,
             }),
+            columnHelper.display({
+                id: 'used_amount',
+                header: t('log.usedAmount'),
+                cell: ({ row }) => (
+                    <div className="text-right font-mono">
+                        ${(row.original.used_amount || 0).toFixed(4)}
+                    </div>
+                ),
+                size: 100,
+            }),
             columnHelper.accessor('code', {
                 header: t('log.state'),
                 cell: (info) => {
@@ -155,7 +212,8 @@ export function LogTable({
                 size: 140,
             }),
         ],
-        [t, expandedRows]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [t, expandedRows, onOpenGroupLog, copyToClipboard]
     )
 
     const table = useReactTable({
@@ -215,7 +273,20 @@ export function LogTable({
                                 ) : (
                                     table.getRowModel().rows.map((row) => (
                                         <React.Fragment key={row.original.id}>
-                                            <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+                                            <tr
+                                                className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                                                onClick={(e) => {
+                                                    // 找到点击所在的 td，获取对应的列 ID
+                                                    const td = (e.target as HTMLElement).closest('td')
+                                                    if (!td) return
+                                                    const cellIndex = Array.from(td.parentElement!.children).indexOf(td)
+                                                    const columnId = row.getVisibleCells()[cellIndex]?.column.id
+                                                    // 非特殊列点击展开行
+                                                    if (!NON_EXPAND_COLUMNS.has(columnId)) {
+                                                        toggleRowExpansion(row.original.id)
+                                                    }
+                                                }}
+                                            >
                                                 {row.getVisibleCells().map((cell) => (
                                                     <td
                                                         key={cell.id}
@@ -308,4 +379,4 @@ export function LogTable({
             </div>
         </div>
     )
-} 
+}

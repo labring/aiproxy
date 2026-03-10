@@ -41,7 +41,7 @@
     "motion": "^12.9.1",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
-    "react-day-picker": "^8.10.1",
+    "react-day-picker": "^9.14.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.56.1",
     "react-i18next": "^15.5.1",

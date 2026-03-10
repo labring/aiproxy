@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestIntegrationChatCompletionToResponsesFlow(t *testing.T) {
 	reqBody, err := json.Marshal(chatReq)
 	require.NoError(t, err)
 
-	httpReq := httptest.NewRequest(
+	httpReq, _ := http.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/v1/chat/completions",
 		bytes.NewReader(reqBody),
@@ -266,7 +267,7 @@ func TestIntegrationConvertRequestWithDifferentModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpReq := httptest.NewRequest(
+			httpReq, _ := http.NewRequestWithContext(context.Background(),
 				http.MethodPost,
 				"/test",
 				bytes.NewReader([]byte(tt.requestBody)),

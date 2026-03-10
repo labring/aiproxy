@@ -9,10 +9,26 @@ export interface ModelConfigDetail {
     support_voices?: string[]
 }
 
+export interface PriceCondition {
+    input_token_min?: number
+    input_token_max?: number
+    output_token_min?: number
+    output_token_max?: number
+    start_time?: number
+    end_time?: number
+}
+
+export interface ConditionalPrice {
+    condition: PriceCondition
+    price: ModelPrice
+}
+
 export interface ModelPrice {
-    input_price: number
-    output_price: number
-    per_request_price: number
+    input_price?: number
+    input_price_unit?: number
+    output_price?: number
+    output_price_unit?: number
+    per_request_price?: number
     cache_creation_price?: number
     cache_creation_price_unit?: number
     cached_price?: number
@@ -21,8 +37,13 @@ export interface ModelPrice {
     image_input_price_unit?: number
     image_output_price?: number
     image_output_price_unit?: number
+    audio_input_price?: number
+    audio_input_price_unit?: number
+    thinking_mode_output_price?: number
+    thinking_mode_output_price_unit?: number
     web_search_price?: number
     web_search_price_unit?: number
+    conditional_prices?: ConditionalPrice[]
 }
 
 export interface ModelConfig {
@@ -111,6 +132,13 @@ type SearchXNGSpec = {
 export interface ModelCreateRequest {
     model: string
     type: number
+    rpm?: number
+    tpm?: number
+    retry_times?: number
+    timeout?: number
+    max_error_rate?: number
+    force_save_detail?: boolean
+    price?: ModelPrice | Record<string, unknown>
     plugin?: Plugin
 }
 

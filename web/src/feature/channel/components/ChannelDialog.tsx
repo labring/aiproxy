@@ -9,6 +9,7 @@ import {
 import { ChannelForm } from './ChannelForm'
 import { Channel } from '@/types/channel'
 import { AnimatePresence, motion } from "motion/react"
+import { useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     dialogEnterExitAnimation,
@@ -32,16 +33,14 @@ export function ChannelDialog({
 }: ChannelDialogProps) {
     const { t } = useTranslation()
 
-    console.log('ChannelDialog opened with mode:', mode, 'channel:', channel);
-
     // Determine title and description based on mode
     const title = mode === 'create' ? t("channel.dialog.createTitle") : t("channel.dialog.updateTitle")
     const description = mode === 'create'
         ? t("channel.dialog.createDescription")
         : t("channel.dialog.updateDescription")
 
-    // Default values for form
-    const defaultValues = mode === 'update' && channel
+    // Default values for form - memoized to avoid new object reference every render
+    const defaultValues = useMemo(() => mode === 'update' && channel
         ? {
             type: channel.type,
             name: channel.name,
@@ -49,7 +48,8 @@ export function ChannelDialog({
             base_url: channel.base_url,
             models: channel.models || [],
             model_mapping: channel.model_mapping || {},
-            sets: channel.sets || []
+            sets: channel.sets || [],
+            priority: channel.priority
         }
         : {
             type: 0,
@@ -58,19 +58,11 @@ export function ChannelDialog({
             base_url: '',
             models: [],
             model_mapping: {},
-            sets: []
-        }
+            sets: [],
+            priority: 10
+        }, [mode, channel])
 
-    // Log for debugging
-    if (mode === 'update') {
-        console.log('Update mode detected. Channel ID:', channel?.id);
-        // Make sure channel ID exists
-        if (!channel || !channel.id) {
-            console.error('ERROR: No channel ID available for update!');
-        } else {
-            console.log('Will pass channelId:', channel.id, 'to ChannelForm');
-        }
-    }
+    const handleSuccess = useCallback(() => onOpenChange(false), [onOpenChange])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,7 +87,7 @@ export function ChannelDialog({
                                         channelId={channel?.id}
                                         channel={channel}
                                         defaultValues={defaultValues}
-                                        onSuccess={() => onOpenChange(false)}
+                                        onSuccess={handleSuccess}
                                     />
                                 </motion.div>
                             </motion.div>

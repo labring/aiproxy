@@ -56,8 +56,8 @@ const (
 
 var channelTypeNames = map[ChannelType]string{
 	ChannelTypeOpenAI:                  "openai",
-	ChannelTypeAzure:                   "azure",
-	ChannelTypeAzure2:                  "azure (model name support contain '.')",
+	ChannelTypeAzure:                   "azure (deprecated)",
+	ChannelTypeAzure2:                  "azure",
 	ChannelTypeGoogleGeminiOpenAI:      "google gemini (openai)",
 	ChannelTypeBaiduV2:                 "baidu v2",
 	ChannelTypeAnthropic:               "anthropic",

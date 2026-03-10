@@ -75,12 +75,18 @@ func (c *Channel) GetBalanceThreshold() float64 {
 
 const (
 	DefaultPriority = 10
+	MaxPriority     = 1000000
 )
 
 func (c *Channel) GetPriority() int32 {
 	if c.Priority == 0 {
 		return DefaultPriority
 	}
+
+	if c.Priority > MaxPriority {
+		return MaxPriority
+	}
+
 	return c.Priority
 }
 
@@ -546,4 +552,27 @@ func UpdateChannelUsedAmount(id int, amount float64, requestCount, retryCount in
 		})
 
 	return HandleUpdateResult(result, ErrChannelNotFound)
+}
+
+type ChannelBasicInfo struct {
+	ID   int         `json:"id"`
+	Name string      `json:"name"`
+	Type ChannelType `json:"type"`
+}
+
+func GetChannelsBasicInfoByIDs(ids []int) ([]*ChannelBasicInfo, error) {
+	if len(ids) == 0 {
+		return []*ChannelBasicInfo{}, nil
+	}
+
+	var result []*ChannelBasicInfo
+
+	err := DB.Unscoped().
+		Model(&Channel{}).
+		Select("id", "name", "type").
+		Where("id IN ?", ids).
+		Find(&result).
+		Error
+
+	return result, err
 }

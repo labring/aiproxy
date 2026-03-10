@@ -8,6 +8,7 @@ export interface Channel {
     models: string[]
     model_mapping: Record<string, string> | null
     request_count: number
+    retry_count: number
     status: number
     created_at: number
     priority: number
@@ -16,10 +17,21 @@ export interface Channel {
     sets?: string[]
 }
 
+export const DEFAULT_PRIORITY = 10
+
+export interface ChannelConfigTemplate {
+    name: string
+    description: string
+    example?: string
+    required: boolean
+}
+
 export interface ChannelTypeMeta {
     name: string
     keyHelp: string
     defaultBaseUrl: string
+    readme?: string
+    configs?: Record<string, ChannelConfigTemplate>
 }
 
 export type ChannelTypeMetaMap = Record<string, ChannelTypeMeta>
@@ -37,6 +49,7 @@ export interface ChannelCreateRequest {
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]
+    priority?: number
 }
 
 export interface ChannelUpdateRequest {
@@ -47,6 +60,7 @@ export interface ChannelUpdateRequest {
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]
+    priority?: number
 }
 
 export interface ChannelStatusRequest {

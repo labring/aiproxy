@@ -2,11 +2,13 @@ package oncall
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/trylock"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -104,12 +106,13 @@ func recordErrorRedis(key string) (time.Time, error) {
 	now := time.Now()
 	nowNanos := now.UnixNano()
 
-	set, err := common.RDB.SetNX(ctx, redisKey, nowNanos, errorStateTTL).Result()
-	if err != nil {
+	_, err = common.RDB.SetArgs(ctx, redisKey, nowNanos, redis.SetArgs{Mode: "NX", TTL: errorStateTTL}).
+		Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return time.Time{}, err
 	}
 
-	if set {
+	if !errors.Is(err, redis.Nil) {
 		return now, nil
 	}
 
@@ -273,14 +276,18 @@ func markAlertedRedis(key string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Use SetNX to ensure atomicity
-	set, err := common.RDB.SetNX(ctx, redisKeyAlerted(key), time.Now().UnixNano(), alertedStateTTL).
+	// Use SetArgs with NX to ensure atomicity
+	_, err := common.RDB.SetArgs(ctx, redisKeyAlerted(key), time.Now().UnixNano(), redis.SetArgs{Mode: "NX", TTL: alertedStateTTL}).
 		Result()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+
 	if err != nil {
 		return false, err
 	}
 
-	return set, nil
+	return true, nil
 }
 
 func markAlertedMemory(key string) bool {

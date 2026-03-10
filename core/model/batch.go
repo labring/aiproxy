@@ -635,6 +635,10 @@ func updateGroupSummaryData(
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
 	}
+
+	if usage.CacheCreationTokens > 0 {
+		groupSummary.CacheCreationCount++
+	}
 }
 
 func updateGroupSummaryDataMinute(
@@ -685,6 +689,10 @@ func updateGroupSummaryDataMinute(
 
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
+	}
+
+	if usage.CacheCreationTokens > 0 {
+		groupSummary.CacheCreationCount++
 	}
 }
 
@@ -738,6 +746,10 @@ func updateSummaryData(
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++
 	}
+
+	if usage.CacheCreationTokens > 0 {
+		summary.CacheCreationCount++
+	}
 }
 
 func updateSummaryDataMinute(
@@ -789,5 +801,9 @@ func updateSummaryDataMinute(
 
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++
+	}
+
+	if usage.CacheCreationTokens > 0 {
+		summary.CacheCreationCount++
 	}
 }

@@ -435,7 +435,7 @@ func GetGroupDashboardModels(c *gin.Context) {
 //	@Param			timezone		query		string	false	"Timezone, default is Local"
 //	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
 //	@Param			fields			query		string	false	"Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all"
-//	@Success		200				{object}	middleware.APIResponse{data=[]model.TimeSummaryDataV2}
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardV2Response}
 //	@Router			/api/dashboardv2/ [get]
 func GetTimeSeriesModelData(c *gin.Context) {
 	channelID, _ := strconv.Atoi(c.Query("channel"))
@@ -444,7 +444,7 @@ func GetTimeSeriesModelData(c *gin.Context) {
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 
-	models, err := model.GetTimeSeriesModelData(
+	result, err := model.GetDashboardV2Data(
 		channelID,
 		modelName,
 		startTime,
@@ -458,7 +458,17 @@ func GetTimeSeriesModelData(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, models)
+	channelStr := c.Query("channel")
+	if channelID == 0 {
+		channelStr = "*"
+	}
+
+	rpm, _ := reqlimit.GetChannelModelRequest(c.Request.Context(), channelStr, modelName)
+	result.RPM = rpm
+	tpm, _ := reqlimit.GetChannelModelTokensRequest(c.Request.Context(), channelStr, modelName)
+	result.TPM = tpm
+
+	middleware.SuccessResponse(c, result)
 }
 
 // GetGroupTimeSeriesModelData godoc
@@ -476,7 +486,7 @@ func GetTimeSeriesModelData(c *gin.Context) {
 //	@Param			timezone		query		string	false	"Timezone, default is Local"
 //	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
 //	@Param			fields			query		string	false	"Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all"
-//	@Success		200				{object}	middleware.APIResponse{data=[]model.TimeSummaryDataV2}
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardV2Response}
 //	@Router			/api/dashboardv2/{group} [get]
 func GetGroupTimeSeriesModelData(c *gin.Context) {
 	group := c.Param("group")
@@ -491,7 +501,7 @@ func GetGroupTimeSeriesModelData(c *gin.Context) {
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 
-	models, err := model.GetGroupTimeSeriesModelData(
+	result, err := model.GetGroupDashboardV2Data(
 		group,
 		tokenName,
 		modelName,
@@ -506,5 +516,20 @@ func GetGroupTimeSeriesModelData(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, models)
+	rpm, _ := reqlimit.GetGroupModelTokennameRequest(
+		c.Request.Context(),
+		group,
+		modelName,
+		tokenName,
+	)
+	result.RPM = rpm
+	tpm, _ := reqlimit.GetGroupModelTokennameTokensRequest(
+		c.Request.Context(),
+		group,
+		modelName,
+		tokenName,
+	)
+	result.TPM = tpm
+
+	middleware.SuccessResponse(c, result)
 }

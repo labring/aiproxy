@@ -3,7 +3,9 @@ import { useState, useMemo } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
 import { ModelConfig } from "@/types/model";
+import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   MoreHorizontal,
   Plus,
@@ -11,6 +13,7 @@ import {
   RefreshCcw,
   Pencil,
   FileText,
+  Search,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,6 +42,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChannelDialog } from "@/feature/channel/components/ChannelDialog";
+import { Channel } from "@/types/channel";
+import { channelApi } from "@/api/channel";
+import { toast } from "sonner";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -50,9 +57,14 @@ export function ModelTable() {
   const [dialogMode, setDialogMode] = useState<"create" | "update">("create");
   const [selectedModel, setSelectedModel] = useState<ModelConfig | null>(null);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // API Doc drawer state
   const [apiDocOpen, setApiDocOpen] = useState(false);
+
+  // Channel edit dialog state
+  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
   // Get models list
   const { data: models, isLoading, error, isError, refetch } = useModels();
@@ -63,17 +75,21 @@ export function ModelTable() {
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
 
-  // Sort models by type for stable sorting
+  // Sort and filter models
   const sortedModels = useMemo(() => {
     if (!models) return [];
-    return [...models].sort((a, b) => {
+    let filtered = models;
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      filtered = models.filter(m => m.model.toLowerCase().includes(keyword));
+    }
+    return [...filtered].sort((a, b) => {
       if (a.type === b.type) {
-        // Secondary sort by model name for stability
         return a.model.localeCompare(b.model);
       }
       return a.type - b.type;
     });
-  }, [models]);
+  }, [models, searchKeyword]);
 
   // Get channel type name by type ID
   const getChannelTypeName = (typeId: number): string => {
@@ -84,14 +100,24 @@ export function ModelTable() {
   };
 
   // Create table columns
-  const columns: ColumnDef<ModelConfig>[] = [
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
     {
       accessorKey: "model",
       header: () => (
         <div className="font-medium py-3.5">{t("model.modelName")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">{row.original.model}</div>
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => {
+            navigator.clipboard.writeText(row.original.model).then(() => {
+              toast.success(t("common.copied"));
+            });
+          }}
+        >
+          {row.original.model}
+        </div>
       ),
     },
     {
@@ -100,7 +126,10 @@ export function ModelTable() {
         <div className="font-medium py-3.5">{t("model.modelType")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => openUpdateDialog(row.original)}
+        >
           {/* @ts-expect-error 动态翻译键 */}
           {t(`modeType.${row.original.type}`)}
         </div>
@@ -149,17 +178,29 @@ export function ModelTable() {
                       {t("model.availableChannels")}
                     </h4>
                     <div className="flex flex-col gap-1">
-                      {channels.map((channel) => (
+                      {[...channels].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).map((channel) => (
                         <div
                           key={channel.id}
-                          className="flex items-center gap-2"
+                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
+                          onClick={async () => {
+                            try {
+                              const fullChannel = await channelApi.getChannel(channel.id);
+                              setSelectedChannel(fullChannel);
+                              setChannelDialogOpen(true);
+                            } catch {
+                              toast.error(t("channel.fetchFailed"));
+                            }
+                          }}
                         >
                           <Badge variant="secondary" className="text-xs">
                             {channel.name}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            ID: {channel.id}, {getChannelTypeName(channel.type)}
+                            ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>
+                          <Badge variant="outline" className="text-xs ml-auto">
+                            {(channel.weight ?? 0).toFixed(1)}%
+                          </Badge>
                         </div>
                       ))}
                     </div>
@@ -180,7 +221,10 @@ export function ModelTable() {
         const plugin = row.original.plugin;
         if (!plugin) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
@@ -206,19 +250,25 @@ export function ModelTable() {
 
         if (enabledPlugins.length === 0) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
         }
 
         return (
-          <div className="flex flex-wrap gap-1">
+          <div
+            className="flex flex-wrap gap-1 cursor-pointer"
+            onClick={() => openUpdateDialog(row.original)}
+          >
             {enabledPlugins.map((pluginName) => (
               <Badge
                 key={pluginName}
                 variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
               >
                 {pluginName}
               </Badge>
@@ -227,16 +277,13 @@ export function ModelTable() {
         );
       },
     },
-    // {
-    //     accessorKey: 'owner',
-    //     header: () => <div className="font-medium py-3.5">{t("model.owner")}</div>,
-    //     cell: ({ row }) => <div>{row.original.owner}</div>,
-    // },
-    // {
-    //     accessorKey: 'rpm',
-    //     header: () => <div className="font-medium py-3.5">{t("model.rpm")}</div>,
-    //     cell: ({ row }) => <div>{row.original.rpm}</div>,
-    // },
+    {
+      accessorKey: "price",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.priceColumn")}</div>
+      ),
+      cell: ({ row }) => <PriceDisplay price={row.original.price} />,
+    },
     {
       id: "actions",
       cell: ({ row }) => (
@@ -265,7 +312,7 @@ export function ModelTable() {
         </DropdownMenu>
       ),
     },
-  ];
+  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas]);
 
   // Initialize table
   const table = useReactTable({
@@ -329,6 +376,15 @@ export function ModelTable() {
             {t("model.management")}
           </h2>
           <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t("common.search")}
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                className="h-9 w-48 pl-8"
+              />
+            </div>
             <AnimatedButton>
               <Button
                 variant="outline"
@@ -404,6 +460,14 @@ export function ModelTable() {
           modelConfig={selectedModel}
         />
       )}
+
+      {/* Channel Edit Dialog */}
+      <ChannelDialog
+        open={channelDialogOpen}
+        onOpenChange={setChannelDialogOpen}
+        mode="update"
+        channel={selectedChannel}
+      />
     </>
   );
 }
