@@ -523,6 +523,7 @@ func StreamHandler(
 			meta.ActualModel,
 			int64(meta.RequestUsage.InputTokens),
 		)
+		usage.ServiceTier = meta.RequestUsage.ServiceTier
 		_ = render.OpenaiObjectData(c, &relaymodel.ChatCompletionsStreamResponse{
 			ID:      ChatCompletionID(),
 			Model:   meta.OriginModel,
@@ -534,6 +535,10 @@ func StreamHandler(
 	} else if usage.TotalTokens != 0 && usage.PromptTokens == 0 { // some channels don't return prompt tokens & completion tokens
 		usage.PromptTokens = int64(meta.RequestUsage.InputTokens)
 		usage.CompletionTokens = usage.TotalTokens - int64(meta.RequestUsage.InputTokens)
+	}
+
+	if usage.ServiceTier == "" {
+		usage.ServiceTier = meta.RequestUsage.ServiceTier
 	}
 
 	render.OpenaiDone(c)
@@ -654,6 +659,7 @@ func Handler(
 			PromptTokens:     int64(meta.RequestUsage.InputTokens),
 			CompletionTokens: completionTokens,
 			TotalTokens:      int64(meta.RequestUsage.InputTokens) + completionTokens,
+			ServiceTier:      meta.RequestUsage.ServiceTier,
 		}
 
 		_, err = node.Set("usage", ast.NewAny(usage))
@@ -682,6 +688,10 @@ func Handler(
 					http.StatusInternalServerError,
 				)
 		}
+	}
+
+	if usage != nil && usage.ServiceTier == "" {
+		usage.ServiceTier = meta.RequestUsage.ServiceTier
 	}
 
 	_, err = node.Set("model", ast.NewString(meta.OriginModel))
@@ -987,6 +997,11 @@ func ConvertChatCompletionToResponsesRequest(
 		responsesReq.ToolChoice = chatReq.ToolChoice
 	}
 
+	// Map service tier
+	if chatReq.ServiceTier != "" {
+		responsesReq.ServiceTier = &chatReq.ServiceTier
+	}
+
 	// Map user
 	if chatReq.User != "" {
 		responsesReq.User = &chatReq.User
@@ -1057,6 +1072,7 @@ func ConvertResponsesToChatCompletionResponse(
 		Created: responsesResp.CreatedAt,
 		Model:   responsesResp.Model,
 		Choices: []*relaymodel.TextResponseChoice{},
+		Usage:   relaymodel.ChatUsage{},
 	}
 
 	// Convert output items to choices
@@ -1108,6 +1124,10 @@ func ConvertResponsesToChatCompletionResponse(
 		chatResp.Usage = responsesResp.Usage.ToChatUsage()
 	}
 
+	if responsesResp.ServiceTier != nil {
+		chatResp.Usage.ServiceTier = *responsesResp.ServiceTier
+	}
+
 	// Marshal and return
 	chatRespData, err := sonic.Marshal(chatResp)
 	if err != nil {
@@ -1123,7 +1143,12 @@ func ConvertResponsesToChatCompletionResponse(
 	_, _ = c.Writer.Write(chatRespData)
 
 	if responsesResp.Usage != nil {
-		return adaptor.DoResponseResult{Usage: responsesResp.Usage.ToModelUsage()}, nil
+		usage := responsesResp.Usage.ToModelUsage()
+		if responsesResp.ServiceTier != nil {
+			usage.ServiceTier = *responsesResp.ServiceTier
+		}
+
+		return adaptor.DoResponseResult{Usage: usage}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil
@@ -1190,6 +1215,9 @@ func ConvertResponsesToChatCompletionStreamResponse(
 		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
 			if event.Response != nil && event.Response.Usage != nil {
 				usage = event.Response.Usage.ToModelUsage()
+				if event.Response.ServiceTier != nil {
+					usage.ServiceTier = *event.Response.ServiceTier
+				}
 			}
 
 			chatStreamResp = state.handleResponseCompleted(&event)

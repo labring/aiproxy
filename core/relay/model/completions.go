@@ -42,6 +42,7 @@ type GeneralOpenAIRequest struct {
 	StreamOptions       *StreamOptions  `json:"stream_options,omitempty"`
 	Temperature         *float64        `json:"temperature,omitempty"`
 	TopP                *float64        `json:"top_p,omitempty"`
+	ServiceTier         string          `json:"service_tier,omitempty"`
 	Model               string          `json:"model,omitempty"`
 	User                string          `json:"user,omitempty"`
 	Size                string          `json:"size,omitempty"`

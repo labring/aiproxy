@@ -106,7 +106,12 @@ func ResponseHandler(
 
 	// Calculate usage
 	if response.Usage != nil {
-		return adaptor.DoResponseResult{Usage: response.Usage.ToModelUsage()}, nil
+		usage := response.Usage.ToModelUsage()
+		if response.ServiceTier != nil {
+			usage.ServiceTier = *response.ServiceTier
+		}
+
+		return adaptor.DoResponseResult{Usage: usage}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil
@@ -176,6 +181,9 @@ func ResponseStreamHandler(
 		// Update usage if available
 		if event.Response != nil && event.Response.Usage != nil {
 			usage = event.Response.Usage.ToModelUsage()
+			if event.Response.ServiceTier != nil {
+				usage.ServiceTier = *event.Response.ServiceTier
+			}
 		}
 
 		// Forward the event

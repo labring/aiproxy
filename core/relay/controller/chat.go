@@ -18,5 +18,6 @@ func GetChatRequestUsage(c *gin.Context, _ model.ModelConfig) (model.Usage, erro
 			textRequest.Messages,
 			textRequest.Model,
 		)),
+		ServiceTier: textRequest.ServiceTier,
 	}, nil
 }

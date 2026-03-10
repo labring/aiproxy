@@ -820,6 +820,8 @@
       "inputTokenMax": "Input Token Max",
       "outputTokenMin": "Output Token Min",
       "outputTokenMax": "Output Token Max",
+      "serviceTier": "Service Tier",
+      "serviceTierAny": "Any",
       "startTime": "Start Time",
       "endTime": "End Time",
       "noPrice": "No price configured",

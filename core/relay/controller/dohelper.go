@@ -398,4 +398,8 @@ func updateUsageMetrics(usage model.Usage, log *log.Entry) {
 	if usage.WebSearchCount > 0 {
 		log.Data["t_websearch"] = usage.WebSearchCount
 	}
+
+	if usage.ServiceTier != "" {
+		log.Data["service_tier"] = usage.ServiceTier
+	}
 }

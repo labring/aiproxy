@@ -16,6 +16,7 @@ export interface PriceCondition {
     output_token_max?: number
     start_time?: number
     end_time?: number
+    service_tier?: '' | 'auto' | 'default' | 'flex' | 'scale' | 'priority'
 }
 
 export interface ConditionalPrice {

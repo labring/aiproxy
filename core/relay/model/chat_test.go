@@ -31,9 +31,22 @@ func TestChatUsage(t *testing.T) {
 			convey.So(int64(modelUsage.OutputTokens), convey.ShouldEqual, 20)
 			convey.So(int64(modelUsage.TotalTokens), convey.ShouldEqual, 30)
 			convey.So(int64(modelUsage.WebSearchCount), convey.ShouldEqual, 5)
+			convey.So(modelUsage.ServiceTier, convey.ShouldEqual, "")
 			convey.So(int64(modelUsage.CachedTokens), convey.ShouldEqual, 5)
 			convey.So(int64(modelUsage.CacheCreationTokens), convey.ShouldEqual, 2)
 			convey.So(int64(modelUsage.ReasoningTokens), convey.ShouldEqual, 10)
+		})
+
+		convey.Convey("ToModelUsage with service tier", func() {
+			u := model.ChatUsage{
+				PromptTokens:     10,
+				CompletionTokens: 20,
+				TotalTokens:      30,
+				ServiceTier:      "priority",
+			}
+
+			modelUsage := u.ToModelUsage()
+			convey.So(modelUsage.ServiceTier, convey.ShouldEqual, "priority")
 		})
 
 		convey.Convey("Add", func() {

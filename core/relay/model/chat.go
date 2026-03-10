@@ -10,7 +10,8 @@ type ChatUsage struct {
 	CompletionTokens int64 `json:"completion_tokens,omitempty"`
 	TotalTokens      int64 `json:"total_tokens"`
 
-	WebSearchCount int64 `json:"web_search_count,omitempty"`
+	WebSearchCount int64  `json:"web_search_count,omitempty"`
+	ServiceTier    string `json:"service_tier,omitempty"`
 
 	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
@@ -22,6 +23,7 @@ func (u ChatUsage) ToModelUsage() model.Usage {
 		OutputTokens:   model.ZeroNullInt64(u.CompletionTokens),
 		TotalTokens:    model.ZeroNullInt64(u.TotalTokens),
 		WebSearchCount: model.ZeroNullInt64(u.WebSearchCount),
+		ServiceTier:    u.ServiceTier,
 	}
 	if u.PromptTokensDetails != nil {
 		usage.CachedTokens = model.ZeroNullInt64(u.PromptTokensDetails.CachedTokens)

@@ -808,6 +808,8 @@
       "inputTokenMax": "输入 Token 最大值",
       "outputTokenMin": "输出 Token 最小值",
       "outputTokenMax": "输出 Token 最大值",
+      "serviceTier": "服务层级",
+      "serviceTierAny": "任意",
       "startTime": "开始时间",
       "endTime": "结束时间",
       "noPrice": "未配置价格",

@@ -77,6 +77,7 @@ const priceConditionSchema = z.object({
     output_token_max: z.number().optional(),
     start_time: z.number().optional(),
     end_time: z.number().optional(),
+    service_tier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).or(z.literal('')).optional(),
 })
 
 // Price schema (used for conditional prices)

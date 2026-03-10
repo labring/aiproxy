@@ -452,6 +452,31 @@ func TestCalculateAmountWithConditionalPricing(t *testing.T) {
 			},
 			want: 0.002, // 0.001 * 1000/1000 + 0.002 * 500/1000
 		},
+		{
+			name: "Conditional Prices - Service Tier Priority",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+				ServiceTier:  "priority",
+			},
+			price: model.Price{
+				InputPrice:  0.001,
+				OutputPrice: 0.002,
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "priority",
+						},
+						Price: model.Price{
+							InputPrice:  0.003,
+							OutputPrice: 0.006,
+						},
+					},
+				},
+			},
+			want: 0.006, // 0.003 * 1000/1000 + 0.006 * 500/1000
+		},
 	}
 
 	for _, tt := range tests {

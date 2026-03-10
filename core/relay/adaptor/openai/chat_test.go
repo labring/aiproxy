@@ -302,6 +302,21 @@ func TestConvertChatCompletionToResponsesRequest(t *testing.T) {
 				assert.Equal(t, "auto", responsesReq.ToolChoice)
 			},
 		},
+		{
+			name: "request with service tier",
+			inputRequest: relaymodel.GeneralOpenAIRequest{
+				Model:       "gpt-5-codex",
+				ServiceTier: "priority",
+				Messages: []relaymodel.Message{
+					{Role: "user", Content: "Hello"},
+				},
+			},
+			checkFunc: func(t *testing.T, responsesReq relaymodel.CreateResponseRequest) {
+				t.Helper()
+				require.NotNil(t, responsesReq.ServiceTier)
+				assert.Equal(t, "priority", *responsesReq.ServiceTier)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -360,6 +375,7 @@ func TestConvertResponsesToChatCompletionResponse(t *testing.T) {
 					OutputTokens: 5,
 					TotalTokens:  15,
 				},
+				ServiceTier: new("priority"),
 			},
 			checkFunc: func(t *testing.T, chatResp relaymodel.TextResponse) {
 				t.Helper()
@@ -371,6 +387,7 @@ func TestConvertResponsesToChatCompletionResponse(t *testing.T) {
 				assert.Equal(t, relaymodel.FinishReasonStop, chatResp.Choices[0].FinishReason)
 				assert.Equal(t, int64(10), chatResp.Usage.PromptTokens)
 				assert.Equal(t, int64(5), chatResp.Usage.CompletionTokens)
+				assert.Equal(t, "priority", chatResp.Usage.ServiceTier)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -459,6 +476,11 @@ type mockReadCloser struct {
 
 func (m *mockReadCloser) Close() error {
 	return nil
+}
+
+//go:fix inline
+func strPtr(s string) *string {
+	return new(s)
 }
 
 func TestConvertChatCompletionsRequest_WithToolsRequiredField(t *testing.T) {
