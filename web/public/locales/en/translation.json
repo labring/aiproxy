@@ -309,6 +309,14 @@
     "edit": "Edit",
     "delete": "Delete",
     "refresh": "Refresh",
+    "export": "Export",
+    "import": "Import",
+    "importing": "Importing...",
+    "exportSuccess": "Model configs exported successfully",
+    "importSuccess": "{{count}} model configs imported successfully",
+    "importFailed": "Failed to import model configs",
+    "noDataToExport": "No model configs to export",
+    "invalidFormat": "Invalid file format",
     "noResults": "No models found",
     "apiDetails": "API Detail",
     "pluginInfo": "Plugin Info",
@@ -687,6 +695,15 @@
     "testNoFailed": "No failed tests",
     "testAllChannels": "Test All Channels",
     "testAll": "Test All",
+    "export": "Export",
+    "import": "Import",
+    "importing": "Importing...",
+    "exportSuccess": "Channels exported successfully",
+    "exportFailed": "Failed to export channels",
+    "importSuccess": "{{success}} channels imported successfully{{fail, select, 0{} other{, {{fail}} failed}}}",
+    "importFailed": "Failed to import channels",
+    "noDataToExport": "No channels to export",
+    "invalidFormat": "Invalid file format",
     "dialog": {
       "createTitle": "Create Channel",
       "updateTitle": "Update Channel",
@@ -879,7 +896,15 @@
       "overrideRecordClaudeLongContextDesc": "Override whether Claude long context summary is recorded for this model",
       "overridePrice": "Override Price",
       "overridePriceDesc": "Override the global pricing for this model",
-      "actions": "Actions"
+      "actions": "Actions",
+      "export": "Export",
+      "import": "Import",
+      "importing": "Importing...",
+      "exportSuccess": "Model configs exported successfully",
+      "importSuccess": "{{count}} model configs imported successfully",
+      "importFailed": "Failed to import model configs",
+      "noDataToExport": "No model configs to export",
+      "invalidFormat": "Invalid file format"
     }
   }
 }

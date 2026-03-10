@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupModelConfigsTab.tsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
@@ -28,7 +28,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search, Download, Upload } from 'lucide-react'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { useGroupModelConfigs } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
@@ -59,9 +59,11 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
 export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
     const { data: systemModels } = useModels()
     const [searchKeyword, setSearchKeyword] = useState('')
+    const [isImporting, setIsImporting] = useState(false)
 
     const filteredData = useMemo(() => {
         if (!data) return []
@@ -212,6 +214,81 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         setTimeout(() => setIsRefreshAnimating(false), 1000)
     }
 
+    // Export group model configs to JSON file
+    const exportConfigs = () => {
+        if (!data || data.length === 0) {
+            toast.error(t('group.modelConfig.noDataToExport'))
+            return
+        }
+
+        const exportData = data.map(config => ({
+            model: config.model,
+            override_limit: config.override_limit,
+            rpm: config.rpm,
+            tpm: config.tpm,
+            override_retry_times: config.override_retry_times,
+            retry_times: config.retry_times,
+            override_force_save_detail: config.override_force_save_detail,
+            force_save_detail: config.force_save_detail,
+            override_summary_service_tier: config.override_summary_service_tier,
+            summary_service_tier: config.summary_service_tier,
+            override_summary_claude_long_context: config.override_summary_claude_long_context,
+            summary_claude_long_context: config.summary_claude_long_context,
+            override_price: config.override_price,
+            price: config.price,
+        }))
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+            type: 'application/json',
+        })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `group_${groupId}_model_configs_${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success(t('group.modelConfig.exportSuccess'))
+    }
+
+    // Import group model configs from JSON file
+    const importConfigs = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsImporting(true)
+        try {
+            const text = await file.text()
+            const configs: GroupModelConfigSaveRequest[] = JSON.parse(text)
+
+            if (!Array.isArray(configs)) {
+                throw new Error(t('group.modelConfig.invalidFormat'))
+            }
+
+            await groupApi.saveGroupModelConfigs(groupId, configs)
+            toast.success(t('group.modelConfig.importSuccess', { count: configs.length }))
+            queryClient.invalidateQueries({ queryKey: ['groupModelConfigs', groupId] })
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : t('group.modelConfig.importFailed')
+            )
+        } finally {
+            setIsImporting(false)
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+        }
+    }
+
+    // Trigger file input click
+    const triggerImport = () => {
+        fileInputRef.current?.click()
+    }
+
     if (isLoading) {
         return (
             <div className="space-y-4">
@@ -247,6 +324,33 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </AnimatedIcon>
                             {t('group.refresh')}
                         </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={exportConfigs}
+                            disabled={!data || data.length === 0}
+                            className="flex items-center gap-1.5 h-8"
+                        >
+                            <Download className="h-3.5 w-3.5" />
+                            {t('group.modelConfig.export')}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={triggerImport}
+                            disabled={isImporting}
+                            className="flex items-center gap-1.5 h-8"
+                        >
+                            <Upload className="h-3.5 w-3.5" />
+                            {isImporting ? t('group.modelConfig.importing') : t('group.modelConfig.import')}
+                        </Button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={importConfigs}
+                            className="hidden"
+                        />
                         <Button
                             size="sm"
                             onClick={openCreateDialog}

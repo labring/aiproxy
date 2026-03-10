@@ -298,6 +298,14 @@
     "edit": "编辑",
     "delete": "删除",
     "refresh": "刷新",
+    "export": "导出",
+    "import": "导入",
+    "importing": "导入中...",
+    "exportSuccess": "模型配置导出成功",
+    "importSuccess": "成功导入 {{count}} 个模型配置",
+    "importFailed": "导入模型配置失败",
+    "noDataToExport": "没有可导出的模型配置",
+    "invalidFormat": "文件格式无效",
     "noResults": "未找到模型",
     "apiDetails": "API 详情",
     "pluginInfo": "插件信息",
@@ -675,6 +683,15 @@
     "testNoFailed": "没有失败的测试",
     "testAllChannels": "测试全部渠道",
     "testAll": "测试全部",
+    "export": "导出",
+    "import": "导入",
+    "importing": "导入中...",
+    "exportSuccess": "渠道导出成功",
+    "exportFailed": "渠道导出失败",
+    "importSuccess": "成功导入 {{success}} 个渠道{{fail, select, 0{} other{，{{fail}} 个失败}}}",
+    "importFailed": "渠道导入失败",
+    "noDataToExport": "没有可导出的渠道",
+    "invalidFormat": "文件格式无效",
     "dialog": {
       "createTitle": "创建渠道",
       "updateTitle": "更新渠道",
@@ -867,7 +884,15 @@
       "overrideRecordClaudeLongContextDesc": "覆盖此模型是否记录 Claude 长上下文汇总",
       "overridePrice": "覆盖价格",
       "overridePriceDesc": "覆盖此模型的全局价格配置",
-      "actions": "操作"
+      "actions": "操作",
+      "export": "导出",
+      "import": "导入",
+      "importing": "导入中...",
+      "exportSuccess": "模型配置导出成功",
+      "importSuccess": "成功导入 {{count}} 个模型配置",
+      "importFailed": "导入模型配置失败",
+      "noDataToExport": "没有可导出的模型配置",
+      "invalidFormat": "文件格式无效"
     }
   }
 }

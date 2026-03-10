@@ -6,13 +6,14 @@ import {
     ColumnDef,
 } from '@tanstack/react-table'
 import { useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels } from '../hooks'
 import { channelApi } from '@/api/channel'
-import { Channel } from '@/types/channel'
+import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, Search, Settings
+    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -43,6 +44,8 @@ import { ROUTES } from '@/routes/constants'
 export function ChannelTable() {
     const { t } = useTranslation()
     const navigate = useNavigate()
+    const queryClient = useQueryClient()
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // 状态管理
     const [channelDialogOpen, setChannelDialogOpen] = useState(false)
@@ -51,6 +54,7 @@ export function ChannelTable() {
     const [dialogMode, setDialogMode] = useState<'create' | 'update'>('create')
     const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
+    const [isImporting, setIsImporting] = useState(false)
     const [testDialogOpen, setTestDialogOpen] = useState(false)
     const [isTestAll, setIsTestAll] = useState(false)
     const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
@@ -133,6 +137,127 @@ export function ChannelTable() {
         setTimeout(() => {
             setIsRefreshAnimating(false)
         }, 1000)
+    }
+
+    // Export channels to JSON file
+    const exportChannels = async () => {
+        try {
+            // Fetch all channels for export
+            const allChannels = await channelApi.getAllChannels()
+            if (!allChannels || allChannels.length === 0) {
+                toast.error(t('channel.noDataToExport'))
+                return
+            }
+
+            const exportData: ChannelCreateRequest[] = allChannels.map(channel => ({
+                type: channel.type,
+                name: channel.name,
+                key: channel.key,
+                base_url: channel.base_url,
+                models: channel.models,
+                model_mapping: channel.model_mapping || undefined,
+                sets: channel.sets,
+                priority: channel.priority,
+            }))
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json',
+            })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `channels_${new Date().toISOString().slice(0, 10)}.json`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+            toast.success(t('channel.exportSuccess'))
+        } catch {
+            toast.error(t('channel.exportFailed'))
+        }
+    }
+
+    // Export single channel to JSON file
+    const exportSingleChannel = (channel: Channel) => {
+        const exportData: ChannelCreateRequest[] = [{
+            type: channel.type,
+            name: channel.name,
+            key: channel.key,
+            base_url: channel.base_url,
+            models: channel.models,
+            model_mapping: channel.model_mapping || undefined,
+            sets: channel.sets,
+            priority: channel.priority,
+        }]
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+            type: 'application/json',
+        })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `channel_${channel.name}_${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success(t('channel.exportSuccess'))
+    }
+
+    // Import channels from JSON file
+    const importChannels = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsImporting(true)
+        try {
+            const text = await file.text()
+            const channels: ChannelCreateRequest[] = JSON.parse(text)
+
+            if (!Array.isArray(channels)) {
+                throw new Error(t('channel.invalidFormat'))
+            }
+
+            // Import channels one by one
+            let successCount = 0
+            let failCount = 0
+
+            for (const channel of channels) {
+                try {
+                    await channelApi.createChannel(channel)
+                    successCount++
+                } catch {
+                    failCount++
+                }
+            }
+
+            if (successCount > 0) {
+                toast.success(t('channel.importSuccess', {
+                    success: successCount,
+                    fail: failCount
+                }))
+                queryClient.invalidateQueries({ queryKey: ['channels'] })
+            } else {
+                toast.error(t('channel.importFailed'))
+            }
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : t('channel.importFailed')
+            )
+        } finally {
+            setIsImporting(false)
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+        }
+    }
+
+    // Trigger file input click
+    const triggerImport = () => {
+        fileInputRef.current?.click()
     }
 
     // 跳转到全局仪表盘
@@ -378,6 +503,12 @@ export function ChannelTable() {
                             <Trash2 className="mr-2 h-4 w-4 text-red-600 dark:text-red-500" />
                             {t("channel.delete")}
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => exportSingleChannel(row.original)}
+                        >
+                            <Download className="mr-2 h-4 w-4" />
+                            {t("channel.export")}
+                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             ),
@@ -452,6 +583,37 @@ export function ChannelTable() {
                                 {t("channel.refresh")}
                             </Button>
                         </AnimatedButton>
+                        <AnimatedButton>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={exportChannels}
+                                disabled={!channels || channels.length === 0}
+                                className="flex items-center gap-2 justify-center"
+                            >
+                                <Download className="h-4 w-4" />
+                                {t("channel.export")}
+                            </Button>
+                        </AnimatedButton>
+                        <AnimatedButton>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={triggerImport}
+                                disabled={isImporting}
+                                className="flex items-center gap-2 justify-center"
+                            >
+                                <Upload className="h-4 w-4" />
+                                {isImporting ? t("channel.importing") : t("channel.import")}
+                            </Button>
+                        </AnimatedButton>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={importChannels}
+                            className="hidden"
+                        />
                         <AnimatedButton>
                             <Button
                                 size="sm"

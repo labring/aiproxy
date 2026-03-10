@@ -1,8 +1,8 @@
 // src/feature/model/components/ModelTable.tsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
-import { ModelConfig } from "@/types/model";
+import { ModelConfig, ModelCreateRequest } from "@/types/model";
 import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ import {
   Pencil,
   FileText,
   Search,
+  Download,
+  Upload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,10 +47,14 @@ import {
 import { ChannelDialog } from "@/feature/channel/components/ChannelDialog";
 import { Channel } from "@/types/channel";
 import { channelApi } from "@/api/channel";
+import { modelApi } from "@/api/model";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function ModelTable() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State management
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
@@ -57,6 +63,7 @@ export function ModelTable() {
   const [dialogMode, setDialogMode] = useState<"create" | "update">("create");
   const [selectedModel, setSelectedModel] = useState<ModelConfig | null>(null);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
 
   // API Doc drawer state
@@ -311,6 +318,10 @@ export function ModelTable() {
               <Trash2 className="mr-2 h-4 w-4 text-red-600 dark:text-red-500" />
               {t("model.delete")}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportSingleModel(row.original)}>
+              <Download className="mr-2 h-4 w-4" />
+              {t("model.export")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -370,6 +381,110 @@ export function ModelTable() {
     }, 1000);
   };
 
+  // Export model configs to JSON file
+  const exportModels = () => {
+    if (!models || models.length === 0) {
+      toast.error(t("model.noDataToExport"));
+      return;
+    }
+
+    const exportData = models.map(model => ({
+      model: model.model,
+      type: model.type,
+      rpm: model.rpm,
+      tpm: model.tpm,
+      retry_times: model.retry_times,
+      max_error_rate: model.max_error_rate,
+      force_save_detail: model.force_save_detail,
+      summary_service_tier: model.summary_service_tier,
+      summary_claude_long_context: model.summary_claude_long_context,
+      price: model.price,
+      plugin: model.plugin,
+      image_prices: model.image_prices,
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `model_configs_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(t("model.exportSuccess"));
+  };
+
+  // Export single model config to JSON file
+  const exportSingleModel = (model: ModelConfig) => {
+    const exportData = [{
+      model: model.model,
+      type: model.type,
+      rpm: model.rpm,
+      tpm: model.tpm,
+      retry_times: model.retry_times,
+      max_error_rate: model.max_error_rate,
+      force_save_detail: model.force_save_detail,
+      summary_service_tier: model.summary_service_tier,
+      summary_claude_long_context: model.summary_claude_long_context,
+      price: model.price,
+      plugin: model.plugin,
+      image_prices: model.image_prices,
+    }];
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `model_${model.model}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(t("model.exportSuccess"));
+  };
+
+  // Import model configs from JSON file
+  const importModels = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const configs: ModelCreateRequest[] = JSON.parse(text);
+
+      if (!Array.isArray(configs)) {
+        throw new Error(t("model.invalidFormat"));
+      }
+
+      await modelApi.saveModels(configs);
+      toast.success(t("model.importSuccess", { count: configs.length }));
+      queryClient.invalidateQueries({ queryKey: ["models"] });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("model.importFailed")
+      );
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Trigger file input click
+  const triggerImport = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <>
       <Card className="border-none shadow-none p-6 flex flex-col h-full">
@@ -405,6 +520,37 @@ export function ModelTable() {
                 {t("model.refresh")}
               </Button>
             </AnimatedButton>
+            <AnimatedButton>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportModels}
+                disabled={!models || models.length === 0}
+                className="flex items-center gap-1"
+              >
+                <Download className="h-4 w-4" />
+                {t("model.export")}
+              </Button>
+            </AnimatedButton>
+            <AnimatedButton>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={triggerImport}
+                disabled={isImporting}
+                className="flex items-center gap-1"
+              >
+                <Upload className="h-4 w-4" />
+                {isImporting ? t("model.importing") : t("model.import")}
+              </Button>
+            </AnimatedButton>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={importModels}
+              className="hidden"
+            />
             <AnimatedButton>
               <Button
                 size="sm"

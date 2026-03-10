@@ -59,11 +59,11 @@ function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor
             bgColor,
             className
         )}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
-                <div className={cn("p-2 rounded-lg", iconColor)}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 h-full px-6 py-4">
+                <div className={cn("p-2 rounded-lg shrink-0", iconColor)}>
                     {icon}
                 </div>
-                <div className="text-right flex-1 ml-3">
+                <div className="text-right flex-1 ml-3 flex flex-col justify-center">
                     <CardTitle className="text-xs font-medium text-muted-foreground mb-1 leading-tight">
                         {title}
                     </CardTitle>
@@ -111,11 +111,11 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 9 }).map((_, index) => (
                     <Card key={index} className="border-0 shadow-sm h-28 dark:bg-card">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
-                            <div className="p-2">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 h-full px-6 py-4">
+                            <div className="p-2 shrink-0">
                                 <Skeleton className="h-5 w-5" />
                             </div>
-                            <div className="text-right flex-1 ml-3">
+                            <div className="text-right flex-1 ml-3 flex flex-col justify-center">
                                 <Skeleton className="h-3 w-16 mb-2" />
                                 <Skeleton className="h-6 w-12" />
                             </div>

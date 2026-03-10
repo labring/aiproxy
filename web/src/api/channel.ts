@@ -47,6 +47,11 @@ export const channelApi = {
         return response
     },
 
+    getAllChannels: async (): Promise<Channel[]> => {
+        const response = await get<Channel[]>('channels/all')
+        return response
+    },
+
     getChannel: async (id: number): Promise<Channel> => {
         const response = await get<Channel>(`channel/${id}`)
         return response
