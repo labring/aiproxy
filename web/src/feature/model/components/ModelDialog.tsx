@@ -38,10 +38,10 @@ export function ModelDialog({
         ? t("model.dialog.createDescription")
         : t("model.dialog.updateDescription")
 
-    // Default values for form
-    const defaultValues = mode === 'update' && model
+    // Default values for form - use model data if available (for both update and copy)
+    const defaultValues = model
         ? {
-            model: model.model,
+            model: mode === 'create' ? '' : model.model, // Clear model name for copy mode
             type: model.type,
             rpm: model.rpm,
             tpm: model.tpm,

@@ -277,7 +277,9 @@ function computeDashboardResult(
 
     // Transform time series based on data source
     let timeSeries = originalTimeSeries
-    if (dataSource && dataSource !== 'total') {
+    let isTransformedDataSource = dataSource && dataSource !== 'total'
+
+    if (isTransformedDataSource) {
         timeSeries = originalTimeSeries.map(ts => {
             const transformedSummary = (ts?.summary || []).map(s => {
                 let dataSet: SummaryDataSet | undefined
@@ -292,12 +294,20 @@ function computeDashboardResult(
                         dataSet = s?.claude_long_context
                         break
                 }
-                if (!dataSet) return null
+                // Skip if no data set or no data (request_count is 0 or undefined)
+                if (!dataSet || (dataSet.request_count || 0) === 0) return null
                 // Map SummaryDataSet fields to ModelSummary format
+                // Keep metadata from original but use data set values for metrics
                 return {
-                    ...s,
+                    timestamp: s?.timestamp,
+                    channel_id: s?.channel_id,
+                    group_id: s?.group_id,
+                    token_name: s?.token_name,
+                    model: s?.model,
+                    // Use data set values for all metrics
                     request_count: dataSet.request_count || 0,
                     exception_count: dataSet.exception_count || 0,
+                    retry_count: dataSet.retry_count || 0,
                     input_tokens: dataSet.input_tokens || 0,
                     output_tokens: dataSet.output_tokens || 0,
                     total_tokens: dataSet.total_tokens || 0,
@@ -309,6 +319,28 @@ function computeDashboardResult(
                     status_5xx_count: dataSet.status_5xx_count || 0,
                     cache_hit_count: dataSet.cache_hit_count || 0,
                     cached_tokens: dataSet.cached_tokens || 0,
+                    // Reset other fields that aren't in SummaryDataSet
+                    image_input_tokens: 0,
+                    audio_input_tokens: 0,
+                    image_output_tokens: 0,
+                    cache_creation_tokens: 0,
+                    reasoning_tokens: 0,
+                    image_input_amount: 0,
+                    audio_input_amount: 0,
+                    image_output_amount: 0,
+                    cached_amount: 0,
+                    cache_creation_amount: 0,
+                    web_search_amount: 0,
+                    total_time_milliseconds: 0,
+                    total_ttfb_milliseconds: 0,
+                    status_other_count: 0,
+                    status_400_count: 0,
+                    status_429_count: 0,
+                    status_500_count: 0,
+                    cache_creation_count: 0,
+                    web_search_count: 0,
+                    max_rpm: 0,
+                    max_tpm: 0,
                 }
             }).filter(Boolean) as ModelSummary[]
             return { timestamp: ts?.timestamp, summary: transformedSummary }
@@ -402,11 +434,28 @@ function computeDashboardResult(
         }
     }
 
-    // Aggregate summary breakdowns from time series
+    // Aggregate summary breakdowns from time series (only from original, non-transformed data)
     let serviceTierFlex: SummaryDataSet | undefined
     let serviceTierPriority: SummaryDataSet | undefined
     let claudeLongContext: SummaryDataSet | undefined
 
+    // Use original time series for breakdown aggregation
+    const tsForBreakdown = isTransformedDataSource ? originalTimeSeries : timeSeries
+    for (const ts of tsForBreakdown) {
+        for (const s of ts?.summary || []) {
+            // Skip if s is null
+            if (!s) continue
+
+            // Aggregate summary breakdowns (only when not transformed)
+            if (!isTransformedDataSource) {
+                serviceTierFlex = mergeSummaryDataSet(serviceTierFlex, s?.service_tier_flex)
+                serviceTierPriority = mergeSummaryDataSet(serviceTierPriority, s?.service_tier_priority)
+                claudeLongContext = mergeSummaryDataSet(claudeLongContext, s?.claude_long_context)
+            }
+        }
+    }
+
+    // Aggregate from transformed time series for main stats
     for (const ts of timeSeries) {
         for (const s of ts?.summary || []) {
             // Skip if s is null (can happen with transformed data)
@@ -436,11 +485,6 @@ function computeDashboardResult(
             agg.web_search_count += normalized?.web_search_count || 0
             if ((normalized?.max_rpm || 0) > agg.max_rpm) agg.max_rpm = normalized?.max_rpm || 0
             if ((normalized?.max_tpm || 0) > agg.max_tpm) agg.max_tpm = normalized?.max_tpm || 0
-
-            // Aggregate summary breakdowns
-            serviceTierFlex = mergeSummaryDataSet(serviceTierFlex, s?.service_tier_flex)
-            serviceTierPriority = mergeSummaryDataSet(serviceTierPriority, s?.service_tier_priority)
-            claudeLongContext = mergeSummaryDataSet(claudeLongContext, s?.claude_long_context)
 
             // Top-level: by model only
             mergeInto(modelRankMap, normalized?.model || '', normalized)

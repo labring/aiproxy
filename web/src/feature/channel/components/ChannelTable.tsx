@@ -13,7 +13,7 @@ import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload
+    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload, Copy
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -114,6 +114,13 @@ export function ChannelTable() {
     // 打开更新渠道对话框
     const openUpdateDialog = (channel: Channel) => {
         setDialogMode('update')
+        setSelectedChannel({...channel})
+        setChannelDialogOpen(true)
+    }
+
+    // 打开复制渠道对话框
+    const openCopyDialog = (channel: Channel) => {
+        setDialogMode('create')
         setSelectedChannel({...channel})
         setChannelDialogOpen(true)
     }
@@ -480,6 +487,12 @@ export function ChannelTable() {
                         >
                             <Pencil className="mr-2 h-4 w-4" />
                             {t("channel.edit")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => openCopyDialog(row.original)}
+                        >
+                            <Copy className="mr-2 h-4 w-4" />
+                            {t("channel.copyFrom")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => handleStatusChange(row.original.id, row.original.status)}

@@ -16,6 +16,7 @@ import {
   Search,
   Download,
   Upload,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -312,6 +313,10 @@ export function ModelTable() {
               <Pencil className="mr-2 h-4 w-4" />
               {t("model.edit")}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openCopyDialog(row.original)}>
+              <Copy className="mr-2 h-4 w-4" />
+              {t("model.copyFrom")}
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => openDeleteDialog(row.original.model)}
             >
@@ -354,6 +359,13 @@ export function ModelTable() {
   // Open update model dialog
   const openUpdateDialog = (model: ModelConfig) => {
     setDialogMode("update");
+    setSelectedModel(model);
+    setModelDialogOpen(true);
+  };
+
+  // Open copy model dialog (create mode with existing model data)
+  const openCopyDialog = (model: ModelConfig) => {
+    setDialogMode("create");
     setSelectedModel(model);
     setModelDialogOpen(true);
   };

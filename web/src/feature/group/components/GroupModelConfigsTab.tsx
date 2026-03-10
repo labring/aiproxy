@@ -19,6 +19,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -28,7 +34,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search, Download, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search, Download, Upload, Copy, MoreHorizontal } from 'lucide-react'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { useGroupModelConfigs } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
@@ -86,6 +92,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [editingConfig, setEditingConfig] = useState<GroupModelConfig | null>(null)
     const [deletingModel, setDeletingModel] = useState<string | null>(null)
     const [isCreating, setIsCreating] = useState(false)
+    const [isCopying, setIsCopying] = useState(false)
 
     // Form state
     const [formModel, setFormModel] = useState('')
@@ -168,6 +175,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
     const openCreateDialog = () => {
         setIsCreating(true)
+        setIsCopying(false)
         setEditingConfig(null)
         resetForm()
         setEditDialogOpen(true)
@@ -175,8 +183,31 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
     const openEditDialog = (config: GroupModelConfig) => {
         setIsCreating(false)
+        setIsCopying(false)
         setEditingConfig(config)
         resetForm(config)
+        setEditDialogOpen(true)
+    }
+
+    const openCopyDialog = (config: GroupModelConfig) => {
+        setIsCreating(true)
+        setIsCopying(true)
+        setEditingConfig(null)
+        // Reset form with copied data but clear model name
+        setFormModel('')
+        setFormOverrideLimit(config.override_limit)
+        setFormRpm(config.rpm)
+        setFormTpm(config.tpm)
+        setFormOverrideRetryTimes(config.override_retry_times)
+        setFormRetryTimes(config.retry_times)
+        setFormOverrideForceSaveDetail(config.override_force_save_detail)
+        setFormForceSaveDetail(config.force_save_detail)
+        setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
+        setFormSummaryServiceTier(config.summary_service_tier)
+        setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
+        setFormSummaryClaudeLongContext(config.summary_claude_long_context)
+        setFormOverridePrice(config.override_price)
+        setFormPrice(config.price || {})
         setEditDialogOpen(true)
     }
 
@@ -382,7 +413,11 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </thead>
                             <tbody>
                                 {filteredData.map((config) => (
-                                    <tr key={config.model} className="border-t hover:bg-muted/50 transition-colors">
+                                    <tr
+                                        key={config.model}
+                                        className="border-t hover:bg-muted/50 transition-colors cursor-pointer"
+                                        onClick={() => openEditDialog(config)}
+                                    >
                                         <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
                                         <td className="px-4 py-3 text-sm">
                                             <Badge variant={config.override_limit ? 'default' : 'secondary'} className="text-xs">
@@ -424,25 +459,31 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                                 </Badge>
                                             ) : '-'}
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8"
-                                                    onClick={() => openEditDialog(config)}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-destructive hover:text-destructive"
-                                                    onClick={() => openDeleteDialog(config.model)}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
+                                        <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => openEditDialog(config)}>
+                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                        {t('common.edit')}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openCopyDialog(config)}>
+                                                        <Copy className="mr-2 h-4 w-4" />
+                                                        {t('group.modelConfig.copyFrom')}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => openDeleteDialog(config.model)}
+                                                        className="text-destructive focus:text-destructive"
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        {t('common.delete')}
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </td>
                                     </tr>
                                 ))}
@@ -459,15 +500,15 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                 </div>
             </div>
 
-            {/* Edit / Create Dialog */}
+            {/* Edit / Create / Copy Dialog */}
             <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
                 <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
-                            {isCreating ? t('group.modelConfig.addTitle') : t('group.modelConfig.editTitle')}
+                            {isCopying ? t('group.modelConfig.copyTitle') : isCreating ? t('group.modelConfig.addTitle') : t('group.modelConfig.editTitle')}
                         </DialogTitle>
                         <DialogDescription>
-                            {isCreating ? t('group.modelConfig.addDescription') : t('group.modelConfig.editDescription')}
+                            {isCopying ? t('group.modelConfig.copyDescription') : isCreating ? t('group.modelConfig.addDescription') : t('group.modelConfig.editDescription')}
                         </DialogDescription>
                     </DialogHeader>
 
