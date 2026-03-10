@@ -288,14 +288,14 @@ func (p *Price) validateConditionalPriceOrdering() error {
 	return nil
 }
 
-func (p *Price) SelectConditionalPrice(usage Usage) Price {
+func (p *Price) SelectConditionalPrice(usage Usage, serviceTier string) Price {
 	if len(p.ConditionalPrices) == 0 {
 		return *p
 	}
 
 	inputTokens := int64(usage.InputTokens)
 	outputTokens := int64(usage.OutputTokens)
-	usageServiceTier := normalizeServiceTier(usage.ServiceTier)
+	usageServiceTier := normalizeServiceTier(serviceTier)
 	currentTime := time.Now().Unix()
 
 	for _, conditionalPrice := range p.ConditionalPrices {
@@ -406,7 +406,6 @@ type Usage struct {
 	ReasoningTokens     ZeroNullInt64 `json:"reasoning_tokens,omitempty"`
 	TotalTokens         ZeroNullInt64 `json:"total_tokens,omitempty"`
 	WebSearchCount      ZeroNullInt64 `json:"web_search_count,omitempty"`
-	ServiceTier         string        `json:"service_tier,omitempty"          gorm:"-"`
 }
 
 func (u *Usage) Add(other Usage) {
@@ -419,10 +418,6 @@ func (u *Usage) Add(other Usage) {
 	u.CacheCreationTokens += other.CacheCreationTokens
 	u.TotalTokens += other.TotalTokens
 	u.WebSearchCount += other.WebSearchCount
-
-	if u.ServiceTier == "" {
-		u.ServiceTier = other.ServiceTier
-	}
 }
 
 type Amount struct {

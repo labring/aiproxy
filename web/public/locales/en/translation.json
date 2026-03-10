@@ -280,6 +280,7 @@
     "timeout": "Timeout",
     "maxErrorRate": "Max Error Rate",
     "forceSaveDetail": "Force Save Detail",
+    "recordServiceTier": "Record Service Tier",
     "add": "Add Model",
     "edit": "Edit",
     "delete": "Delete",
@@ -299,6 +300,7 @@
     "priceColumn": "Price",
     "noChannel": "No available channels",
     "availableChannels": "Available Channels",
+    "channelCount": "{{count}}",
     "dialog": {
       "createTitle": "Create Model",
       "updateTitle": "Update Model",
@@ -319,6 +321,7 @@
       "maxErrorRate": "Max Error Rate (0-1)",
       "maxErrorRatePlaceholder": "Maximum error rate (0-1)",
       "forceSaveDetail": "Force Save Detail",
+      "recordServiceTier": "Record Service Tier",
       "create": "Create",
       "update": "Update",
       "submitting": "Submitting...",
@@ -841,6 +844,8 @@
       "overrideRetryTimesDesc": "Override the global retry times for this model",
       "overrideForceSaveDetail": "Override Save Detail",
       "overrideForceSaveDetailDesc": "Override the force save detail setting for this model",
+      "overrideRecordServiceTier": "Override Service Tier Recording",
+      "overrideRecordServiceTierDesc": "Override whether service tier is recorded for this model",
       "overridePrice": "Override Price",
       "overridePriceDesc": "Override the global pricing for this model",
       "actions": "Actions"

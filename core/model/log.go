@@ -68,6 +68,7 @@ type Log struct {
 	Price            Price           `gorm:"embedded"                                                       json:"price,omitempty"`
 	Usage            Usage           `gorm:"embedded"                                                       json:"usage,omitempty"`
 	Amount           Amount          `gorm:"embedded"                                                       json:"amount,omitempty"`
+	ServiceTier      string          `gorm:"size:16"                                                        json:"service_tier,omitempty"`
 	// https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
 	User     EmptyNullString   `gorm:"type:text"                     json:"user,omitempty"`
 	Metadata map[string]string `gorm:"serializer:fastjson;type:text" json:"metadata,omitempty"`
@@ -342,6 +343,7 @@ func RecordConsumeLog(
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
 ) error {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -385,6 +387,7 @@ func RecordConsumeLog(
 		User:             EmptyNullString(user),
 		Metadata:         metadata,
 		UpstreamID:       EmptyNullString(upstreamID),
+		ServiceTier:      serviceTier,
 	}
 
 	return LogDB.Create(log).Error

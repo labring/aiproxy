@@ -18,6 +18,14 @@ func GetChatRequestUsage(c *gin.Context, _ model.ModelConfig) (model.Usage, erro
 			textRequest.Messages,
 			textRequest.Model,
 		)),
-		ServiceTier: textRequest.ServiceTier,
 	}, nil
+}
+
+func GetChatRequestServiceTier(c *gin.Context) (string, error) {
+	textRequest, err := utils.UnmarshalGeneralOpenAIRequest(c.Request)
+	if err != nil {
+		return "", err
+	}
+
+	return textRequest.ServiceTier, nil
 }

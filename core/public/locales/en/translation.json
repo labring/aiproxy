@@ -613,7 +613,7 @@
       "setsPlaceholder": "Enter group name and press enter to add",
       "priority": "Priority",
       "priorityPlaceholder": "1-100, default 10",
-      "priorityHelp": "Lower value means higher priority, default is 10",
+      "priorityHelp": "Higher value means higher priority, default is 10",
       "create": "Create",
       "update": "Update",
       "submitting": "Submitting..."

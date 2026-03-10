@@ -269,6 +269,7 @@
     "timeout": "超时时间",
     "maxErrorRate": "最大错误率",
     "forceSaveDetail": "强制保存详情",
+    "recordServiceTier": "记录服务层级",
     "add": "添加模型",
     "edit": "编辑",
     "delete": "删除",
@@ -288,6 +289,7 @@
     "loading": "加载中...",
     "noChannel": "无可用渠道",
     "availableChannels": "可用渠道",
+    "channelCount": "{{count}} 个",
     "dialog": {
       "createTitle": "创建模型",
       "updateTitle": "更新模型",
@@ -308,6 +310,7 @@
       "maxErrorRate": "最大错误率（0-1）",
       "maxErrorRatePlaceholder": "最大错误率（0-1）",
       "forceSaveDetail": "强制保存详情",
+      "recordServiceTier": "记录服务层级",
       "create": "创建",
       "update": "更新",
       "submitting": "提交中...",
@@ -829,6 +832,8 @@
       "overrideRetryTimesDesc": "覆盖此模型的全局重试次数",
       "overrideForceSaveDetail": "覆盖保存详情",
       "overrideForceSaveDetailDesc": "覆盖此模型的强制保存详情设置",
+      "overrideRecordServiceTier": "覆盖服务层级记录",
+      "overrideRecordServiceTierDesc": "覆盖此模型是否记录服务层级",
       "overridePrice": "覆盖价格",
       "overridePriceDesc": "覆盖此模型的全局价格配置",
       "actions": "操作"

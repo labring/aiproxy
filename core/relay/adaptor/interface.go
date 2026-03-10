@@ -62,8 +62,9 @@ type DoRequest interface {
 
 // DoResponseResult contains the result of DoResponse
 type DoResponseResult struct {
-	Usage      model.Usage
-	UpstreamID string // ID from response body or x-request-id header
+	Usage       model.Usage
+	UpstreamID  string // ID from response body or x-request-id header
+	ServiceTier string
 }
 
 type DoResponse interface {

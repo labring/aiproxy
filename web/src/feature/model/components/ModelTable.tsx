@@ -169,13 +169,16 @@ export function ModelTable() {
                     variant="outline"
                     className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    {setName}
+                    <span>{setName}</span>
+                    <span className="ml-1 text-[11px] opacity-80">
+                      {t("model.channelCount", { count: channels.length })}
+                    </span>
                   </Badge>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-3" align="start">
                   <div className="space-y-2">
                     <h4 className="font-medium">
-                      {t("model.availableChannels")}
+                      {t("model.availableChannels")} ({t("model.channelCount", { count: channels.length })})
                     </h4>
                     <div className="flex flex-col gap-1">
                       {[...channels].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).map((channel) => (

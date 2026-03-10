@@ -523,7 +523,7 @@ func StreamHandler(
 			meta.ActualModel,
 			int64(meta.RequestUsage.InputTokens),
 		)
-		usage.ServiceTier = meta.RequestUsage.ServiceTier
+		usage.ServiceTier = meta.RequestServiceTier
 		_ = render.OpenaiObjectData(c, &relaymodel.ChatCompletionsStreamResponse{
 			ID:      ChatCompletionID(),
 			Model:   meta.OriginModel,
@@ -538,14 +538,15 @@ func StreamHandler(
 	}
 
 	if usage.ServiceTier == "" {
-		usage.ServiceTier = meta.RequestUsage.ServiceTier
+		usage.ServiceTier = meta.RequestServiceTier
 	}
 
 	render.OpenaiDone(c)
 
 	return adaptor.DoResponseResult{
-		Usage:      usage.ToModelUsage(),
-		UpstreamID: upstreamID,
+		Usage:       usage.ToModelUsage(),
+		UpstreamID:  upstreamID,
+		ServiceTier: usage.ServiceTier,
 	}, nil
 }
 
@@ -659,7 +660,7 @@ func Handler(
 			PromptTokens:     int64(meta.RequestUsage.InputTokens),
 			CompletionTokens: completionTokens,
 			TotalTokens:      int64(meta.RequestUsage.InputTokens) + completionTokens,
-			ServiceTier:      meta.RequestUsage.ServiceTier,
+			ServiceTier:      meta.RequestServiceTier,
 		}
 
 		_, err = node.Set("usage", ast.NewAny(usage))
@@ -691,7 +692,7 @@ func Handler(
 	}
 
 	if usage != nil && usage.ServiceTier == "" {
-		usage.ServiceTier = meta.RequestUsage.ServiceTier
+		usage.ServiceTier = meta.RequestServiceTier
 	}
 
 	_, err = node.Set("model", ast.NewString(meta.OriginModel))
@@ -727,8 +728,9 @@ func Handler(
 	}
 
 	return adaptor.DoResponseResult{
-		Usage:      usage.ToModelUsage(),
-		UpstreamID: upstreamID,
+		Usage:       usage.ToModelUsage(),
+		UpstreamID:  upstreamID,
+		ServiceTier: usage.ServiceTier,
 	}, nil
 }
 
@@ -1144,11 +1146,12 @@ func ConvertResponsesToChatCompletionResponse(
 
 	if responsesResp.Usage != nil {
 		usage := responsesResp.Usage.ToModelUsage()
+		serviceTier := ""
 		if responsesResp.ServiceTier != nil {
-			usage.ServiceTier = *responsesResp.ServiceTier
+			serviceTier = *responsesResp.ServiceTier
 		}
 
-		return adaptor.DoResponseResult{Usage: usage}, nil
+		return adaptor.DoResponseResult{Usage: usage, ServiceTier: serviceTier}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil
@@ -1172,6 +1175,7 @@ func ConvertResponsesToChatCompletionStreamResponse(
 	defer cleanup()
 
 	var usage model.Usage
+	serviceTier := ""
 
 	state := &chatCompletionStreamState{
 		meta: meta,
@@ -1216,7 +1220,7 @@ func ConvertResponsesToChatCompletionStreamResponse(
 			if event.Response != nil && event.Response.Usage != nil {
 				usage = event.Response.Usage.ToModelUsage()
 				if event.Response.ServiceTier != nil {
-					usage.ServiceTier = *event.Response.ServiceTier
+					serviceTier = *event.Response.ServiceTier
 				}
 			}
 
@@ -1239,5 +1243,5 @@ func ConvertResponsesToChatCompletionStreamResponse(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{Usage: usage, ServiceTier: serviceTier}, nil
 }

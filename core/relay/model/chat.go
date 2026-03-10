@@ -23,7 +23,6 @@ func (u ChatUsage) ToModelUsage() model.Usage {
 		OutputTokens:   model.ZeroNullInt64(u.CompletionTokens),
 		TotalTokens:    model.ZeroNullInt64(u.TotalTokens),
 		WebSearchCount: model.ZeroNullInt64(u.WebSearchCount),
-		ServiceTier:    u.ServiceTier,
 	}
 	if u.PromptTokensDetails != nil {
 		usage.CachedTokens = model.ZeroNullInt64(u.PromptTokensDetails.CachedTokens)

@@ -23,7 +23,13 @@ func recordConsume(
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
 ) error {
+	summaryServiceTier := serviceTier
+	if !meta.ModelConfig.ShouldSummaryServiceTier() {
+		summaryServiceTier = ""
+	}
+
 	return model.BatchRecordLogs(
 		now,
 		meta.RequestID,
@@ -49,6 +55,8 @@ func recordConsume(
 		user,
 		metadata,
 		upstreamID,
+		serviceTier,
+		summaryServiceTier,
 	)
 }
 
@@ -60,7 +68,12 @@ func recordSummary(
 	usage model.Usage,
 	amount model.Amount,
 	downstreamResult bool,
+	serviceTier string,
 ) {
+	if !meta.ModelConfig.ShouldSummaryServiceTier() {
+		serviceTier = ""
+	}
+
 	model.BatchUpdateSummary(
 		now,
 		meta.RequestAt,
@@ -74,5 +87,6 @@ func recordSummary(
 		downstreamResult,
 		usage,
 		amount,
+		serviceTier,
 	)
 }

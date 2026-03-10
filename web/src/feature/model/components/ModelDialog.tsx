@@ -49,6 +49,7 @@ export function ModelDialog({
             timeout: model.timeout,
             max_error_rate: model.max_error_rate,
             force_save_detail: model.force_save_detail,
+            summary_service_tier: model.summary_service_tier ?? false,
             price: model.price,
             plugin: model.plugin
         }

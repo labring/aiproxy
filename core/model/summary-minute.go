@@ -514,12 +514,9 @@ type SummaryDataV2 struct {
 	TokenName string `json:"token_name,omitempty"`
 	Model     string `json:"model"`
 
-	TotalTimeMilliseconds int64 `json:"total_time_milliseconds"`
-	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds"`
-
-	Count
-	Usage
-	Amount
+	SummaryDataSet
+	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty" gorm:"embedded;embeddedPrefix:service_tier_flex_"`
+	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
 
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`
@@ -1318,12 +1315,9 @@ func aggregatToSpan(
 			}
 		}
 
-		currentData.Count.Add(data.Count)
-		currentData.Usage.Add(data.Usage)
-		currentData.Amount.Add(data.Amount)
-
-		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
-		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
+		currentData.SummaryDataSet.Add(data.SummaryDataSet)
+		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
+		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 
 		if data.MaxRPM > currentData.MaxRPM {
 			currentData.MaxRPM = data.MaxRPM
@@ -1407,12 +1401,9 @@ func aggregatToSpanGroup(
 			}
 		}
 
-		currentData.Count.Add(data.Count)
-		currentData.Usage.Add(data.Usage)
-		currentData.Amount.Add(data.Amount)
-
-		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
-		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
+		currentData.SummaryDataSet.Add(data.SummaryDataSet)
+		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
+		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 
 		if data.MaxRPM > currentData.MaxRPM {
 			currentData.MaxRPM = data.MaxRPM

@@ -233,16 +233,16 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     }
 
     const toRow = (m: ModelSummary): TableRow => {
-        const successCalls = m.request_count - m.exception_count
+        const successCalls = (m?.request_count || 0) - (m?.exception_count || 0)
         return {
-            model: m.model,
-            tokenName: m.token_name || '',
-            channelId: m.channel_id || 0,
-            totalCalls: m.request_count,
-            errorCalls: m.exception_count,
-            usedAmount: m.used_amount,
-            avgResponseTime: successCalls > 0 ? m.total_time_milliseconds / successCalls : 0,
-            avgTtfb: successCalls > 0 ? m.total_ttfb_milliseconds / successCalls : 0,
+            model: m?.model || '',
+            tokenName: m?.token_name || '',
+            channelId: m?.channel_id || 0,
+            totalCalls: m?.request_count || 0,
+            errorCalls: m?.exception_count || 0,
+            usedAmount: m?.used_amount || 0,
+            avgResponseTime: successCalls > 0 ? (m?.total_time_milliseconds || 0) / successCalls : 0,
+            avgTtfb: successCalls > 0 ? (m?.total_ttfb_milliseconds || 0) / successCalls : 0,
         }
     }
 
@@ -252,9 +252,10 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     const detailByModel = useMemo(() => {
         const map = new Map<string, TableRow[]>()
         for (const m of detailRanking) {
-            const rows = map.get(m.model) || []
+            const modelKey = m?.model || ''
+            const rows = map.get(modelKey) || []
             rows.push(toRow(m))
-            map.set(m.model, rows)
+            map.set(modelKey, rows)
         }
         return map
     }, [detailRanking])
@@ -266,7 +267,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     const detailChannelIds = useMemo(() => {
         const ids = new Set<number>()
         for (const m of detailRanking) {
-            if (m.channel_id) ids.add(m.channel_id)
+            if (m?.channel_id) ids.add(m?.channel_id || 0)
         }
         return [...ids]
     }, [detailRanking])

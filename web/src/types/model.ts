@@ -63,6 +63,7 @@ export interface ModelConfig {
     timeout?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    summary_service_tier?: boolean
     plugin: Plugin
 }
 
@@ -139,6 +140,7 @@ export interface ModelCreateRequest {
     timeout?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    summary_service_tier?: boolean
     price?: ModelPrice | Record<string, unknown>
     plugin?: Plugin
 }

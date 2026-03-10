@@ -39,15 +39,17 @@ import (
 // https://platform.openai.com/docs/api-reference/chat
 
 type (
-	RelayHandler    func(*gin.Context, *meta.Meta) *controller.HandleResult
-	GetRequestUsage func(*gin.Context, model.ModelConfig) (model.Usage, error)
-	GetRequestPrice func(*gin.Context, model.ModelConfig) (model.Price, error)
+	RelayHandler          func(*gin.Context, *meta.Meta) *controller.HandleResult
+	GetRequestUsage       func(*gin.Context, model.ModelConfig) (model.Usage, error)
+	GetRequestServiceTier func(*gin.Context) (string, error)
+	GetRequestPrice       func(*gin.Context, model.ModelConfig) (model.Price, error)
 )
 
 type RelayController struct {
-	GetRequestUsage GetRequestUsage
-	GetRequestPrice GetRequestPrice
-	Handler         RelayHandler
+	GetRequestUsage       GetRequestUsage
+	GetRequestServiceTier GetRequestServiceTier
+	GetRequestPrice       GetRequestPrice
+	Handler               RelayHandler
 }
 
 var adaptorStore adaptor.Store = &storeImpl{}
@@ -149,6 +151,7 @@ func relayController(m mode.Mode) RelayController {
 		c.GetRequestUsage = controller.GetAnthropicRequestUsage
 	case mode.ChatCompletions:
 		c.GetRequestUsage = controller.GetChatRequestUsage
+		c.GetRequestServiceTier = controller.GetChatRequestServiceTier
 	case mode.Gemini:
 		c.GetRequestUsage = controller.GetGeminiRequestUsage
 	case mode.Embeddings:
@@ -159,6 +162,7 @@ func relayController(m mode.Mode) RelayController {
 		c.GetRequestUsage = controller.GetVideoGenerationJobRequestUsage
 	case mode.Responses:
 		c.GetRequestUsage = controller.GetResponsesRequestUsage
+		c.GetRequestServiceTier = controller.GetResponsesRequestServiceTier
 	}
 
 	return c
@@ -237,8 +241,24 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 		meta.RequestUsage = requestUsage
 	}
 
+	if relayController.GetRequestServiceTier != nil {
+		requestServiceTier, err := relayController.GetRequestServiceTier(c)
+		if err != nil {
+			middleware.AbortLogWithMessageWithMode(mode, c,
+				http.StatusInternalServerError,
+				"get request service tier failed: "+err.Error(),
+			)
+
+			return
+		}
+
+		meta.RequestServiceTier = requestServiceTier
+	}
+
 	gbc := middleware.GetGroupBalanceConsumerFromContext(c)
-	if !gbc.CheckBalance(consume.CalculateAmount(http.StatusOK, meta.RequestUsage, price)) {
+	if !gbc.CheckBalance(
+		consume.CalculateAmount(http.StatusOK, meta.RequestUsage, price, meta.RequestServiceTier),
+	) {
 		middleware.AbortLogWithMessageWithMode(mode, c,
 			http.StatusForbidden,
 			fmt.Sprintf("group (%s) balance not enough", gbc.Group),
@@ -320,6 +340,7 @@ func recordResult(
 		code,
 		result.Usage,
 		price,
+		result.ServiceTier,
 	)
 	if amount > 0 {
 		log := common.GetLogger(c)
@@ -341,6 +362,7 @@ func recordResult(
 		user,
 		metadata,
 		result.UpstreamID,
+		result.ServiceTier,
 	)
 }
 

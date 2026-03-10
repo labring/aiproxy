@@ -125,22 +125,22 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
         )
     }
 
-    const agg = data.aggregates
+    const agg = data?.aggregates
 
-    const errorRate = agg.request_count > 0
-        ? ((agg.exception_count / agg.request_count) * 100).toFixed(1)
+    const errorRate = (agg?.request_count || 0) > 0
+        ? ((((agg?.exception_count || 0) / (agg?.request_count || 0)) * 100)).toFixed(1)
         : '0.0'
 
-    const avgLatency = agg.request_count > 0
-        ? Math.round(agg.total_time_milliseconds / agg.request_count)
+    const avgLatency = (agg?.request_count || 0) > 0
+        ? Math.round((agg?.total_time_milliseconds || 0) / (agg?.request_count || 0))
         : 0
 
-    const avgTtfb = agg.request_count > 0
-        ? Math.round(agg.total_ttfb_milliseconds / agg.request_count)
+    const avgTtfb = (agg?.request_count || 0) > 0
+        ? Math.round((agg?.total_ttfb_milliseconds || 0) / (agg?.request_count || 0))
         : 0
 
-    const cacheHitRate = agg.request_count > 0
-        ? ((agg.cache_hit_count / agg.request_count) * 100).toFixed(1)
+    const cacheHitRate = (agg?.request_count || 0) > 0
+        ? ((((agg?.cache_hit_count || 0) / (agg?.request_count || 0)) * 100)).toFixed(1)
         : '0.0'
 
     return (
@@ -148,7 +148,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             {/* Row 1: Core metrics */}
             <MetricCard
                 title={t('monitor.metrics.totalRequests')}
-                value={agg.request_count}
+                value={agg?.request_count || 0}
                 icon={<Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
                 bgColor="bg-blue-50 dark:bg-blue-950/30"
                 iconColor="bg-blue-100 dark:bg-blue-900/50"
@@ -156,7 +156,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.errorCount')}
-                value={agg.exception_count}
+                value={agg?.exception_count || 0}
                 subtitle={`${t('monitor.metrics.errorRate')}: ${errorRate}%`}
                 icon={<AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />}
                 bgColor="bg-orange-50 dark:bg-orange-950/30"
@@ -165,7 +165,7 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.usedAmount')}
-                value={`$${(agg.used_amount || 0).toFixed(4)}`}
+                value={`$${(agg?.used_amount || 0).toFixed(4)}`}
                 icon={<DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />}
                 bgColor="bg-green-50 dark:bg-green-950/30"
                 iconColor="bg-green-100 dark:bg-green-900/50"
@@ -174,8 +174,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             {/* Row 2: Throughput & Latency */}
             <MetricCard
                 title={t('monitor.metrics.currentRpm')}
-                value={agg.current_rpm}
-                subtitle={`${t('monitor.metrics.avgRpm')}: ${formatCompact(agg.avg_rpm)} | Max: ${formatCompact(agg.max_rpm)}`}
+                value={agg?.current_rpm || 0}
+                subtitle={`${t('monitor.metrics.avgRpm')}: ${formatCompact(agg?.avg_rpm || 0)} | Max: ${formatCompact(agg?.max_rpm || 0)}`}
                 icon={<BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />}
                 bgColor="bg-indigo-50 dark:bg-indigo-950/30"
                 iconColor="bg-indigo-100 dark:bg-indigo-900/50"
@@ -183,8 +183,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.currentTpm')}
-                value={agg.current_tpm}
-                subtitle={`${t('monitor.metrics.avgTpm')}: ${formatCompact(agg.avg_tpm)} | Max: ${formatCompact(agg.max_tpm)}`}
+                value={agg?.current_tpm || 0}
+                subtitle={`${t('monitor.metrics.avgTpm')}: ${formatCompact(agg?.avg_tpm || 0)} | Max: ${formatCompact(agg?.max_tpm || 0)}`}
                 icon={<Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
                 bgColor="bg-purple-50 dark:bg-purple-950/30"
                 iconColor="bg-purple-100 dark:bg-purple-900/50"
@@ -201,8 +201,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             {/* Row 3: Tokens & Cache */}
             <MetricCard
                 title={t('monitor.metrics.totalTokens')}
-                value={agg.total_tokens}
-                subtitle={`${t('monitor.metrics.cachedTokens')}: ${formatCompact(agg.cached_tokens)}`}
+                value={agg?.total_tokens || 0}
+                subtitle={`${t('monitor.metrics.cachedTokens')}: ${formatCompact(agg?.cached_tokens || 0)}`}
                 icon={<Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
                 bgColor="bg-amber-50 dark:bg-amber-950/30"
                 iconColor="bg-amber-100 dark:bg-amber-900/50"
@@ -210,8 +210,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
             />
             <MetricCard
                 title={t('monitor.metrics.cacheHitCount')}
-                value={agg.cache_hit_count}
-                subtitle={`${t('monitor.metrics.cacheHitRate')}: ${cacheHitRate}% | ${t('monitor.metrics.cacheCreationCount')}: ${formatCompact(agg.cache_creation_count)}`}
+                value={agg?.cache_hit_count || 0}
+                subtitle={`${t('monitor.metrics.cacheHitRate')}: ${cacheHitRate}% | ${t('monitor.metrics.cacheCreationCount')}: ${formatCompact(agg?.cache_creation_count || 0)}`}
                 icon={<Database className="h-5 w-5 text-teal-600 dark:text-teal-400" />}
                 bgColor="bg-teal-50 dark:bg-teal-950/30"
                 iconColor="bg-teal-100 dark:bg-teal-900/50"

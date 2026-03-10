@@ -704,7 +704,7 @@ func TestPrice_SelectConditionalPrice_WithTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			selectedPrice := tt.price.SelectConditionalPrice(tt.usage)
+			selectedPrice := tt.price.SelectConditionalPrice(tt.usage, "")
 
 			if float64(selectedPrice.InputPrice) != tt.expectedInput {
 				t.Errorf("%s: expected input price %v, got %v",
@@ -724,6 +724,7 @@ func TestPrice_SelectConditionalPrice_WithServiceTier(t *testing.T) {
 		name          string
 		price         model.Price
 		usage         model.Usage
+		serviceTier   string
 		expectedInput float64
 	}{
 		{
@@ -743,8 +744,8 @@ func TestPrice_SelectConditionalPrice_WithServiceTier(t *testing.T) {
 			},
 			usage: model.Usage{
 				InputTokens: 1000,
-				ServiceTier: "priority",
 			},
+			serviceTier:   "priority",
 			expectedInput: 0.003,
 		},
 		{
@@ -764,8 +765,8 @@ func TestPrice_SelectConditionalPrice_WithServiceTier(t *testing.T) {
 			},
 			usage: model.Usage{
 				InputTokens: 1000,
-				ServiceTier: "default",
 			},
+			serviceTier:   "default",
 			expectedInput: 0.001,
 		},
 		{
@@ -785,15 +786,15 @@ func TestPrice_SelectConditionalPrice_WithServiceTier(t *testing.T) {
 			},
 			usage: model.Usage{
 				InputTokens: 1000,
-				ServiceTier: "PRIORITY",
 			},
+			serviceTier:   "PRIORITY",
 			expectedInput: 0.003,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			selectedPrice := tt.price.SelectConditionalPrice(tt.usage)
+			selectedPrice := tt.price.SelectConditionalPrice(tt.usage, tt.serviceTier)
 			if float64(selectedPrice.InputPrice) != tt.expectedInput {
 				t.Errorf("%s: expected input price %v, got %v",
 					tt.name, tt.expectedInput, float64(selectedPrice.InputPrice))

@@ -47,6 +47,7 @@ interface ModelFormProps {
         timeout?: number
         max_error_rate?: number
         force_save_detail?: boolean
+        summary_service_tier?: boolean
         price?: ModelPrice
         plugin?: Plugin
     }
@@ -100,6 +101,7 @@ export function ModelForm({
             timeout: defaultValues.timeout,
             max_error_rate: defaultValues.max_error_rate,
             force_save_detail: defaultValues.force_save_detail ?? false,
+            summary_service_tier: defaultValues.summary_service_tier ?? false,
             price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
@@ -309,6 +311,7 @@ export function ModelForm({
             ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
             ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
+            ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
             ...(priceData && { price: priceData }),
             ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
         }
@@ -324,6 +327,7 @@ export function ModelForm({
                 ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
                 ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
+                ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
                 ...(priceData && { price: priceData }),
                 ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
             }, {
@@ -536,6 +540,23 @@ export function ModelForm({
                         render={({ field }) => (
                             <FormItem className="flex flex-row items-center justify-between py-2">
                                 <FormLabel>{t("model.dialog.forceSaveDetail")}</FormLabel>
+                                <FormControl>
+                                    <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+
+                    {/* Record Service Tier Switch */}
+                    <FormField
+                        control={form.control}
+                        name="summary_service_tier"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between py-2">
+                                <FormLabel>{t("model.dialog.recordServiceTier")}</FormLabel>
                                 <FormControl>
                                     <Switch
                                         checked={field.value}

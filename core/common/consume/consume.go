@@ -36,6 +36,7 @@ func AsyncConsume(
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
@@ -67,6 +68,7 @@ func AsyncConsume(
 		user,
 		metadata,
 		upstreamID,
+		serviceTier,
 	)
 }
 
@@ -87,15 +89,16 @@ func Consume(
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
 	}
 
-	amountDetail := CalculateAmountDetail(code, usage, modelPrice)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice, serviceTier)
 	amountDetail.UsedAmount = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
 
-	selectedModelPrice := modelPrice.SelectConditionalPrice(usage)
+	selectedModelPrice := modelPrice.SelectConditionalPrice(usage, serviceTier)
 	selectedModelPrice.ConditionalPrices = nil
 
 	err := recordConsume(
@@ -114,6 +117,7 @@ func Consume(
 		user,
 		metadata,
 		upstreamID,
+		serviceTier,
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())
@@ -129,7 +133,7 @@ func Summary(
 	modelPrice model.Price,
 	downstreamResult bool,
 ) {
-	amountDetail := CalculateAmountDetail(code, usage, modelPrice)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice, meta.RequestServiceTier)
 
 	recordSummary(
 		time.Now(),
@@ -139,6 +143,7 @@ func Summary(
 		usage,
 		amountDetail,
 		downstreamResult,
+		meta.RequestServiceTier,
 	)
 }
 
@@ -172,6 +177,7 @@ func CalculateAmountDetail(
 	code int,
 	usage model.Usage,
 	modelPrice model.Price,
+	serviceTier string,
 ) model.Amount {
 	if modelPrice.PerRequestPrice != 0 {
 		if code != http.StatusOK {
@@ -183,7 +189,7 @@ func CalculateAmountDetail(
 		}
 	}
 
-	modelPrice = modelPrice.SelectConditionalPrice(usage)
+	modelPrice = modelPrice.SelectConditionalPrice(usage, serviceTier)
 
 	inputTokens := usage.InputTokens
 	if modelPrice.ImageInputPrice > 0 {
@@ -276,8 +282,9 @@ func CalculateAmount(
 	code int,
 	usage model.Usage,
 	modelPrice model.Price,
+	serviceTier string,
 ) float64 {
-	return CalculateAmountDetail(code, usage, modelPrice).UsedAmount
+	return CalculateAmountDetail(code, usage, modelPrice, serviceTier).UsedAmount
 }
 
 func processGroupConsume(

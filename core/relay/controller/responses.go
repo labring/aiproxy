@@ -15,10 +15,20 @@ func GetResponsesRequestUsage(c *gin.Context, _ model.ModelConfig) (model.Usage,
 		return model.Usage{}, err
 	}
 
-	usage := model.Usage{}
-	if request.ServiceTier != nil {
-		usage.ServiceTier = *request.ServiceTier
+	return model.Usage{}, nil
+}
+
+func GetResponsesRequestServiceTier(c *gin.Context) (string, error) {
+	var request relaymodel.CreateResponseRequest
+
+	err := common.UnmarshalRequestReusable(c.Request, &request)
+	if err != nil {
+		return "", err
 	}
 
-	return usage, nil
+	if request.ServiceTier == nil {
+		return "", nil
+	}
+
+	return *request.ServiceTier, nil
 }

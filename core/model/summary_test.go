@@ -9,6 +9,117 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
+func TestParseSummaryFields_ServiceTierBreakdownFields(t *testing.T) {
+	got := model.ParseSummaryFields(
+		"service_tier_flex_request_count,service_tier_priority_used_amount,count",
+	)
+	if got == nil {
+		t.Fatal("ParseSummaryFields returned nil")
+	}
+
+	wantContains := []string{
+		"request_count",
+		"service_tier_flex_request_count",
+		"service_tier_priority_used_amount",
+		"service_tier_priority_cache_hit_count",
+	}
+
+	for _, field := range wantContains {
+		if !slices.Contains(got, field) {
+			t.Fatalf("ParseSummaryFields result %v does not contain %q", got, field)
+		}
+	}
+
+	notWanted := []string{
+		"service_tier_auto_count",
+		"service_tier_scale_count",
+	}
+
+	for _, field := range notWanted {
+		if slices.Contains(got, field) {
+			t.Fatalf("ParseSummaryFields result %v should not contain %q", got, field)
+		}
+	}
+}
+
+func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
+	usage := model.Usage{
+		InputTokens:  10,
+		OutputTokens: 20,
+		TotalTokens:  30,
+	}
+	amount := model.Amount{
+		InputAmount:  1.5,
+		OutputAmount: 2.5,
+		UsedAmount:   4,
+	}
+
+	tests := []struct {
+		name                 string
+		serviceTier          string
+		wantFlexCount        int64
+		wantPriorityCount    int64
+		wantFlexTotalTokens  int64
+		wantPriorityUsedCost float64
+	}{
+		{
+			name:                "flex tier tracked separately",
+			serviceTier:         "flex",
+			wantFlexCount:       1,
+			wantFlexTotalTokens: 30,
+		},
+		{
+			name:                 "priority tier tracked separately",
+			serviceTier:          "priority",
+			wantPriorityCount:    1,
+			wantPriorityUsedCost: 4,
+		},
+		{
+			name:        "auto maps to default total only",
+			serviceTier: "auto",
+		},
+		{
+			name:        "empty maps to default total only",
+			serviceTier: "",
+		},
+		{
+			name:        "default maps to default total only",
+			serviceTier: "default",
+		},
+		{
+			name:        "standard maps to default total only",
+			serviceTier: "standard",
+		},
+		{
+			name:        "scale ignored into default total only",
+			serviceTier: "scale",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var data model.SummaryData
+			data.AddServiceTierBreakdown(tt.serviceTier, usage, amount, true, 429)
+
+			if got := data.ServiceTierFlex.RequestCount; got != tt.wantFlexCount {
+				t.Fatalf("flex request count = %d, want %d", got, tt.wantFlexCount)
+			}
+
+			if got := data.ServiceTierPriority.RequestCount; got != tt.wantPriorityCount {
+				t.Fatalf("priority request count = %d, want %d", got, tt.wantPriorityCount)
+			}
+
+			if got := int64(data.ServiceTierFlex.TotalTokens); got != tt.wantFlexTotalTokens {
+				t.Fatalf("flex total tokens = %d, want %d", got, tt.wantFlexTotalTokens)
+			}
+
+			if got := data.ServiceTierPriority.UsedAmount; got != tt.wantPriorityUsedCost {
+				t.Fatalf("priority used amount = %v, want %v", got, tt.wantPriorityUsedCost)
+			}
+		})
+	}
+}
+
 func TestParseSummaryFields_EmptyInput(t *testing.T) {
 	tests := []struct {
 		name  string
