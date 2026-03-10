@@ -642,16 +642,19 @@ func updateGroupSummaryData(
 
 	groupSummary.Amount.Add(amount)
 
-	groupSummary.SummaryDataSet.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	groupSummary.SummaryDataSet.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
 	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+
 	if summaryClaudeLongContext {
 		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
+			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
+			Milliseconds()
 	}
 
 	if usage.CachedTokens > 0 {
@@ -703,16 +706,19 @@ func updateGroupSummaryDataMinute(
 
 	groupSummary.Amount.Add(amount)
 
-	groupSummary.SummaryDataSet.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	groupSummary.SummaryDataSet.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
 	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+
 	if summaryClaudeLongContext {
 		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
+			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
+			Milliseconds()
 	}
 
 	if usage.CachedTokens > 0 {
@@ -765,12 +771,13 @@ func updateSummaryData(
 
 	summary.Amount.Add(amount)
 
-	summary.SummaryDataSet.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	summary.SummaryDataSet.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
 	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+
 	if summaryClaudeLongContext {
 		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
 		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
@@ -827,12 +834,13 @@ func updateSummaryDataMinute(
 
 	summary.Amount.Add(amount)
 
-	summary.SummaryDataSet.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	summary.SummaryDataSet.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
 	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+
 	if summaryClaudeLongContext {
 		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
 		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()

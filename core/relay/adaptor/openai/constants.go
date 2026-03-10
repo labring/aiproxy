@@ -235,6 +235,8 @@ var ModelList = []model.ModelConfig{
 }
 
 var responsesOnlyModels = map[string]struct{}{
+	"gpt-53-codex":  {},
+	"gpt-5.3-codex": {},
 	"gpt-52-codex":  {},
 	"gpt-5.2-codex": {},
 	"gpt-5-codex":   {},

@@ -29,6 +29,7 @@ func recordConsume(
 	if !meta.ModelConfig.ShouldSummaryServiceTier() {
 		summaryServiceTier = ""
 	}
+
 	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
 		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
 
@@ -76,6 +77,7 @@ func recordSummary(
 	if !meta.ModelConfig.ShouldSummaryServiceTier() {
 		serviceTier = ""
 	}
+
 	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
 		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
 

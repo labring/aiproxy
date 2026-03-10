@@ -515,9 +515,9 @@ type SummaryDataV2 struct {
 	Model     string `json:"model"`
 
 	SummaryDataSet
-	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty" gorm:"embedded;embeddedPrefix:service_tier_flex_"`
+	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
 	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
-	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty" gorm:"embedded;embeddedPrefix:claude_long_context_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`
@@ -1316,7 +1316,7 @@ func aggregatToSpan(
 			}
 		}
 
-		currentData.SummaryDataSet.Add(data.SummaryDataSet)
+		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 
@@ -1402,7 +1402,7 @@ func aggregatToSpanGroup(
 			}
 		}
 
-		currentData.SummaryDataSet.Add(data.SummaryDataSet)
+		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 

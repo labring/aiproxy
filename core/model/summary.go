@@ -434,23 +434,29 @@ func (d *SummaryData) AddServiceTierBreakdown(
 ) {
 	switch normalizeSummaryServiceTier(serviceTier) {
 	case "flex":
-		d.ServiceTierFlex.Count.AddRequest(status, isRetry)
+		d.ServiceTierFlex.AddRequest(status, isRetry)
+
 		if usage.CachedTokens > 0 {
 			d.ServiceTierFlex.CacheHitCount++
 		}
+
 		if usage.CacheCreationTokens > 0 {
 			d.ServiceTierFlex.CacheCreationCount++
 		}
+
 		d.ServiceTierFlex.Usage.Add(usage)
 		d.ServiceTierFlex.Amount.Add(amount)
 	case "priority":
-		d.ServiceTierPriority.Count.AddRequest(status, isRetry)
+		d.ServiceTierPriority.AddRequest(status, isRetry)
+
 		if usage.CachedTokens > 0 {
 			d.ServiceTierPriority.CacheHitCount++
 		}
+
 		if usage.CacheCreationTokens > 0 {
 			d.ServiceTierPriority.CacheCreationCount++
 		}
+
 		d.ServiceTierPriority.Usage.Add(usage)
 		d.ServiceTierPriority.Amount.Add(amount)
 	}
@@ -474,13 +480,16 @@ func (d *SummaryData) AddClaudeLongContextBreakdown(
 	isRetry bool,
 	status int,
 ) {
-	d.ClaudeLongContext.Count.AddRequest(status, isRetry)
+	d.ClaudeLongContext.AddRequest(status, isRetry)
+
 	if usage.CachedTokens > 0 {
 		d.ClaudeLongContext.CacheHitCount++
 	}
+
 	if usage.CacheCreationTokens > 0 {
 		d.ClaudeLongContext.CacheCreationCount++
 	}
+
 	d.ClaudeLongContext.Usage.Add(usage)
 	d.ClaudeLongContext.Amount.Add(amount)
 }
@@ -600,24 +609,23 @@ func appendSummaryAmountUpdateData(
 	}
 }
 
-//nolint:gocyclo
 func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 	data := map[string]any{}
 
 	appendSummaryAmountUpdateData(data, tableName, "", d.Amount)
 	appendSummaryCountUpdateData(data, tableName, "", d.Count)
 
-	if d.SummaryDataSet.TotalTimeMilliseconds > 0 {
+	if d.TotalTimeMilliseconds > 0 {
 		data["total_time_milliseconds"] = gorm.Expr(
 			tableName+".total_time_milliseconds + ?",
-			d.SummaryDataSet.TotalTimeMilliseconds,
+			d.TotalTimeMilliseconds,
 		)
 	}
 
-	if d.SummaryDataSet.TotalTTFBMilliseconds > 0 {
+	if d.TotalTTFBMilliseconds > 0 {
 		data["total_ttfb_milliseconds"] = gorm.Expr(
 			tableName+".total_ttfb_milliseconds + ?",
-			d.SummaryDataSet.TotalTTFBMilliseconds,
+			d.TotalTTFBMilliseconds,
 		)
 	}
 
@@ -625,18 +633,21 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 	appendSummaryCountUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Count)
 	appendSummaryUsageUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Usage)
 	appendSummaryAmountUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Amount)
+
 	if d.ServiceTierFlex.TotalTimeMilliseconds > 0 {
 		data["service_tier_flex_total_time_milliseconds"] = gorm.Expr(
 			tableName+".service_tier_flex_total_time_milliseconds + ?",
 			d.ServiceTierFlex.TotalTimeMilliseconds,
 		)
 	}
+
 	if d.ServiceTierFlex.TotalTTFBMilliseconds > 0 {
 		data["service_tier_flex_total_ttfb_milliseconds"] = gorm.Expr(
 			tableName+".service_tier_flex_total_ttfb_milliseconds + ?",
 			d.ServiceTierFlex.TotalTTFBMilliseconds,
 		)
 	}
+
 	appendSummaryCountUpdateData(
 		data,
 		tableName,
@@ -655,18 +666,21 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		"service_tier_priority_",
 		d.ServiceTierPriority.Amount,
 	)
+
 	if d.ServiceTierPriority.TotalTimeMilliseconds > 0 {
 		data["service_tier_priority_total_time_milliseconds"] = gorm.Expr(
 			tableName+".service_tier_priority_total_time_milliseconds + ?",
 			d.ServiceTierPriority.TotalTimeMilliseconds,
 		)
 	}
+
 	if d.ServiceTierPriority.TotalTTFBMilliseconds > 0 {
 		data["service_tier_priority_total_ttfb_milliseconds"] = gorm.Expr(
 			tableName+".service_tier_priority_total_ttfb_milliseconds + ?",
 			d.ServiceTierPriority.TotalTTFBMilliseconds,
 		)
 	}
+
 	appendSummaryCountUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Count)
 	appendSummaryUsageUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Usage)
 	appendSummaryAmountUpdateData(
@@ -675,12 +689,14 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		"claude_long_context_",
 		d.ClaudeLongContext.Amount,
 	)
+
 	if d.ClaudeLongContext.TotalTimeMilliseconds > 0 {
 		data["claude_long_context_total_time_milliseconds"] = gorm.Expr(
 			tableName+".claude_long_context_total_time_milliseconds + ?",
 			d.ClaudeLongContext.TotalTimeMilliseconds,
 		)
 	}
+
 	if d.ClaudeLongContext.TotalTTFBMilliseconds > 0 {
 		data["claude_long_context_total_ttfb_milliseconds"] = gorm.Expr(
 			tableName+".claude_long_context_total_ttfb_milliseconds + ?",
@@ -1116,7 +1132,7 @@ func aggregateDataToSpan(
 			}
 		}
 
-		currentData.SummaryDataSet.Add(data.SummaryDataSet)
+		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 
@@ -1137,7 +1153,7 @@ func sumDashboardResponse(chartData []ChartData) DashboardResponse {
 	}
 
 	for _, data := range chartData {
-		dashboardResponse.SummaryDataSet.Add(data.SummaryDataSet)
+		dashboardResponse.Add(data.SummaryDataSet)
 		dashboardResponse.TotalCount = dashboardResponse.RequestCount
 		dashboardResponse.ServiceTierFlex.Add(data.ServiceTierFlex)
 		dashboardResponse.ServiceTierPriority.Add(data.ServiceTierPriority)

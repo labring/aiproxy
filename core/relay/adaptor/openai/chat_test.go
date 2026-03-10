@@ -477,11 +477,6 @@ func (m *mockReadCloser) Close() error {
 	return nil
 }
 
-//go:fix inline
-func strPtr(s string) *string {
-	return new(s)
-}
-
 func TestConvertChatCompletionsRequest_WithToolsRequiredField(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -224,6 +224,7 @@ func SetLogServiceTierField(fields logrus.Fields, serviceTier string) {
 	if serviceTier == "" {
 		return
 	}
+
 	fields["service_tier"] = serviceTier
 }
 

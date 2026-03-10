@@ -1,17 +1,21 @@
-package model
+package model_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/labring/aiproxy/core/model"
+)
 
 func TestModelConfigShouldSummaryServiceTier(t *testing.T) {
 	t.Run("default false does not record summary service tier", func(t *testing.T) {
-		cfg := &ModelConfig{}
+		cfg := &model.ModelConfig{}
 		if cfg.ShouldSummaryServiceTier() {
 			t.Fatal("expected zero-value summary_service_tier to default to false")
 		}
 	})
 
 	t.Run("explicit false disables summary service tier recording", func(t *testing.T) {
-		cfg := &ModelConfig{SummaryServiceTier: false}
+		cfg := &model.ModelConfig{SummaryServiceTier: false}
 		if cfg.ShouldSummaryServiceTier() {
 			t.Fatal("expected false summary_service_tier to disable recording")
 		}
@@ -19,7 +23,9 @@ func TestModelConfigShouldSummaryServiceTier(t *testing.T) {
 }
 
 func TestModelConfigLoadFromGroupModelConfigSummaryServiceTier(t *testing.T) {
-	base := (&ModelConfig{SummaryServiceTier: true}).LoadFromGroupModelConfig(GroupModelConfig{
+	base := (&model.ModelConfig{
+		SummaryServiceTier: true,
+	}).LoadFromGroupModelConfig(model.GroupModelConfig{
 		OverrideSummaryServiceTier: true,
 		SummaryServiceTier:         false,
 	})
@@ -31,14 +37,14 @@ func TestModelConfigLoadFromGroupModelConfigSummaryServiceTier(t *testing.T) {
 
 func TestModelConfigShouldSummaryClaudeLongContext(t *testing.T) {
 	t.Run("default false does not record claude long context", func(t *testing.T) {
-		cfg := &ModelConfig{}
+		cfg := &model.ModelConfig{}
 		if cfg.ShouldSummaryClaudeLongContext() {
 			t.Fatal("expected zero-value summary_claude_long_context to default to false")
 		}
 	})
 
 	t.Run("explicit true enables claude long context", func(t *testing.T) {
-		cfg := &ModelConfig{SummaryClaudeLongContext: true}
+		cfg := &model.ModelConfig{SummaryClaudeLongContext: true}
 		if !cfg.ShouldSummaryClaudeLongContext() {
 			t.Fatal("expected true summary_claude_long_context to enable recording")
 		}
@@ -46,10 +52,14 @@ func TestModelConfigShouldSummaryClaudeLongContext(t *testing.T) {
 }
 
 func TestModelConfigLoadFromGroupModelConfigSummaryClaudeLongContext(t *testing.T) {
-	base := (&ModelConfig{SummaryClaudeLongContext: false}).LoadFromGroupModelConfig(GroupModelConfig{
-		OverrideSummaryClaudeLongContext: true,
-		SummaryClaudeLongContext:         true,
-	})
+	base := (&model.ModelConfig{
+		SummaryClaudeLongContext: false,
+	}).LoadFromGroupModelConfig(
+		model.GroupModelConfig{
+			OverrideSummaryClaudeLongContext: true,
+			SummaryClaudeLongContext:         true,
+		},
+	)
 
 	if !base.SummaryClaudeLongContext {
 		t.Fatal("expected override to set summary_claude_long_context to true")
