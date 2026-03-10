@@ -146,6 +146,17 @@
       "cacheCreationCount": "Cache Creations",
       "webSearchCount": "Web Searches",
       "costTrend": "Cost",
+      "costBreakdown": "Cost Breakdown",
+      "costBreakdownTypes": {
+        "input": "Input",
+        "cached": "Cached",
+        "cacheCreation": "Cache Creation",
+        "imageInput": "Image Input",
+        "audioInput": "Audio Input",
+        "output": "Output",
+        "imageOutput": "Image Output",
+        "webSearch": "Web Search"
+      },
       "avgResponseTime": "Avg Response Time",
       "avgTtfb": "Avg TTFB",
       "maxRpm": "Max RPM",
@@ -535,6 +546,7 @@
     "tokenInfo": "Token Info",
     "timeInfo": "Time Info",
     "priceInfo": "Price Info",
+    "consumeInfo": "Consumption Info",
     "requestBody": "Request Body",
     "responseBody": "Response Body",
     "noRequestBody": "No request body available",
@@ -571,6 +583,16 @@
     "perRequestPrice": "Per Request Price",
     "thinkingPrice": "Thinking Price",
     "webSearchPrice": "Web Search Price",
+    "costBreakdown": {
+      "input": "Text Input Cost",
+      "cached": "Cached Cost",
+      "cacheCreation": "Cache Creation Cost",
+      "imageInput": "Image Input Cost",
+      "audioInput": "Audio Input Cost",
+      "output": "Text Output Cost",
+      "imageOutput": "Image Output Cost",
+      "webSearch": "Web Search Cost"
+    },
     "filters": {
       "modelPlaceholder": "Enter model name to filter",
       "tokenNamePlaceholder": "Select token name",

@@ -92,6 +92,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     const [tokensMode, setTokensMode] = useState<DisplayMode>('incremental')
     const [tokenChartMode, setTokenChartMode] = useState<TokenChartMode>('breakdown')
     const [costMode, setCostMode] = useState<DisplayMode>('incremental')
+    const [costBreakdownMode, setCostBreakdownMode] = useState<DisplayMode>('incremental')
 
     const isDarkMode = useMemo(() => {
         if (theme === 'dark') return true
@@ -606,6 +607,94 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                     option={buildAreaChart('usedAmount', '#8b5cf6', costMode, {
                         formatter: (v) => `$${v.toFixed(4)}`
                     })}
+                    style={{ width: '100%', height: '100%' }}
+                />
+            </ChartBox>
+
+            {/* Cost Breakdown - full width */}
+            <ChartBox
+                title={t('monitor.charts.costBreakdown')}
+                rightSlot={<ToggleGroup value={costBreakdownMode} onChange={(v) => setCostBreakdownMode(v as DisplayMode)} options={modeOptions} />}
+            >
+                <EChart
+                    option={(() => {
+                        const costBreakdownSeries: { key: keyof ChartDataPoint; name: string; color: string }[] = [
+                            { key: 'inputAmount', name: t('monitor.charts.costBreakdownTypes.input'), color: '#3b82f6' },
+                            { key: 'cachedAmount', name: t('monitor.charts.costBreakdownTypes.cached'), color: '#6366f1' },
+                            { key: 'cacheCreationAmount', name: t('monitor.charts.costBreakdownTypes.cacheCreation'), color: '#a78bfa' },
+                            { key: 'imageInputAmount', name: t('monitor.charts.costBreakdownTypes.imageInput'), color: '#06b6d4' },
+                            { key: 'audioInputAmount', name: t('monitor.charts.costBreakdownTypes.audioInput'), color: '#8b5cf6' },
+                            { key: 'outputAmount', name: t('monitor.charts.costBreakdownTypes.output'), color: '#10b981' },
+                            { key: 'imageOutputAmount', name: t('monitor.charts.costBreakdownTypes.imageOutput'), color: '#14b8a6' },
+                            { key: 'webSearchAmount', name: t('monitor.charts.costBreakdownTypes.webSearch'), color: '#0ea5e9' },
+                        ]
+                        // Filter out series that have no data at all
+                        const activeSeries = costBreakdownSeries.filter(s =>
+                            chartData.some(d => (d[s.key] as number) > 0)
+                        )
+                        return {
+                            backgroundColor: 'transparent',
+                            color: activeSeries.map(s => s.color),
+                            tooltip: {
+                                trigger: 'axis',
+                                backgroundColor: themeColors.tooltipBg,
+                                borderColor: themeColors.tooltipBorder,
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
+                                formatter: (params: any) => {
+                                    const ps = Array.isArray(params) ? params : [params]
+                                    const idx = ps[0]?.dataIndex
+                                    const point = chartData[idx]
+                                    let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
+                                    for (const p of ps) {
+                                        if (p.value > 0) {
+                                            html += `<div>${p.marker} ${p.seriesName}: $${Number(p.value).toFixed(4)}</div>`
+                                        }
+                                    }
+                                    html += '</div>'
+                                    return html
+                                }
+                            },
+                            legend: {
+                                bottom: 0,
+                                textStyle: { color: themeColors.textColor, fontSize: 11 },
+                                itemWidth: 12, itemHeight: 8,
+                            },
+                            grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                            xAxis: {
+                                type: 'category',
+                                boundaryGap: false,
+                                data: xLabels,
+                                axisLine: { lineStyle: { color: themeColors.axisLineColor } },
+                                axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                axisTick: { show: false },
+                            },
+                            yAxis: {
+                                type: 'value',
+                                axisLine: { show: false },
+                                axisLabel: {
+                                    color: themeColors.textColor,
+                                    fontSize: 11,
+                                    formatter: (v: number) => `$${v.toFixed(4)}`,
+                                },
+                                axisTick: { show: false },
+                                splitLine: { lineStyle: { color: themeColors.splitLineColor, type: 'dashed' } },
+                            },
+                            series: activeSeries.map(s => ({
+                                name: s.name,
+                                type: 'line' as const,
+                                smooth: true,
+                                showSymbol: false,
+                                lineStyle: { width: 1.5, color: s.color },
+                                itemStyle: { color: s.color },
+                                areaStyle: { color: s.color + (isDarkMode ? '40' : '30') },
+                                data: makeData(s.key, costBreakdownMode),
+                            })),
+                            animation: true,
+                            animationDuration: 600,
+                        }
+                    })()}
                     style={{ width: '100%', height: '100%' }}
                 />
             </ChartBox>

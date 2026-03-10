@@ -181,7 +181,7 @@ export function LogTable({
                 header: t('log.usedAmount'),
                 cell: ({ row }) => (
                     <div className="text-right font-mono">
-                        ${(row.original.used_amount || 0).toFixed(4)}
+                        ${Number(row.original.amount?.used_amount ?? row.original.used_amount ?? 0).toFixed(4)}
                     </div>
                 ),
                 size: 100,

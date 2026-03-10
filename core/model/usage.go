@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type PriceCondition struct {
@@ -367,4 +369,46 @@ func (u *Usage) Add(other Usage) {
 	u.CacheCreationTokens += other.CacheCreationTokens
 	u.TotalTokens += other.TotalTokens
 	u.WebSearchCount += other.WebSearchCount
+}
+
+type Amount struct {
+	InputAmount         float64 `json:"input_amount,omitempty"`
+	ImageInputAmount    float64 `json:"image_input_amount,omitempty"`
+	AudioInputAmount    float64 `json:"audio_input_amount,omitempty"`
+	OutputAmount        float64 `json:"output_amount,omitempty"`
+	ImageOutputAmount   float64 `json:"image_output_amount,omitempty"`
+	CachedAmount        float64 `json:"cached_amount,omitempty"`
+	CacheCreationAmount float64 `json:"cache_creation_amount,omitempty"`
+	WebSearchAmount     float64 `json:"web_search_amount,omitempty"`
+	UsedAmount          float64 `json:"used_amount,omitempty"`
+}
+
+func (a *Amount) Add(other Amount) {
+	a.InputAmount = decimal.NewFromFloat(a.InputAmount).
+		Add(decimal.NewFromFloat(other.InputAmount)).
+		InexactFloat64()
+	a.ImageInputAmount = decimal.NewFromFloat(a.ImageInputAmount).
+		Add(decimal.NewFromFloat(other.ImageInputAmount)).
+		InexactFloat64()
+	a.AudioInputAmount = decimal.NewFromFloat(a.AudioInputAmount).
+		Add(decimal.NewFromFloat(other.AudioInputAmount)).
+		InexactFloat64()
+	a.OutputAmount = decimal.NewFromFloat(a.OutputAmount).
+		Add(decimal.NewFromFloat(other.OutputAmount)).
+		InexactFloat64()
+	a.ImageOutputAmount = decimal.NewFromFloat(a.ImageOutputAmount).
+		Add(decimal.NewFromFloat(other.ImageOutputAmount)).
+		InexactFloat64()
+	a.CachedAmount = decimal.NewFromFloat(a.CachedAmount).
+		Add(decimal.NewFromFloat(other.CachedAmount)).
+		InexactFloat64()
+	a.CacheCreationAmount = decimal.NewFromFloat(a.CacheCreationAmount).
+		Add(decimal.NewFromFloat(other.CacheCreationAmount)).
+		InexactFloat64()
+	a.WebSearchAmount = decimal.NewFromFloat(a.WebSearchAmount).
+		Add(decimal.NewFromFloat(other.WebSearchAmount)).
+		InexactFloat64()
+	a.UsedAmount = decimal.NewFromFloat(a.UsedAmount).
+		Add(decimal.NewFromFloat(other.UsedAmount)).
+		InexactFloat64()
 }

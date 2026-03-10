@@ -31,6 +31,19 @@ export interface LogUsage {
   web_search_count: number
 }
 
+// 消费金额明细
+export interface LogAmount {
+  input_amount?: number
+  image_input_amount?: number
+  audio_input_amount?: number
+  output_amount?: number
+  image_output_amount?: number
+  cached_amount?: number
+  cache_creation_amount?: number
+  web_search_amount?: number
+  used_amount?: number
+}
+
 // 请求详情
 export interface LogRequestDetail {
   id: number
@@ -65,7 +78,10 @@ export interface LogRecord {
   token_name: string
   ttfb_milliseconds: number
   usage: LogUsage
-  used_amount: number
+  // 兼容旧接口字段
+  used_amount?: number
+  // 新接口金额明细字段
+  amount?: LogAmount
   user: string
 }
 

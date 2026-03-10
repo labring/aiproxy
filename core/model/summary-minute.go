@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -509,18 +508,18 @@ func getGroupDashboardDataMinute(
 }
 
 type SummaryDataV2 struct {
-	Timestamp  int64   `json:"timestamp,omitempty"`
-	ChannelID  int     `json:"channel_id,omitempty"`
-	GroupID    string  `json:"group_id,omitempty"`
-	TokenName  string  `json:"token_name,omitempty"`
-	Model      string  `json:"model"`
-	UsedAmount float64 `json:"used_amount"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	ChannelID int    `json:"channel_id,omitempty"`
+	GroupID   string `json:"group_id,omitempty"`
+	TokenName string `json:"token_name,omitempty"`
+	Model     string `json:"model"`
 
 	TotalTimeMilliseconds int64 `json:"total_time_milliseconds"`
 	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds"`
 
 	Count
 	Usage
+	Amount
 
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`
@@ -543,6 +542,11 @@ type GroupDashboardV2Response struct {
 	DashboardV2Response
 	TokenNames []string `json:"token_names"`
 }
+
+type (
+	DashboardV3Response      = DashboardV2Response
+	GroupDashboardV3Response = GroupDashboardV2Response
+)
 
 func GetDashboardV2Data(
 	channelID int,
@@ -665,6 +669,39 @@ func GetGroupDashboardV2Data(
 		},
 		TokenNames: tokenNames,
 	}, nil
+}
+
+// V3 wrapper functions - same as V2 since types are aliases
+func GetDashboardV3Data(
+	channelID int,
+	modelName string,
+	start, end time.Time,
+	timeSpan TimeSpanType,
+	timezone *time.Location,
+	fields SummarySelectFields,
+) (*DashboardV3Response, error) {
+	return GetDashboardV2Data(channelID, modelName, start, end, timeSpan, timezone, fields)
+}
+
+func GetGroupDashboardV3Data(
+	group string,
+	tokenName string,
+	modelName string,
+	start, end time.Time,
+	timeSpan TimeSpanType,
+	timezone *time.Location,
+	fields SummarySelectFields,
+) (*GroupDashboardV3Response, error) {
+	return GetGroupDashboardV2Data(
+		group,
+		tokenName,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezone,
+		fields,
+	)
 }
 
 func getCurrentRPM(channelID int, modelName string) (int64, int64) {
@@ -1283,11 +1320,8 @@ func aggregatToSpan(
 
 		currentData.Count.Add(data.Count)
 		currentData.Usage.Add(data.Usage)
+		currentData.Amount.Add(data.Amount)
 
-		currentData.UsedAmount = decimal.
-			NewFromFloat(currentData.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
 		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
 		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
 
@@ -1375,11 +1409,8 @@ func aggregatToSpanGroup(
 
 		currentData.Count.Add(data.Count)
 		currentData.Usage.Add(data.Usage)
+		currentData.Amount.Add(data.Amount)
 
-		currentData.UsedAmount = decimal.
-			NewFromFloat(currentData.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
 		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
 		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
 

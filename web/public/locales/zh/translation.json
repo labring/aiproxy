@@ -130,6 +130,17 @@
       "cacheCreationCount": "缓存创建",
       "webSearchCount": "联网搜索",
       "costTrend": "消费",
+      "costBreakdown": "消费明细",
+      "costBreakdownTypes": {
+        "input": "文本输入",
+        "cached": "缓存命中",
+        "cacheCreation": "缓存创建",
+        "imageInput": "图片输入",
+        "audioInput": "音频输入",
+        "output": "文本输出",
+        "imageOutput": "图片输出",
+        "webSearch": "联网搜索"
+      },
       "avgResponseTime": "平均耗时时间",
       "avgTtfb": "平均首字节时间",
       "maxRpm": "最大 RPM",
@@ -523,6 +534,7 @@
     "tokenInfo": "Token 信息",
     "timeInfo": "时间信息",
     "priceInfo": "价格信息",
+    "consumeInfo": "消费信息",
     "requestBody": "请求内容",
     "responseBody": "响应内容",
     "noRequestBody": "无请求内容",
@@ -559,6 +571,16 @@
     "perRequestPrice": "每次请求价格",
     "thinkingPrice": "思考价格",
     "webSearchPrice": "搜索价格",
+    "costBreakdown": {
+      "input": "文本输入消费",
+      "cached": "缓存命中消费",
+      "cacheCreation": "缓存创建消费",
+      "imageInput": "图片输入消费",
+      "audioInput": "音频输入消费",
+      "output": "文本输出消费",
+      "imageOutput": "图片输出消费",
+      "webSearch": "联网搜索消费"
+    },
     "filters": {
       "modelPlaceholder": "输入模型名称进行筛选",
       "tokenNamePlaceholder": "选择 Token 名称",

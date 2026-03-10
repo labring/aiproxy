@@ -92,8 +92,8 @@ func Consume(
 		return
 	}
 
-	amount := CalculateAmount(code, usage, modelPrice)
-	amount = consumeAmount(ctx, amount, postGroupConsumer, meta)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice)
+	amountDetail.UsedAmount = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
 
 	selectedModelPrice := modelPrice.SelectConditionalPrice(usage)
 	selectedModelPrice.ConditionalPrices = nil
@@ -108,7 +108,7 @@ func Consume(
 		content,
 		ip,
 		requestDetail,
-		amount,
+		amountDetail,
 		retryTimes,
 		downstreamResult,
 		user,
@@ -129,7 +129,7 @@ func Summary(
 	modelPrice model.Price,
 	downstreamResult bool,
 ) {
-	amount := CalculateAmount(code, usage, modelPrice)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice)
 
 	recordSummary(
 		time.Now(),
@@ -137,7 +137,7 @@ func Summary(
 		code,
 		firstByteAt,
 		usage,
-		amount,
+		amountDetail,
 		downstreamResult,
 	)
 }
@@ -168,16 +168,19 @@ func consumeAmount(
 	return amount
 }
 
-func CalculateAmount(
+func CalculateAmountDetail(
 	code int,
 	usage model.Usage,
 	modelPrice model.Price,
-) float64 {
+) model.Amount {
 	if modelPrice.PerRequestPrice != 0 {
 		if code != http.StatusOK {
-			return 0
+			return model.Amount{}
 		}
-		return float64(modelPrice.PerRequestPrice)
+
+		return model.Amount{
+			UsedAmount: float64(modelPrice.PerRequestPrice),
+		}
 	}
 
 	modelPrice = modelPrice.SelectConditionalPrice(usage)
@@ -246,7 +249,7 @@ func CalculateAmount(
 		Mul(decimal.NewFromFloat(float64(modelPrice.ImageOutputPrice))).
 		Div(decimal.NewFromInt(modelPrice.GetImageOutputPriceUnit()))
 
-	return inputAmount.
+	usedAmount := inputAmount.
 		Add(imageInputAmount).
 		Add(audioInputAmount).
 		Add(cachedAmount).
@@ -255,6 +258,26 @@ func CalculateAmount(
 		Add(outputAmount).
 		Add(imageOutputAmount).
 		InexactFloat64()
+
+	return model.Amount{
+		InputAmount:         inputAmount.InexactFloat64(),
+		ImageInputAmount:    imageInputAmount.InexactFloat64(),
+		AudioInputAmount:    audioInputAmount.InexactFloat64(),
+		OutputAmount:        outputAmount.InexactFloat64(),
+		ImageOutputAmount:   imageOutputAmount.InexactFloat64(),
+		CachedAmount:        cachedAmount.InexactFloat64(),
+		CacheCreationAmount: cacheCreationAmount.InexactFloat64(),
+		WebSearchAmount:     webSearchAmount.InexactFloat64(),
+		UsedAmount:          usedAmount,
+	}
+}
+
+func CalculateAmount(
+	code int,
+	usage model.Usage,
+	modelPrice model.Price,
+) float64 {
+	return CalculateAmountDetail(code, usage, modelPrice).UsedAmount
 }
 
 func processGroupConsume(

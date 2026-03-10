@@ -17,7 +17,7 @@ func recordConsume(
 	content string,
 	ip string,
 	requestDetail *model.RequestDetail,
-	amount float64,
+	amount model.Amount,
 	retryTimes int,
 	downstreamResult bool,
 	user string,
@@ -58,7 +58,7 @@ func recordSummary(
 	code int,
 	firstByteAt time.Time,
 	usage model.Usage,
-	amount float64,
+	amount model.Amount,
 	downstreamResult bool,
 ) {
 	model.BatchUpdateSummary(

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -43,8 +42,17 @@ var allSummaryFields = []string{
 	"cache_creation_tokens",
 	"total_tokens",
 	"web_search_count",
-	// Other fields
+	// Amount fields
+	"input_amount",
+	"image_input_amount",
+	"audio_input_amount",
+	"output_amount",
+	"image_output_amount",
+	"cached_amount",
+	"cache_creation_amount",
+	"web_search_amount",
 	"used_amount",
+	// Other fields
 	"total_time_milliseconds",
 	"total_ttfb_milliseconds",
 }
@@ -69,6 +77,11 @@ var summaryFieldGroups = map[string][]string{
 		"input_tokens", "image_input_tokens", "audio_input_tokens",
 		"output_tokens", "image_output_tokens", "cached_tokens",
 		"cache_creation_tokens", "total_tokens", "web_search_count",
+	},
+	"amount": {
+		"input_amount", "image_input_amount", "audio_input_amount",
+		"output_amount", "image_output_amount", "cached_amount",
+		"cache_creation_amount", "web_search_amount", "used_amount",
 	},
 	"time": {"total_time_milliseconds", "total_ttfb_milliseconds"},
 }
@@ -296,18 +309,78 @@ func (c *Count) Add(other Count) {
 type SummaryData struct {
 	Count
 	Usage
-
-	UsedAmount float64 `json:"used_amount"`
+	Amount
 
 	TotalTimeMilliseconds int64 `json:"total_time_milliseconds,omitempty"`
 	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds,omitempty"`
 }
 
+//nolint:gocyclo
 func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 	data := map[string]any{}
 
+	// amount update
+	if d.InputAmount > 0 {
+		data["input_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.input_amount, 0) + ?", tableName),
+			d.InputAmount,
+		)
+	}
+
+	if d.ImageInputAmount > 0 {
+		data["image_input_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.image_input_amount, 0) + ?", tableName),
+			d.ImageInputAmount,
+		)
+	}
+
+	if d.AudioInputAmount > 0 {
+		data["audio_input_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.audio_input_amount, 0) + ?", tableName),
+			d.AudioInputAmount,
+		)
+	}
+
+	if d.OutputAmount > 0 {
+		data["output_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.output_amount, 0) + ?", tableName),
+			d.OutputAmount,
+		)
+	}
+
+	if d.ImageOutputAmount > 0 {
+		data["image_output_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.image_output_amount, 0) + ?", tableName),
+			d.ImageOutputAmount,
+		)
+	}
+
+	if d.CachedAmount > 0 {
+		data["cached_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cached_amount, 0) + ?", tableName),
+			d.CachedAmount,
+		)
+	}
+
+	if d.CacheCreationAmount > 0 {
+		data["cache_creation_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.cache_creation_amount, 0) + ?", tableName),
+			d.CacheCreationAmount,
+		)
+	}
+
+	if d.WebSearchAmount > 0 {
+		data["web_search_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.web_search_amount, 0) + ?", tableName),
+			d.WebSearchAmount,
+		)
+	}
+
 	if d.UsedAmount > 0 {
-		data["used_amount"] = gorm.Expr(tableName+".used_amount + ?", d.UsedAmount)
+		data["used_amount"] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.used_amount, 0) + ?", tableName),
+			d.UsedAmount,
+		)
 	}
 
 	if d.RequestCount > 0 {
@@ -807,8 +880,8 @@ func getGroupLogGroupByValues[T cmp.Ordered](
 }
 
 type ChartData struct {
-	Timestamp  int64   `json:"timestamp"`
-	UsedAmount float64 `json:"used_amount"`
+	Timestamp int64 `json:"timestamp"`
+	Amount    `      json:"amount,omitempty" gorm:"embedded"`
 
 	TotalTimeMilliseconds int64 `json:"total_time_milliseconds"`
 	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds"`
@@ -828,11 +901,10 @@ type DashboardResponse struct {
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`
 
-	UsedAmount float64 `json:"used_amount"`
-
 	TotalCount int64 `json:"total_count"` // use Count.RequestCount instead
 	Count
 	Usage
+	Amount
 
 	Channels []int    `json:"channels,omitempty"`
 	Models   []string `json:"models,omitempty"`
@@ -901,13 +973,10 @@ func aggregateDataToSpan(
 
 		currentData.Count.Add(data.Count)
 		currentData.Usage.Add(data.Usage)
+		currentData.Amount.Add(data.Amount)
 
 		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
 		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
-		currentData.UsedAmount = decimal.
-			NewFromFloat(currentData.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
 
 		dataMap[timestamp] = currentData
 	}
@@ -925,23 +994,16 @@ func sumDashboardResponse(chartData []ChartData) DashboardResponse {
 		ChartData: chartData,
 	}
 
-	usedAmount := decimal.NewFromFloat(0)
 	for _, data := range chartData {
 		dashboardResponse.Count.Add(data.Count)
 		dashboardResponse.TotalCount = dashboardResponse.RequestCount
 
 		dashboardResponse.Usage.Add(data.Usage)
+		dashboardResponse.Amount.Add(data.Amount)
 
 		dashboardResponse.TotalTimeMilliseconds += data.TotalTimeMilliseconds
 		dashboardResponse.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
-		usedAmount = usedAmount.Add(decimal.NewFromFloat(data.UsedAmount))
-		dashboardResponse.UsedAmount = decimal.
-			NewFromFloat(dashboardResponse.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
 	}
-
-	dashboardResponse.UsedAmount = usedAmount.InexactFloat64()
 
 	return dashboardResponse
 }

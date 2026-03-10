@@ -4,6 +4,15 @@ export interface ModelSummary {
     group_id?: string
     token_name?: string
     model: string
+    // Detailed amount fields
+    input_amount?: number
+    image_input_amount?: number
+    audio_input_amount?: number
+    output_amount?: number
+    image_output_amount?: number
+    cached_amount?: number
+    cache_creation_amount?: number
+    web_search_amount?: number
     used_amount: number
     total_time_milliseconds: number
     total_ttfb_milliseconds: number
@@ -26,7 +35,7 @@ export interface ModelSummary {
     image_output_tokens: number
     cached_tokens: number
     cache_creation_tokens: number
-    reasoning_tokens: number
+    reasoning_tokens?: number
     total_tokens: number
     web_search_count: number
     max_rpm: number
@@ -67,6 +76,15 @@ export interface ChartDataPoint {
     reasoningTokens: number
     totalTokens: number
     webSearchCount: number
+    // Detailed amounts
+    inputAmount: number
+    imageInputAmount: number
+    audioInputAmount: number
+    outputAmount: number
+    imageOutputAmount: number
+    cachedAmount: number
+    cacheCreationAmount: number
+    webSearchAmount: number
     usedAmount: number
     avgResponseTime: number
     avgTtfb: number

@@ -67,7 +67,7 @@ type Log struct {
 	RetryTimes       ZeroNullInt64   `                                                                      json:"retry_times,omitempty"`
 	Price            Price           `gorm:"embedded"                                                       json:"price,omitempty"`
 	Usage            Usage           `gorm:"embedded"                                                       json:"usage,omitempty"`
-	UsedAmount       float64         `                                                                      json:"used_amount,omitempty"`
+	Amount           Amount          `gorm:"embedded"                                                       json:"amount,omitempty"`
 	// https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
 	User     EmptyNullString   `gorm:"type:text"                     json:"user,omitempty"`
 	Metadata map[string]string `gorm:"serializer:fastjson;type:text" json:"metadata,omitempty"`
@@ -148,13 +148,15 @@ func (l *Log) MarshalJSON() ([]byte, error) {
 
 	a := &struct {
 		*Alias
-		CreatedAt int64 `json:"created_at"`
-		RequestAt int64 `json:"request_at"`
-		RetryAt   int64 `json:"retry_at,omitempty"`
+		CreatedAt  int64   `json:"created_at"`
+		RequestAt  int64   `json:"request_at"`
+		RetryAt    int64   `json:"retry_at,omitempty"`
+		UsedAmount float64 `json:"used_amount,omitempty"`
 	}{
-		Alias:     (*Alias)(l),
-		CreatedAt: l.CreatedAt.UnixMilli(),
-		RequestAt: l.RequestAt.UnixMilli(),
+		Alias:      (*Alias)(l),
+		CreatedAt:  l.CreatedAt.UnixMilli(),
+		RequestAt:  l.RequestAt.UnixMilli(),
+		UsedAmount: l.Amount.UsedAmount,
 	}
 	if !l.RetryAt.IsZero() {
 		a.RetryAt = l.RetryAt.UnixMilli()
@@ -336,7 +338,7 @@ func RecordConsumeLog(
 	requestDetail *RequestDetail,
 	usage Usage,
 	modelPrice Price,
-	amount float64,
+	amountDetail Amount,
 	user string,
 	metadata map[string]string,
 	upstreamID string,
@@ -379,7 +381,7 @@ func RecordConsumeLog(
 		RequestDetail:    requestDetail,
 		Price:            modelPrice,
 		Usage:            usage,
-		UsedAmount:       amount,
+		Amount:           amountDetail,
 		User:             EmptyNullString(user),
 		Metadata:         metadata,
 		UpstreamID:       EmptyNullString(upstreamID),

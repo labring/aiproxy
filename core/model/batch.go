@@ -359,7 +359,7 @@ func BatchRecordLogs(
 	downstreamResult bool,
 	usage Usage,
 	modelPrice Price,
-	amount float64,
+	amount Amount,
 	user string,
 	metadata map[string]string,
 	upstreamID string,
@@ -452,18 +452,18 @@ func BatchUpdateSummary(
 	tokenName string,
 	downstreamResult bool,
 	usage Usage,
-	amount float64,
+	amount Amount,
 ) {
 	if now.IsZero() {
 		now = time.Now()
 	}
 
-	amountDecimal := decimal.NewFromFloat(amount)
+	amountDecimal := decimal.NewFromFloat(amount.UsedAmount)
 
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	updateChannelData(channelID, amount, amountDecimal, !downstreamResult)
+	updateChannelData(channelID, amount.UsedAmount, amountDecimal, !downstreamResult)
 
 	if channelID != 0 {
 		updateSummaryData(
@@ -473,7 +473,7 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 			!downstreamResult,
 		)
@@ -485,7 +485,7 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 			!downstreamResult,
 		)
@@ -496,9 +496,9 @@ func BatchUpdateSummary(
 		return
 	}
 
-	updateGroupData(group, amount, amountDecimal)
+	updateGroupData(group, amount.UsedAmount, amountDecimal)
 
-	updateTokenData(tokenID, amount, amountDecimal)
+	updateTokenData(tokenID, amount.UsedAmount, amountDecimal)
 
 	if group != "" {
 		updateGroupSummaryData(
@@ -509,7 +509,7 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 		)
 
@@ -521,7 +521,7 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 		)
 	}
@@ -592,7 +592,7 @@ func updateGroupSummaryData(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 ) {
 	if createAt.IsZero() {
@@ -622,9 +622,7 @@ func updateGroupSummaryData(
 		batchData.GroupSummaries[groupUnique] = groupSummary
 	}
 
-	groupSummary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
-		InexactFloat64()
+	groupSummary.Amount.Add(amount)
 
 	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
@@ -647,7 +645,7 @@ func updateGroupSummaryDataMinute(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 ) {
 	if createAt.IsZero() {
@@ -677,9 +675,7 @@ func updateGroupSummaryDataMinute(
 		batchData.GroupSummariesMinute[groupUnique] = groupSummary
 	}
 
-	groupSummary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
-		InexactFloat64()
+	groupSummary.Amount.Add(amount)
 
 	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
@@ -703,7 +699,7 @@ func updateSummaryData(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 	isRetry bool,
 ) {
@@ -733,9 +729,7 @@ func updateSummaryData(
 		batchData.Summaries[summaryUnique] = summary
 	}
 
-	summary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(summary.UsedAmount)).
-		InexactFloat64()
+	summary.Amount.Add(amount)
 
 	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
@@ -759,7 +753,7 @@ func updateSummaryDataMinute(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 	isRetry bool,
 ) {
@@ -789,9 +783,7 @@ func updateSummaryDataMinute(
 		batchData.SummariesMinute[summaryUnique] = summary
 	}
 
-	summary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(summary.UsedAmount)).
-		InexactFloat64()
+	summary.Amount.Add(amount)
 
 	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()

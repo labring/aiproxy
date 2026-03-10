@@ -6,6 +6,15 @@ import { DashboardFilters, DashboardV2Response, TimeSeriesPoint, ModelSummary, C
 export interface DashboardAggregates {
     request_count: number
     exception_count: number
+    // Detailed amount fields
+    input_amount: number
+    image_input_amount: number
+    audio_input_amount: number
+    output_amount: number
+    image_output_amount: number
+    cached_amount: number
+    cache_creation_amount: number
+    web_search_amount: number
     used_amount: number
     total_time_milliseconds: number
     total_ttfb_milliseconds: number
@@ -107,6 +116,16 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const reasoningTokens = summary.reduce((acc, s) => acc + (s.reasoning_tokens || 0), 0)
         const totalTokens = summary.reduce((acc, s) => acc + (s.total_tokens || 0), 0)
         const webSearchCount = summary.reduce((acc, s) => acc + (s.web_search_count || 0), 0)
+
+        // Detailed amounts
+        const inputAmount = summary.reduce((acc, s) => acc + (s.input_amount || 0), 0)
+        const imageInputAmount = summary.reduce((acc, s) => acc + (s.image_input_amount || 0), 0)
+        const audioInputAmount = summary.reduce((acc, s) => acc + (s.audio_input_amount || 0), 0)
+        const outputAmount = summary.reduce((acc, s) => acc + (s.output_amount || 0), 0)
+        const imageOutputAmount = summary.reduce((acc, s) => acc + (s.image_output_amount || 0), 0)
+        const cachedAmount = summary.reduce((acc, s) => acc + (s.cached_amount || 0), 0)
+        const cacheCreationAmount = summary.reduce((acc, s) => acc + (s.cache_creation_amount || 0), 0)
+        const webSearchAmount = summary.reduce((acc, s) => acc + (s.web_search_amount || 0), 0)
         const usedAmount = summary.reduce((acc, s) => acc + (s.used_amount || 0), 0)
 
         // Non-overlapping text portions (subtract sub-categories from totals)
@@ -181,6 +200,15 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             reasoningTokens,
             totalTokens,
             webSearchCount,
+            // Detailed amounts
+            inputAmount,
+            imageInputAmount,
+            audioInputAmount,
+            outputAmount,
+            imageOutputAmount,
+            cachedAmount,
+            cacheCreationAmount,
+            webSearchAmount,
             usedAmount,
             avgResponseTime,
             avgTtfb,
@@ -201,6 +229,15 @@ function computeDashboardResult(
     const agg: DashboardAggregates = {
         request_count: 0,
         exception_count: 0,
+        // Detailed amounts
+        input_amount: 0,
+        image_input_amount: 0,
+        audio_input_amount: 0,
+        output_amount: 0,
+        image_output_amount: 0,
+        cached_amount: 0,
+        cache_creation_amount: 0,
+        web_search_amount: 0,
         used_amount: 0,
         total_time_milliseconds: 0,
         total_ttfb_milliseconds: 0,
@@ -231,6 +268,14 @@ function computeDashboardResult(
             existing.request_count += (s.request_count || 0)
             existing.exception_count += (s.exception_count || 0)
             existing.used_amount += (s.used_amount || 0)
+            existing.input_amount = (existing.input_amount || 0) + (s.input_amount || 0)
+            existing.image_input_amount = (existing.image_input_amount || 0) + (s.image_input_amount || 0)
+            existing.audio_input_amount = (existing.audio_input_amount || 0) + (s.audio_input_amount || 0)
+            existing.output_amount = (existing.output_amount || 0) + (s.output_amount || 0)
+            existing.image_output_amount = (existing.image_output_amount || 0) + (s.image_output_amount || 0)
+            existing.cached_amount = (existing.cached_amount || 0) + (s.cached_amount || 0)
+            existing.cache_creation_amount = (existing.cache_creation_amount || 0) + (s.cache_creation_amount || 0)
+            existing.web_search_amount = (existing.web_search_amount || 0) + (s.web_search_amount || 0)
             existing.total_time_milliseconds += (s.total_time_milliseconds || 0)
             existing.total_ttfb_milliseconds += (s.total_ttfb_milliseconds || 0)
             existing.input_tokens += (s.input_tokens || 0)
@@ -249,6 +294,14 @@ function computeDashboardResult(
             agg.request_count += (s.request_count || 0)
             agg.exception_count += (s.exception_count || 0)
             agg.used_amount += (s.used_amount || 0)
+            agg.input_amount += (s.input_amount || 0)
+            agg.image_input_amount += (s.image_input_amount || 0)
+            agg.audio_input_amount += (s.audio_input_amount || 0)
+            agg.output_amount += (s.output_amount || 0)
+            agg.image_output_amount += (s.image_output_amount || 0)
+            agg.cached_amount += (s.cached_amount || 0)
+            agg.cache_creation_amount += (s.cache_creation_amount || 0)
+            agg.web_search_amount += (s.web_search_amount || 0)
             agg.total_time_milliseconds += (s.total_time_milliseconds || 0)
             agg.total_ttfb_milliseconds += (s.total_ttfb_milliseconds || 0)
             agg.input_tokens += (s.input_tokens || 0)
