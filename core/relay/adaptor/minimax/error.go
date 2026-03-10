@@ -23,6 +23,7 @@ type ErrorResponse struct {
 
 func TryErrorHanlder(resp *http.Response) adaptor.Error {
 	respBody, err := common.GetResponseBody(resp)
+
 	_ = resp.Body.Close()
 	if err != nil {
 		return relaymodel.NewOpenAIError(resp.StatusCode, relaymodel.OpenAIError{
