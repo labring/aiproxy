@@ -658,9 +658,25 @@
       "priority": "Priority",
       "priorityPlaceholder": "1-100, default 10",
       "priorityHelp": "Lower value means higher priority, default is 10",
+      "useDefaultModels": "Use Default Models",
+      "customModels": "Custom Models",
+      "defaultModelsHint": "Default models from channel type config. Switch to custom to override.",
+      "defaultModelsEmpty": "No default models configured for this type. Please select custom models.",
+      "switchToCustomConfirm": "Switching to custom will pre-fill with defaults for editing.",
+      "defaultModelMapping": "Default Model Mapping",
       "create": "Create",
       "update": "Update",
       "submitting": "Submitting..."
+    },
+    "usingDefaults": "Default",
+    "defaultModels": {
+      "title": "Default Models",
+      "description": "Configure default models for each channel type, auto-applied when creating channels",
+      "manage": "Default Models",
+      "add": "Add",
+      "empty": "No default models configured for any channel type yet",
+      "mappingCount": "mappings",
+      "backToList": "Back to list"
     },
     "deleteDialog": {
       "confirmTitle": "Delete Channel",

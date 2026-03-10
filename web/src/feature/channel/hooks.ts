@@ -1,6 +1,7 @@
 // src/feature/channel/hooks.ts
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { channelApi, ChannelTestResult } from '@/api/channel'
+import { modelApi } from '@/api/model'
 import { useState, useCallback } from 'react'
 import { ChannelCreateRequest, ChannelUpdateRequest, ChannelStatusRequest } from '@/types/channel'
 import { toast } from 'sonner'
@@ -15,6 +16,23 @@ export const useChannelTypeMetas = () => {
     return {
         ...query,
     }
+}
+
+// 获取渠道类型默认模型
+export const useChannelDefaultModels = (type: number) => {
+    return useQuery({
+        queryKey: ['channelDefaultModels', type],
+        queryFn: () => modelApi.getDefaultModelsByType(type),
+        enabled: type > 0,
+    })
+}
+
+// 获取所有渠道类型默认模型
+export const useAllChannelDefaultModels = () => {
+    return useQuery({
+        queryKey: ['allChannelDefaultModels'],
+        queryFn: () => modelApi.getAllDefaultModels(),
+    })
 }
 
 // 获取渠道列表（分页）

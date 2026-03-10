@@ -12,7 +12,7 @@ import { Channel } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, Search
+    PowerOff, Power, FlaskConical, Search, Settings
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -25,6 +25,7 @@ import { Loader2 } from 'lucide-react'
 import { DataTable } from '@/components/table/motion-data-table'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteChannelDialog } from './DeleteChannelDialog'
+import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -52,6 +53,7 @@ export function ChannelTable() {
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [testDialogOpen, setTestDialogOpen] = useState(false)
     const [isTestAll, setIsTestAll] = useState(false)
+    const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
     const [searchInput, setSearchInput] = useState('')
     const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -231,7 +233,11 @@ export function ChannelTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
             cell: ({ row }) => {
                 const models = row.original.models || []
-                if (models.length === 0) return <div className="text-muted-foreground text-xs">-</div>
+                if (models.length === 0) return (
+                    <Badge variant="outline" className="text-xs">
+                        {t("channel.usingDefaults")}
+                    </Badge>
+                )
 
                 return (
                     <Popover>
@@ -405,6 +411,17 @@ export function ChannelTable() {
                             <Button
                                 variant="outline"
                                 size="sm"
+                                onClick={() => setDefaultModelsDialogOpen(true)}
+                                className="flex items-center gap-2 justify-center"
+                            >
+                                <Settings className="h-4 w-4" />
+                                {t("channel.defaultModels.manage")}
+                            </Button>
+                        </AnimatedButton>
+                        <AnimatedButton>
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={() => {
                                     clearTestAllResults()
                                     setIsTestAll(true)
@@ -472,6 +489,12 @@ export function ChannelTable() {
                     />
                 </div>
             </Card>
+
+            {/* 默认模型管理对话框 */}
+            <DefaultModelsDialog
+                open={defaultModelsDialogOpen}
+                onOpenChange={setDefaultModelsDialogOpen}
+            />
 
             {/* 渠道对话框 */}
             <ChannelDialog

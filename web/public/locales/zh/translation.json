@@ -646,9 +646,25 @@
       "priority": "优先级",
       "priorityPlaceholder": "1-100，默认10",
       "priorityHelp": "数值越小优先级越高，默认为10",
+      "useDefaultModels": "使用默认模型",
+      "customModels": "自定义模型",
+      "defaultModelsHint": "默认模型来自渠道类型配置，切换到自定义模型可覆盖",
+      "defaultModelsEmpty": "该渠道类型未配置默认模型，请自定义选择",
+      "switchToCustomConfirm": "切换到自定义模型将使用默认模型作为初始值，你可以在此基础上修改",
+      "defaultModelMapping": "默认模型映射",
       "create": "创建",
       "update": "更新",
       "submitting": "提交中..."
+    },
+    "usingDefaults": "默认",
+    "defaultModels": {
+      "title": "默认模型管理",
+      "description": "配置各渠道类型的默认模型，新建渠道时可自动使用",
+      "manage": "默认模型",
+      "add": "添加",
+      "empty": "尚未配置任何渠道类型的默认模型",
+      "mappingCount": "个映射",
+      "backToList": "返回列表"
     },
     "deleteDialog": {
       "confirmTitle": "删除渠道",

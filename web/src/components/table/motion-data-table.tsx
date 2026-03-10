@@ -106,15 +106,12 @@ export function DataTable<TData, TValue>({
         return `${tableRows[0].id}-${tableRows[tableRowCount - 1].id}-${tableRowCount}`
     }, [tableRows, tableRowCount])
 
-    // 数据变化时重置已显示行集合
+    // 数据变化时重置已显示行集合并重建 IntersectionObserver
+    // 必须在同一个 effect 中完成，否则 observer 不会重新触发已在视口中的元素
     useEffect(() => {
         if (!animatedRows) return
-        setInViewRows(new Set())
-    }, [dataKey, animatedRows])
 
-    // 创建并维护 IntersectionObserver（仅创建一次）
-    useEffect(() => {
-        if (!animatedRows) return
+        setInViewRows(new Set())
 
         observerRef.current = new IntersectionObserver(
             (entries) => {
@@ -142,7 +139,7 @@ export function DataTable<TData, TValue>({
             observerRef.current?.disconnect()
             observerRef.current = null
         }
-    }, [animatedRows])
+    }, [dataKey, animatedRows])
 
     // 当行 DOM 元素挂载时，通过 ref callback 注册观察
     const observeRow = (el: HTMLElement | null, rowIndex: number) => {
