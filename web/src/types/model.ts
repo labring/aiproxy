@@ -16,6 +16,7 @@ export interface PriceCondition {
     output_token_max?: number
     start_time?: number
     end_time?: number
+    service_tier?: '' | 'auto' | 'default' | 'flex' | 'scale' | 'priority'
 }
 
 export interface ConditionalPrice {
@@ -62,6 +63,8 @@ export interface ModelConfig {
     timeout?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
     plugin: Plugin
 }
 
@@ -138,6 +141,8 @@ export interface ModelCreateRequest {
     timeout?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
     price?: ModelPrice | Record<string, unknown>
     plugin?: Plugin
 }

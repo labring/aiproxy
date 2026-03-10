@@ -106,7 +106,9 @@ func ResponseHandler(
 
 	// Calculate usage
 	if response.Usage != nil {
-		return adaptor.DoResponseResult{Usage: response.Usage.ToModelUsage()}, nil
+		usage := response.Usage.ToModelUsage()
+
+		return adaptor.DoResponseResult{Usage: usage}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil

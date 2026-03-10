@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -18,40 +17,8 @@ import (
 // SummarySelectFields is a list of field names to select when querying summary data
 type SummarySelectFields []string
 
-// allSummaryFields contains all available summary field names
-var allSummaryFields = []string{
-	// Count fields
-	"request_count",
-	"retry_count",
-	"exception_count",
-	"status2xx_count",
-	"status4xx_count",
-	"status5xx_count",
-	"status_other_count",
-	"status400_count",
-	"status429_count",
-	"status500_count",
-	"cache_hit_count",
-	"cache_creation_count",
-	// Usage fields
-	"input_tokens",
-	"image_input_tokens",
-	"audio_input_tokens",
-	"output_tokens",
-	"image_output_tokens",
-	"cached_tokens",
-	"cache_creation_tokens",
-	"total_tokens",
-	"web_search_count",
-	// Other fields
-	"used_amount",
-	"total_time_milliseconds",
-	"total_ttfb_milliseconds",
-}
-
-// summaryFieldGroups maps group names to their fields
-var summaryFieldGroups = map[string][]string{
-	"count": {
+var (
+	baseCountSummaryFields = []string{
 		"request_count",
 		"retry_count",
 		"exception_count",
@@ -64,14 +31,154 @@ var summaryFieldGroups = map[string][]string{
 		"status500_count",
 		"cache_hit_count",
 		"cache_creation_count",
-	},
-	"usage": {
-		"input_tokens", "image_input_tokens", "audio_input_tokens",
-		"output_tokens", "image_output_tokens", "cached_tokens",
-		"cache_creation_tokens", "total_tokens", "web_search_count",
-	},
-	"time": {"total_time_milliseconds", "total_ttfb_milliseconds"},
+	}
+	baseUsageSummaryFields = []string{
+		"input_tokens",
+		"image_input_tokens",
+		"audio_input_tokens",
+		"output_tokens",
+		"image_output_tokens",
+		"cached_tokens",
+		"cache_creation_tokens",
+		"total_tokens",
+		"web_search_count",
+	}
+	baseAmountSummaryFields = []string{
+		"input_amount",
+		"image_input_amount",
+		"audio_input_amount",
+		"output_amount",
+		"image_output_amount",
+		"cached_amount",
+		"cache_creation_amount",
+		"web_search_amount",
+		"used_amount",
+	}
+	baseTimeSummaryFields = []string{
+		"total_time_milliseconds",
+		"total_ttfb_milliseconds",
+	}
+	serviceTierPrefixes = []string{
+		"service_tier_flex",
+		"service_tier_priority",
+	}
+	extraSummaryPrefixes = []string{
+		"claude_long_context",
+	}
+)
+
+func buildPrefixedSummaryFields(prefix string, fields []string) []string {
+	result := make([]string, 0, len(fields))
+	for _, field := range fields {
+		result = append(result, prefix+"_"+field)
+	}
+
+	return result
 }
+
+func concatSummaryFields(groups ...[]string) []string {
+	var totalLen int
+	for _, group := range groups {
+		totalLen += len(group)
+	}
+
+	result := make([]string, 0, totalLen)
+	for _, group := range groups {
+		result = append(result, group...)
+	}
+
+	return result
+}
+
+// allSummaryFields contains all available summary field names
+var allSummaryFields = func() []string {
+	countFields := append([]string{}, baseCountSummaryFields...)
+	usageFields := append([]string{}, baseUsageSummaryFields...)
+	amountFields := append([]string{}, baseAmountSummaryFields...)
+	timeFields := append([]string{}, baseTimeSummaryFields...)
+
+	for _, prefix := range serviceTierPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
+	for _, prefix := range extraSummaryPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
+	return concatSummaryFields(
+		countFields,
+		usageFields,
+		amountFields,
+		timeFields,
+	)
+}()
+
+// summaryFieldGroups maps group names to their fields
+var summaryFieldGroups = func() map[string][]string {
+	countFields := append([]string{}, baseCountSummaryFields...)
+	usageFields := append([]string{}, baseUsageSummaryFields...)
+	amountFields := append([]string{}, baseAmountSummaryFields...)
+	timeFields := append([]string{}, baseTimeSummaryFields...)
+
+	for _, prefix := range serviceTierPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
+	for _, prefix := range extraSummaryPrefixes {
+		countFields = append(
+			countFields,
+			buildPrefixedSummaryFields(prefix, baseCountSummaryFields)...)
+		usageFields = append(
+			usageFields,
+			buildPrefixedSummaryFields(prefix, baseUsageSummaryFields)...)
+		amountFields = append(
+			amountFields,
+			buildPrefixedSummaryFields(prefix, baseAmountSummaryFields)...)
+		timeFields = append(
+			timeFields,
+			buildPrefixedSummaryFields(prefix, baseTimeSummaryFields)...)
+	}
+
+	return map[string][]string{
+		"count":  countFields,
+		"usage":  usageFields,
+		"amount": amountFields,
+		"time":   timeFields,
+	}
+}()
 
 // summaryFieldAliases maps alternative field names to canonical names
 var summaryFieldAliases = map[string]string{
@@ -232,17 +339,17 @@ type SummaryUnique struct {
 
 type Count struct {
 	RequestCount       int64         `json:"request_count"`
-	RetryCount         ZeroNullInt64 `json:"retry_count"`
-	ExceptionCount     ZeroNullInt64 `json:"exception_count"`
-	Status2xxCount     ZeroNullInt64 `json:"status_2xx_count"`
-	Status4xxCount     ZeroNullInt64 `json:"status_4xx_count"`
-	Status5xxCount     ZeroNullInt64 `json:"status_5xx_count"`
-	StatusOtherCount   ZeroNullInt64 `json:"status_other_count"`
-	Status400Count     ZeroNullInt64 `json:"status_400_count"`
-	Status429Count     ZeroNullInt64 `json:"status_429_count"`
-	Status500Count     ZeroNullInt64 `json:"status_500_count"`
-	CacheHitCount      ZeroNullInt64 `json:"cache_hit_count"`
-	CacheCreationCount ZeroNullInt64 `json:"cache_creation_count"`
+	RetryCount         ZeroNullInt64 `json:"retry_count,omitempty"`
+	ExceptionCount     ZeroNullInt64 `json:"exception_count,omitempty"`
+	Status2xxCount     ZeroNullInt64 `json:"status_2xx_count,omitempty"`
+	Status4xxCount     ZeroNullInt64 `json:"status_4xx_count,omitempty"`
+	Status5xxCount     ZeroNullInt64 `json:"status_5xx_count,omitempty"`
+	StatusOtherCount   ZeroNullInt64 `json:"status_other_count,omitempty"`
+	Status400Count     ZeroNullInt64 `json:"status_400_count,omitempty"`
+	Status429Count     ZeroNullInt64 `json:"status_429_count,omitempty"`
+	Status500Count     ZeroNullInt64 `json:"status_500_count,omitempty"`
+	CacheHitCount      ZeroNullInt64 `json:"cache_hit_count,omitempty"`
+	CacheCreationCount ZeroNullInt64 `json:"cache_creation_count,omitempty"`
 }
 
 func (c *Count) AddRequest(status int, isRetry bool) {
@@ -293,86 +400,220 @@ func (c *Count) Add(other Count) {
 	c.CacheCreationCount += other.CacheCreationCount
 }
 
-type SummaryData struct {
-	Count
-	Usage
-
-	UsedAmount float64 `json:"used_amount"`
-
+type SummaryDataSet struct {
+	Count                 `      json:",inline"                           gorm:"embedded"`
+	Usage                 `      json:",inline"                           gorm:"embedded"`
+	Amount                `      json:",inline"                           gorm:"embedded"`
 	TotalTimeMilliseconds int64 `json:"total_time_milliseconds,omitempty"`
 	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds,omitempty"`
+}
+
+func (s *SummaryDataSet) Add(other SummaryDataSet) {
+	s.Count.Add(other.Count)
+	s.Usage.Add(other.Usage)
+	s.Amount.Add(other.Amount)
+	s.TotalTimeMilliseconds += other.TotalTimeMilliseconds
+	s.TotalTTFBMilliseconds += other.TotalTTFBMilliseconds
+}
+
+type SummaryData struct {
+	SummaryDataSet
+	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
+	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
+}
+
+const ClaudeLongContextInputTokensThreshold = int64(200000)
+
+func (d *SummaryData) AddServiceTierBreakdown(
+	serviceTier string,
+	usage Usage,
+	amount Amount,
+	isRetry bool,
+	status int,
+) {
+	switch normalizeSummaryServiceTier(serviceTier) {
+	case "flex":
+		d.ServiceTierFlex.AddRequest(status, isRetry)
+
+		if usage.CachedTokens > 0 {
+			d.ServiceTierFlex.CacheHitCount++
+		}
+
+		if usage.CacheCreationTokens > 0 {
+			d.ServiceTierFlex.CacheCreationCount++
+		}
+
+		d.ServiceTierFlex.Usage.Add(usage)
+		d.ServiceTierFlex.Amount.Add(amount)
+	case "priority":
+		d.ServiceTierPriority.AddRequest(status, isRetry)
+
+		if usage.CachedTokens > 0 {
+			d.ServiceTierPriority.CacheHitCount++
+		}
+
+		if usage.CacheCreationTokens > 0 {
+			d.ServiceTierPriority.CacheCreationCount++
+		}
+
+		d.ServiceTierPriority.Usage.Add(usage)
+		d.ServiceTierPriority.Amount.Add(amount)
+	}
+}
+
+func (d *SummaryData) Add(other SummaryData) {
+	d.SummaryDataSet.Add(other.SummaryDataSet)
+	d.ServiceTierFlex.Add(other.ServiceTierFlex)
+	d.ServiceTierPriority.Add(other.ServiceTierPriority)
+	d.ClaudeLongContext.Add(other.ClaudeLongContext)
+}
+
+func IsClaudeLongContextSummary(modelName string, usage Usage) bool {
+	return strings.Contains(strings.ToLower(modelName), "claude") &&
+		int64(usage.InputTokens) > ClaudeLongContextInputTokensThreshold
+}
+
+func (d *SummaryData) AddClaudeLongContextBreakdown(
+	usage Usage,
+	amount Amount,
+	isRetry bool,
+	status int,
+) {
+	d.ClaudeLongContext.AddRequest(status, isRetry)
+
+	if usage.CachedTokens > 0 {
+		d.ClaudeLongContext.CacheHitCount++
+	}
+
+	if usage.CacheCreationTokens > 0 {
+		d.ClaudeLongContext.CacheCreationCount++
+	}
+
+	d.ClaudeLongContext.Usage.Add(usage)
+	d.ClaudeLongContext.Amount.Add(amount)
+}
+
+func normalizeSummaryServiceTier(serviceTier string) string {
+	switch normalizeServiceTier(serviceTier) {
+	case "", "auto", "default", "standard":
+		return "standard"
+	case "flex":
+		return "flex"
+	case "priority":
+		return "priority"
+	default:
+		return "standard"
+	}
+}
+
+func appendSummaryCountUpdateData(
+	data map[string]any,
+	tableName, prefix string,
+	count Count,
+) {
+	fields := []struct {
+		column string
+		value  int64
+	}{
+		{column: "request_count", value: count.RequestCount},
+		{column: "retry_count", value: int64(count.RetryCount)},
+		{column: "exception_count", value: int64(count.ExceptionCount)},
+		{column: "status2xx_count", value: int64(count.Status2xxCount)},
+		{column: "status4xx_count", value: int64(count.Status4xxCount)},
+		{column: "status5xx_count", value: int64(count.Status5xxCount)},
+		{column: "status_other_count", value: int64(count.StatusOtherCount)},
+		{column: "status400_count", value: int64(count.Status400Count)},
+		{column: "status429_count", value: int64(count.Status429Count)},
+		{column: "status500_count", value: int64(count.Status500Count)},
+		{column: "cache_hit_count", value: int64(count.CacheHitCount)},
+		{column: "cache_creation_count", value: int64(count.CacheCreationCount)},
+	}
+
+	for _, field := range fields {
+		if field.value <= 0 {
+			continue
+		}
+
+		columnName := prefix + field.column
+		data[columnName] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.%s, 0) + ?", tableName, columnName),
+			field.value,
+		)
+	}
+}
+
+func appendSummaryUsageUpdateData(
+	data map[string]any,
+	tableName, prefix string,
+	usage Usage,
+) {
+	fields := []struct {
+		column string
+		value  int64
+	}{
+		{column: "input_tokens", value: int64(usage.InputTokens)},
+		{column: "image_input_tokens", value: int64(usage.ImageInputTokens)},
+		{column: "audio_input_tokens", value: int64(usage.AudioInputTokens)},
+		{column: "output_tokens", value: int64(usage.OutputTokens)},
+		{column: "image_output_tokens", value: int64(usage.ImageOutputTokens)},
+		{column: "cached_tokens", value: int64(usage.CachedTokens)},
+		{column: "cache_creation_tokens", value: int64(usage.CacheCreationTokens)},
+		{column: "total_tokens", value: int64(usage.TotalTokens)},
+		{column: "web_search_count", value: int64(usage.WebSearchCount)},
+	}
+
+	for _, field := range fields {
+		if field.value <= 0 {
+			continue
+		}
+
+		columnName := prefix + field.column
+		data[columnName] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.%s, 0) + ?", tableName, columnName),
+			field.value,
+		)
+	}
+}
+
+func appendSummaryAmountUpdateData(
+	data map[string]any,
+	tableName, prefix string,
+	amount Amount,
+) {
+	fields := []struct {
+		column string
+		value  float64
+	}{
+		{column: "input_amount", value: amount.InputAmount},
+		{column: "image_input_amount", value: amount.ImageInputAmount},
+		{column: "audio_input_amount", value: amount.AudioInputAmount},
+		{column: "output_amount", value: amount.OutputAmount},
+		{column: "image_output_amount", value: amount.ImageOutputAmount},
+		{column: "cached_amount", value: amount.CachedAmount},
+		{column: "cache_creation_amount", value: amount.CacheCreationAmount},
+		{column: "web_search_amount", value: amount.WebSearchAmount},
+		{column: "used_amount", value: amount.UsedAmount},
+	}
+
+	for _, field := range fields {
+		if field.value <= 0 {
+			continue
+		}
+
+		columnName := prefix + field.column
+		data[columnName] = gorm.Expr(
+			fmt.Sprintf("COALESCE(%s.%s, 0) + ?", tableName, columnName),
+			field.value,
+		)
+	}
 }
 
 func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 	data := map[string]any{}
 
-	if d.UsedAmount > 0 {
-		data["used_amount"] = gorm.Expr(tableName+".used_amount + ?", d.UsedAmount)
-	}
-
-	if d.RequestCount > 0 {
-		data["request_count"] = gorm.Expr(tableName+".request_count + ?", d.RequestCount)
-	}
-
-	if d.RetryCount > 0 {
-		data["retry_count"] = gorm.Expr(tableName+".retry_count + ?", d.RetryCount)
-	}
-
-	if d.ExceptionCount > 0 {
-		data["exception_count"] = gorm.Expr(
-			tableName+".exception_count + ?",
-			d.ExceptionCount,
-		)
-	}
-
-	if d.Status2xxCount > 0 {
-		data["status2xx_count"] = gorm.Expr(
-			tableName+".status2xx_count + ?",
-			d.Status2xxCount,
-		)
-	}
-
-	if d.Status4xxCount > 0 {
-		data["status4xx_count"] = gorm.Expr(
-			tableName+".status4xx_count + ?",
-			d.Status4xxCount,
-		)
-	}
-
-	if d.Status5xxCount > 0 {
-		data["status5xx_count"] = gorm.Expr(
-			tableName+".status5xx_count + ?",
-			d.Status5xxCount,
-		)
-	}
-
-	if d.StatusOtherCount > 0 {
-		data["status_other_count"] = gorm.Expr(
-			tableName+".status_other_count + ?",
-			d.StatusOtherCount,
-		)
-	}
-
-	if d.Status400Count > 0 {
-		data["status400_count"] = gorm.Expr(
-			tableName+".status400_count + ?",
-			d.Status400Count,
-		)
-	}
-
-	if d.Status429Count > 0 {
-		data["status429_count"] = gorm.Expr(
-			tableName+".status429_count + ?",
-			d.Status429Count,
-		)
-	}
-
-	if d.Status500Count > 0 {
-		data["status500_count"] = gorm.Expr(
-			tableName+".status500_count + ?",
-			d.Status500Count,
-		)
-	}
+	appendSummaryAmountUpdateData(data, tableName, "", d.Amount)
+	appendSummaryCountUpdateData(data, tableName, "", d.Count)
 
 	if d.TotalTimeMilliseconds > 0 {
 		data["total_time_milliseconds"] = gorm.Expr(
@@ -388,81 +629,78 @@ func (d *SummaryData) buildUpdateData(tableName string) map[string]any {
 		)
 	}
 
-	// usage update
-	if d.InputTokens > 0 {
-		data["input_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.input_tokens, 0) + ?", tableName),
-			d.InputTokens,
+	appendSummaryUsageUpdateData(data, tableName, "", d.Usage)
+	appendSummaryCountUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Count)
+	appendSummaryUsageUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Usage)
+	appendSummaryAmountUpdateData(data, tableName, "service_tier_flex_", d.ServiceTierFlex.Amount)
+
+	if d.ServiceTierFlex.TotalTimeMilliseconds > 0 {
+		data["service_tier_flex_total_time_milliseconds"] = gorm.Expr(
+			tableName+".service_tier_flex_total_time_milliseconds + ?",
+			d.ServiceTierFlex.TotalTimeMilliseconds,
 		)
 	}
 
-	if d.ImageInputTokens > 0 {
-		data["image_input_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.image_input_tokens, 0) + ?", tableName),
-			d.ImageInputTokens,
+	if d.ServiceTierFlex.TotalTTFBMilliseconds > 0 {
+		data["service_tier_flex_total_ttfb_milliseconds"] = gorm.Expr(
+			tableName+".service_tier_flex_total_ttfb_milliseconds + ?",
+			d.ServiceTierFlex.TotalTTFBMilliseconds,
 		)
 	}
 
-	if d.AudioInputTokens > 0 {
-		data["audio_input_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.audio_input_tokens, 0) + ?", tableName),
-			d.AudioInputTokens,
+	appendSummaryCountUpdateData(
+		data,
+		tableName,
+		"service_tier_priority_",
+		d.ServiceTierPriority.Count,
+	)
+	appendSummaryUsageUpdateData(
+		data,
+		tableName,
+		"service_tier_priority_",
+		d.ServiceTierPriority.Usage,
+	)
+	appendSummaryAmountUpdateData(
+		data,
+		tableName,
+		"service_tier_priority_",
+		d.ServiceTierPriority.Amount,
+	)
+
+	if d.ServiceTierPriority.TotalTimeMilliseconds > 0 {
+		data["service_tier_priority_total_time_milliseconds"] = gorm.Expr(
+			tableName+".service_tier_priority_total_time_milliseconds + ?",
+			d.ServiceTierPriority.TotalTimeMilliseconds,
 		)
 	}
 
-	if d.OutputTokens > 0 {
-		data["output_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.output_tokens, 0) + ?", tableName),
-			d.OutputTokens,
+	if d.ServiceTierPriority.TotalTTFBMilliseconds > 0 {
+		data["service_tier_priority_total_ttfb_milliseconds"] = gorm.Expr(
+			tableName+".service_tier_priority_total_ttfb_milliseconds + ?",
+			d.ServiceTierPriority.TotalTTFBMilliseconds,
 		)
 	}
 
-	if d.ImageOutputTokens > 0 {
-		data["image_output_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.image_output_tokens, 0) + ?", tableName),
-			d.ImageOutputTokens,
+	appendSummaryCountUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Count)
+	appendSummaryUsageUpdateData(data, tableName, "claude_long_context_", d.ClaudeLongContext.Usage)
+	appendSummaryAmountUpdateData(
+		data,
+		tableName,
+		"claude_long_context_",
+		d.ClaudeLongContext.Amount,
+	)
+
+	if d.ClaudeLongContext.TotalTimeMilliseconds > 0 {
+		data["claude_long_context_total_time_milliseconds"] = gorm.Expr(
+			tableName+".claude_long_context_total_time_milliseconds + ?",
+			d.ClaudeLongContext.TotalTimeMilliseconds,
 		)
 	}
 
-	if d.TotalTokens > 0 {
-		data["total_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.total_tokens, 0) + ?", tableName),
-			d.TotalTokens,
-		)
-	}
-
-	if d.CachedTokens > 0 {
-		data["cached_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.cached_tokens, 0) + ?", tableName),
-			d.CachedTokens,
-		)
-	}
-
-	if d.CacheCreationTokens > 0 {
-		data["cache_creation_tokens"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.cache_creation_tokens, 0) + ?", tableName),
-			d.CacheCreationTokens,
-		)
-	}
-
-	if d.WebSearchCount > 0 {
-		data["web_search_count"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.web_search_count, 0) + ?", tableName),
-			d.WebSearchCount,
-		)
-	}
-
-	if d.CacheHitCount > 0 {
-		data["cache_hit_count"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.cache_hit_count, 0) + ?", tableName),
-			d.CacheHitCount,
-		)
-	}
-
-	if d.CacheCreationCount > 0 {
-		data["cache_creation_count"] = gorm.Expr(
-			fmt.Sprintf("COALESCE(%s.cache_creation_count, 0) + ?", tableName),
-			d.CacheCreationCount,
+	if d.ClaudeLongContext.TotalTTFBMilliseconds > 0 {
+		data["claude_long_context_total_ttfb_milliseconds"] = gorm.Expr(
+			tableName+".claude_long_context_total_ttfb_milliseconds + ?",
+			d.ClaudeLongContext.TotalTTFBMilliseconds,
 		)
 	}
 
@@ -807,20 +1045,15 @@ func getGroupLogGroupByValues[T cmp.Ordered](
 }
 
 type ChartData struct {
-	Timestamp  int64   `json:"timestamp"`
-	UsedAmount float64 `json:"used_amount"`
-
-	TotalTimeMilliseconds int64 `json:"total_time_milliseconds"`
-	TotalTTFBMilliseconds int64 `json:"total_ttfb_milliseconds"`
-
-	Count
-	Usage
+	Timestamp int64 `json:"timestamp"`
+	SummaryDataSet
+	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
+	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 }
 
 type DashboardResponse struct {
-	ChartData             []ChartData `json:"chart_data"`
-	TotalTimeMilliseconds int64       `json:"total_time_milliseconds"`
-	TotalTTFBMilliseconds int64       `json:"total_ttfb_milliseconds"`
+	ChartData []ChartData `json:"chart_data"`
 
 	RPM int64 `json:"rpm"`
 	TPM int64 `json:"tpm"`
@@ -828,11 +1061,11 @@ type DashboardResponse struct {
 	MaxRPM int64 `json:"max_rpm"`
 	MaxTPM int64 `json:"max_tpm"`
 
-	UsedAmount float64 `json:"used_amount"`
-
 	TotalCount int64 `json:"total_count"` // use Count.RequestCount instead
-	Count
-	Usage
+	SummaryDataSet
+	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
+	ServiceTierPriority SummaryDataSet `json:"service_tier_priority,omitempty" gorm:"embedded;embeddedPrefix:service_tier_priority_"`
+	ClaudeLongContext   SummaryDataSet `json:"claude_long_context,omitempty"   gorm:"embedded;embeddedPrefix:claude_long_context_"`
 
 	Channels []int    `json:"channels,omitempty"`
 	Models   []string `json:"models,omitempty"`
@@ -899,15 +1132,9 @@ func aggregateDataToSpan(
 			}
 		}
 
-		currentData.Count.Add(data.Count)
-		currentData.Usage.Add(data.Usage)
-
-		currentData.TotalTimeMilliseconds += data.TotalTimeMilliseconds
-		currentData.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
-		currentData.UsedAmount = decimal.
-			NewFromFloat(currentData.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
+		currentData.Add(data.SummaryDataSet)
+		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
+		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
 
 		dataMap[timestamp] = currentData
 	}
@@ -925,23 +1152,12 @@ func sumDashboardResponse(chartData []ChartData) DashboardResponse {
 		ChartData: chartData,
 	}
 
-	usedAmount := decimal.NewFromFloat(0)
 	for _, data := range chartData {
-		dashboardResponse.Count.Add(data.Count)
+		dashboardResponse.Add(data.SummaryDataSet)
 		dashboardResponse.TotalCount = dashboardResponse.RequestCount
-
-		dashboardResponse.Usage.Add(data.Usage)
-
-		dashboardResponse.TotalTimeMilliseconds += data.TotalTimeMilliseconds
-		dashboardResponse.TotalTTFBMilliseconds += data.TotalTTFBMilliseconds
-		usedAmount = usedAmount.Add(decimal.NewFromFloat(data.UsedAmount))
-		dashboardResponse.UsedAmount = decimal.
-			NewFromFloat(dashboardResponse.UsedAmount).
-			Add(decimal.NewFromFloat(data.UsedAmount)).
-			InexactFloat64()
+		dashboardResponse.ServiceTierFlex.Add(data.ServiceTierFlex)
+		dashboardResponse.ServiceTierPriority.Add(data.ServiceTierPriority)
 	}
-
-	dashboardResponse.UsedAmount = usedAmount.InexactFloat64()
 
 	return dashboardResponse
 }

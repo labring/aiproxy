@@ -62,6 +62,12 @@ export const modelApi = {
     return;
   },
 
+  // Batch save model configs (for import)
+  saveModels: async (configs: ModelCreateRequest[]): Promise<void> => {
+    await post("model_configs/", configs);
+    return;
+  },
+
   getDefaultModelsByType: async (type: number): Promise<DefaultModelsResponse> => {
     const response = await get<DefaultModelsResponse>(`models/default/${type}`);
     return response;

@@ -246,6 +246,7 @@ type Response struct {
 	TopP               float64            `json:"top_p"`
 	Truncation         string             `json:"truncation"`
 	Usage              *ResponseUsage     `json:"usage"`
+	ServiceTier        *string            `json:"service_tier,omitempty"`
 	User               *string            `json:"user"`
 	Metadata           map[string]any     `json:"metadata"`
 }

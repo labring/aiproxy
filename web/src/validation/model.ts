@@ -77,6 +77,7 @@ const priceConditionSchema = z.object({
     output_token_max: z.number().optional(),
     start_time: z.number().optional(),
     end_time: z.number().optional(),
+    service_tier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).or(z.literal('')).optional(),
 })
 
 // Price schema (used for conditional prices)
@@ -139,6 +140,8 @@ export const modelCreateSchema = z.object({
     timeout: z.number().nonnegative('Timeout must be a non-negative number').optional(),
     max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
     force_save_detail: z.boolean().optional(),
+    summary_service_tier: z.boolean().optional(),
+    summary_claude_long_context: z.boolean().optional(),
     price: priceSchema,
     plugin: pluginSchema,
 })

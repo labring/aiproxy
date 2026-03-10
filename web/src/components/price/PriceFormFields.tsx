@@ -4,6 +4,13 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Plus, Trash2 } from 'lucide-react'
 import type { ModelPrice, ConditionalPrice, PriceCondition } from '@/types/model'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 
 interface PriceFormFieldsProps {
     price: ModelPrice
@@ -56,6 +63,8 @@ function ConditionFields({ condition, onChange }: {
     onChange: (c: PriceCondition) => void
 }) {
     const { t } = useTranslation()
+    const anyServiceTier = '__any__'
+
     return (
         <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
@@ -77,6 +86,28 @@ function ConditionFields({ condition, onChange }: {
                 <Label className="text-xs">{t('group.price.outputTokenMax')}</Label>
                 <Input type="number" min={0} value={condition.output_token_max || ''} className="h-8 text-sm"
                     onChange={(e) => onChange({ ...condition, output_token_max: parseInt(e.target.value) || 0 })} />
+            </div>
+            <div className="space-y-1 col-span-2">
+                <Label className="text-xs">{t('group.price.serviceTier')}</Label>
+                <Select
+                    value={condition.service_tier || anyServiceTier}
+                    onValueChange={(value) => onChange({
+                        ...condition,
+                        service_tier: (value === anyServiceTier ? '' : value) as PriceCondition['service_tier']
+                    })}
+                >
+                    <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder={t('group.price.serviceTierAny')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value={anyServiceTier}>{t('group.price.serviceTierAny')}</SelectItem>
+                        <SelectItem value="auto">auto</SelectItem>
+                        <SelectItem value="default">default</SelectItem>
+                        <SelectItem value="flex">flex</SelectItem>
+                        <SelectItem value="scale">scale</SelectItem>
+                        <SelectItem value="priority">priority</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
         </div>
     )

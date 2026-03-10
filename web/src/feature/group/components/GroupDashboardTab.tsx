@@ -5,7 +5,7 @@ import { BarChart3 } from 'lucide-react'
 import { useGroupDashboard } from '@/feature/monitor/hooks'
 import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
-import { GroupDashboardFilters } from './GroupDashboardFilters'
+import { GroupDashboardFilters, DataSourceMode } from './GroupDashboardFilters'
 import type { DashboardFilters } from '@/types/dashboard'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -32,8 +32,17 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
     }
 
     const [filters, setFilters] = useState<DashboardFilters & { tokenName?: string }>(getDefaultFilters())
+    const [dataSource, setDataSource] = useState<DataSourceMode>('total')
 
-    const { data, isLoading, error, refetch } = useGroupDashboard(groupId, filters)
+    // First fetch with total mode to get breakdown data availability
+    const { data: totalData } = useGroupDashboard(groupId, filters, 'total')
+
+    // Check if breakdown data exists (show selector if any breakdown data object exists)
+    const hasServiceTierData = totalData?.serviceTierFlex != undefined || totalData?.serviceTierPriority != undefined
+    const hasLongContextData = totalData?.claudeLongContext !== undefined
+
+    // Then fetch with actual selected dataSource
+    const { data, isLoading, error, refetch } = useGroupDashboard(groupId, filters, dataSource)
 
     // Preserve the full list of available token names and models across filter changes
     const availableTokenNamesRef = useRef<string[]>([])
@@ -59,6 +68,10 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
         setFilters(newFilters)
     }
 
+    const handleDataSourceChange = (newDataSource: DataSourceMode) => {
+        setDataSource(newDataSource)
+    }
+
     const hasData = (data?.chartData?.length ?? 0) > 0
 
     if (error) {
@@ -77,6 +90,11 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                 availableModels={data?.models ?? availableModelsRef.current}
                 availableTokenNames={data?.tokenNames ?? availableTokenNamesRef.current}
                 defaultTokenName={initialTokenName}
+                showDataSourceSelector={hasServiceTierData || hasLongContextData}
+                hasServiceTierData={hasServiceTierData}
+                hasLongContextData={hasLongContextData}
+                dataSource={dataSource}
+                onDataSourceChange={handleDataSourceChange}
             />
 
             {isLoading ? (

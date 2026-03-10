@@ -9,6 +9,194 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
+func TestParseSummaryFields_ServiceTierBreakdownFields(t *testing.T) {
+	got := model.ParseSummaryFields(
+		"service_tier_flex_request_count,service_tier_priority_used_amount,claude_long_context_total_tokens,count",
+	)
+	if got == nil {
+		t.Fatal("ParseSummaryFields returned nil")
+	}
+
+	wantContains := []string{
+		"request_count",
+		"service_tier_flex_request_count",
+		"service_tier_priority_used_amount",
+		"service_tier_priority_cache_hit_count",
+		"claude_long_context_total_tokens",
+		"claude_long_context_cache_hit_count",
+	}
+
+	for _, field := range wantContains {
+		if !slices.Contains(got, field) {
+			t.Fatalf("ParseSummaryFields result %v does not contain %q", got, field)
+		}
+	}
+
+	notWanted := []string{
+		"service_tier_auto_count",
+		"service_tier_scale_count",
+	}
+
+	for _, field := range notWanted {
+		if slices.Contains(got, field) {
+			t.Fatalf("ParseSummaryFields result %v should not contain %q", got, field)
+		}
+	}
+}
+
+func TestSummaryDataAddClaudeLongContextBreakdown(t *testing.T) {
+	usage := model.Usage{
+		InputTokens:         210000,
+		OutputTokens:        20,
+		TotalTokens:         210020,
+		CachedTokens:        100,
+		CacheCreationTokens: 200,
+	}
+	amount := model.Amount{
+		InputAmount:  1.5,
+		OutputAmount: 2.5,
+		UsedAmount:   4,
+	}
+
+	var data model.SummaryData
+	data.AddClaudeLongContextBreakdown(usage, amount, true, 429)
+
+	if got := data.ClaudeLongContext.RequestCount; got != 1 {
+		t.Fatalf("claude long context request count = %d, want 1", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.TotalTokens); got != 210020 {
+		t.Fatalf("claude long context total tokens = %d, want 210020", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.CacheHitCount); got != 1 {
+		t.Fatalf("claude long context cache hit count = %d, want 1", got)
+	}
+
+	if got := int64(data.ClaudeLongContext.CacheCreationCount); got != 1 {
+		t.Fatalf("claude long context cache creation count = %d, want 1", got)
+	}
+
+	if got := data.ClaudeLongContext.UsedAmount; got != 4 {
+		t.Fatalf("claude long context used amount = %v, want 4", got)
+	}
+}
+
+func TestIsClaudeLongContextSummary(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		usage    model.Usage
+		expected bool
+	}{
+		{
+			name:     "claude model over threshold",
+			model:    "claude-3-7-sonnet",
+			usage:    model.Usage{InputTokens: 200001},
+			expected: true,
+		},
+		{
+			name:     "claude model at threshold",
+			model:    "claude-3-7-sonnet",
+			usage:    model.Usage{InputTokens: 200000},
+			expected: false,
+		},
+		{
+			name:     "non claude model over threshold",
+			model:    "gpt-4.1",
+			usage:    model.Usage{InputTokens: 300000},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := model.IsClaudeLongContextSummary(tt.model, tt.usage)
+			if got != tt.expected {
+				t.Fatalf("IsClaudeLongContextSummary() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
+	usage := model.Usage{
+		InputTokens:  10,
+		OutputTokens: 20,
+		TotalTokens:  30,
+	}
+	amount := model.Amount{
+		InputAmount:  1.5,
+		OutputAmount: 2.5,
+		UsedAmount:   4,
+	}
+
+	tests := []struct {
+		name                 string
+		serviceTier          string
+		wantFlexCount        int64
+		wantPriorityCount    int64
+		wantFlexTotalTokens  int64
+		wantPriorityUsedCost float64
+	}{
+		{
+			name:                "flex tier tracked separately",
+			serviceTier:         "flex",
+			wantFlexCount:       1,
+			wantFlexTotalTokens: 30,
+		},
+		{
+			name:                 "priority tier tracked separately",
+			serviceTier:          "priority",
+			wantPriorityCount:    1,
+			wantPriorityUsedCost: 4,
+		},
+		{
+			name:        "auto maps to default total only",
+			serviceTier: "auto",
+		},
+		{
+			name:        "empty maps to default total only",
+			serviceTier: "",
+		},
+		{
+			name:        "default maps to default total only",
+			serviceTier: "default",
+		},
+		{
+			name:        "standard maps to default total only",
+			serviceTier: "standard",
+		},
+		{
+			name:        "scale ignored into default total only",
+			serviceTier: "scale",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var data model.SummaryData
+			data.AddServiceTierBreakdown(tt.serviceTier, usage, amount, true, 429)
+
+			if got := data.ServiceTierFlex.RequestCount; got != tt.wantFlexCount {
+				t.Fatalf("flex request count = %d, want %d", got, tt.wantFlexCount)
+			}
+
+			if got := data.ServiceTierPriority.RequestCount; got != tt.wantPriorityCount {
+				t.Fatalf("priority request count = %d, want %d", got, tt.wantPriorityCount)
+			}
+
+			if got := int64(data.ServiceTierFlex.TotalTokens); got != tt.wantFlexTotalTokens {
+				t.Fatalf("flex total tokens = %d, want %d", got, tt.wantFlexTotalTokens)
+			}
+
+			if got := data.ServiceTierPriority.UsedAmount; got != tt.wantPriorityUsedCost {
+				t.Fatalf("priority used amount = %v, want %v", got, tt.wantPriorityUsedCost)
+			}
+		})
+	}
+}
+
 func TestParseSummaryFields_EmptyInput(t *testing.T) {
 	tests := []struct {
 		name  string

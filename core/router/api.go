@@ -46,6 +46,12 @@ func SetAPIRouter(router *gin.Engine) {
 			dashboardV2Route.GET("/:group", controller.GetGroupTimeSeriesModelData)
 		}
 
+		dashboardV3Route := apiRouter.Group("/dashboardv3")
+		{
+			dashboardV3Route.GET("/", controller.GetTimeSeriesModelDataV3)
+			dashboardV3Route.GET("/:group", controller.GetGroupTimeSeriesModelDataV3)
+		}
+
 		groupsRoute := apiRouter.Group("/groups")
 		{
 			groupsRoute.GET("/", controller.GetGroups)

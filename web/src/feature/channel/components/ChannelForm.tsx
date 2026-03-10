@@ -169,7 +169,7 @@ export function ChannelForm({
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
-            priority: data.priority || 10
+            priority: data.priority
         }
 
         if (mode === 'create') {
@@ -723,7 +723,7 @@ export function ChannelForm({
                                         <FormControl>
                                             <Input
                                                 type="number"
-                                                min={1}
+                                                min={0}
                                                 max={1000000}
                                                 placeholder={t("channel.dialog.priorityPlaceholder")}
                                                 {...field}

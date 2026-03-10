@@ -35,7 +35,8 @@ type Meta struct {
 
 	RequestTimeout time.Duration
 
-	RequestUsage model.Usage
+	RequestUsage       model.Usage
+	RequestServiceTier string
 
 	JobID        string
 	GenerationID string

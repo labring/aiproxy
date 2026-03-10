@@ -17,15 +17,33 @@ import { DashboardFilters } from '@/types/dashboard'
 import { channelApi } from '@/api/channel'
 import { useChannelTypeMetas } from '@/feature/channel/hooks'
 
+export type DataSourceMode = 'total' | 'serviceTierFlex' | 'serviceTierPriority' | 'claudeLongContext'
+
 interface MonitorFiltersProps {
     onFiltersChange: (filters: DashboardFilters) => void
+    onDataSourceChange?: (dataSource: DataSourceMode) => void
     loading?: boolean
     availableModels?: string[]
     availableChannels?: number[]
     defaultChannel?: number
+    showDataSourceSelector?: boolean
+    hasServiceTierData?: boolean
+    hasLongContextData?: boolean
+    dataSource?: DataSourceMode
 }
 
-export function MonitorFilters({ onFiltersChange, loading = false, availableModels = [], availableChannels = [], defaultChannel }: MonitorFiltersProps) {
+export function MonitorFilters({
+    onFiltersChange,
+    onDataSourceChange,
+    loading = false,
+    availableModels = [],
+    availableChannels = [],
+    defaultChannel,
+    showDataSourceSelector = false,
+    hasServiceTierData = false,
+    hasLongContextData = false,
+    dataSource = 'total'
+}: MonitorFiltersProps) {
     const { t } = useTranslation()
     const { data: typeMetas } = useChannelTypeMetas()
 
@@ -146,6 +164,29 @@ export function MonitorFilters({ onFiltersChange, loading = false, availableMode
                                 {availableModels.map((m) => (
                                     <SelectItem key={m} value={m}>{m}</SelectItem>
                                 ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+
+                {/* Data Source Selector */}
+                {showDataSourceSelector && (
+                    <div className="w-36 flex-shrink-0">
+                        <Select value={dataSource} onValueChange={(value) => onDataSourceChange?.(value as DataSourceMode)} disabled={loading}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="total">{t('monitor.filters.dataSourceTotal')}</SelectItem>
+                                {hasServiceTierData && (
+                                    <>
+                                        <SelectItem value="serviceTierFlex">{t('monitor.filters.dataSourceFlex')}</SelectItem>
+                                        <SelectItem value="serviceTierPriority">{t('monitor.filters.dataSourcePriority')}</SelectItem>
+                                    </>
+                                )}
+                                {hasLongContextData && (
+                                    <SelectItem value="claudeLongContext">{t('monitor.filters.dataSourceLongContext')}</SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>

@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupModelConfigsTab.tsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
@@ -19,6 +19,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -28,7 +34,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCcw, Loader2, Search, Download, Upload, Copy, MoreHorizontal } from 'lucide-react'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { useGroupModelConfigs } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
@@ -50,14 +56,20 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
     retry_times: 0,
     override_force_save_detail: false,
     force_save_detail: false,
+    override_summary_service_tier: false,
+    summary_service_tier: false,
+    override_summary_claude_long_context: false,
+    summary_claude_long_context: false,
 })
 
 export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
     const { data: systemModels } = useModels()
     const [searchKeyword, setSearchKeyword] = useState('')
+    const [isImporting, setIsImporting] = useState(false)
 
     const filteredData = useMemo(() => {
         if (!data) return []
@@ -80,6 +92,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [editingConfig, setEditingConfig] = useState<GroupModelConfig | null>(null)
     const [deletingModel, setDeletingModel] = useState<string | null>(null)
     const [isCreating, setIsCreating] = useState(false)
+    const [isCopying, setIsCopying] = useState(false)
 
     // Form state
     const [formModel, setFormModel] = useState('')
@@ -90,6 +103,10 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [formRetryTimes, setFormRetryTimes] = useState(0)
     const [formOverrideForceSaveDetail, setFormOverrideForceSaveDetail] = useState(false)
     const [formForceSaveDetail, setFormForceSaveDetail] = useState(false)
+    const [formOverrideSummaryServiceTier, setFormOverrideSummaryServiceTier] = useState(false)
+    const [formSummaryServiceTier, setFormSummaryServiceTier] = useState(false)
+    const [formOverrideSummaryClaudeLongContext, setFormOverrideSummaryClaudeLongContext] = useState(false)
+    const [formSummaryClaudeLongContext, setFormSummaryClaudeLongContext] = useState(false)
     const [formOverridePrice, setFormOverridePrice] = useState(false)
     const [formPrice, setFormPrice] = useState<ModelPrice>({})
 
@@ -131,6 +148,10 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormRetryTimes(config.retry_times)
             setFormOverrideForceSaveDetail(config.override_force_save_detail)
             setFormForceSaveDetail(config.force_save_detail)
+            setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
+            setFormSummaryServiceTier(config.summary_service_tier)
+            setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
+            setFormSummaryClaudeLongContext(config.summary_claude_long_context)
             setFormOverridePrice(config.override_price)
             setFormPrice(config.price || {})
         } else {
@@ -143,6 +164,10 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormRetryTimes(defaults.retry_times!)
             setFormOverrideForceSaveDetail(defaults.override_force_save_detail!)
             setFormForceSaveDetail(defaults.force_save_detail!)
+            setFormOverrideSummaryServiceTier(defaults.override_summary_service_tier!)
+            setFormSummaryServiceTier(defaults.summary_service_tier!)
+            setFormOverrideSummaryClaudeLongContext(defaults.override_summary_claude_long_context!)
+            setFormSummaryClaudeLongContext(defaults.summary_claude_long_context!)
             setFormOverridePrice(false)
             setFormPrice({})
         }
@@ -150,6 +175,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
     const openCreateDialog = () => {
         setIsCreating(true)
+        setIsCopying(false)
         setEditingConfig(null)
         resetForm()
         setEditDialogOpen(true)
@@ -157,8 +183,31 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
     const openEditDialog = (config: GroupModelConfig) => {
         setIsCreating(false)
+        setIsCopying(false)
         setEditingConfig(config)
         resetForm(config)
+        setEditDialogOpen(true)
+    }
+
+    const openCopyDialog = (config: GroupModelConfig) => {
+        setIsCreating(true)
+        setIsCopying(true)
+        setEditingConfig(null)
+        // Reset form with copied data but clear model name
+        setFormModel('')
+        setFormOverrideLimit(config.override_limit)
+        setFormRpm(config.rpm)
+        setFormTpm(config.tpm)
+        setFormOverrideRetryTimes(config.override_retry_times)
+        setFormRetryTimes(config.retry_times)
+        setFormOverrideForceSaveDetail(config.override_force_save_detail)
+        setFormForceSaveDetail(config.force_save_detail)
+        setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
+        setFormSummaryServiceTier(config.summary_service_tier)
+        setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
+        setFormSummaryClaudeLongContext(config.summary_claude_long_context)
+        setFormOverridePrice(config.override_price)
+        setFormPrice(config.price || {})
         setEditDialogOpen(true)
     }
 
@@ -180,6 +229,10 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             retry_times: formRetryTimes,
             override_force_save_detail: formOverrideForceSaveDetail,
             force_save_detail: formForceSaveDetail,
+            override_summary_service_tier: formOverrideSummaryServiceTier,
+            summary_service_tier: formSummaryServiceTier,
+            override_summary_claude_long_context: formOverrideSummaryClaudeLongContext,
+            summary_claude_long_context: formSummaryClaudeLongContext,
             override_price: formOverridePrice,
             ...(formOverridePrice && { price: formPrice }),
         }
@@ -190,6 +243,81 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         setIsRefreshAnimating(true)
         refetch()
         setTimeout(() => setIsRefreshAnimating(false), 1000)
+    }
+
+    // Export group model configs to JSON file
+    const exportConfigs = () => {
+        if (!data || data.length === 0) {
+            toast.error(t('group.modelConfig.noDataToExport'))
+            return
+        }
+
+        const exportData = data.map(config => ({
+            model: config.model,
+            override_limit: config.override_limit,
+            rpm: config.rpm,
+            tpm: config.tpm,
+            override_retry_times: config.override_retry_times,
+            retry_times: config.retry_times,
+            override_force_save_detail: config.override_force_save_detail,
+            force_save_detail: config.force_save_detail,
+            override_summary_service_tier: config.override_summary_service_tier,
+            summary_service_tier: config.summary_service_tier,
+            override_summary_claude_long_context: config.override_summary_claude_long_context,
+            summary_claude_long_context: config.summary_claude_long_context,
+            override_price: config.override_price,
+            price: config.price,
+        }))
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+            type: 'application/json',
+        })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `group_${groupId}_model_configs_${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success(t('group.modelConfig.exportSuccess'))
+    }
+
+    // Import group model configs from JSON file
+    const importConfigs = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsImporting(true)
+        try {
+            const text = await file.text()
+            const configs: GroupModelConfigSaveRequest[] = JSON.parse(text)
+
+            if (!Array.isArray(configs)) {
+                throw new Error(t('group.modelConfig.invalidFormat'))
+            }
+
+            await groupApi.saveGroupModelConfigs(groupId, configs)
+            toast.success(t('group.modelConfig.importSuccess', { count: configs.length }))
+            queryClient.invalidateQueries({ queryKey: ['groupModelConfigs', groupId] })
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : t('group.modelConfig.importFailed')
+            )
+        } finally {
+            setIsImporting(false)
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+        }
+    }
+
+    // Trigger file input click
+    const triggerImport = () => {
+        fileInputRef.current?.click()
     }
 
     if (isLoading) {
@@ -228,6 +356,33 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             {t('group.refresh')}
                         </Button>
                         <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={exportConfigs}
+                            disabled={!data || data.length === 0}
+                            className="flex items-center gap-1.5 h-8"
+                        >
+                            <Download className="h-3.5 w-3.5" />
+                            {t('group.modelConfig.export')}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={triggerImport}
+                            disabled={isImporting}
+                            className="flex items-center gap-1.5 h-8"
+                        >
+                            <Upload className="h-3.5 w-3.5" />
+                            {isImporting ? t('group.modelConfig.importing') : t('group.modelConfig.import')}
+                        </Button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={importConfigs}
+                            className="hidden"
+                        />
+                        <Button
                             size="sm"
                             onClick={openCreateDialog}
                             className="flex items-center gap-1 h-8"
@@ -251,12 +406,18 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideRetryTimes')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.retryTimes')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.forceSaveDetail')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordServiceTier')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordClaudeLongContext')}</th>
                                     <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredData.map((config) => (
-                                    <tr key={config.model} className="border-t hover:bg-muted/50 transition-colors">
+                                    <tr
+                                        key={config.model}
+                                        className="border-t hover:bg-muted/50 transition-colors cursor-pointer"
+                                        onClick={() => openEditDialog(config)}
+                                    >
                                         <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
                                         <td className="px-4 py-3 text-sm">
                                             <Badge variant={config.override_limit ? 'default' : 'secondary'} className="text-xs">
@@ -284,31 +445,51 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                                 </Badge>
                                             ) : '-'}
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8"
-                                                    onClick={() => openEditDialog(config)}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-destructive hover:text-destructive"
-                                                    onClick={() => openDeleteDialog(config.model)}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
+                                        <td className="px-4 py-3 text-sm">
+                                            {config.override_summary_service_tier ? (
+                                                <Badge variant={config.summary_service_tier ? 'default' : 'secondary'} className="text-xs">
+                                                    {config.summary_service_tier ? t('common.yes') : t('common.no')}
+                                                </Badge>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            {config.override_summary_claude_long_context ? (
+                                                <Badge variant={config.summary_claude_long_context ? 'default' : 'secondary'} className="text-xs">
+                                                    {config.summary_claude_long_context ? t('common.yes') : t('common.no')}
+                                                </Badge>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => openEditDialog(config)}>
+                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                        {t('common.edit')}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openCopyDialog(config)}>
+                                                        <Copy className="mr-2 h-4 w-4" />
+                                                        {t('group.modelConfig.copyFrom')}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => openDeleteDialog(config.model)}
+                                                        className="text-destructive focus:text-destructive"
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        {t('common.delete')}
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </td>
                                     </tr>
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>
@@ -319,15 +500,15 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                 </div>
             </div>
 
-            {/* Edit / Create Dialog */}
+            {/* Edit / Create / Copy Dialog */}
             <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
                 <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
-                            {isCreating ? t('group.modelConfig.addTitle') : t('group.modelConfig.editTitle')}
+                            {isCopying ? t('group.modelConfig.copyTitle') : isCreating ? t('group.modelConfig.addTitle') : t('group.modelConfig.editTitle')}
                         </DialogTitle>
                         <DialogDescription>
-                            {isCreating ? t('group.modelConfig.addDescription') : t('group.modelConfig.editDescription')}
+                            {isCopying ? t('group.modelConfig.copyDescription') : isCreating ? t('group.modelConfig.addDescription') : t('group.modelConfig.editDescription')}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -419,6 +600,37 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             <div className="flex items-center gap-2 pl-4">
                                 <Label>{t('model.forceSaveDetail')}</Label>
                                 <Switch checked={formForceSaveDetail} onCheckedChange={setFormForceSaveDetail} />
+                            </div>
+                        )}
+
+                        {/* Override Record Service Tier */}
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideRecordServiceTier')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRecordServiceTierDesc')}</p>
+                            </div>
+                            <Switch checked={formOverrideSummaryServiceTier} onCheckedChange={setFormOverrideSummaryServiceTier} />
+                        </div>
+
+                        {formOverrideSummaryServiceTier && (
+                            <div className="flex items-center gap-2 pl-4">
+                                <Label>{t('model.recordServiceTier')}</Label>
+                                <Switch checked={formSummaryServiceTier} onCheckedChange={setFormSummaryServiceTier} />
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideRecordClaudeLongContext')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRecordClaudeLongContextDesc')}</p>
+                            </div>
+                            <Switch checked={formOverrideSummaryClaudeLongContext} onCheckedChange={setFormOverrideSummaryClaudeLongContext} />
+                        </div>
+
+                        {formOverrideSummaryClaudeLongContext && (
+                            <div className="flex items-center gap-2 pl-4">
+                                <Label>{t('model.recordClaudeLongContext')}</Label>
+                                <Switch checked={formSummaryClaudeLongContext} onCheckedChange={setFormSummaryClaudeLongContext} />
                             </div>
                         )}
 

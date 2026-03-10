@@ -987,6 +987,11 @@ func ConvertChatCompletionToResponsesRequest(
 		responsesReq.ToolChoice = chatReq.ToolChoice
 	}
 
+	// Map service tier
+	if chatReq.ServiceTier != "" {
+		responsesReq.ServiceTier = &chatReq.ServiceTier
+	}
+
 	// Map user
 	if chatReq.User != "" {
 		responsesReq.User = &chatReq.User
@@ -1057,6 +1062,7 @@ func ConvertResponsesToChatCompletionResponse(
 		Created: responsesResp.CreatedAt,
 		Model:   responsesResp.Model,
 		Choices: []*relaymodel.TextResponseChoice{},
+		Usage:   relaymodel.ChatUsage{},
 	}
 
 	// Convert output items to choices
@@ -1123,7 +1129,9 @@ func ConvertResponsesToChatCompletionResponse(
 	_, _ = c.Writer.Write(chatRespData)
 
 	if responsesResp.Usage != nil {
-		return adaptor.DoResponseResult{Usage: responsesResp.Usage.ToModelUsage()}, nil
+		usage := responsesResp.Usage.ToModelUsage()
+
+		return adaptor.DoResponseResult{Usage: usage}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil

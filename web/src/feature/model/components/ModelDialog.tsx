@@ -38,10 +38,10 @@ export function ModelDialog({
         ? t("model.dialog.createDescription")
         : t("model.dialog.updateDescription")
 
-    // Default values for form
-    const defaultValues = mode === 'update' && model
+    // Default values for form - use model data if available (for both update and copy)
+    const defaultValues = model
         ? {
-            model: model.model,
+            model: mode === 'create' ? '' : model.model, // Clear model name for copy mode
             type: model.type,
             rpm: model.rpm,
             tpm: model.tpm,
@@ -49,6 +49,8 @@ export function ModelDialog({
             timeout: model.timeout,
             max_error_rate: model.max_error_rate,
             force_save_detail: model.force_save_detail,
+            summary_service_tier: model.summary_service_tier ?? false,
+            summary_claude_long_context: model.summary_claude_long_context ?? false,
             price: model.price,
             plugin: model.plugin
         }

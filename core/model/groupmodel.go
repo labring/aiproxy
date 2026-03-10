@@ -29,6 +29,12 @@ type GroupModelConfig struct {
 
 	OverrideForceSaveDetail bool `json:"override_force_save_detail"`
 	ForceSaveDetail         bool `json:"force_save_detail"`
+
+	OverrideSummaryServiceTier bool `json:"override_summary_service_tier"`
+	SummaryServiceTier         bool `json:"summary_service_tier"`
+
+	OverrideSummaryClaudeLongContext bool `json:"override_summary_claude_long_context"`
+	SummaryClaudeLongContext         bool `json:"summary_claude_long_context"`
 }
 
 func (g *GroupModelConfig) BeforeSave(_ *gorm.DB) (err error) {

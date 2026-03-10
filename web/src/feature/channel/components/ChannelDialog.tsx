@@ -40,10 +40,11 @@ export function ChannelDialog({
         : t("channel.dialog.updateDescription")
 
     // Default values for form - memoized to avoid new object reference every render
-    const defaultValues = useMemo(() => mode === 'update' && channel
+    // Use channel data if available (for both update and copy)
+    const defaultValues = useMemo(() => channel
         ? {
             type: channel.type,
-            name: channel.name,
+            name: mode === 'create' ? '' : channel.name, // Clear name for copy mode
             key: channel.key,
             base_url: channel.base_url,
             models: channel.models || [],

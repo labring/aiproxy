@@ -17,13 +17,22 @@ func recordConsume(
 	content string,
 	ip string,
 	requestDetail *model.RequestDetail,
-	amount float64,
+	amount model.Amount,
 	retryTimes int,
 	downstreamResult bool,
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
 ) error {
+	summaryServiceTier := serviceTier
+	if !meta.ModelConfig.ShouldSummaryServiceTier() {
+		summaryServiceTier = ""
+	}
+
+	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
+		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
+
 	return model.BatchRecordLogs(
 		now,
 		meta.RequestID,
@@ -49,6 +58,9 @@ func recordConsume(
 		user,
 		metadata,
 		upstreamID,
+		serviceTier,
+		summaryServiceTier,
+		summaryClaudeLongContext,
 	)
 }
 
@@ -58,9 +70,17 @@ func recordSummary(
 	code int,
 	firstByteAt time.Time,
 	usage model.Usage,
-	amount float64,
+	amount model.Amount,
 	downstreamResult bool,
+	serviceTier string,
 ) {
+	if !meta.ModelConfig.ShouldSummaryServiceTier() {
+		serviceTier = ""
+	}
+
+	summaryClaudeLongContext := meta.ModelConfig.ShouldSummaryClaudeLongContext() &&
+		model.IsClaudeLongContextSummary(meta.OriginModel, usage)
+
 	model.BatchUpdateSummary(
 		now,
 		meta.RequestAt,
@@ -74,5 +94,7 @@ func recordSummary(
 		downstreamResult,
 		usage,
 		amount,
+		serviceTier,
+		summaryClaudeLongContext,
 	)
 }

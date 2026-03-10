@@ -704,7 +704,7 @@ func TestPrice_SelectConditionalPrice_WithTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			selectedPrice := tt.price.SelectConditionalPrice(tt.usage)
+			selectedPrice := tt.price.SelectConditionalPrice(tt.usage, "")
 
 			if float64(selectedPrice.InputPrice) != tt.expectedInput {
 				t.Errorf("%s: expected input price %v, got %v",
@@ -714,6 +714,199 @@ func TestPrice_SelectConditionalPrice_WithTime(t *testing.T) {
 			if float64(selectedPrice.OutputPrice) != tt.expectedOutput {
 				t.Errorf("%s: expected output price %v, got %v",
 					tt.name, tt.expectedOutput, float64(selectedPrice.OutputPrice))
+			}
+		})
+	}
+}
+
+func TestPrice_SelectConditionalPrice_WithServiceTier(t *testing.T) {
+	tests := []struct {
+		name          string
+		price         model.Price
+		usage         model.Usage
+		serviceTier   string
+		expectedInput float64
+	}{
+		{
+			name: "match specific service tier",
+			price: model.Price{
+				InputPrice: 0.001,
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			usage: model.Usage{
+				InputTokens: 1000,
+			},
+			serviceTier:   "priority",
+			expectedInput: 0.003,
+		},
+		{
+			name: "fallback when service tier not matched",
+			price: model.Price{
+				InputPrice: 0.001,
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			usage: model.Usage{
+				InputTokens: 1000,
+			},
+			serviceTier:   "default",
+			expectedInput: 0.001,
+		},
+		{
+			name: "case-insensitive service tier match",
+			price: model.Price{
+				InputPrice: 0.001,
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "Priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			usage: model.Usage{
+				InputTokens: 1000,
+			},
+			serviceTier:   "PRIORITY",
+			expectedInput: 0.003,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selectedPrice := tt.price.SelectConditionalPrice(tt.usage, tt.serviceTier)
+			if float64(selectedPrice.InputPrice) != tt.expectedInput {
+				t.Errorf("%s: expected input price %v, got %v",
+					tt.name, tt.expectedInput, float64(selectedPrice.InputPrice))
+			}
+		})
+	}
+}
+
+func TestPrice_ValidateConditionalPrices_WithServiceTier(t *testing.T) {
+	tests := []struct {
+		name    string
+		price   model.Price
+		wantErr bool
+	}{
+		{
+			name: "valid service tier",
+			price: model.Price{
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid service tier",
+			price: model.Price{
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "premium",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "same token range but different service tiers are allowed",
+			price: model.Price{
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							InputTokenMin: 0,
+							InputTokenMax: 32000,
+							ServiceTier:   "default",
+						},
+						Price: model.Price{
+							InputPrice: 0.001,
+						},
+					},
+					{
+						Condition: model.PriceCondition{
+							InputTokenMin: 0,
+							InputTokenMax: 32000,
+							ServiceTier:   "priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "same token range with wildcard and specific tier should fail overlap",
+			price: model.Price{
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							InputTokenMin: 0,
+							InputTokenMax: 32000,
+						},
+						Price: model.Price{
+							InputPrice: 0.001,
+						},
+					},
+					{
+						Condition: model.PriceCondition{
+							InputTokenMin: 0,
+							InputTokenMax: 32000,
+							ServiceTier:   "priority",
+						},
+						Price: model.Price{
+							InputPrice: 0.003,
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.price.ValidateConditionalPrices()
+			if tt.wantErr && err == nil {
+				t.Errorf("%s: ValidateConditionalPrices() expected error but got nil", tt.name)
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("%s: ValidateConditionalPrices() unexpected error = %v", tt.name, err)
 			}
 		})
 	}

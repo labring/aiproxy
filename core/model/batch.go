@@ -359,10 +359,13 @@ func BatchRecordLogs(
 	downstreamResult bool,
 	usage Usage,
 	modelPrice Price,
-	amount float64,
+	amount Amount,
 	user string,
 	metadata map[string]string,
 	upstreamID string,
+	serviceTier string,
+	summaryServiceTier string,
+	summaryClaudeLongContext bool,
 ) (err error) {
 	if now.IsZero() {
 		now = time.Now()
@@ -400,6 +403,7 @@ func BatchRecordLogs(
 				user,
 				metadata,
 				upstreamID,
+				serviceTier,
 			)
 		}
 	} else {
@@ -435,6 +439,8 @@ func BatchRecordLogs(
 		downstreamResult,
 		usage,
 		amount,
+		summaryServiceTier,
+		summaryClaudeLongContext,
 	)
 
 	return err
@@ -452,18 +458,20 @@ func BatchUpdateSummary(
 	tokenName string,
 	downstreamResult bool,
 	usage Usage,
-	amount float64,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if now.IsZero() {
 		now = time.Now()
 	}
 
-	amountDecimal := decimal.NewFromFloat(amount)
+	amountDecimal := decimal.NewFromFloat(amount.UsedAmount)
 
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	updateChannelData(channelID, amount, amountDecimal, !downstreamResult)
+	updateChannelData(channelID, amount.UsedAmount, amountDecimal, !downstreamResult)
 
 	if channelID != 0 {
 		updateSummaryData(
@@ -473,9 +481,11 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 			!downstreamResult,
+			serviceTier,
+			summaryClaudeLongContext,
 		)
 
 		updateSummaryDataMinute(
@@ -485,9 +495,11 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
 			!downstreamResult,
+			serviceTier,
+			summaryClaudeLongContext,
 		)
 	}
 
@@ -496,9 +508,9 @@ func BatchUpdateSummary(
 		return
 	}
 
-	updateGroupData(group, amount, amountDecimal)
+	updateGroupData(group, amount.UsedAmount, amountDecimal)
 
-	updateTokenData(tokenID, amount, amountDecimal)
+	updateTokenData(tokenID, amount.UsedAmount, amountDecimal)
 
 	if group != "" {
 		updateGroupSummaryData(
@@ -509,8 +521,10 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
+			serviceTier,
+			summaryClaudeLongContext,
 		)
 
 		updateGroupSummaryDataMinute(
@@ -521,8 +535,10 @@ func BatchUpdateSummary(
 			requestAt,
 			firstByteAt,
 			code,
-			amountDecimal,
+			amount,
 			usage,
+			serviceTier,
+			summaryClaudeLongContext,
 		)
 	}
 }
@@ -592,8 +608,10 @@ func updateGroupSummaryData(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
+	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -622,15 +640,22 @@ func updateGroupSummaryData(
 		batchData.GroupSummaries[groupUnique] = groupSummary
 	}
 
-	groupSummary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
-		InexactFloat64()
+	groupSummary.Amount.Add(amount)
 
 	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
+	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+
+	if summaryClaudeLongContext {
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
+			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
+			Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
@@ -647,8 +672,10 @@ func updateGroupSummaryDataMinute(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
+	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -677,15 +704,22 @@ func updateGroupSummaryDataMinute(
 		batchData.GroupSummariesMinute[groupUnique] = groupSummary
 	}
 
-	groupSummary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(groupSummary.UsedAmount)).
-		InexactFloat64()
+	groupSummary.Amount.Add(amount)
 
 	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
+	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+
+	if summaryClaudeLongContext {
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
+			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
+			Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		groupSummary.CacheHitCount++
@@ -703,9 +737,11 @@ func updateSummaryData(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 	isRetry bool,
+	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -733,15 +769,20 @@ func updateSummaryData(
 		batchData.Summaries[summaryUnique] = summary
 	}
 
-	summary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(summary.UsedAmount)).
-		InexactFloat64()
+	summary.Amount.Add(amount)
 
 	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
+	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+
+	if summaryClaudeLongContext {
+		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
+		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++
@@ -759,9 +800,11 @@ func updateSummaryDataMinute(
 	requestAt time.Time,
 	firstByteAt time.Time,
 	code int,
-	amountDecimal decimal.Decimal,
+	amount Amount,
 	usage Usage,
 	isRetry bool,
+	serviceTier string,
+	summaryClaudeLongContext bool,
 ) {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -789,15 +832,20 @@ func updateSummaryDataMinute(
 		batchData.SummariesMinute[summaryUnique] = summary
 	}
 
-	summary.UsedAmount = amountDecimal.
-		Add(decimal.NewFromFloat(summary.UsedAmount)).
-		InexactFloat64()
+	summary.Amount.Add(amount)
 
 	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
 	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
+	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+
+	if summaryClaudeLongContext {
+		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
+		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	}
 
 	if usage.CachedTokens > 0 {
 		summary.CacheHitCount++

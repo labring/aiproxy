@@ -85,9 +85,10 @@ const formatRemainingTime = (targetDate: Date): string => {
 
 interface GroupTokensTabProps {
     groupId: string
+    onNavigateDashboard?: (tokenName: string) => void
 }
 
-export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
+export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
@@ -179,7 +180,12 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.key")}</div>,
             cell: ({ row }) => (
                 <div className="flex items-center space-x-2">
-                    <span className="font-mono text-xs">{maskApiKey(row.original.key)}</span>
+                    <span
+                        className="font-mono text-xs cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => copyToClipboard(row.original.key)}
+                    >
+                        {maskApiKey(row.original.key)}
+                    </span>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -197,11 +203,23 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
             cell: ({ row }) => {
                 const token = row.original
                 const remaining = calculateRemainingQuota(token)
+
                 if (remaining.total < 0 && remaining.period < 0) {
-                    return <span className="text-muted-foreground text-sm">{t("token.quota.unlimited")}</span>
+                    return (
+                        <span
+                            className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => openQuotaDialog(token)}
+                        >
+                            {t("token.quota.unlimited")}
+                        </span>
+                    )
                 }
+
                 return (
-                    <div className="text-sm space-y-1">
+                    <div
+                        className="text-sm space-y-1 cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => openQuotaDialog(token)}
+                    >
                         {token.quota > 0 && (
                             <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Total:</span>
@@ -226,15 +244,61 @@ export function GroupTokensTab({ groupId }: GroupTokensTabProps) {
             accessorKey: 'period_reset',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.quota.nextRefresh")}</div>,
             cell: ({ row }) => {
-                const nextRefresh = calculateNextRefreshTime(row.original)
-                if (!nextRefresh) return <span className="text-muted-foreground text-sm">-</span>
-                return <span className="text-sm">{formatRemainingTime(nextRefresh)}</span>
+                const token = row.original
+                const nextRefresh = calculateNextRefreshTime(token)
+
+                if (!nextRefresh) {
+                    return (
+                        <span
+                            className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => openQuotaDialog(token)}
+                        >
+                            -
+                        </span>
+                    )
+                }
+
+                return (
+                    <span
+                        className="text-sm cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => openQuotaDialog(token)}
+                    >
+                        {formatRemainingTime(nextRefresh)}
+                    </span>
+                )
             },
+        },
+        {
+            accessorKey: 'used_amount',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.usedAmount")}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={cn(onNavigateDashboard && "cursor-pointer hover:text-primary transition-colors")}
+                    onClick={() => {
+                        if (onNavigateDashboard) {
+                            onNavigateDashboard(row.original.name)
+                        }
+                    }}
+                >
+                    ${(row.original.used_amount || 0).toFixed(4)}
+                </div>
+            ),
         },
         {
             accessorKey: 'request_count',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.requestCount")}</div>,
-            cell: ({ row }) => <div>{row.original.request_count}</div>,
+            cell: ({ row }) => (
+                <div
+                    className={cn(onNavigateDashboard && "cursor-pointer hover:text-primary transition-colors")}
+                    onClick={() => {
+                        if (onNavigateDashboard) {
+                            onNavigateDashboard(row.original.name)
+                        }
+                    }}
+                >
+                    {row.original.request_count.toLocaleString()}
+                </div>
+            ),
         },
         {
             accessorKey: 'status',

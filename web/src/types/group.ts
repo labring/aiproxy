@@ -29,6 +29,10 @@ export interface GroupModelConfig {
     retry_times: number
     override_force_save_detail: boolean
     force_save_detail: boolean
+    override_summary_service_tier: boolean
+    summary_service_tier: boolean
+    override_summary_claude_long_context: boolean
+    summary_claude_long_context: boolean
 }
 
 // Group response from API
@@ -105,4 +109,8 @@ export interface GroupModelConfigSaveRequest {
     retry_times?: number
     override_force_save_detail?: boolean
     force_save_detail?: boolean
+    override_summary_service_tier?: boolean
+    summary_service_tier?: boolean
+    override_summary_claude_long_context?: boolean
+    summary_claude_long_context?: boolean
 }

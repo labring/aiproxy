@@ -3,16 +3,20 @@ package model
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type PriceCondition struct {
-	InputTokenMin  int64 `json:"input_token_min,omitempty"`
-	InputTokenMax  int64 `json:"input_token_max,omitempty"`
-	OutputTokenMin int64 `json:"output_token_min,omitempty"`
-	OutputTokenMax int64 `json:"output_token_max,omitempty"`
-	StartTime      int64 `json:"start_time,omitempty"` // Unix timestamp, 0 means no start limit
-	EndTime        int64 `json:"end_time,omitempty"`   // Unix timestamp, 0 means no end limit
+	InputTokenMin  int64  `json:"input_token_min,omitempty"`
+	InputTokenMax  int64  `json:"input_token_max,omitempty"`
+	OutputTokenMin int64  `json:"output_token_min,omitempty"`
+	OutputTokenMax int64  `json:"output_token_max,omitempty"`
+	StartTime      int64  `json:"start_time,omitempty"` // Unix timestamp, 0 means no start limit
+	EndTime        int64  `json:"end_time,omitempty"`   // Unix timestamp, 0 means no end limit
+	ServiceTier    string `json:"service_tier,omitempty"`
 }
 
 type ConditionalPrice struct {
@@ -55,6 +59,31 @@ type Price struct {
 	ConditionalPrices []ConditionalPrice `gorm:"serializer:fastjson;type:text" json:"conditional_prices,omitempty"`
 }
 
+func normalizeServiceTier(serviceTier string) string {
+	return strings.ToLower(strings.TrimSpace(serviceTier))
+}
+
+func isAllowedServiceTier(serviceTier string) bool {
+	switch normalizeServiceTier(serviceTier) {
+	case "", "auto", "default", "flex", "scale", "priority":
+		return true
+	default:
+		return false
+	}
+}
+
+func serviceTierOverlap(serviceTier1, serviceTier2 string) bool {
+	normalized1 := normalizeServiceTier(serviceTier1)
+	normalized2 := normalizeServiceTier(serviceTier2)
+
+	// Empty means wildcard (applies to any tier).
+	if normalized1 == "" || normalized2 == "" {
+		return true
+	}
+
+	return normalized1 == normalized2
+}
+
 func (p *Price) ValidateConditionalPrices() error {
 	if len(p.ConditionalPrices) == 0 {
 		return nil
@@ -62,6 +91,14 @@ func (p *Price) ValidateConditionalPrices() error {
 
 	for i, conditionalPrice := range p.ConditionalPrices {
 		condition := conditionalPrice.Condition
+
+		if !isAllowedServiceTier(condition.ServiceTier) {
+			return fmt.Errorf(
+				"conditional price %d: invalid service tier %q (allowed: auto, default, flex, scale, priority)",
+				i,
+				condition.ServiceTier,
+			)
+		}
 
 		// Validate individual condition ranges
 		if condition.InputTokenMin > 0 && condition.InputTokenMax > 0 {
@@ -101,6 +138,9 @@ func (p *Price) ValidateConditionalPrices() error {
 		// Check for overlaps with other conditions
 		for j := i + 1; j < len(p.ConditionalPrices); j++ {
 			otherCondition := p.ConditionalPrices[j].Condition
+			if !serviceTierOverlap(condition.ServiceTier, otherCondition.ServiceTier) {
+				continue
+			}
 
 			// Check input token range overlap
 			if hasRangeOverlap(
@@ -205,7 +245,11 @@ func (p *Price) validateConditionalPriceOrdering() error {
 
 	for i := range len(p.ConditionalPrices) - 1 {
 		current := p.ConditionalPrices[i].Condition
+
 		next := p.ConditionalPrices[i+1].Condition
+		if !serviceTierOverlap(current.ServiceTier, next.ServiceTier) {
+			continue
+		}
 
 		// Check if input token ranges are in ascending order
 		// Compare the starting points of ranges
@@ -244,17 +288,24 @@ func (p *Price) validateConditionalPriceOrdering() error {
 	return nil
 }
 
-func (p *Price) SelectConditionalPrice(usage Usage) Price {
+func (p *Price) SelectConditionalPrice(usage Usage, serviceTier string) Price {
 	if len(p.ConditionalPrices) == 0 {
 		return *p
 	}
 
 	inputTokens := int64(usage.InputTokens)
 	outputTokens := int64(usage.OutputTokens)
+	usageServiceTier := normalizeServiceTier(serviceTier)
 	currentTime := time.Now().Unix()
 
 	for _, conditionalPrice := range p.ConditionalPrices {
 		condition := conditionalPrice.Condition
+		conditionServiceTier := normalizeServiceTier(condition.ServiceTier)
+
+		// If condition specifies service tier, it must match usage tier.
+		if conditionServiceTier != "" && usageServiceTier != conditionServiceTier {
+			continue
+		}
 
 		// Check time range
 		if condition.StartTime > 0 && currentTime < condition.StartTime {
@@ -367,4 +418,46 @@ func (u *Usage) Add(other Usage) {
 	u.CacheCreationTokens += other.CacheCreationTokens
 	u.TotalTokens += other.TotalTokens
 	u.WebSearchCount += other.WebSearchCount
+}
+
+type Amount struct {
+	InputAmount         float64 `json:"input_amount,omitempty"`
+	ImageInputAmount    float64 `json:"image_input_amount,omitempty"`
+	AudioInputAmount    float64 `json:"audio_input_amount,omitempty"`
+	OutputAmount        float64 `json:"output_amount,omitempty"`
+	ImageOutputAmount   float64 `json:"image_output_amount,omitempty"`
+	CachedAmount        float64 `json:"cached_amount,omitempty"`
+	CacheCreationAmount float64 `json:"cache_creation_amount,omitempty"`
+	WebSearchAmount     float64 `json:"web_search_amount,omitempty"`
+	UsedAmount          float64 `json:"used_amount,omitempty"`
+}
+
+func (a *Amount) Add(other Amount) {
+	a.InputAmount = decimal.NewFromFloat(a.InputAmount).
+		Add(decimal.NewFromFloat(other.InputAmount)).
+		InexactFloat64()
+	a.ImageInputAmount = decimal.NewFromFloat(a.ImageInputAmount).
+		Add(decimal.NewFromFloat(other.ImageInputAmount)).
+		InexactFloat64()
+	a.AudioInputAmount = decimal.NewFromFloat(a.AudioInputAmount).
+		Add(decimal.NewFromFloat(other.AudioInputAmount)).
+		InexactFloat64()
+	a.OutputAmount = decimal.NewFromFloat(a.OutputAmount).
+		Add(decimal.NewFromFloat(other.OutputAmount)).
+		InexactFloat64()
+	a.ImageOutputAmount = decimal.NewFromFloat(a.ImageOutputAmount).
+		Add(decimal.NewFromFloat(other.ImageOutputAmount)).
+		InexactFloat64()
+	a.CachedAmount = decimal.NewFromFloat(a.CachedAmount).
+		Add(decimal.NewFromFloat(other.CachedAmount)).
+		InexactFloat64()
+	a.CacheCreationAmount = decimal.NewFromFloat(a.CacheCreationAmount).
+		Add(decimal.NewFromFloat(other.CacheCreationAmount)).
+		InexactFloat64()
+	a.WebSearchAmount = decimal.NewFromFloat(a.WebSearchAmount).
+		Add(decimal.NewFromFloat(other.WebSearchAmount)).
+		InexactFloat64()
+	a.UsedAmount = decimal.NewFromFloat(a.UsedAmount).
+		Add(decimal.NewFromFloat(other.UsedAmount)).
+		InexactFloat64()
 }

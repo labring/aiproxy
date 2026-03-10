@@ -17,13 +17,13 @@ function buildParams(filters?: DashboardFilters & { tokenName?: string }): strin
 export const dashboardApi = {
     getDashboardData: async (filters?: DashboardFilters): Promise<DashboardV2Response> => {
         const queryString = buildParams(filters)
-        const url = queryString ? `dashboardv2/?${queryString}` : 'dashboardv2/'
+        const url = queryString ? `dashboardv3/?${queryString}` : 'dashboardv3/'
         return get<DashboardV2Response>(url)
     },
 
     getDashboardByGroup: async (group: string, filters?: DashboardFilters & { tokenName?: string }): Promise<DashboardV2Response> => {
         const queryString = buildParams(filters)
-        const url = queryString ? `dashboardv2/${group}?${queryString}` : `dashboardv2/${group}`
+        const url = queryString ? `dashboardv3/${group}?${queryString}` : `dashboardv3/${group}`
         return get<DashboardV2Response>(url)
     },
 

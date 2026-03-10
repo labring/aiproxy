@@ -10,11 +10,12 @@ import (
 
 func TestCalculateAmount(t *testing.T) {
 	tests := []struct {
-		name  string
-		code  int
-		usage model.Usage
-		price model.Price
-		want  float64
+		name        string
+		code        int
+		usage       model.Usage
+		price       model.Price
+		serviceTier string
+		want        float64
 	}{
 		{
 			name: "Per-Request Pricing (OK)",
@@ -241,7 +242,7 @@ func TestCalculateAmount(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := consume.CalculateAmount(tt.code, tt.usage, tt.price)
+		got := consume.CalculateAmount(tt.code, tt.usage, tt.price, tt.serviceTier)
 		if got != tt.want {
 			t.Errorf("CalculateAmount()\n%s\n\tgot: %v\n\twant: %v\n\t", tt.name, got, tt.want)
 		}
@@ -250,11 +251,12 @@ func TestCalculateAmount(t *testing.T) {
 
 func TestCalculateAmountWithConditionalPricing(t *testing.T) {
 	tests := []struct {
-		name  string
-		code  int
-		usage model.Usage
-		price model.Price
-		want  float64
+		name        string
+		code        int
+		usage       model.Usage
+		price       model.Price
+		serviceTier string
+		want        float64
 	}{
 		{
 			name: "Conditional Pricing - Small Input/Output",
@@ -452,10 +454,35 @@ func TestCalculateAmountWithConditionalPricing(t *testing.T) {
 			},
 			want: 0.002, // 0.001 * 1000/1000 + 0.002 * 500/1000
 		},
+		{
+			name: "Conditional Prices - Service Tier Priority",
+			code: http.StatusOK,
+			usage: model.Usage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+			},
+			serviceTier: "priority",
+			price: model.Price{
+				InputPrice:  0.001,
+				OutputPrice: 0.002,
+				ConditionalPrices: []model.ConditionalPrice{
+					{
+						Condition: model.PriceCondition{
+							ServiceTier: "priority",
+						},
+						Price: model.Price{
+							InputPrice:  0.003,
+							OutputPrice: 0.006,
+						},
+					},
+				},
+			},
+			want: 0.006, // 0.003 * 1000/1000 + 0.006 * 500/1000
+		},
 	}
 
 	for _, tt := range tests {
-		got := consume.CalculateAmount(tt.code, tt.usage, tt.price)
+		got := consume.CalculateAmount(tt.code, tt.usage, tt.price, tt.serviceTier)
 		if got != tt.want {
 			t.Errorf("CalculateAmount()\n%s\n\tgot: %v\n\twant: %v\n\t", tt.name, got, tt.want)
 		}

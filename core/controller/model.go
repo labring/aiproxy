@@ -279,7 +279,7 @@ func newEnabledModelChannel(ch *model.Channel) EnabledModelChannel {
 }
 
 // calculateWeights 计算渠道权重百分比
-// 权重 = 1/priority，然后归一化到百分比
+// 权重 = priority，然后归一化到百分比
 func calculateWeights(channels []EnabledModelChannel) {
 	if len(channels) == 0 {
 		return
@@ -289,7 +289,7 @@ func calculateWeights(channels []EnabledModelChannel) {
 	totalWeight := 0.0
 	for _, ch := range channels {
 		if ch.Priority > 0 {
-			totalWeight += 1.0 / float64(ch.Priority)
+			totalWeight += float64(ch.Priority)
 		}
 	}
 
@@ -297,7 +297,7 @@ func calculateWeights(channels []EnabledModelChannel) {
 	if totalWeight > 0 {
 		for i := range channels {
 			if channels[i].Priority > 0 {
-				channels[i].Weight = (1.0 / float64(channels[i].Priority)) / totalWeight * 100
+				channels[i].Weight = float64(channels[i].Priority) / totalWeight * 100
 			}
 		}
 	}

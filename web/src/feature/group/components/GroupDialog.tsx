@@ -27,6 +27,7 @@ interface GroupDialogProps {
 export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboard', initialTokenName }: GroupDialogProps) {
     const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState(initialTab)
+    const [dashboardTokenName, setDashboardTokenName] = useState<string | undefined>(initialTokenName)
 
     const { data: group, isLoading } = useGroup(groupId || '')
 
@@ -34,8 +35,9 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
     useEffect(() => {
         if (open) {
             setActiveTab(initialTab)
+            setDashboardTokenName(initialTokenName)
         }
-    }, [open, initialTab])
+    }, [open, initialTab, initialTokenName])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,11 +80,19 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
 
                             <div className="flex-1 overflow-auto mt-4 min-h-0">
                                 <TabsContent value="dashboard" className="h-full m-0">
-                                    {groupId && <GroupDashboardTab groupId={groupId} initialTokenName={initialTokenName} />}
+                                    {groupId && <GroupDashboardTab groupId={groupId} initialTokenName={dashboardTokenName} />}
                                 </TabsContent>
 
                                 <TabsContent value="tokens" className="h-full m-0">
-                                    {groupId && <GroupTokensTab groupId={groupId} />}
+                                    {groupId && (
+                                        <GroupTokensTab
+                                            groupId={groupId}
+                                            onNavigateDashboard={(tokenName) => {
+                                                setDashboardTokenName(tokenName)
+                                                setActiveTab('dashboard')
+                                            }}
+                                        />
+                                    )}
                                 </TabsContent>
 
                                 <TabsContent value="models" className="h-full m-0">
