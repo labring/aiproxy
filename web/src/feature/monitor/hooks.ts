@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '@/api/dashboard'
-import { DashboardFilters, DashboardV2Response, TimeSeriesPoint, ModelSummary, ChartDataPoint } from '@/types/dashboard'
+import { DashboardFilters, DashboardV2Response, TimeSeriesPoint, ModelSummary, ChartDataPoint, SummaryDataSet } from '@/types/dashboard'
 
 export interface DashboardAggregates {
     request_count: number
@@ -43,6 +43,10 @@ export interface DashboardV2Result {
     channels: number[]
     models: string[]
     tokenNames: string[]
+    // Summary breakdowns
+    serviceTierFlex?: SummaryDataSet
+    serviceTierPriority?: SummaryDataSet
+    claudeLongContext?: SummaryDataSet
 }
 
 function withSummaryDefaults(summary?: ModelSummary): ModelSummary {
@@ -267,8 +271,50 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
 function computeDashboardResult(
     response: DashboardV2Response,
     filters?: DashboardFilters,
+    dataSource?: 'total' | 'serviceTierFlex' | 'serviceTierPriority' | 'claudeLongContext',
 ): DashboardV2Result {
-    const timeSeries = response?.time_series || []
+    const originalTimeSeries = response?.time_series || []
+
+    // Transform time series based on data source
+    let timeSeries = originalTimeSeries
+    if (dataSource && dataSource !== 'total') {
+        timeSeries = originalTimeSeries.map(ts => {
+            const transformedSummary = (ts?.summary || []).map(s => {
+                let dataSet: SummaryDataSet | undefined
+                switch (dataSource) {
+                    case 'serviceTierFlex':
+                        dataSet = s?.service_tier_flex
+                        break
+                    case 'serviceTierPriority':
+                        dataSet = s?.service_tier_priority
+                        break
+                    case 'claudeLongContext':
+                        dataSet = s?.claude_long_context
+                        break
+                }
+                if (!dataSet) return null
+                // Map SummaryDataSet fields to ModelSummary format
+                return {
+                    ...s,
+                    request_count: dataSet.request_count || 0,
+                    exception_count: dataSet.exception_count || 0,
+                    input_tokens: dataSet.input_tokens || 0,
+                    output_tokens: dataSet.output_tokens || 0,
+                    total_tokens: dataSet.total_tokens || 0,
+                    used_amount: dataSet.used_amount || 0,
+                    input_amount: dataSet.input_amount || 0,
+                    output_amount: dataSet.output_amount || 0,
+                    status_2xx_count: dataSet.status_2xx_count || 0,
+                    status_4xx_count: dataSet.status_4xx_count || 0,
+                    status_5xx_count: dataSet.status_5xx_count || 0,
+                    cache_hit_count: dataSet.cache_hit_count || 0,
+                    cached_tokens: dataSet.cached_tokens || 0,
+                }
+            }).filter(Boolean) as ModelSummary[]
+            return { timestamp: ts?.timestamp, summary: transformedSummary }
+        })
+    }
+
     const filled = fillMissingPeriods(timeSeries, filters)
     const chartData = toChartData(filled, filters?.timespan, !!filters?.model)
 
@@ -336,8 +382,36 @@ function computeDashboardResult(
         }
     }
 
+    // Helper function to merge SummaryDataSet
+    const mergeSummaryDataSet = (target: SummaryDataSet | undefined, source: SummaryDataSet | undefined): SummaryDataSet => {
+        if (!source) return target || { request_count: 0 }
+        if (!target) return { ...source }
+        return {
+            request_count: (target.request_count || 0) + (source.request_count || 0),
+            retry_count: (target.retry_count || 0) + (source.retry_count || 0),
+            exception_count: (target.exception_count || 0) + (source.exception_count || 0),
+            status_2xx_count: (target.status_2xx_count || 0) + (source.status_2xx_count || 0),
+            status_4xx_count: (target.status_4xx_count || 0) + (source.status_4xx_count || 0),
+            status_5xx_count: (target.status_5xx_count || 0) + (source.status_5xx_count || 0),
+            input_tokens: (target.input_tokens || 0) + (source.input_tokens || 0),
+            output_tokens: (target.output_tokens || 0) + (source.output_tokens || 0),
+            total_tokens: (target.total_tokens || 0) + (source.total_tokens || 0),
+            used_amount: (target.used_amount || 0) + (source.used_amount || 0),
+            input_amount: (target.input_amount || 0) + (source.input_amount || 0),
+            output_amount: (target.output_amount || 0) + (source.output_amount || 0),
+        }
+    }
+
+    // Aggregate summary breakdowns from time series
+    let serviceTierFlex: SummaryDataSet | undefined
+    let serviceTierPriority: SummaryDataSet | undefined
+    let claudeLongContext: SummaryDataSet | undefined
+
     for (const ts of timeSeries) {
         for (const s of ts?.summary || []) {
+            // Skip if s is null (can happen with transformed data)
+            if (!s) continue
+
             const normalized = withSummaryDefaults(s)
             agg.request_count += normalized?.request_count || 0
             agg.exception_count += normalized?.exception_count || 0
@@ -362,6 +436,11 @@ function computeDashboardResult(
             agg.web_search_count += normalized?.web_search_count || 0
             if ((normalized?.max_rpm || 0) > agg.max_rpm) agg.max_rpm = normalized?.max_rpm || 0
             if ((normalized?.max_tpm || 0) > agg.max_tpm) agg.max_tpm = normalized?.max_tpm || 0
+
+            // Aggregate summary breakdowns
+            serviceTierFlex = mergeSummaryDataSet(serviceTierFlex, s?.service_tier_flex)
+            serviceTierPriority = mergeSummaryDataSet(serviceTierPriority, s?.service_tier_priority)
+            claudeLongContext = mergeSummaryDataSet(claudeLongContext, s?.claude_long_context)
 
             // Top-level: by model only
             mergeInto(modelRankMap, normalized?.model || '', normalized)
@@ -399,10 +478,12 @@ function computeDashboardResult(
     const models = response?.models || []
     const tokenNames = response?.token_names || []
 
-    return { timeSeries: filled, chartData, aggregates: agg, modelRanking, detailRanking, channels, models, tokenNames }
+    return { timeSeries: filled, chartData, aggregates: agg, modelRanking, detailRanking, channels, models, tokenNames, serviceTierFlex, serviceTierPriority, claudeLongContext }
 }
 
-export const useDashboard = (filters?: DashboardFilters) => {
+export type DataSourceMode = 'total' | 'serviceTierFlex' | 'serviceTierPriority' | 'claudeLongContext'
+
+export const useDashboard = (filters?: DashboardFilters, dataSource?: DataSourceMode) => {
     const query = useQuery({
         queryKey: ['dashboard', filters],
         queryFn: () => dashboardApi.getDashboardData(filters),
@@ -413,8 +494,8 @@ export const useDashboard = (filters?: DashboardFilters) => {
 
     const result = useMemo(() => {
         if (!query.data) return undefined
-        return computeDashboardResult(query.data, filters)
-    }, [query.data, filters])
+        return computeDashboardResult(query.data, filters, dataSource)
+    }, [query.data, filters, dataSource])
 
     return {
         ...query,
@@ -422,7 +503,7 @@ export const useDashboard = (filters?: DashboardFilters) => {
     }
 }
 
-export const useGroupDashboard = (group: string, filters?: DashboardFilters & { tokenName?: string }) => {
+export const useGroupDashboard = (group: string, filters?: DashboardFilters & { tokenName?: string }, dataSource?: DataSourceMode) => {
     const query = useQuery({
         queryKey: ['groupDashboard', group, filters],
         queryFn: () => dashboardApi.getDashboardByGroup(group, filters),
@@ -433,8 +514,8 @@ export const useGroupDashboard = (group: string, filters?: DashboardFilters & { 
 
     const result = useMemo(() => {
         if (!query.data) return undefined
-        return computeDashboardResult(query.data, filters)
-    }, [query.data, filters])
+        return computeDashboardResult(query.data, filters, dataSource)
+    }, [query.data, filters, dataSource])
 
     return {
         ...query,

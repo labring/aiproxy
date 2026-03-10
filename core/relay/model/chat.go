@@ -10,8 +10,7 @@ type ChatUsage struct {
 	CompletionTokens int64 `json:"completion_tokens,omitempty"`
 	TotalTokens      int64 `json:"total_tokens"`
 
-	WebSearchCount int64  `json:"web_search_count,omitempty"`
-	ServiceTier    string `json:"service_tier,omitempty"`
+	WebSearchCount int64 `json:"web_search_count,omitempty"`
 
 	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`

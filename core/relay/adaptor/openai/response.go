@@ -107,12 +107,8 @@ func ResponseHandler(
 	// Calculate usage
 	if response.Usage != nil {
 		usage := response.Usage.ToModelUsage()
-		serviceTier := ""
-		if response.ServiceTier != nil {
-			serviceTier = *response.ServiceTier
-		}
 
-		return adaptor.DoResponseResult{Usage: usage, ServiceTier: serviceTier}, nil
+		return adaptor.DoResponseResult{Usage: usage}, nil
 	}
 
 	return adaptor.DoResponseResult{}, nil
@@ -137,9 +133,8 @@ func ResponseStreamHandler(
 	defer cleanup()
 
 	var (
-		usage       model.Usage
-		responseID  string
-		serviceTier string
+		usage      model.Usage
+		responseID string
 	)
 
 	for scanner.Scan() {
@@ -183,9 +178,6 @@ func ResponseStreamHandler(
 		// Update usage if available
 		if event.Response != nil && event.Response.Usage != nil {
 			usage = event.Response.Usage.ToModelUsage()
-			if event.Response.ServiceTier != nil {
-				serviceTier = *event.Response.ServiceTier
-			}
 		}
 
 		// Forward the event
@@ -196,7 +188,7 @@ func ResponseStreamHandler(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage, ServiceTier: serviceTier}, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // GetResponseHandler handles GET /v1/responses/{response_id}

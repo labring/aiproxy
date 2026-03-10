@@ -3,7 +3,7 @@ import { BarChart3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 
-import { useDashboard } from '@/feature/monitor/hooks'
+import { useDashboard, DataSourceMode } from '@/feature/monitor/hooks'
 import { MonitorFilters } from '@/feature/monitor/components/MonitorFilters'
 import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
@@ -13,6 +13,7 @@ import { DashboardFilters } from '@/types/dashboard'
 export default function MonitorPage() {
     const { t } = useTranslation()
     const [searchParams] = useSearchParams()
+    const [dataSource, setDataSource] = useState<DataSourceMode>('total')
 
     const initialChannel = searchParams.get('channel') ? Number(searchParams.get('channel')) : undefined
 
@@ -32,7 +33,15 @@ export default function MonitorPage() {
 
     const [filters, setFilters] = useState<DashboardFilters>(getDefaultFilters())
 
-    const { data, isLoading, error, refetch } = useDashboard(filters)
+    // First fetch with total mode to get breakdown data availability
+    const { data: totalData } = useDashboard(filters, 'total')
+
+    // Check if breakdown data exists (show selector if any breakdown data object exists)
+    const hasServiceTierData = totalData?.serviceTierFlex != undefined || totalData?.serviceTierPriority != undefined
+    const hasLongContextData = totalData?.claudeLongContext !== undefined
+
+    // Then fetch with actual selected dataSource
+    const { data, isLoading, error, refetch } = useDashboard(filters, dataSource)
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -46,6 +55,10 @@ export default function MonitorPage() {
         setFilters(newFilters)
     }
 
+    const handleDataSourceChange = (newDataSource: DataSourceMode) => {
+        setDataSource(newDataSource)
+    }
+
     const hasData = (data?.chartData?.length ?? 0) > 0
 
     return (
@@ -53,9 +66,14 @@ export default function MonitorPage() {
             <MonitorFilters
                 onFiltersChange={handleFiltersChange}
                 loading={isLoading}
-                availableModels={data?.models}
-                availableChannels={data?.channels}
+                availableModels={totalData?.models}
+                availableChannels={totalData?.channels}
                 defaultChannel={initialChannel}
+                showDataSourceSelector={hasServiceTierData || hasLongContextData}
+                hasServiceTierData={hasServiceTierData}
+                hasLongContextData={hasLongContextData}
+                dataSource={dataSource}
+                onDataSourceChange={handleDataSourceChange}
             />
 
             {error && (

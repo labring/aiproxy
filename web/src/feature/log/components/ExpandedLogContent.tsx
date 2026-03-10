@@ -158,6 +158,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                             ) : '-'}
                         </div>
                         <div><span className="font-medium">{t('log.mode')}:</span> {t(`modeType.${log.mode}`, { defaultValue: log.mode?.toString() || '-' })}</div>
+                        <div><span className="font-medium">{t('log.serviceTier')}:</span> {log.service_tier || '-'}</div>
                         <div><span className="font-medium">{t('log.user')}:</span> {log.user || '-'}</div>
                         <div><span className="font-medium">{t('log.ip')}:</span> {log.ip || '-'}</div>
                         <div><span className="font-medium">{t('log.endpoint')}:</span> {log.endpoint || '-'}</div>

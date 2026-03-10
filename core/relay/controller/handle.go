@@ -11,11 +11,10 @@ import (
 
 // HandleResult contains all the information needed for consumption recording
 type HandleResult struct {
-	Error       adaptor.Error
-	Usage       model.Usage
-	UpstreamID  string
-	ServiceTier string
-	Detail      *RequestDetail
+	Error      adaptor.Error
+	Usage      model.Usage
+	UpstreamID string
+	Detail     *RequestDetail
 }
 
 func Handle(
@@ -42,18 +41,16 @@ func Handle(
 		}
 
 		return &HandleResult{
-			Error:       respErr,
-			Usage:       result.Usage,
-			UpstreamID:  result.UpstreamID,
-			ServiceTier: result.ServiceTier,
-			Detail:      detail,
+			Error:      respErr,
+			Usage:      result.Usage,
+			UpstreamID: result.UpstreamID,
+			Detail:     detail,
 		}
 	}
 
 	return &HandleResult{
-		Usage:       result.Usage,
-		UpstreamID:  result.UpstreamID,
-		ServiceTier: result.ServiceTier,
-		Detail:      detail,
+		Usage:      result.Usage,
+		UpstreamID: result.UpstreamID,
+		Detail:     detail,
 	}
 }

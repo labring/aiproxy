@@ -340,7 +340,7 @@ func recordResult(
 		code,
 		result.Usage,
 		price,
-		result.ServiceTier,
+		meta.RequestServiceTier,
 	)
 	if amount > 0 {
 		log := common.GetLogger(c)
@@ -362,7 +362,7 @@ func recordResult(
 		user,
 		metadata,
 		result.UpstreamID,
-		result.ServiceTier,
+		meta.RequestServiceTier,
 	)
 }
 

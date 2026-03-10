@@ -21,11 +21,7 @@ func GetChatRequestUsage(c *gin.Context, _ model.ModelConfig) (model.Usage, erro
 	}, nil
 }
 
+// GetChatRequestServiceTier extracts service_tier from the request body
 func GetChatRequestServiceTier(c *gin.Context) (string, error) {
-	textRequest, err := utils.UnmarshalGeneralOpenAIRequest(c.Request)
-	if err != nil {
-		return "", err
-	}
-
-	return textRequest.ServiceTier, nil
+	return GetRequestServiceTier(c)
 }

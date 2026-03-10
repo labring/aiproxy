@@ -129,7 +129,7 @@ func DoHelper(
 	}
 
 	log := common.GetLogger(c)
-	updateUsageMetrics(result.Usage, result.ServiceTier, log)
+	updateUsageMetrics(result.Usage, log)
 
 	if result.UpstreamID != "" {
 		log.Data["upstream_id"] = result.UpstreamID
@@ -354,7 +354,7 @@ func handleResponse(
 	return result, relayErr
 }
 
-func updateUsageMetrics(usage model.Usage, serviceTier string, log *log.Entry) {
+func updateUsageMetrics(usage model.Usage, log *log.Entry) {
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 	}
@@ -397,9 +397,5 @@ func updateUsageMetrics(usage model.Usage, serviceTier string, log *log.Entry) {
 
 	if usage.WebSearchCount > 0 {
 		log.Data["t_websearch"] = usage.WebSearchCount
-	}
-
-	if serviceTier != "" {
-		log.Data["service_tier"] = serviceTier
 	}
 }

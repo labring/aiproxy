@@ -9,6 +9,7 @@ import {
     Clock,
     Coins,
     Database,
+    Layers,
 } from 'lucide-react'
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -225,6 +226,29 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 iconColor="bg-sky-100 dark:bg-sky-900/50"
                 tooltip={t('monitor.metrics.avgTtfbTooltip')}
             />
+            {/* Row 4: Service Tier Flex & Long Context (conditionally rendered) */}
+            {data?.serviceTierFlex && (data.serviceTierFlex.request_count || 0) > 0 && (
+                <MetricCard
+                    title={t('monitor.metrics.serviceTierFlex')}
+                    value={data.serviceTierFlex.request_count || 0}
+                    subtitle={`$${((data.serviceTierFlex.used_amount || 0)).toFixed(4)}`}
+                    icon={<Layers className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
+                    bgColor="bg-violet-50 dark:bg-violet-950/30"
+                    iconColor="bg-violet-100 dark:bg-violet-900/50"
+                    tooltip={t('monitor.metrics.serviceTierFlexTooltip')}
+                />
+            )}
+            {data?.claudeLongContext && (data.claudeLongContext.request_count || 0) > 0 && (
+                <MetricCard
+                    title={t('monitor.metrics.claudeLongContext')}
+                    value={data.claudeLongContext.request_count || 0}
+                    subtitle={`$${((data.claudeLongContext.used_amount || 0)).toFixed(4)}`}
+                    icon={<Activity className="h-5 w-5 text-fuchsia-600 dark:text-fuchsia-400" />}
+                    bgColor="bg-fuchsia-50 dark:bg-fuchsia-950/30"
+                    iconColor="bg-fuchsia-100 dark:bg-fuchsia-900/50"
+                    tooltip={t('monitor.metrics.claudeLongContextTooltip')}
+                />
+            )}
         </div>
     )
 }

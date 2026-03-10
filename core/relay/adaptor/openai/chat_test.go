@@ -387,7 +387,6 @@ func TestConvertResponsesToChatCompletionResponse(t *testing.T) {
 				assert.Equal(t, relaymodel.FinishReasonStop, chatResp.Choices[0].FinishReason)
 				assert.Equal(t, int64(10), chatResp.Usage.PromptTokens)
 				assert.Equal(t, int64(5), chatResp.Usage.CompletionTokens)
-				assert.Equal(t, "priority", chatResp.Usage.ServiceTier)
 			},
 			expectedStatus: http.StatusOK,
 		},

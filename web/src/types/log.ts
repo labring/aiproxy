@@ -74,6 +74,7 @@ export interface LogRecord {
   upstream_id: string
   retry_at: string
   retry_times: number
+  service_tier?: string
   token_id: number
   token_name: string
   ttfb_milliseconds: number
