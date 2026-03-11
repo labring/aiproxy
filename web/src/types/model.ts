@@ -134,6 +134,7 @@ type SearchXNGSpec = {
 
 export interface ModelCreateRequest {
     model: string
+    owner?: string
     type: number
     rpm?: number
     tpm?: number

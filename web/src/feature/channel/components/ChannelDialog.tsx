@@ -21,7 +21,7 @@ import {
 interface ChannelDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    mode: 'create' | 'update'
+    mode: 'create' | 'update' | 'copy'
     channel?: Channel | null
 }
 
@@ -34,17 +34,19 @@ export function ChannelDialog({
     const { t } = useTranslation()
 
     // Determine title and description based on mode
-    const title = mode === 'create' ? t("channel.dialog.createTitle") : t("channel.dialog.updateTitle")
-    const description = mode === 'create'
-        ? t("channel.dialog.createDescription")
-        : t("channel.dialog.updateDescription")
+    const title = mode === 'update'
+        ? t("channel.dialog.updateTitle")
+        : t("channel.dialog.createTitle")
+    const description = mode === 'update'
+        ? t("channel.dialog.updateDescription")
+        : t("channel.dialog.createDescription")
 
     // Default values for form - memoized to avoid new object reference every render
     // Use channel data if available (for both update and copy)
     const defaultValues = useMemo(() => channel
         ? {
             type: channel.type,
-            name: mode === 'create' ? '' : channel.name, // Clear name for copy mode
+            name: mode === 'update' ? channel.name : '',
             key: channel.key,
             base_url: channel.base_url,
             models: channel.models || [],

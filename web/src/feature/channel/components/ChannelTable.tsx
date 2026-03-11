@@ -7,13 +7,13 @@ import {
 } from '@tanstack/react-table'
 import { useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels } from '../hooks'
+import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels, useAllChannelDefaultModels } from '../hooks'
 import { channelApi } from '@/api/channel'
 import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload, Copy
+    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload, Copy, ChevronDown
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -38,6 +38,13 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
 
@@ -51,7 +58,7 @@ export function ChannelTable() {
     const [channelDialogOpen, setChannelDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null)
-    const [dialogMode, setDialogMode] = useState<'create' | 'update'>('create')
+    const [dialogMode, setDialogMode] = useState<'create' | 'update' | 'copy'>('create')
     const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
@@ -60,6 +67,7 @@ export function ChannelTable() {
     const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
     const [searchInput, setSearchInput] = useState('')
     const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
+    const [selectedChannelType, setSelectedChannelType] = useState<number | undefined>(undefined)
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(20)
@@ -75,13 +83,14 @@ export function ChannelTable() {
 
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
+    const { data: allDefaultModels } = useAllChannelDefaultModels()
 
     // 获取渠道列表
     const {
         data,
         isLoading,
         refetch
-    } = useChannels(page, pageSize, searchKeyword)
+    } = useChannels(page, pageSize, searchKeyword, selectedChannelType)
 
     // 更新渠道状态
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateChannelStatus()
@@ -120,7 +129,7 @@ export function ChannelTable() {
 
     // 打开复制渠道对话框
     const openCopyDialog = (channel: Channel) => {
-        setDialogMode('create')
+        setDialogMode('copy')
         setSelectedChannel({...channel})
         setChannelDialogOpen(true)
     }
@@ -279,6 +288,30 @@ export function ChannelTable() {
         return meta ? meta.name : String(typeId)
     }
 
+    const providerOptions = useMemo(() => {
+        if (!typeMetas) return []
+        return Object.entries(typeMetas)
+            .map(([key, meta]) => ({
+                value: String(key),
+                label: meta.name,
+            }))
+    }, [typeMetas])
+
+    const getDisplayModels = useCallback((channel: Channel) => {
+        if (channel.models && channel.models.length > 0) {
+            return {
+                models: channel.models,
+                usingDefaultModels: false,
+            }
+        }
+
+        const defaultModels = allDefaultModels?.models?.[String(channel.type)] || []
+        return {
+            models: defaultModels,
+            usingDefaultModels: true,
+        }
+    }, [allDefaultModels])
+
     // 可点击单元格样式
     const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
@@ -364,32 +397,70 @@ export function ChannelTable() {
             accessorKey: 'models',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
             cell: ({ row }) => {
-                const models = row.original.models || []
-                if (models.length === 0) return (
-                    <Badge variant="outline" className="text-xs">
-                        {t("channel.usingDefaults")}
-                    </Badge>
-                )
+                const { models, usingDefaultModels } = getDisplayModels(row.original)
+
+                if (models.length === 0) {
+                    return (
+                        usingDefaultModels ? (
+                            <button
+                                type="button"
+                                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-sm text-amber-700 transition-colors hover:border-amber-400 hover:bg-amber-100 hover:text-amber-800 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                                onClick={() => openUpdateDialog(row.original)}
+                            >
+                                <span className="whitespace-nowrap">
+                                    {t("channel.usingDefaults")} · 0 {t("channel.modelsCount")}
+                                </span>
+                            </button>
+                        ) : (
+                            <Badge variant="outline" className="text-xs">
+                                -
+                            </Badge>
+                        )
+                    )
+                }
 
                 return (
                     <Popover>
                         <PopoverTrigger asChild>
-                            <button className="text-sm hover:text-primary transition-colors cursor-pointer">
-                                {models.length} {t("channel.modelsCount")}
+                            <button
+                                className={cn(
+                                    "inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer",
+                                    usingDefaultModels
+                                        ? "border-amber-300/70 bg-amber-50 text-amber-700 hover:border-amber-400 hover:bg-amber-100 hover:text-amber-800 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                                        : "border-border bg-background hover:border-primary hover:text-primary"
+                                )}
+                            >
+                                <span className="whitespace-nowrap">
+                                    {usingDefaultModels
+                                        ? `${t("channel.usingDefaults")} · ${models.length} ${t("channel.modelsCount")}`
+                                        : `${models.length} ${t("channel.modelsCount")}`}
+                                </span>
+                                <ChevronDown className="h-3.5 w-3.5" />
                             </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-3" align="start">
                             <div className="space-y-2">
-                                <h4 className="font-medium text-sm">{t("channel.models")} ({models.length})</h4>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="font-medium text-sm">{t("channel.models")} ({models.length})</h4>
+                                    {usingDefaultModels && (
+                                        <Badge variant="outline" className="border-amber-300/70 bg-amber-50 text-xs text-amber-700 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-300">
+                                            {t("channel.usingDefaults")}
+                                        </Badge>
+                                    )}
+                                </div>
                                 <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
                                     {models.map((model, index) => (
-                                        <Badge
+                                        <button
                                             key={index}
-                                            variant="outline"
-                                            className="text-xs py-0.5 px-1.5 font-mono w-fit"
+                                            type="button"
+                                            className={cn(
+                                                "w-fit rounded-md border px-1.5 py-0.5 text-xs font-mono transition-colors",
+                                                "hover:border-primary hover:text-primary"
+                                            )}
+                                            onClick={() => openUpdateDialog(row.original)}
                                         >
                                             {model}
-                                        </Badge>
+                                        </button>
                                     ))}
                                 </div>
                             </div>
@@ -526,7 +597,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels])
 
     // 初始化表格
     const table = useReactTable({
@@ -542,6 +613,27 @@ export function ChannelTable() {
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
                     <div className="flex gap-2">
+                        <div className="w-48">
+                            <Select
+                                value={selectedChannelType ? String(selectedChannelType) : ''}
+                                onValueChange={(value) => {
+                                    setSelectedChannelType(value === '__all__' ? undefined : Number(value))
+                                    setPage(1)
+                                }}
+                            >
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={t('channel.dialog.selectType')} />
+                                </SelectTrigger>
+                                <SelectContent className="z-[60]">
+                                    <SelectItem value="__all__">{t('common.all')}</SelectItem>
+                                    {providerOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input

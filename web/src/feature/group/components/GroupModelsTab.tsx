@@ -7,6 +7,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import {
     Table,
     TableBody,
     TableCell,
@@ -25,6 +32,7 @@ interface GroupModelsTabProps {
 export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
     const { t } = useTranslation()
     const [searchKeyword, setSearchKeyword] = useState('')
+    const [ownerFilter, setOwnerFilter] = useState('')
 
     const { data: models, isLoading, error } = useQuery({
         queryKey: ['groupModels', groupId],
@@ -32,12 +40,42 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
         enabled: !!groupId,
     })
 
+    const ownerOptions = useMemo(() => {
+        if (!models) return []
+        const ownerSet = new Set<string>()
+        let hasEmptyOwner = false
+
+        for (const model of models) {
+            if (model.owner) {
+                ownerSet.add(model.owner)
+            } else {
+                hasEmptyOwner = true
+            }
+        }
+
+        const options = [...ownerSet].sort((a, b) => a.localeCompare(b))
+        if (hasEmptyOwner) {
+            options.push('__empty__')
+        }
+        return options
+    }, [models])
+
     const filteredModels = useMemo(() => {
         if (!models) return []
-        if (!searchKeyword) return models
-        const keyword = searchKeyword.toLowerCase()
-        return models.filter(m => m.model.toLowerCase().includes(keyword))
-    }, [models, searchKeyword])
+        let filtered = models
+        if (searchKeyword) {
+            const keyword = searchKeyword.toLowerCase()
+            filtered = filtered.filter(m =>
+                m.model.toLowerCase().includes(keyword) || (m.owner || '').toLowerCase().includes(keyword)
+            )
+        }
+        if (ownerFilter === '__empty__') {
+            filtered = filtered.filter((model) => !model.owner)
+        } else if (ownerFilter && ownerFilter !== '__all__') {
+            filtered = filtered.filter((model) => model.owner === ownerFilter)
+        }
+        return filtered
+    }, [models, searchKeyword, ownerFilter])
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -75,15 +113,31 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
 
     return (
         <div className="space-y-4">
-            {/* Search */}
-            <div className="relative w-64">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder={t('common.search')}
-                    value={searchKeyword}
-                    onChange={(e) => setSearchKeyword(e.target.value)}
-                    className="pl-9 h-9"
-                />
+            <div className="flex gap-2">
+                <div className="relative w-64">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder={t('common.search')}
+                        value={searchKeyword}
+                        onChange={(e) => setSearchKeyword(e.target.value)}
+                        className="pl-9 h-9"
+                    />
+                </div>
+                <div className="w-44">
+                    <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                        <SelectTrigger className="h-9">
+                            <SelectValue placeholder={t('model.ownerFilterPlaceholder')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">{t('model.allOwners')}</SelectItem>
+                            {ownerOptions.map((owner) => (
+                                <SelectItem key={owner} value={owner}>
+                                    {owner === '__empty__' ? t('model.emptyOwner') : owner}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div className="rounded-md border">
@@ -91,6 +145,7 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                     <TableHeader>
                         <TableRow>
                             <TableHead>{t('group.models.model')}</TableHead>
+                            <TableHead>{t('model.owner')}</TableHead>
                             <TableHead>{t('group.models.type')}</TableHead>
                             <TableHead>{t('group.models.rpm')}</TableHead>
                             <TableHead>{t('group.models.tpm')}</TableHead>
@@ -111,6 +166,11 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                                             <Copy className="h-3 w-3 text-muted-foreground" />
                                         </span>
                                     </button>
+                                </TableCell>
+                                <TableCell>
+                                    {model.owner || (
+                                        <span className="text-muted-foreground text-sm">{t('model.emptyOwner')}</span>
+                                    )}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant="outline">
@@ -139,7 +199,7 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                         ))}
                         {filteredModels.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                                <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                                     {t('common.noResult')}
                                 </TableCell>
                             </TableRow>

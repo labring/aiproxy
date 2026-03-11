@@ -5,11 +5,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import { Combobox } from '@/components/ui/combobox'
 import {
     Dialog,
     DialogContent,
@@ -41,6 +47,7 @@ import { useModels } from '@/feature/model/hooks'
 import type { GroupModelConfig, GroupModelConfigSaveRequest } from '@/types/group'
 import type { ModelPrice } from '@/types/model'
 import { PriceFormFields } from '@/components/price/PriceFormFields'
+import { Combobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
 
 interface GroupModelConfigsTabProps {
@@ -69,14 +76,62 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
     const { data: systemModels } = useModels()
     const [searchKeyword, setSearchKeyword] = useState('')
+    const [ownerFilter, setOwnerFilter] = useState('')
     const [isImporting, setIsImporting] = useState(false)
+
+    const modelOwnerMap = useMemo(() => {
+        const map = new Map<string, string>()
+        for (const model of systemModels || []) {
+            map.set(model.model, model.owner || '')
+        }
+        return map
+    }, [systemModels])
 
     const filteredData = useMemo(() => {
         if (!data) return []
-        if (!searchKeyword) return data
-        const keyword = searchKeyword.toLowerCase()
-        return data.filter(c => c.model.toLowerCase().includes(keyword))
-    }, [data, searchKeyword])
+        let filtered = data
+        if (searchKeyword) {
+            const keyword = searchKeyword.toLowerCase()
+            filtered = filtered.filter((config) => {
+                const owner = modelOwnerMap.get(config.model) || ''
+                return config.model.toLowerCase().includes(keyword) || owner.toLowerCase().includes(keyword)
+            })
+        }
+        if (ownerFilter === '__empty__') {
+            filtered = filtered.filter((config) => !(modelOwnerMap.get(config.model) || ''))
+        } else if (ownerFilter && ownerFilter !== '__all__') {
+            filtered = filtered.filter((config) => (modelOwnerMap.get(config.model) || '') === ownerFilter)
+        }
+        return filtered
+    }, [data, searchKeyword, ownerFilter, modelOwnerMap])
+
+    const ownerOptions = useMemo(() => {
+        if (!data) return []
+
+        const ownerSet = new Set<string>()
+        let hasEmptyOwner = false
+
+        for (const config of data) {
+            const owner = modelOwnerMap.get(config.model) || ''
+            if (owner) {
+                ownerSet.add(owner)
+            } else {
+                hasEmptyOwner = true
+            }
+        }
+
+        const options = [...ownerSet]
+            .sort((a, b) => a.localeCompare(b))
+        if (hasEmptyOwner) {
+            options.push('__empty__')
+        }
+        return options
+    }, [data, modelOwnerMap])
+
+    const ownerLabel = (owner: string) => {
+        if (owner === '__empty__') return t('model.emptyOwner')
+        return owner
+    }
 
     const modelOptions = useMemo(() => {
         if (!systemModels) return []
@@ -334,14 +389,29 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             <div className="space-y-4">
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                    <div className="relative w-64">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('common.search')}
-                            value={searchKeyword}
-                            onChange={(e) => setSearchKeyword(e.target.value)}
-                            className="pl-9 h-9"
-                        />
+                    <div className="flex gap-2">
+                        <div className="relative w-64">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder={t('common.search')}
+                                value={searchKeyword}
+                                onChange={(e) => setSearchKeyword(e.target.value)}
+                                className="h-9 pl-8"
+                            />
+                        </div>
+                        <div className="w-44">
+                            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={t('model.ownerFilterPlaceholder')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">{t('model.allOwners')}</SelectItem>
+                                    {ownerOptions.map((owner) => (
+                                        <SelectItem key={owner} value={owner}>{ownerLabel(owner)}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -400,6 +470,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             <thead className="bg-muted/50">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.modelName')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.owner')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideLimit')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">RPM</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">TPM</th>
@@ -419,6 +490,11 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                         onClick={() => openEditDialog(config)}
                                     >
                                         <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
+                                        <td className="px-4 py-3 text-sm">
+                                            {modelOwnerMap.get(config.model) || (
+                                                <span className="text-muted-foreground">{t('model.emptyOwner')}</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-sm">
                                             <Badge variant={config.override_limit ? 'default' : 'secondary'} className="text-xs">
                                                 {config.override_limit ? t('common.yes') : t('common.no')}
@@ -489,7 +565,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>
