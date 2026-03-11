@@ -199,7 +199,7 @@ jobs:
 
       - name: Build for ${{ matrix.arch }}
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           labels: ${{ steps.meta.outputs.labels }}
@@ -366,7 +366,7 @@ jobs:
           username: ${{ secrets.ALIYUN_USERNAME }}
           password: ${{ secrets.ALIYUN_PASSWORD }}
       - name: Build images
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./core/deploy
           file: ./core/deploy/Kubefile
