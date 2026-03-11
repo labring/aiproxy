@@ -41,6 +41,7 @@ interface ModelFormProps {
     onSuccess?: () => void
     defaultValues?: {
         model: string
+        owner?: string
         type: number
         rpm?: number
         tpm?: number
@@ -58,8 +59,9 @@ interface ModelFormProps {
 export function ModelForm({
     mode = 'create',
     onSuccess,
-    defaultValues = {
+        defaultValues = {
         model: '',
+        owner: '',
         type: 1,
     },
 }: ModelFormProps) {
@@ -96,6 +98,7 @@ export function ModelForm({
         mode: 'onChange', // 启用实时验证
         defaultValues: {
             model: defaultValues.model || '',
+            owner: defaultValues.owner ?? '',
             type: defaultValues.type || 1,
             rpm: defaultValues.rpm,
             tpm: defaultValues.tpm,
@@ -307,6 +310,7 @@ export function ModelForm({
 
         // Prepare data for API - 如果没有启用的插件，则不传递 plugin 字段
         const formData: Omit<ModelCreateRequest, 'model'> = {
+            owner: data.owner ?? '',
             type: Number(data.type),
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
@@ -324,6 +328,7 @@ export function ModelForm({
             // For create mode, include the model name
             createModel({
                 model: data.model,
+                owner: data.owner ?? '',
                 type: Number(data.type),
                 ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
                 ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
@@ -402,6 +407,25 @@ export function ModelForm({
                                         {t("model.dialog.modelNameUpdateDisabled")}
                                     </p>
                                 )}
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="owner"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("model.owner")}</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        placeholder={t("model.dialog.ownerPlaceholder")}
+                                        {...field}
+                                        value={field.value ?? ''}
+                                    />
+                                </FormControl>
+                                <FormDescription>{t("model.dialog.ownerDescription")}</FormDescription>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />

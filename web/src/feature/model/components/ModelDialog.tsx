@@ -42,6 +42,7 @@ export function ModelDialog({
     const defaultValues = model
         ? {
             model: mode === 'create' ? '' : model.model, // Clear model name for copy mode
+            owner: model.owner ?? '',
             type: model.type,
             rpm: model.rpm,
             tpm: model.tpm,
@@ -56,6 +57,7 @@ export function ModelDialog({
         }
         : {
             model: '',
+            owner: '',
             type: 1
         }
 

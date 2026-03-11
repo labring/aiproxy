@@ -7,6 +7,13 @@ import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   MoreHorizontal,
   Plus,
   Trash2,
@@ -66,6 +73,7 @@ export function ModelTable() {
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
 
   // API Doc drawer state
   const [apiDocOpen, setApiDocOpen] = useState(false);
@@ -89,7 +97,16 @@ export function ModelTable() {
     let filtered = models;
     if (searchKeyword) {
       const keyword = searchKeyword.toLowerCase();
-      filtered = models.filter(m => m.model.toLowerCase().includes(keyword));
+      filtered = filtered.filter(m =>
+        m.model.toLowerCase().includes(keyword) || (m.owner || '').toLowerCase().includes(keyword)
+      );
+    }
+    if (ownerFilter === '__all__') {
+      // no-op
+    } else if (ownerFilter === '__empty__') {
+      filtered = filtered.filter((m) => !m.owner);
+    } else if (ownerFilter) {
+      filtered = filtered.filter((m) => (m.owner || '') === ownerFilter);
     }
     return [...filtered].sort((a, b) => {
       if (a.type === b.type) {
@@ -97,7 +114,34 @@ export function ModelTable() {
       }
       return a.type - b.type;
     });
-  }, [models, searchKeyword]);
+  }, [models, searchKeyword, ownerFilter]);
+
+  const ownerOptions = useMemo(() => {
+    if (!models) {
+      return [];
+    }
+
+    const ownerSet = new Set<string>();
+    let hasEmptyOwner = false;
+
+    for (const model of models) {
+      if (model.owner) {
+        ownerSet.add(model.owner);
+      } else {
+        hasEmptyOwner = true;
+      }
+    }
+
+    const options = [...ownerSet]
+      .sort((a, b) => a.localeCompare(b))
+      .map((owner) => ({ value: owner, label: owner }));
+
+    if (hasEmptyOwner) {
+      options.push({ value: '__empty__', label: t("model.emptyOwner") });
+    }
+
+    return options;
+  }, [models, t]);
 
   // Get channel type name by type ID
   const getChannelTypeName = (typeId: number): string => {
@@ -140,6 +184,22 @@ export function ModelTable() {
         >
           {/* @ts-expect-error 动态翻译键 */}
           {t(`modeType.${row.original.type}`)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "owner",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.owner")}</div>
+      ),
+      cell: ({ row }) => (
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => openUpdateDialog(row.original)}
+        >
+          {row.original.owner || (
+            <span className="text-muted-foreground">{t("model.emptyOwner")}</span>
+          )}
         </div>
       ),
     },
@@ -403,6 +463,7 @@ export function ModelTable() {
     const exportData = models.map(model => ({
       model: model.model,
       type: model.type,
+      owner: model.owner,
       rpm: model.rpm,
       tpm: model.tpm,
       retry_times: model.retry_times,
@@ -434,6 +495,7 @@ export function ModelTable() {
     const exportData = [{
       model: model.model,
       type: model.type,
+      owner: model.owner,
       rpm: model.rpm,
       tpm: model.tpm,
       retry_times: model.retry_times,
@@ -514,6 +576,21 @@ export function ModelTable() {
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 className="h-9 w-48 pl-8"
               />
+            </div>
+            <div className="w-44">
+              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("model.ownerFilterPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("model.allOwners")}</SelectItem>
+                  {ownerOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <AnimatedButton>
               <Button

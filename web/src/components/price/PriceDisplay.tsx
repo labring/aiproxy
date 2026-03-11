@@ -12,11 +12,37 @@ interface PriceDisplayProps {
 }
 
 const DEFAULT_UNIT = 1000
+const SERVICE_TIER_LABELS: Record<NonNullable<NonNullable<ModelPrice['conditional_prices']>[number]['condition']['service_tier']>, string> = {
+    '': 'Any',
+    auto: 'Auto',
+    default: 'Default',
+    flex: 'Flex',
+    scale: 'Scale',
+    priority: 'Priority',
+}
 
 function formatPriceValue(price?: number, unit?: number): string | null {
     if (!price) return null
     const effectiveUnit = unit || DEFAULT_UNIT
     return `${price} / ${effectiveUnit}`
+}
+
+function formatConditionSummary(condition: NonNullable<ModelPrice['conditional_prices']>[number]['condition']): string[] {
+    const parts: string[] = []
+
+    if (condition.service_tier !== undefined) {
+        parts.push(`Service Tier: ${SERVICE_TIER_LABELS[condition.service_tier]}`)
+    }
+
+    if (condition.input_token_min || condition.input_token_max) {
+        parts.push(`Input: ${condition.input_token_min || 0} - ${condition.input_token_max || '∞'}`)
+    }
+
+    if (condition.output_token_min || condition.output_token_max) {
+        parts.push(`Output: ${condition.output_token_min || 0} - ${condition.output_token_max || '∞'}`)
+    }
+
+    return parts
 }
 
 export function PriceDisplay({ price }: PriceDisplayProps) {
@@ -31,7 +57,7 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
 
     // Quick summary for cell display
     const summary = [inputStr && `In: ${inputStr}`, outputStr && `Out: ${outputStr}`].filter(Boolean).join(' | ')
-    if (!summary && !price.per_request_price) {
+    if (!summary && !price.per_request_price && !price.conditional_prices?.length) {
         return <span className="text-muted-foreground text-sm">-</span>
     }
 
@@ -54,7 +80,7 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
         <Popover>
             <PopoverTrigger asChild>
                 <button className="text-left text-sm font-mono hover:underline cursor-pointer">
-                    {summary || (price.per_request_price ? `Per req: ${price.per_request_price}` : '-')}
+                    {summary || (price.per_request_price ? `Per req: ${price.per_request_price}` : t('group.price.conditionalPrices'))}
                     {hasConditional && (
                         <Badge variant="secondary" className="text-[10px] ml-1 px-1 py-0">
                             +{price.conditional_prices!.length}
@@ -78,14 +104,13 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
                             <h5 className="font-medium text-xs mb-1">{t('group.price.conditionalPrices')}</h5>
                             {price.conditional_prices!.map((cp, i) => (
                                 <div key={i} className="rounded border p-2 mb-1 text-xs space-y-1">
-                                    <div className="text-muted-foreground">
-                                        {cp.condition.input_token_min || cp.condition.input_token_max ? (
-                                            <span>Input: {cp.condition.input_token_min || 0} - {cp.condition.input_token_max || '∞'} </span>
-                                        ) : null}
-                                        {cp.condition.output_token_min || cp.condition.output_token_max ? (
-                                            <span>Output: {cp.condition.output_token_min || 0} - {cp.condition.output_token_max || '∞'}</span>
-                                        ) : null}
-                                    </div>
+                                    {formatConditionSummary(cp.condition).length > 0 && (
+                                        <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                                            {formatConditionSummary(cp.condition).map((item) => (
+                                                <span key={item}>{item}</span>
+                                            ))}
+                                        </div>
+                                    )}
                                     {cp.price.input_price != null && (
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">{t('group.price.inputPrice')}</span>
