@@ -33,7 +33,8 @@
     "delete": "删除",
     "save": "保存",
     "saving": "保存中...",
-    "search": "搜索..."
+    "search": "搜索...",
+    "all": "全部"
   },
   "error": {
     "loading": "数据加载失败",
@@ -729,7 +730,9 @@
       "useDefaultModels": "使用默认模型",
       "customModels": "自定义模型",
       "defaultModelsHint": "默认模型来自渠道类型配置，切换到自定义模型可覆盖",
-      "defaultModelsEmpty": "该渠道类型未配置默认模型，请自定义选择",
+      "defaultModelsEmpty": "该渠道类型暂未配置默认模型",
+      "configureDefaultModels": "配置默认模型",
+      "defaultModelsManageHint": "你可以先配置该提供商的默认模型，保存后这里会立即显示默认模型列表",
       "switchToCustomConfirm": "切换到自定义模型将使用默认模型作为初始值，你可以在此基础上修改",
       "defaultModelMapping": "默认模型映射",
       "create": "创建",

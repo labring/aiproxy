@@ -33,7 +33,8 @@
     "delete": "Delete",
     "save": "Save",
     "saving": "Saving...",
-    "search": "Search..."
+    "search": "Search...",
+    "all": "All"
   },
   "error": {
     "loading": "Failed to load data",
@@ -741,7 +742,9 @@
       "useDefaultModels": "Use Default Models",
       "customModels": "Custom Models",
       "defaultModelsHint": "Default models from channel type config. Switch to custom to override.",
-      "defaultModelsEmpty": "No default models configured for this type. Please select custom models.",
+      "defaultModelsEmpty": "No default models are configured for this provider yet.",
+      "configureDefaultModels": "Configure Default Models",
+      "defaultModelsManageHint": "You can configure default models for this provider first, and they will appear here immediately after saving.",
       "switchToCustomConfirm": "Switching to custom will pre-fill with defaults for editing.",
       "defaultModelMapping": "Default Model Mapping",
       "create": "Create",

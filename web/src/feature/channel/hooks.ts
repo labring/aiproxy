@@ -36,10 +36,15 @@ export const useAllChannelDefaultModels = () => {
 }
 
 // 获取渠道列表（分页）
-export const useChannels = (page: number, perPage: number, keyword?: string) => {
+export const useChannels = (
+    page: number,
+    perPage: number,
+    keyword?: string,
+    channelType?: number
+) => {
     const query = useQuery({
-        queryKey: ['channels', page, perPage, keyword],
-        queryFn: () => channelApi.getChannels(page, perPage, keyword),
+        queryKey: ['channels', page, perPage, keyword, channelType],
+        queryFn: () => channelApi.getChannels(page, perPage, keyword, channelType),
     })
 
     return {
