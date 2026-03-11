@@ -85,7 +85,11 @@ export default function MonitorPage() {
             )}
 
             {data && (
-                <MetricsCards data={data} loading={isLoading} />
+                <MetricsCards
+                    data={data}
+                    loading={isLoading}
+                    showBreakdownCards={dataSource === 'total'}
+                />
             )}
 
             {data && hasData && (

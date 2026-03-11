@@ -104,7 +104,13 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                     ))}
                 </div>
             ) : (
-                data && <MetricsCards data={data} loading={isLoading} />
+                data && (
+                    <MetricsCards
+                        data={data}
+                        loading={isLoading}
+                        showBreakdownCards={dataSource === 'total'}
+                    />
+                )
             )}
 
             {isLoading ? (

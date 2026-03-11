@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 interface MetricsCardsProps {
     data: DashboardV2Result
     loading?: boolean
+    showBreakdownCards?: boolean
 }
 
 interface MetricCardProps {
@@ -103,7 +104,11 @@ function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor
     return cardContent
 }
 
-export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
+export function MetricsCards({
+    data,
+    loading = false,
+    showBreakdownCards = false,
+}: MetricsCardsProps) {
     const { t } = useTranslation()
 
     if (loading) {
@@ -226,8 +231,8 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                 iconColor="bg-sky-100 dark:bg-sky-900/50"
                 tooltip={t('monitor.metrics.avgTtfbTooltip')}
             />
-            {/* Row 4: Service Tier Flex & Long Context (conditionally rendered) */}
-            {data?.serviceTierFlex && (data.serviceTierFlex.request_count || 0) > 0 && (
+            {/* Row 4: Breakdown metrics (only shown in total mode) */}
+            {showBreakdownCards && data?.serviceTierFlex && (data.serviceTierFlex.request_count || 0) > 0 && (
                 <MetricCard
                     title={t('monitor.metrics.serviceTierFlex')}
                     value={data.serviceTierFlex.request_count || 0}
@@ -238,7 +243,18 @@ export function MetricsCards({ data, loading = false }: MetricsCardsProps) {
                     tooltip={t('monitor.metrics.serviceTierFlexTooltip')}
                 />
             )}
-            {data?.claudeLongContext && (data.claudeLongContext.request_count || 0) > 0 && (
+            {showBreakdownCards && data?.serviceTierPriority && (data.serviceTierPriority.request_count || 0) > 0 && (
+                <MetricCard
+                    title={t('monitor.metrics.serviceTierPriority')}
+                    value={data.serviceTierPriority.request_count || 0}
+                    subtitle={`$${((data.serviceTierPriority.used_amount || 0)).toFixed(4)}`}
+                    icon={<Layers className="h-5 w-5 text-rose-600 dark:text-rose-400" />}
+                    bgColor="bg-rose-50 dark:bg-rose-950/30"
+                    iconColor="bg-rose-100 dark:bg-rose-900/50"
+                    tooltip={t('monitor.metrics.serviceTierPriorityTooltip')}
+                />
+            )}
+            {showBreakdownCards && data?.claudeLongContext && (data.claudeLongContext.request_count || 0) > 0 && (
                 <MetricCard
                     title={t('monitor.metrics.claudeLongContext')}
                     value={data.claudeLongContext.request_count || 0}
