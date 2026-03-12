@@ -101,12 +101,9 @@ func Consume(
 		_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
 	} else if amountDetail.UsedAmount != 0 {
 		log.Warnf(
-			"consume amount: %.6f, request_id: %s, group_id: %d, token_name: %s, model: %s",
-			amountDetail.UsedAmount,
+			"not downstream result but used amount is not zero, request_id: %s, used_amount: %f",
 			meta.RequestID,
-			meta.Group.ID,
-			meta.Token.Name,
-			meta.OriginModel,
+			amountDetail.UsedAmount,
 		)
 	}
 
