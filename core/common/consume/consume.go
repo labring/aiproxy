@@ -96,7 +96,19 @@ func Consume(
 	}
 
 	amountDetail := CalculateAmountDetail(code, usage, modelPrice, serviceTier)
-	amountDetail.UsedAmount = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
+	if downstreamResult {
+		// TODO: add record actual consume amount
+		_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
+	} else if amountDetail.UsedAmount != 0 {
+		log.Warnf(
+			"consume amount: %.6f, request_id: %s, group_id: %d, token_name: %s, model: %s",
+			amountDetail.UsedAmount,
+			meta.RequestID,
+			meta.Group.ID,
+			meta.Token.Name,
+			meta.OriginModel,
+		)
+	}
 
 	selectedModelPrice := modelPrice.SelectConditionalPrice(usage, serviceTier)
 	selectedModelPrice.ConditionalPrices = nil
