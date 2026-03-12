@@ -112,6 +112,8 @@ export const useUpdateToken = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
+            queryClient.invalidateQueries({ queryKey: ['groupTokens'] })
+            queryClient.invalidateQueries({ queryKey: ['groups'] })
             setError(null)
             toast.success('Token更新成功')
         },

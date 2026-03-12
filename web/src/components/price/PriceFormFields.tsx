@@ -109,6 +109,26 @@ function ConditionFields({ condition, onChange }: {
                     </SelectContent>
                 </Select>
             </div>
+            <div className="space-y-1">
+                <Label className="text-xs">{t('group.price.startTime')}</Label>
+                <Input
+                    type="number"
+                    min={0}
+                    value={condition.start_time || ''}
+                    className="h-8 text-sm"
+                    onChange={(e) => onChange({ ...condition, start_time: parseInt(e.target.value) || 0 })}
+                />
+            </div>
+            <div className="space-y-1">
+                <Label className="text-xs">{t('group.price.endTime')}</Label>
+                <Input
+                    type="number"
+                    min={0}
+                    value={condition.end_time || ''}
+                    className="h-8 text-sm"
+                    onChange={(e) => onChange({ ...condition, end_time: parseInt(e.target.value) || 0 })}
+                />
+            </div>
         </div>
     )
 }

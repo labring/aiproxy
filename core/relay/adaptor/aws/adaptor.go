@@ -103,7 +103,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 	}
 
 	return adaptor.Metadata{
-		Readme:  "Gemini support",
+		Readme:  "AWS Bedrock unified adaptor\nRoutes requests to provider-specific Bedrock adaptors by model name\nSupports OpenAI-compatible chat/completions plus Anthropic-compatible and Gemini-compatible request conversion\nKey format: `region|ak|sk` or `region|apikey`",
 		Models:  models,
 		KeyHelp: "region|ak|sk or region|apikey",
 	}

@@ -120,7 +120,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "The `reasoning` field is converted to `reasoning_content`\nGemini support",
+		Readme: "OpenRouter OpenAI-compatible endpoint\nThe upstream `reasoning` field is normalized to `reasoning_content`\nAlso supports Gemini-compatible request conversion",
 		Models: openai.ModelList,
 	}
 }

@@ -41,7 +41,7 @@ func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "Gemini support",
+		Readme:  "iFlytek Spark API\nOpenAI-compatible endpoint\nKey format uses `app_id|app_token`\nSupports Gemini-compatible request conversion",
 		KeyHelp: "app_id|app_token",
 		Models:  ModelList,
 	}

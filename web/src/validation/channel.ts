@@ -10,6 +10,7 @@ export const channelCreateSchema = z.object({
     model_mapping: z.record(z.string(), z.string()).optional(),
     sets: z.array(z.string()).optional(),
     priority: z.number().int().min(0).max(1000000).optional(),
+    configs_text: z.string().optional(),
     useDefaultModels: z.boolean().optional(),
 })
 

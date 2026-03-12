@@ -43,7 +43,6 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/xunfei"
 	"github.com/labring/aiproxy/core/relay/adaptor/zhipu"
 	"github.com/labring/aiproxy/core/relay/adaptor/zhipucoding"
-	log "github.com/sirupsen/logrus"
 )
 
 var ChannelAdaptor = map[model.ChannelType]adaptor.Adaptor{
@@ -95,11 +94,11 @@ func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {
 }
 
 type AdaptorMeta struct {
-	Name            string                            `json:"name"`
-	KeyHelp         string                            `json:"keyHelp"`
-	DefaultBaseURL  string                            `json:"defaultBaseUrl"`
-	Readme          string                            `json:"readme"`
-	ConfigTemplates map[string]adaptor.ConfigTemplate `json:"configs,omitempty"`
+	Name           string         `json:"name"`
+	KeyHelp        string         `json:"keyHelp"`
+	DefaultBaseURL string         `json:"defaultBaseUrl"`
+	Readme         string         `json:"readme"`
+	ConfigSchema   map[string]any `json:"configSchema,omitempty"`
 }
 
 var ChannelMetas = map[model.ChannelType]AdaptorMeta{}
@@ -109,16 +108,11 @@ func init() {
 		adaptorMeta := a.Metadata()
 
 		meta := AdaptorMeta{
-			Name:            i.String(),
-			KeyHelp:         adaptorMeta.KeyHelp,
-			DefaultBaseURL:  a.DefaultBaseURL(),
-			Readme:          adaptorMeta.Readme,
-			ConfigTemplates: adaptorMeta.ConfigTemplates.Configs,
-		}
-		for key, template := range adaptorMeta.ConfigTemplates.Configs {
-			if template.Name == "" {
-				log.Fatalf("config template %s is invalid: name is empty", key)
-			}
+			Name:           i.String(),
+			KeyHelp:        adaptorMeta.KeyHelp,
+			DefaultBaseURL: a.DefaultBaseURL(),
+			Readme:         adaptorMeta.Readme,
+			ConfigSchema:   adaptorMeta.ConfigSchema,
 		}
 
 		ChannelMetas[i] = meta

@@ -1,6 +1,6 @@
 // src/api/model.ts
 import { get, post, del } from "./index";
-import { ModelConfig, ModelCreateRequest } from "@/types/model";
+import { ModelConfig, ModelCreateRequest, ModelSaveRequest } from "@/types/model";
 
 // Define the type for model sets response
 export interface ModelSetsResponse {
@@ -63,7 +63,7 @@ export const modelApi = {
   },
 
   // Batch save model configs (for import)
-  saveModels: async (configs: ModelCreateRequest[]): Promise<void> => {
+  saveModels: async (configs: ModelSaveRequest[]): Promise<void> => {
     await post("model_configs/", configs);
     return;
   },

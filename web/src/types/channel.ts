@@ -15,15 +15,20 @@ export interface Channel {
     balance?: number
     used_amount?: number
     sets?: string[]
+    configs?: Record<string, unknown> | null
 }
 
 export const DEFAULT_PRIORITY = 10
 
-export interface ChannelConfigTemplate {
-    name: string
-    description: string
-    example?: string
-    required: boolean
+export interface ChannelConfigSchema {
+    type?: string
+    title?: string
+    description?: string
+    enum?: string[]
+    properties?: Record<string, ChannelConfigSchema>
+    items?: ChannelConfigSchema
+    required?: string[]
+    default?: unknown
 }
 
 export interface ChannelTypeMeta {
@@ -31,7 +36,7 @@ export interface ChannelTypeMeta {
     keyHelp: string
     defaultBaseUrl: string
     readme?: string
-    configs?: Record<string, ChannelConfigTemplate>
+    configSchema?: ChannelConfigSchema
 }
 
 export type ChannelTypeMetaMap = Record<string, ChannelTypeMeta>
@@ -50,6 +55,7 @@ export interface ChannelCreateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    configs?: Record<string, unknown>
 }
 
 export interface ChannelUpdateRequest {
@@ -61,6 +67,7 @@ export interface ChannelUpdateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    configs?: Record<string, unknown>
 }
 
 export interface ChannelStatusRequest {

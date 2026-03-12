@@ -28,7 +28,7 @@ import { modelCreateSchema } from '@/validation/model'
 import { useCreateModel, useUpdateModel } from '../hooks'
 import { useTranslation } from 'react-i18next'
 import { ModelCreateForm } from '@/validation/model'
-import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest } from '@/types/model'
+import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest, ModelConfig } from '@/types/model'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { useState } from 'react'
@@ -36,16 +36,84 @@ import { ENV } from '@/utils/env'
 import { PriceFormFields } from '@/components/price/PriceFormFields'
 import { ValidationErrorDisplay } from '@/components/common/error/validationErrorDisplay'
 
+const KNOWN_PRICE_KEYS = new Set([
+    'input_price',
+    'input_price_unit',
+    'output_price',
+    'output_price_unit',
+    'per_request_price',
+    'cache_creation_price',
+    'cache_creation_price_unit',
+    'cached_price',
+    'cached_price_unit',
+    'image_input_price',
+    'image_input_price_unit',
+    'image_output_price',
+    'image_output_price_unit',
+    'audio_input_price',
+    'audio_input_price_unit',
+    'thinking_mode_output_price',
+    'thinking_mode_output_price_unit',
+    'web_search_price',
+    'web_search_price_unit',
+    'conditional_prices',
+])
+
+const MANAGED_MODEL_KEYS = new Set([
+    'owner',
+    'type',
+    'rpm',
+    'tpm',
+    'retry_times',
+    'timeout_config',
+    'max_error_rate',
+    'force_save_detail',
+    'summary_service_tier',
+    'summary_claude_long_context',
+    'price',
+    'plugin',
+])
+
+const MANAGED_PLUGIN_KEYS = {
+    cache: new Set([
+        'enable',
+        'ttl',
+        'item_max_size',
+        'add_cache_hit_header',
+        'cache_hit_header',
+    ]),
+    'web-search': new Set([
+        'enable',
+        'force_search',
+        'max_results',
+        'need_reference',
+        'reference_location',
+        'reference_format',
+        'default_language',
+        'prompt_template',
+        'search_from',
+    ]),
+    'think-split': new Set(['enable']),
+    'stream-fake': new Set(['enable']),
+} as const
+
 interface ModelFormProps {
     mode?: 'create' | 'update'
     onSuccess?: () => void
+    baseModelConfig?: ModelConfig | null
     defaultValues?: {
         model: string
+        config?: ModelConfig['config']
         owner?: string
         type: number
+        exclude_from_tests?: boolean
         rpm?: number
         tpm?: number
+        image_quality_prices?: ModelConfig['image_quality_prices']
+        image_prices?: ModelConfig['image_prices']
         retry_times?: number
+        timeout_config?: ModelConfig['timeout_config']
+        warn_error_rate?: number
         timeout?: number
         max_error_rate?: number
         force_save_detail?: boolean
@@ -59,7 +127,8 @@ interface ModelFormProps {
 export function ModelForm({
     mode = 'create',
     onSuccess,
-        defaultValues = {
+    baseModelConfig = null,
+    defaultValues = {
         model: '',
         owner: '',
         type: 1,
@@ -308,20 +377,127 @@ export function ModelForm({
         }
         const priceData = cleanPrice(data.price as ModelPrice | undefined)
 
+        const baseConfig = baseModelConfig
+            ? (({ created_at, updated_at, model, ...rest }) => rest)(baseModelConfig)
+            : null
+
+        const preservedTopLevelFields = Object.fromEntries(
+            Object.entries((baseConfig || {}) as Record<string, unknown>).filter(([key]) => !MANAGED_MODEL_KEYS.has(key))
+        )
+
+        const basePriceUnknown = Object.fromEntries(
+            Object.entries(baseModelConfig?.price || {}).filter(([key]) => !KNOWN_PRICE_KEYS.has(key))
+        )
+
+        const mergedPrice = (() => {
+            if (!priceData && Object.keys(basePriceUnknown).length === 0) {
+                return undefined
+            }
+
+            return {
+                ...basePriceUnknown,
+                ...(priceData || {}),
+            } as ModelPrice
+        })()
+
+        const existingPlugin = (baseModelConfig?.plugin || {}) as Record<string, unknown>
+        const mergedPlugin: Record<string, unknown> = Object.fromEntries(
+            Object.entries(existingPlugin).filter(([key]) => !['cache', 'web-search', 'think-split', 'stream-fake'].includes(key))
+        )
+
+        if (data.plugin?.cache?.enable) {
+            const existingCachePlugin = (baseModelConfig?.plugin?.cache || {}) as Record<string, unknown>
+            const preservedCachePluginFields = Object.fromEntries(
+                Object.entries(existingCachePlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS.cache.has(key))
+            )
+            mergedPlugin.cache = {
+                ...preservedCachePluginFields,
+                enable: true,
+                ...(data.plugin.cache.ttl !== undefined && { ttl: data.plugin.cache.ttl }),
+                ...(data.plugin.cache.item_max_size !== undefined && { item_max_size: data.plugin.cache.item_max_size }),
+                ...(data.plugin.cache.add_cache_hit_header !== undefined && { add_cache_hit_header: data.plugin.cache.add_cache_hit_header }),
+                ...(data.plugin.cache.cache_hit_header !== undefined && { cache_hit_header: data.plugin.cache.cache_hit_header }),
+            }
+        }
+
+        if (data.plugin?.['web-search']?.enable && data.plugin['web-search'].search_from && data.plugin['web-search'].search_from.length > 0) {
+            const existingWebSearchPlugin = (baseModelConfig?.plugin?.['web-search'] || {}) as Record<string, unknown>
+            const preservedWebSearchPluginFields = Object.fromEntries(
+                Object.entries(existingWebSearchPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['web-search'].has(key))
+            )
+            const cleanedSearchFrom = data.plugin['web-search'].search_from.map(engine => ({
+                type: engine.type,
+                ...(engine.max_results !== undefined && { max_results: engine.max_results }),
+                ...(engine.spec && Object.keys(engine.spec).some(key => (engine.spec as Record<string, unknown>)[key] !== undefined && (engine.spec as Record<string, unknown>)[key] !== '') && { spec: engine.spec })
+            }))
+
+            mergedPlugin['web-search'] = {
+                ...preservedWebSearchPluginFields,
+                enable: true,
+                search_from: cleanedSearchFrom,
+                ...(data.plugin['web-search'].force_search !== undefined && { force_search: data.plugin['web-search'].force_search }),
+                ...(data.plugin['web-search'].max_results !== undefined && { max_results: data.plugin['web-search'].max_results }),
+                ...(data.plugin['web-search'].need_reference !== undefined && { need_reference: data.plugin['web-search'].need_reference }),
+                ...(data.plugin['web-search'].reference_location !== undefined && { reference_location: data.plugin['web-search'].reference_location }),
+                ...(data.plugin['web-search'].reference_format !== undefined && { reference_format: data.plugin['web-search'].reference_format }),
+                ...(data.plugin['web-search'].default_language !== undefined && { default_language: data.plugin['web-search'].default_language }),
+                ...(data.plugin['web-search'].prompt_template !== undefined && { prompt_template: data.plugin['web-search'].prompt_template }),
+            }
+        }
+
+        if (data.plugin?.['think-split']?.enable) {
+            const existingThinkSplitPlugin = (baseModelConfig?.plugin?.['think-split'] || {}) as Record<string, unknown>
+            const preservedThinkSplitPluginFields = Object.fromEntries(
+                Object.entries(existingThinkSplitPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['think-split'].has(key))
+            )
+            mergedPlugin['think-split'] = {
+                ...preservedThinkSplitPluginFields,
+                enable: true,
+            }
+        }
+
+        if (data.plugin?.['stream-fake']?.enable) {
+            const existingStreamFakePlugin = (baseModelConfig?.plugin?.['stream-fake'] || {}) as Record<string, unknown>
+            const preservedStreamFakePluginFields = Object.fromEntries(
+                Object.entries(existingStreamFakePlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['stream-fake'].has(key))
+            )
+            mergedPlugin['stream-fake'] = {
+                ...preservedStreamFakePluginFields,
+                enable: true,
+            }
+        }
+
+        const preservedTimeoutConfigFields = Object.fromEntries(
+            Object.entries((baseConfig?.timeout_config || {}) as Record<string, unknown>).filter(([key]) => key !== 'request_timeout')
+        )
+        const mergedTimeoutConfig = (() => {
+            if (data.timeout !== undefined) {
+                return {
+                    ...preservedTimeoutConfigFields,
+                    request_timeout: Number(data.timeout),
+                }
+            }
+            if (Object.keys(preservedTimeoutConfigFields).length > 0) {
+                return preservedTimeoutConfigFields
+            }
+            return undefined
+        })()
+
         // Prepare data for API - 如果没有启用的插件，则不传递 plugin 字段
         const formData: Omit<ModelCreateRequest, 'model'> = {
+            ...preservedTopLevelFields,
             owner: data.owner ?? '',
             type: Number(data.type),
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
             ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
-            ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
+            ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
             ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
             ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
             ...(data.summary_claude_long_context !== undefined && { summary_claude_long_context: data.summary_claude_long_context }),
-            ...(priceData && { price: priceData }),
-            ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
+            ...(mergedPrice && { price: mergedPrice }),
+            ...(Object.keys(mergedPlugin).length > 0 && { plugin: mergedPlugin as Plugin })
         }
 
         if (mode === 'create') {
@@ -333,7 +509,7 @@ export function ModelForm({
                 ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
                 ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
                 ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
-                ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
+                ...(data.timeout !== undefined && { timeout_config: { request_timeout: Number(data.timeout) } }),
                 ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
                 ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),

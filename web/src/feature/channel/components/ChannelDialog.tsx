@@ -52,7 +52,8 @@ export function ChannelDialog({
             models: channel.models || [],
             model_mapping: channel.model_mapping || {},
             sets: channel.sets || [],
-            priority: channel.priority
+            priority: channel.priority,
+            configs_text: channel.configs ? JSON.stringify(channel.configs, null, 2) : ''
         }
         : {
             type: 0,
@@ -62,7 +63,8 @@ export function ChannelDialog({
             models: [],
             model_mapping: {},
             sets: [],
-            priority: 10
+            priority: 10,
+            configs_text: ''
         }, [mode, channel])
 
     const handleSuccess = useCallback(() => onOpenChange(false), [onOpenChange])

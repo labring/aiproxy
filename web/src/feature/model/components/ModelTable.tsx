@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
-import { ModelConfig, ModelCreateRequest } from "@/types/model";
+import { ModelConfig, ModelSaveRequest } from "@/types/model";
 import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,6 +149,11 @@ export function ModelTable() {
     
     const typeKey = String(typeId);
     return channelTypeMetas[typeKey]?.name || `Type: ${typeId}`;
+  };
+
+  const toModelSaveRequest = (model: ModelConfig): ModelSaveRequest => {
+    const { created_at, updated_at, ...rest } = model;
+    return rest;
   };
 
   // Create table columns
@@ -460,21 +465,7 @@ export function ModelTable() {
       return;
     }
 
-    const exportData = models.map(model => ({
-      model: model.model,
-      type: model.type,
-      owner: model.owner,
-      rpm: model.rpm,
-      tpm: model.tpm,
-      retry_times: model.retry_times,
-      max_error_rate: model.max_error_rate,
-      force_save_detail: model.force_save_detail,
-      summary_service_tier: model.summary_service_tier,
-      summary_claude_long_context: model.summary_claude_long_context,
-      price: model.price,
-      plugin: model.plugin,
-      image_prices: model.image_prices,
-    }));
+    const exportData = models.map(toModelSaveRequest);
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: "application/json",
@@ -492,21 +483,7 @@ export function ModelTable() {
 
   // Export single model config to JSON file
   const exportSingleModel = (model: ModelConfig) => {
-    const exportData = [{
-      model: model.model,
-      type: model.type,
-      owner: model.owner,
-      rpm: model.rpm,
-      tpm: model.tpm,
-      retry_times: model.retry_times,
-      max_error_rate: model.max_error_rate,
-      force_save_detail: model.force_save_detail,
-      summary_service_tier: model.summary_service_tier,
-      summary_claude_long_context: model.summary_claude_long_context,
-      price: model.price,
-      plugin: model.plugin,
-      image_prices: model.image_prices,
-    }];
+    const exportData = [toModelSaveRequest(model)];
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: "application/json",
@@ -530,7 +507,7 @@ export function ModelTable() {
     setIsImporting(true);
     try {
       const text = await file.text();
-      const configs: ModelCreateRequest[] = JSON.parse(text);
+      const configs: ModelSaveRequest[] = JSON.parse(text);
 
       if (!Array.isArray(configs)) {
         throw new Error(t("model.invalidFormat"));

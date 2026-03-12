@@ -27,7 +27,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Gemini support",
+		Readme: "DeepSeek API\nOpenAI-compatible chat and completions endpoints\nSupports Anthropic-compatible and Gemini-compatible request conversion",
 		Models: ModelList,
 	}
 }

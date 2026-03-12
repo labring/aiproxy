@@ -232,5 +232,33 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
 		Readme: "Support native Endpoint: /v1/messages",
 		Models: ModelList,
+		ConfigSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"disable_context_management": map[string]any{
+					"type":        "boolean",
+					"title":       "Disable Context Management",
+					"description": "Remove the entire context_management field before sending the request upstream.",
+				},
+				"supported_context_management_edits_type": map[string]any{
+					"type":        "array",
+					"title":       "Supported Context Management Edit Types",
+					"description": "Only keep the listed context management edit types. Leave empty to keep all edit types.",
+					"items": map[string]any{
+						"type": "string",
+					},
+				},
+				"remove_tools_examples": map[string]any{
+					"type":        "boolean",
+					"title":       "Remove Tool Examples",
+					"description": "Strip tool input_examples from the request body before relay.",
+				},
+				"remove_tools_custom_defer_loading": map[string]any{
+					"type":        "boolean",
+					"title":       "Remove Tool Defer Loading",
+					"description": "Strip tool defer_loading from the request body before relay.",
+				},
+			},
+		},
 	}
 }

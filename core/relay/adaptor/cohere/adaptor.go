@@ -107,6 +107,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Cohere Chat API\nUses `/v1/chat`\nOnly chat completions mode is supported",
 		Models: ModelList,
 	}
 }

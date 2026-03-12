@@ -85,7 +85,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Bot support\nNetwork search metering support",
+		Readme: "Doubao / Volcano Engine endpoint\nSupports bot-style models and network search metering fields",
 		Models: ModelList,
 	}
 }

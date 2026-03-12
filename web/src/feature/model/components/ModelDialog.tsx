@@ -10,6 +10,7 @@ import { ModelForm } from './ModelForm'
 import { ModelConfig } from '@/types/model'
 import { AnimatePresence, motion } from "motion/react"
 import { useTranslation } from 'react-i18next'
+import { useMemo } from 'react'
 import {
     dialogEnterExitAnimation,
     dialogContentAnimation,
@@ -39,19 +40,13 @@ export function ModelDialog({
         : t("model.dialog.updateDescription")
 
     // Default values for form - use model data if available (for both update and copy)
-    const defaultValues = model
+    const defaultValues = useMemo(() => model
         ? {
-            model: mode === 'create' ? '' : model.model, // Clear model name for copy mode
+            ...model,
+            model: mode === 'create' ? '' : model.model,
             owner: model.owner ?? '',
             type: model.type,
-            rpm: model.rpm,
-            tpm: model.tpm,
-            retry_times: model.retry_times,
-            timeout: model.timeout,
-            max_error_rate: model.max_error_rate,
-            force_save_detail: model.force_save_detail,
-            summary_service_tier: model.summary_service_tier ?? false,
-            summary_claude_long_context: model.summary_claude_long_context ?? false,
+            timeout: model.timeout_config?.request_timeout,
             price: model.price,
             plugin: model.plugin
         }
@@ -59,7 +54,7 @@ export function ModelDialog({
             model: '',
             owner: '',
             type: 1
-        }
+        }, [mode, model])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,6 +77,7 @@ export function ModelDialog({
                                     <ModelForm
                                         mode={mode}
                                         defaultValues={defaultValues}
+                                        baseModelConfig={mode === 'update' ? model : null}
                                         onSuccess={() => onOpenChange(false)}
                                     />
                                 </motion.div>

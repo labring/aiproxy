@@ -14,5 +14,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
-	return adaptor.Metadata{}
+	return adaptor.Metadata{
+		Readme: "Sangfor AICP OpenAI-compatible endpoint",
+	}
 }

@@ -100,6 +100,7 @@ func (a *Adaptor) SetupRequestHeader(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Doc2X PDF parsing API\nUses `/api/v2/parse/pdf`\nOnly PDF parsing mode is supported",
 		Models: ModelList,
 	}
 }

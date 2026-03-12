@@ -140,6 +140,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Baidu Qianfan v2 endpoint\nSupports chat completions and rerank\nSome model names are remapped to official v2 route names\nKey format: `ak|sk`",
 		KeyHelp: "ak|sk",
 		Models:  ModelList,
 	}

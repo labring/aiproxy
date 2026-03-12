@@ -31,7 +31,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "https://github.com/huggingface/text-embeddings-inference\nEmbeddings、Rerank Support",
+		Readme: "https://github.com/huggingface/text-embeddings-inference\nHugging Face Text Embeddings Inference endpoint\nSupports embeddings and rerank",
 		Models: ModelList,
 	}
 }
