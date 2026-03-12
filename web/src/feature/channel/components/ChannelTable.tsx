@@ -174,6 +174,7 @@ export function ChannelTable() {
                 model_mapping: channel.model_mapping || undefined,
                 sets: channel.sets,
                 priority: channel.priority,
+                configs: channel.configs || undefined,
             }))
 
             const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -204,6 +205,7 @@ export function ChannelTable() {
             model_mapping: channel.model_mapping || undefined,
             sets: channel.sets,
             priority: channel.priority,
+            configs: channel.configs || undefined,
         }]
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {

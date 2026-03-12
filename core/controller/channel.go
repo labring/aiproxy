@@ -258,14 +258,6 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 		}
 	}
 
-	if r.Configs != nil {
-		if metadata.ConfigTemplates.Validator != nil {
-			if err := metadata.ConfigTemplates.Validator(r.Configs); err != nil {
-				return nil, fmt.Errorf("config validate faild: %w", err)
-			}
-		}
-	}
-
 	return &model.Channel{
 		Type:         r.Type,
 		Name:         r.Name,

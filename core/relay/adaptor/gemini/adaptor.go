@@ -141,7 +141,23 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "https://ai.google.dev\nChat、Embeddings、Image generation Support",
+		Readme: "https://ai.google.dev\nGoogle Gemini native API\nSupports chat, embeddings, native Gemini requests, and image generation",
 		Models: ModelList,
+		ConfigSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"safety": map[string]any{
+					"type":        "string",
+					"title":       "Safety Threshold",
+					"description": "Safety blocking threshold applied to all Gemini safety categories.",
+					"enum": []string{
+						relaymodel.GeminiSafetyThresholdBlockNone,
+						relaymodel.GeminiSafetyThresholdBlockLowAndAbove,
+						relaymodel.GeminiSafetyThresholdBlockMediumAndAbove,
+						relaymodel.GeminiSafetyThresholdBlockOnlyHigh,
+					},
+				},
+			},
+		},
 	}
 }

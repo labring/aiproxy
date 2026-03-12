@@ -137,6 +137,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Coze bot chat endpoint\nOnly chat completions mode is supported\nActual model should be a bot ID; the `bot-` prefix is stripped before upstream requests\nKey format: `token|user_id`",
 		KeyHelp: "token|user_id",
 		Models:  ModelList,
 	}

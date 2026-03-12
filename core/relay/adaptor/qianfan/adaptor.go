@@ -42,6 +42,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Baidu Qianfan OpenAI-compatible endpoint\nSupports chat, completions, embeddings, and Anthropic-compatible request conversion\nKey format example: `bce-v3/aaa/bbb`",
 		KeyHelp: "bce-v3/aaa/bbb",
 	}
 }

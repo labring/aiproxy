@@ -25,7 +25,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Gemini support",
+		Readme: "SiliconFlow API\nOpenAI-compatible chat, embeddings, audio, and rerank endpoints\nSupports Gemini-compatible request conversion",
 		Models: ModelList,
 	}
 }

@@ -65,7 +65,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "Claude support native Endpoint: /v1/messages\nGemini support",
+		Readme:  "Google Vertex AI unified adaptor\nRoutes Gemini and Claude models to Vertex AI publisher endpoints\nSupports OpenAI-compatible chat plus Anthropic-compatible and Gemini-compatible request conversion\nKey format: `region|adcJSON`, `region|apikey`, or `region|project_id|apikey`",
 		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}

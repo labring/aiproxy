@@ -100,6 +100,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Zhipu Coding endpoint\nChat and completions are routed to `/api/coding/paas/v4`\nAnthropic-compatible requests are routed to `/api/anthropic/v1/messages`",
 		Models: zhipu.ModelList,
 	}
 }

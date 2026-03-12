@@ -44,7 +44,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "https://www.volcengine.com/docs/6561/1257543\nTTS support",
+		Readme:  "https://www.volcengine.com/docs/6561/1257543\nVolcano Engine Doubao Audio TTS endpoint\nOnly text-to-speech mode is supported",
 		KeyHelp: "app_id|app_token",
 		Models:  ModelList,
 	}

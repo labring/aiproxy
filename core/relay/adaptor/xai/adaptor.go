@@ -34,6 +34,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "xAI API\nOpenAI-compatible endpoint",
 		Models: ModelList,
 	}
 }

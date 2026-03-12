@@ -170,6 +170,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Baidu Wenxin Workshop v1 endpoint\nSupports chat, embeddings, rerank, and image generation\nKey format: `client_id|client_secret`",
 		KeyHelp: "client_id|client_secret",
 		Models:  ModelList,
 	}

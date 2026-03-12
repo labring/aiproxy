@@ -17,7 +17,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Gemini support",
+		Readme: "Baichuan open platform\nOpenAI-compatible chat endpoint\nSupports Gemini-compatible request conversion",
 		Models: ModelList,
 	}
 }

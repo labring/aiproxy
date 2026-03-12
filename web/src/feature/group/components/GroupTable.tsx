@@ -10,7 +10,7 @@ import type { Group } from '@/types/group'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-    MoreHorizontal, Plus, Trash2, RefreshCcw,
+    MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
     PowerOff, Power, Key, Search
 } from 'lucide-react'
 import {
@@ -57,6 +57,7 @@ export function GroupTable() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+    const [editingGroup, setEditingGroup] = useState<Group | null>(null)
     const [isRefreshAnimating, setIsRefreshAnimating] = useState(false)
     const [searchInput, setSearchInput] = useState('')
     const [searchKeyword, setSearchKeyword] = useState<string | undefined>(undefined)
@@ -88,6 +89,12 @@ export function GroupTable() {
 
     // Open create group dialog
     const openCreateDialog = () => {
+        setEditingGroup(null)
+        setCreateGroupDialogOpen(true)
+    }
+
+    const openEditDialog = (group: Group) => {
+        setEditingGroup(group)
         setCreateGroupDialogOpen(true)
     }
 
@@ -205,6 +212,12 @@ export function GroupTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onClick={() => openEditDialog(row.original)}
+                        >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {t("group.edit")}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => openTokenDialog(row.original.id)}
                         >
@@ -328,6 +341,7 @@ export function GroupTable() {
             <CreateGroupDialog
                 open={createGroupDialogOpen}
                 onOpenChange={setCreateGroupDialogOpen}
+                group={editingGroup}
             />
 
             {/* Delete group dialog */}

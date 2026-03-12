@@ -49,7 +49,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
             name: data.name,
             quota: data.quota,
             period_quota: data.period_quota,
-            period_type: data.period_type || undefined,
+            period_type: data.period_quota && data.period_quota > 0 ? (data.period_type || 'monthly') : undefined,
         }, {
             onSuccess: () => {
                 onSuccess?.()
@@ -141,8 +141,9 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                         <FormItem>
                             <FormLabel>{t("token.quota.periodType")}</FormLabel>
                             <Select
-                                onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
-                                value={field.value || 'none'}
+                                onValueChange={field.onChange}
+                                value={field.value || 'monthly'}
+                                disabled={!form.watch('period_quota')}
                             >
                                 <FormControl>
                                     <SelectTrigger>
@@ -150,12 +151,16 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                                     </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    <SelectItem value="none">{t("token.quota.noLimit")}</SelectItem>
                                     <SelectItem value="daily">{t("token.quota.daily")}</SelectItem>
                                     <SelectItem value="weekly">{t("token.quota.weekly")}</SelectItem>
                                     <SelectItem value="monthly">{t("token.quota.monthly")}</SelectItem>
                                 </SelectContent>
                             </Select>
+                            {!form.watch('period_quota') && (
+                                <FormDescription>
+                                    {t("token.quota.periodTypeDisabledHelp")}
+                                </FormDescription>
+                            )}
                             <FormMessage />
                         </FormItem>
                     )}

@@ -47,6 +47,7 @@ import { useModels } from '@/feature/model/hooks'
 import type { GroupModelConfig, GroupModelConfigSaveRequest } from '@/types/group'
 import type { ModelPrice } from '@/types/model'
 import { PriceFormFields } from '@/components/price/PriceFormFields'
+import { PriceDisplay } from '@/components/price/PriceDisplay'
 import { Combobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
 
@@ -164,6 +165,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [formSummaryClaudeLongContext, setFormSummaryClaudeLongContext] = useState(false)
     const [formOverridePrice, setFormOverridePrice] = useState(false)
     const [formPrice, setFormPrice] = useState<ModelPrice>({})
+    const [formImagePrices, setFormImagePrices] = useState<Record<string, number>>({})
 
     // Save mutation
     const saveMutation = useMutation({
@@ -209,6 +211,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormSummaryClaudeLongContext(config.summary_claude_long_context)
             setFormOverridePrice(config.override_price)
             setFormPrice(config.price || {})
+            setFormImagePrices(config.image_prices || {})
         } else {
             const defaults = getDefaultConfig()
             setFormModel('')
@@ -225,6 +228,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormSummaryClaudeLongContext(defaults.summary_claude_long_context!)
             setFormOverridePrice(false)
             setFormPrice({})
+            setFormImagePrices({})
         }
     }
 
@@ -263,6 +267,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         setFormSummaryClaudeLongContext(config.summary_claude_long_context)
         setFormOverridePrice(config.override_price)
         setFormPrice(config.price || {})
+        setFormImagePrices(config.image_prices || {})
         setEditDialogOpen(true)
     }
 
@@ -290,6 +295,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             summary_claude_long_context: formSummaryClaudeLongContext,
             override_price: formOverridePrice,
             ...(formOverridePrice && { price: formPrice }),
+            ...(formOverridePrice && Object.keys(formImagePrices).length > 0 && { image_prices: formImagePrices }),
         }
         saveMutation.mutate({ model, config })
     }
@@ -307,22 +313,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             return
         }
 
-        const exportData = data.map(config => ({
-            model: config.model,
-            override_limit: config.override_limit,
-            rpm: config.rpm,
-            tpm: config.tpm,
-            override_retry_times: config.override_retry_times,
-            retry_times: config.retry_times,
-            override_force_save_detail: config.override_force_save_detail,
-            force_save_detail: config.force_save_detail,
-            override_summary_service_tier: config.override_summary_service_tier,
-            summary_service_tier: config.summary_service_tier,
-            override_summary_claude_long_context: config.override_summary_claude_long_context,
-            summary_claude_long_context: config.summary_claude_long_context,
-            override_price: config.override_price,
-            price: config.price,
-        }))
+        const exportData = data.map(({ group_id, ...config }) => config)
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {
             type: 'application/json',
@@ -373,6 +364,17 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     // Trigger file input click
     const triggerImport = () => {
         fileInputRef.current?.click()
+    }
+
+    const formatImagePriceSummary = (imagePrices?: Record<string, number>) => {
+        if (!imagePrices || Object.keys(imagePrices).length === 0) {
+            return null
+        }
+
+        return Object.entries(imagePrices)
+            .slice(0, 2)
+            .map(([size, value]) => `${size}: ${value}`)
+            .join(' | ')
     }
 
     if (isLoading) {
@@ -479,6 +481,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.forceSaveDetail')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordServiceTier')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordClaudeLongContext')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overridePrice')}</th>
                                     <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.actions')}</th>
                                 </tr>
                             </thead>
@@ -535,6 +538,18 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                                 </Badge>
                                             ) : '-'}
                                         </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            {config.override_price ? (
+                                                <div className="space-y-1">
+                                                    <PriceDisplay price={config.price} />
+                                                    {formatImagePriceSummary(config.image_prices) && (
+                                                        <div className="text-xs text-muted-foreground font-mono">
+                                                            {formatImagePriceSummary(config.image_prices)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : '-'}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
@@ -565,7 +580,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>

@@ -28,7 +28,7 @@ type Store interface {
 }
 
 type Metadata struct {
-	ConfigTemplates ConfigTemplates
+	ConfigSchema    map[string]any
 	KeyHelp         string
 	Readme          string
 	Models          []model.ModelConfig
@@ -107,14 +107,4 @@ type KeyValidator interface {
 	ValidateKey(key string) error
 }
 
-type ConfigTemplate struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Example     string `json:"example,omitempty"`
-	Required    bool   `json:"required"`
-}
-
-type ConfigTemplates struct {
-	Configs   map[string]ConfigTemplate
-	Validator func(model.ChannelConfigs) error `json:"-"`
-}
+type ConfigValidator func(model.ChannelConfigs) error

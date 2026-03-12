@@ -34,7 +34,7 @@ func (a *Adaptor) ConvertRequest(
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
 		Readme: fmt.Sprintf(
-			"Model names can contain '.' character\nAPI version is optional, default is '%s'\nGemini support",
+			"Azure AI Foundry / Azure OpenAI compatible endpoint\nModel names can contain '.' character\nAPI version is optional, default is '%s'\nSupports Gemini-compatible request conversion",
 			azure.DefaultAPIVersion,
 		),
 		KeyHelp: "key or key|api-version",

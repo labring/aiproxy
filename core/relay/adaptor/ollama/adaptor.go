@@ -132,7 +132,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Chat、Embeddings Support",
+		Readme: "Ollama local API\nSupports chat, completions, and embeddings\nDefault base URL points to a local Ollama instance",
 		Models: ModelList,
 	}
 }

@@ -111,6 +111,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Streamlake OpenAI-compatible endpoint\nSupports chat, completions, and Anthropic-compatible requests\nKAT Coder models can use the Claude Code Proxy path `/claude-code-proxy/v1/messages`",
 		Models: ModelList,
 	}
 }

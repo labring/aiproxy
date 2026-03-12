@@ -94,6 +94,7 @@ func (a *Adaptor) GetRequestURL(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Cloudflare Workers AI\nDefault base URL uses the account-scoped REST API\nAlso supports AI Gateway Workers AI endpoints ending with `/workers-ai`\nChat and embeddings use OpenAI-compatible paths; other modes use `/run/{model}`",
 		Models: ModelList,
 	}
 }

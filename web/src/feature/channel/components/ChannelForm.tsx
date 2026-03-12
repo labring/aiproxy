@@ -30,6 +30,7 @@ import { FlaskConical, Loader2, Info } from 'lucide-react'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { Badge } from '@/components/ui/badge'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
+import { ChannelConfigEditor } from './ChannelConfigEditor'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update' | 'copy'
@@ -45,6 +46,7 @@ interface ChannelFormProps {
         model_mapping?: Record<string, string>
         sets?: string[]
         priority?: number
+        configs_text?: string
     }
 }
 
@@ -69,6 +71,7 @@ export function ChannelForm({
     const [isUserSubmitting, setIsUserSubmitting] = useState(false)
     const isCreateLikeMode = mode === 'create' || mode === 'copy'
     const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
+    const [configsError, setConfigsError] = useState<string | null>(null)
 
     // Determine initial useDefaultModels state
     const initialUseDefault = mode === 'create'
@@ -154,6 +157,23 @@ export function ChannelForm({
 
         // 清除之前的错误
         if (clearError) clearError()
+        setConfigsError(null)
+
+        let parsedConfigs: Record<string, unknown> | undefined
+        const rawConfigs = data.configs_text?.trim()
+        if (rawConfigs) {
+            try {
+                const parsed = JSON.parse(rawConfigs) as unknown
+                if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+                    setConfigsError(t('channel.dialog.configsJsonObjectError'))
+                    return
+                }
+                parsedConfigs = parsed as Record<string, unknown>
+            } catch {
+                setConfigsError(t('channel.dialog.configsJsonInvalid'))
+                return
+            }
+        }
 
         // 准备提交数据 - when using defaults, send empty models/mapping
         const formData = {
@@ -164,7 +184,8 @@ export function ChannelForm({
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
-            priority: data.priority
+            priority: data.priority,
+            configs: parsedConfigs
         }
 
         if (isCreateLikeMode) {
@@ -220,6 +241,7 @@ export function ChannelForm({
     // 处理测试按钮点击
     const handleTestClick = () => {
         const formData = form.getValues()
+        setConfigsError(null)
 
         // 验证必填字段
         if (!formData.type) {
@@ -244,6 +266,26 @@ export function ChannelForm({
             return
         }
 
+        let parsedConfigs: Record<string, unknown> | undefined
+        const rawConfigs = formData.configs_text?.trim()
+        if (rawConfigs) {
+            try {
+                const parsed = JSON.parse(rawConfigs) as unknown
+                if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+                    const message = t('channel.dialog.configsJsonObjectError')
+                    setConfigsError(message)
+                    toast.error(message)
+                    return
+                }
+                parsedConfigs = parsed as Record<string, unknown>
+            } catch {
+                const message = t('channel.dialog.configsJsonInvalid')
+                setConfigsError(message)
+                toast.error(message)
+                return
+            }
+        }
+
         clearTestResults()
         setTestDialogOpen(true)
 
@@ -254,7 +296,7 @@ export function ChannelForm({
             name: formData.name || '',
             models: testModels,
             model_mapping: testMapping,
-            configs: {}
+            configs: parsedConfigs
         })
     }
 
@@ -691,6 +733,33 @@ export function ChannelForm({
                                         </FormItem>
                                     )
                                 }}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="configs_text"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>{t("channel.dialog.configs")}</FormLabel>
+                                            <span className="text-xs text-muted-foreground">{t("common.optional")}</span>
+                                        </div>
+                                        <FormControl>
+                                            <div>
+                                                <ChannelConfigEditor
+                                                    value={field.value || ''}
+                                                    onChange={field.onChange}
+                                                    meta={watchedType > 0 ? typeMetas[String(watchedType)] : null}
+                                                    error={configsError}
+                                                />
+                                            </div>
+                                        </FormControl>
+                                        {configsError && (
+                                            <p className="text-sm font-medium text-destructive">{configsError}</p>
+                                        )}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
 
                             {/* 代理地址字段 */}

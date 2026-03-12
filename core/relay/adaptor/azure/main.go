@@ -336,7 +336,7 @@ func (a *Adaptor) SetupRequestHeader(
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
 		Readme: fmt.Sprintf(
-			"Model names do not contain '.' character, dots will be removed\nFor example: gpt-3.5-turbo becomes gpt-35-turbo\nAPI version is optional, default is '%s'\nGemini support",
+			"Azure OpenAI endpoint\nModel names do not contain '.' character, dots will be removed\nFor example: gpt-3.5-turbo becomes gpt-35-turbo\nAPI version is optional, default is '%s'\nSupports Gemini-compatible request conversion",
 			DefaultAPIVersion,
 		),
 		KeyHelp: "key or key|api-version",

@@ -24,6 +24,11 @@ export interface ConditionalPrice {
     price: ModelPrice
 }
 
+export interface TimeoutConfig {
+    request_timeout?: number
+    stream_request_timeout?: number
+}
+
 export interface ModelPrice {
     input_price?: number
     input_price_unit?: number
@@ -49,24 +54,29 @@ export interface ModelPrice {
 
 export interface ModelConfig {
     config?: ModelConfigDetail
-    created_at: number
-    updated_at: number
-    image_prices: number[] | null
+    created_at?: number
+    updated_at?: number
     model: string
-    owner: string
+    owner?: string
     image_batch_size?: number
     type: number
-    price: ModelPrice
-    rpm: number
+    exclude_from_tests?: boolean
+    image_quality_prices?: Record<string, Record<string, number>> | null
+    image_prices?: Record<string, number> | null
+    price?: ModelPrice
+    rpm?: number
     tpm?: number
     retry_times?: number
-    timeout?: number
+    timeout_config?: TimeoutConfig
+    warn_error_rate?: number
     max_error_rate?: number
     force_save_detail?: boolean
     summary_service_tier?: boolean
     summary_claude_long_context?: boolean
-    plugin: Plugin
+    plugin?: Plugin
 }
+
+export type ModelSaveRequest = Omit<ModelConfig, 'created_at' | 'updated_at'>
 
 type Plugin = {
     cache: CachePlugin // 缓存插件
@@ -134,12 +144,17 @@ type SearchXNGSpec = {
 
 export interface ModelCreateRequest {
     model: string
+    config?: ModelConfigDetail
     owner?: string
     type: number
+    exclude_from_tests?: boolean
     rpm?: number
     tpm?: number
+    image_quality_prices?: Record<string, Record<string, number>> | null
+    image_prices?: Record<string, number> | null
     retry_times?: number
-    timeout?: number
+    timeout_config?: TimeoutConfig
+    warn_error_rate?: number
     max_error_rate?: number
     force_save_detail?: boolean
     summary_service_tier?: boolean
