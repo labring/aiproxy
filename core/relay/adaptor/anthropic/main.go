@@ -406,6 +406,16 @@ func StreamHandler(
 
 				if response != nil && response.Usage != nil {
 					usage.Add(response.Usage)
+				} else {
+					complateTokens := openai.CountTokenText(
+						responseText.String(),
+						m.OriginModel,
+					)
+					usage.Add(&relaymodel.ChatUsage{
+						PromptTokens:     int64(m.RequestUsage.InputTokens),
+						CompletionTokens: complateTokens,
+						TotalTokens:      int64(m.RequestUsage.InputTokens) + complateTokens,
+					})
 				}
 
 				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
@@ -425,11 +435,6 @@ func StreamHandler(
 				}
 
 				usage.Add(response.Usage)
-
-				if usage.PromptTokens == 0 {
-					usage.PromptTokens = int64(m.RequestUsage.InputTokens)
-					usage.TotalTokens += int64(m.RequestUsage.InputTokens)
-				}
 
 				response.Usage = usage
 
@@ -476,16 +481,15 @@ func StreamHandler(
 		log.Error("error reading stream: " + err.Error())
 	}
 
-	if usage == nil {
+	if usage == nil || usage.PromptTokens == 0 || usage.TotalTokens == 0 {
+		complateTokens := openai.CountTokenText(
+			responseText.String(),
+			m.OriginModel,
+		)
 		usage = &relaymodel.ChatUsage{
 			PromptTokens:     int64(m.RequestUsage.InputTokens),
-			CompletionTokens: openai.CountTokenText(responseText.String(), m.OriginModel),
-			TotalTokens: int64(
-				m.RequestUsage.InputTokens,
-			) + openai.CountTokenText(
-				responseText.String(),
-				m.OriginModel,
-			),
+			CompletionTokens: complateTokens,
+			TotalTokens:      int64(m.RequestUsage.InputTokens) + complateTokens,
 		}
 	}
 

@@ -28,10 +28,10 @@ type Store interface {
 }
 
 type Metadata struct {
-	ConfigSchema    map[string]any
-	KeyHelp         string
-	Readme          string
-	Models          []model.ModelConfig
+	ConfigSchema map[string]any
+	KeyHelp      string
+	Readme       string
+	Models       []model.ModelConfig
 }
 
 type RequestURL struct {
