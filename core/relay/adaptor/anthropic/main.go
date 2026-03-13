@@ -406,7 +406,7 @@ func StreamHandler(
 
 				if response != nil && response.Usage != nil {
 					usage.Add(response.Usage)
-				} else {
+				} else if usage.PromptTokens == 0 || usage.TotalTokens == 0 {
 					complateTokens := openai.CountTokenText(
 						responseText.String(),
 						m.OriginModel,
