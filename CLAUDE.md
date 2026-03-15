@@ -14,7 +14,8 @@ This is a **Go workspace** with three modules (`go.work`):
 - **`web/`** — Admin panel frontend (React + Vite + TailwindCSS + Radix UI + Zustand)
 - **`mcp-servers/`** — MCP (Model Context Protocol) server implementations
 - **`openapi-mcp/`** — OpenAPI-to-MCP converter
-- **`enterprise/`** — Enterprise extensions (build tag `enterprise`, planned)
+- **`core/enterprise/`** — Enterprise module (build tag `enterprise`): Feishu SSO, analytics, quota, notifications
+- **`enterprise/`** — Enterprise documentation (progress, architecture, frontend plan)
 
 ## Build & Development Commands
 
@@ -129,9 +130,9 @@ Runtime config via environment variables. Key ones:
 
 The project uses golangci-lint v2 with a comprehensive config at `.golangci.yml`. Key enabled linters: `errcheck`, `govet`, `staticcheck`, `gosec`, `revive`, `prealloc`, `perfsprint`, `modernize`, `wsl_v5`. Formatters: `gci`, `gofmt`, `gofumpt`, `golines`.
 
-## Enterprise Branch Context
+## Enterprise Module
 
-This fork maintains an `enterprise` branch for custom features (Feishu SSO, progressive quota tiers, department analytics). Enterprise code lives in `enterprise/` (top-level, separate from `core/`). See `AI_Proxy_企业版产品目标文档.md` for the full product spec.
+Enterprise features are built into `core/enterprise/` with Go build tag `enterprise`. Includes: Feishu SSO + tenant whitelist, org sync, analytics (9 APIs), quota policies, notifications. Frontend has 5 pages under `/enterprise/*`. See `enterprise/docs/` for detailed progress and architecture docs.
 
 ## User Preferences
 
