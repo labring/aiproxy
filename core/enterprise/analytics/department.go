@@ -15,11 +15,15 @@ type DepartmentSummary struct {
 	DepartmentID   string  `json:"department_id"`
 	DepartmentName string  `json:"department_name"`
 	MemberCount    int     `json:"member_count"`
+	ActiveUsers    int     `json:"active_users"`
 	RequestCount   int64   `json:"request_count"`
 	UsedAmount     float64 `json:"used_amount"`
 	TotalTokens    int64   `json:"total_tokens"`
 	InputTokens    int64   `json:"input_tokens"`
 	OutputTokens   int64   `json:"output_tokens"`
+	SuccessRate    float64 `json:"success_rate"`
+	AvgCost        float64 `json:"avg_cost"`
+	UniqueModels   int     `json:"unique_models"`
 }
 
 // DepartmentTrendPoint holds a single data point in a department's usage trend.
@@ -78,12 +82,14 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 
 	// Query group_summaries for these groups in the time range
 	type groupAgg struct {
-		GroupID      string  `gorm:"column:group_id"`
-		RequestCount int64   `gorm:"column:request_count"`
-		UsedAmount   float64 `gorm:"column:used_amount"`
-		TotalTokens  int64   `gorm:"column:total_tokens"`
-		InputTokens  int64   `gorm:"column:input_tokens"`
-		OutputTokens int64   `gorm:"column:output_tokens"`
+		GroupID        string  `gorm:"column:group_id"`
+		RequestCount   int64   `gorm:"column:request_count"`
+		UsedAmount     float64 `gorm:"column:used_amount"`
+		TotalTokens    int64   `gorm:"column:total_tokens"`
+		InputTokens    int64   `gorm:"column:input_tokens"`
+		OutputTokens   int64   `gorm:"column:output_tokens"`
+		SuccessCount   int64   `gorm:"column:success_count"`
+		UniqueModels   int     `gorm:"column:unique_models"`
 	}
 
 	var results []groupAgg
@@ -97,6 +103,8 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 			"SUM(total_tokens) as total_tokens",
 			"SUM(input_tokens) as input_tokens",
 			"SUM(output_tokens) as output_tokens",
+			"SUM(status_2xx_count) as success_count",
+			"COUNT(DISTINCT model) as unique_models",
 		).
 		Where("group_id IN ?", groupIDs).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
@@ -106,8 +114,13 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		return nil, fmt.Errorf("query group summaries: %w", err)
 	}
 
+	// Track active users (unique group_ids) per department
+	deptActiveUsers := make(map[string]map[string]bool)
+
 	// Aggregate by department
 	deptAgg := make(map[string]*DepartmentSummary)
+	deptSuccessCount := make(map[string]int64)
+
 	for _, r := range results {
 		deptID := groupToDept[r.GroupID]
 		if deptID == "" {
@@ -131,6 +144,7 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 				MemberCount:    memberCount,
 			}
 			deptAgg[deptID] = agg
+			deptActiveUsers[deptID] = make(map[string]bool)
 		}
 
 		agg.RequestCount += r.RequestCount
@@ -138,10 +152,18 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		agg.TotalTokens += r.TotalTokens
 		agg.InputTokens += r.InputTokens
 		agg.OutputTokens += r.OutputTokens
+		agg.UniqueModels += r.UniqueModels
+		deptSuccessCount[deptID] += r.SuccessCount
+		deptActiveUsers[deptID][r.GroupID] = true
 	}
 
 	summaries := make([]DepartmentSummary, 0, len(deptAgg))
-	for _, v := range deptAgg {
+	for deptID, v := range deptAgg {
+		v.ActiveUsers = len(deptActiveUsers[deptID])
+		if v.RequestCount > 0 {
+			v.SuccessRate = float64(deptSuccessCount[deptID]) / float64(v.RequestCount) * 100.0
+			v.AvgCost = v.UsedAmount / float64(v.RequestCount)
+		}
 		summaries = append(summaries, *v)
 	}
 

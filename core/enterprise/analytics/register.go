@@ -10,7 +10,10 @@ func RegisterRoutes(admin *gin.RouterGroup) {
 	{
 		analytics.GET("/department", HandleDepartmentSummary)
 		analytics.GET("/department/:id/trend", HandleDepartmentTrend)
+		analytics.GET("/department/ranking", HandleDepartmentRanking)
 		analytics.GET("/user/ranking", HandleUserRanking)
+		analytics.GET("/model/distribution", HandleModelDistribution)
+		analytics.GET("/comparison", HandlePeriodComparison)
 		analytics.GET("/export", HandleExport)
 	}
 }

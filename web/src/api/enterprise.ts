@@ -16,10 +16,16 @@ export interface FeishuCallbackResponse {
 export interface DepartmentSummary {
     department_id: string
     department_name: string
+    member_count: number
+    active_users: number
     request_count: number
     used_amount: number
-    token_count: number
-    active_users: number
+    total_tokens: number
+    input_tokens: number
+    output_tokens: number
+    success_rate: number
+    avg_cost: number
+    unique_models: number
 }
 
 export interface DepartmentSummaryResponse {
@@ -28,10 +34,10 @@ export interface DepartmentSummaryResponse {
 }
 
 export interface DepartmentTrendPoint {
-    timestamp: string
+    hour_timestamp: number
     request_count: number
     used_amount: number
-    token_count: number
+    total_tokens: number
 }
 
 export interface DepartmentTrendResponse {
@@ -40,16 +46,74 @@ export interface DepartmentTrendResponse {
 }
 
 export interface UserRankingItem {
+    rank: number
+    group_id: string
     user_name: string
-    open_id: string
+    department_id: string
     department_name: string
     request_count: number
     used_amount: number
-    token_count: number
+    total_tokens: number
+    input_tokens: number
+    output_tokens: number
+    success_rate: number
+    unique_models: number
 }
 
 export interface UserRankingResponse {
     ranking: UserRankingItem[]
+    total: number
+}
+
+export interface ModelDistributionItem {
+    model: string
+    request_count: number
+    total_tokens: number
+    input_tokens: number
+    output_tokens: number
+    used_amount: number
+    unique_users: number
+    percentage: number
+}
+
+export interface ModelDistributionResponse {
+    distribution: ModelDistributionItem[]
+    total: number
+}
+
+export interface PeriodStats {
+    request_count: number
+    total_tokens: number
+    used_amount: number
+    active_users: number
+}
+
+export interface ComparisonData {
+    period_type: string
+    current_period: PeriodStats
+    previous_period: PeriodStats
+    changes: {
+        request_count_pct: number
+        total_tokens_pct: number
+        used_amount_pct: number
+        active_users_pct: number
+    }
+}
+
+export interface DepartmentRankingItem {
+    rank: number
+    department_id: string
+    department_name: string
+    active_users: number
+    used_amount: number
+    request_count: number
+    total_tokens: number
+    input_tokens: number
+    output_tokens: number
+}
+
+export interface DepartmentRankingResponse {
+    ranking: DepartmentRankingItem[]
     total: number
 }
 
@@ -91,6 +155,16 @@ export const enterpriseApi = {
         })
     },
 
+    getDepartmentRanking: (
+        limit?: number,
+        startTimestamp?: number,
+        endTimestamp?: number,
+    ): Promise<DepartmentRankingResponse> => {
+        const params: Record<string, string> = buildTimeParams(startTimestamp, endTimestamp)
+        if (limit) params.limit = String(limit)
+        return get<DepartmentRankingResponse>('/enterprise/analytics/department/ranking', { params })
+    },
+
     getUserRanking: (
         departmentId?: string,
         limit?: number,
@@ -101,6 +175,26 @@ export const enterpriseApi = {
         if (departmentId) params.department_id = departmentId
         if (limit) params.limit = String(limit)
         return get<UserRankingResponse>('/enterprise/analytics/user/ranking', { params })
+    },
+
+    getModelDistribution: (
+        departmentId?: string,
+        startTimestamp?: number,
+        endTimestamp?: number,
+    ): Promise<ModelDistributionResponse> => {
+        const params: Record<string, string> = buildTimeParams(startTimestamp, endTimestamp)
+        if (departmentId) params.department_id = departmentId
+        return get<ModelDistributionResponse>('/enterprise/analytics/model/distribution', { params })
+    },
+
+    getComparison: (
+        period?: string,
+        departmentId?: string,
+    ): Promise<ComparisonData> => {
+        const params: Record<string, string> = {}
+        if (period) params.period = period
+        if (departmentId) params.department_id = departmentId
+        return get<ComparisonData>('/enterprise/analytics/comparison', { params })
     },
 
     exportReport: async (startTimestamp?: number, endTimestamp?: number): Promise<void> => {

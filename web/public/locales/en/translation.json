@@ -259,7 +259,11 @@
       "amount": "Usage",
       "tokens": "Tokens",
       "activeUsers": "Active Users",
-      "viewTrend": "View Trend"
+      "successRate": "Success Rate",
+      "viewTrend": "View Trend",
+      "modelDistribution": "Model Distribution",
+      "model": "Model",
+      "share": "Share"
     },
     "ranking": {
       "title": "Employee Ranking",
@@ -268,6 +272,9 @@
       "requests": "Requests",
       "amount": "Usage",
       "tokens": "Tokens",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "models": "Models",
       "allDepartments": "All Departments",
       "top": "Top {{count}}",
       "export": "Export Report"

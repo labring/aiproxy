@@ -122,46 +122,55 @@ export default function EnterpriseRanking() {
                                     <th className="text-right py-3 px-2 font-medium">
                                         {t("enterprise.ranking.tokens")}
                                     </th>
+                                    <th className="text-right py-3 px-2 font-medium">
+                                        {t("enterprise.ranking.inputTokens")}
+                                    </th>
+                                    <th className="text-right py-3 px-2 font-medium">
+                                        {t("enterprise.ranking.outputTokens")}
+                                    </th>
+                                    <th className="text-right py-3 px-2 font-medium">
+                                        {t("enterprise.ranking.models")}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                                        <td colSpan={9} className="text-center py-8 text-muted-foreground">
                                             {t("common.loading")}
                                         </td>
                                     </tr>
                                 ) : ranking.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                                        <td colSpan={9} className="text-center py-8 text-muted-foreground">
                                             {t("common.noResult")}
                                         </td>
                                     </tr>
                                 ) : (
-                                    ranking.map((user, index) => (
+                                    ranking.map((user) => (
                                         <tr
-                                            key={user.open_id}
+                                            key={user.group_id}
                                             className="border-b last:border-0 hover:bg-muted/50 transition-colors"
                                         >
                                             <td className="py-3 px-2">
                                                 <span
                                                     className={
-                                                        index < 3
+                                                        user.rank <= 3
                                                             ? "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white " +
-                                                              (index === 0
+                                                              (user.rank === 1
                                                                   ? "bg-yellow-500"
-                                                                  : index === 1
+                                                                  : user.rank === 2
                                                                     ? "bg-gray-400"
                                                                     : "bg-amber-600")
                                                             : "text-muted-foreground"
                                                     }
                                                 >
-                                                    {index + 1}
+                                                    {user.rank}
                                                 </span>
                                             </td>
                                             <td className="py-3 px-2 font-medium">{user.user_name}</td>
                                             <td className="py-3 px-2 text-muted-foreground">
-                                                {user.department_name}
+                                                {user.department_name || user.department_id}
                                             </td>
                                             <td className="py-3 px-2 text-right">
                                                 {formatNumber(user.request_count)}
@@ -170,7 +179,16 @@ export default function EnterpriseRanking() {
                                                 {formatAmount(user.used_amount)}
                                             </td>
                                             <td className="py-3 px-2 text-right">
-                                                {formatNumber(user.token_count)}
+                                                {formatNumber(user.total_tokens)}
+                                            </td>
+                                            <td className="py-3 px-2 text-right text-muted-foreground">
+                                                {formatNumber(user.input_tokens)}
+                                            </td>
+                                            <td className="py-3 px-2 text-right text-muted-foreground">
+                                                {formatNumber(user.output_tokens)}
+                                            </td>
+                                            <td className="py-3 px-2 text-right">
+                                                {user.unique_models}
                                             </td>
                                         </tr>
                                     ))

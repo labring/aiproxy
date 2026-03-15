@@ -12,22 +12,31 @@ import (
 
 // UserRankingEntry holds a single user's ranking in usage.
 type UserRankingEntry struct {
-	GroupID      string  `json:"group_id"`
-	TokenName    string  `json:"token_name"`
-	UserName     string  `json:"user_name"`
-	DepartmentID string  `json:"department_id"`
-	UsedAmount   float64 `json:"used_amount"`
-	RequestCount int64   `json:"request_count"`
-	TotalTokens  int64   `json:"total_tokens"`
-}
-
-// DepartmentRankingEntry holds a single department's ranking in usage.
-type DepartmentRankingEntry struct {
+	Rank           int     `json:"rank"`
+	GroupID        string  `json:"group_id"`
+	UserName       string  `json:"user_name"`
 	DepartmentID   string  `json:"department_id"`
 	DepartmentName string  `json:"department_name"`
 	UsedAmount     float64 `json:"used_amount"`
 	RequestCount   int64   `json:"request_count"`
 	TotalTokens    int64   `json:"total_tokens"`
+	InputTokens    int64   `json:"input_tokens"`
+	OutputTokens   int64   `json:"output_tokens"`
+	SuccessRate    float64 `json:"success_rate"`
+	UniqueModels   int     `json:"unique_models"`
+}
+
+// DepartmentRankingEntry holds a single department's ranking in usage.
+type DepartmentRankingEntry struct {
+	Rank           int     `json:"rank"`
+	DepartmentID   string  `json:"department_id"`
+	DepartmentName string  `json:"department_name"`
+	ActiveUsers    int     `json:"active_users"`
+	UsedAmount     float64 `json:"used_amount"`
+	RequestCount   int64   `json:"request_count"`
+	TotalTokens    int64   `json:"total_tokens"`
+	InputTokens    int64   `json:"input_tokens"`
+	OutputTokens   int64   `json:"output_tokens"`
 }
 
 // GetUserRanking returns users ranked by usage amount within the given time range.
@@ -78,6 +87,10 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		UsedAmount   float64 `gorm:"column:used_amount"`
 		RequestCount int64   `gorm:"column:request_count"`
 		TotalTokens  int64   `gorm:"column:total_tokens"`
+		InputTokens  int64   `gorm:"column:input_tokens"`
+		OutputTokens int64   `gorm:"column:output_tokens"`
+		SuccessCount int64   `gorm:"column:success_count"`
+		UniqueModels int     `gorm:"column:unique_models"`
 	}
 
 	var results []groupAgg
@@ -89,6 +102,10 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			"SUM(used_amount) as used_amount",
 			"SUM(request_count) as request_count",
 			"SUM(total_tokens) as total_tokens",
+			"SUM(input_tokens) as input_tokens",
+			"SUM(output_tokens) as output_tokens",
+			"SUM(status_2xx_count) as success_count",
+			"COUNT(DISTINCT model) as unique_models",
 		).
 		Where("group_id IN ?", groupIDs).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
@@ -100,16 +117,37 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		return nil, fmt.Errorf("query user ranking: %w", err)
 	}
 
+	// Build department name map
+	var departments []models.FeishuDepartment
+	if err := model.DB.Find(&departments).Error; err != nil {
+		return nil, fmt.Errorf("query departments: %w", err)
+	}
+
+	deptNameMap := make(map[string]string, len(departments))
+	for _, d := range departments {
+		deptNameMap[d.DepartmentID] = d.Name
+	}
+
 	entries := make([]UserRankingEntry, 0, len(results))
-	for _, r := range results {
+	for i, r := range results {
 		ui := groupToUser[r.GroupID]
+		var successRate float64
+		if r.RequestCount > 0 {
+			successRate = float64(r.SuccessCount) / float64(r.RequestCount) * 100.0
+		}
 		entries = append(entries, UserRankingEntry{
-			GroupID:      r.GroupID,
-			UserName:     ui.Name,
-			DepartmentID: ui.DepartmentID,
-			UsedAmount:   r.UsedAmount,
-			RequestCount: r.RequestCount,
-			TotalTokens:  r.TotalTokens,
+			Rank:           i + 1,
+			GroupID:        r.GroupID,
+			UserName:       ui.Name,
+			DepartmentID:   ui.DepartmentID,
+			DepartmentName: deptNameMap[ui.DepartmentID],
+			UsedAmount:     r.UsedAmount,
+			RequestCount:   r.RequestCount,
+			TotalTokens:    r.TotalTokens,
+			InputTokens:    r.InputTokens,
+			OutputTokens:   r.OutputTokens,
+			SuccessRate:    successRate,
+			UniqueModels:   r.UniqueModels,
 		})
 	}
 
@@ -143,9 +181,12 @@ func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]Department
 		entries = append(entries, DepartmentRankingEntry{
 			DepartmentID:   s.DepartmentID,
 			DepartmentName: s.DepartmentName,
+			ActiveUsers:    s.ActiveUsers,
 			UsedAmount:     s.UsedAmount,
 			RequestCount:   s.RequestCount,
 			TotalTokens:    s.TotalTokens,
+			InputTokens:    s.InputTokens,
+			OutputTokens:   s.OutputTokens,
 		})
 	}
 
@@ -154,6 +195,11 @@ func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]Department
 
 	if len(entries) > limit {
 		entries = entries[:limit]
+	}
+
+	// Assign ranks
+	for i := range entries {
+		entries[i].Rank = i + 1
 	}
 
 	return entries, nil

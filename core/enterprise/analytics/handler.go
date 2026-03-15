@@ -68,6 +68,54 @@ func HandleUserRanking(c *gin.Context) {
 	})
 }
 
+// HandleModelDistribution returns model usage distribution.
+func HandleModelDistribution(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	departmentID := c.Query("department_id")
+
+	distribution, err := GetModelDistribution(startTime, endTime, departmentID)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"distribution": distribution,
+		"total":        len(distribution),
+	})
+}
+
+// HandlePeriodComparison returns period-over-period comparison data.
+func HandlePeriodComparison(c *gin.Context) {
+	periodType := c.DefaultQuery("period", "monthly")
+	departmentID := c.Query("department_id")
+
+	comparison, err := GetPeriodComparison(periodType, departmentID)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, comparison)
+}
+
+// HandleDepartmentRanking returns departments ranked by usage.
+func HandleDepartmentRanking(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+
+	ranking, err := GetDepartmentRanking(startTime, endTime, limit)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"ranking": ranking,
+		"total":   len(ranking),
+	})
+}
+
 // HandleExport generates and returns an Excel report of department analytics.
 func HandleExport(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
@@ -84,7 +132,13 @@ func HandleExport(c *gin.Context) {
 		return
 	}
 
-	f, err := ExportDepartmentReport(summaries, ranking, startTime, endTime)
+	modelDist, err := GetModelDistribution(startTime, endTime, "")
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	f, err := ExportAnalyticsReport(summaries, ranking, modelDist, startTime, endTime)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

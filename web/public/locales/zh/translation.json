@@ -248,7 +248,11 @@
       "amount": "用量",
       "tokens": "Token 数",
       "activeUsers": "活跃用户",
-      "viewTrend": "查看趋势"
+      "successRate": "成功率",
+      "viewTrend": "查看趋势",
+      "modelDistribution": "模型用量分布",
+      "model": "模型",
+      "share": "占比"
     },
     "ranking": {
       "title": "员工排行榜",
@@ -257,6 +261,9 @@
       "requests": "请求数",
       "amount": "用量",
       "tokens": "Token 数",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "models": "模型数",
       "allDepartments": "全部部门",
       "top": "前 {{count}} 名",
       "export": "导出报表"

@@ -14,7 +14,7 @@ import { type TimeRange, getTimeRange } from "@/lib/enterprise"
 function TrendChart({
     trend,
 }: {
-    trend: { timestamp: string; request_count: number; used_amount: number; token_count: number }[]
+    trend: { hour_timestamp: number; request_count: number; used_amount: number; total_tokens: number }[]
 }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
@@ -27,7 +27,7 @@ function TrendChart({
         }
 
         const xData = trend.map((p) => {
-            const d = new Date(p.timestamp)
+            const d = new Date(p.hour_timestamp * 1000)
             return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:00`
         })
 
