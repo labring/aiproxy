@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	larkauthen "github.com/larksuite/oapi-sdk-go/v3/service/authen/v1"
@@ -174,12 +175,12 @@ func HandleCallback(c *gin.Context) {
 		model.DB.Model(&feishuUser).Update("token_id", token.ID)
 	}
 
-	// If the request comes from the frontend API call (has Accept: application/json
-	// or X-Requested-With header), return JSON response.
-	// Otherwise (direct browser redirect from Feishu), redirect to the frontend
-	// callback page with auth data in URL fragment.
+	// If the request comes from the frontend API call (has explicit
+	// "application/json" in Accept header, not just wildcard */*),
+	// return JSON. Otherwise redirect to the frontend callback page.
+	accept := c.GetHeader("Accept")
 	if c.GetHeader("X-Requested-With") != "" ||
-		c.NegotiateFormat(gin.MIMEJSON) == gin.MIMEJSON {
+		strings.Contains(accept, "application/json") {
 		middleware.SuccessResponse(c, gin.H{
 			"token_key": token.Key,
 			"user": gin.H{
