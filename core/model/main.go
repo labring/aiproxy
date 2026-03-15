@@ -138,6 +138,9 @@ func InitDB() error {
 	return nil
 }
 
+// enterpriseMigrator is set by enterprise build tag to add enterprise table migrations.
+var enterpriseMigrator func(*gorm.DB) error
+
 func migrateDB() error {
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -153,6 +156,12 @@ func migrateDB() error {
 	)
 	if err != nil {
 		return err
+	}
+
+	if enterpriseMigrator != nil {
+		if err := enterpriseMigrator(DB); err != nil {
+			return err
+		}
 	}
 
 	return nil

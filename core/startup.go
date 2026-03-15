@@ -27,9 +27,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// enterpriseInitializer is set by enterprise build tag.
+var enterpriseInitializer func()
+
 func initializeServices(pprofPort int) error {
 	initializePprof(pprofPort)
 	initializeNotifier()
+
+	if enterpriseInitializer != nil {
+		enterpriseInitializer()
+	}
 
 	if err := common.InitRedisClient(); err != nil {
 		return err
