@@ -31,6 +31,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/ollama"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/adaptor/openrouter"
+	"github.com/labring/aiproxy/core/relay/adaptor/ppio"
 	"github.com/labring/aiproxy/core/relay/adaptor/qianfan"
 	"github.com/labring/aiproxy/core/relay/adaptor/sangforaicp"
 	"github.com/labring/aiproxy/core/relay/adaptor/siliconflow"
@@ -86,6 +87,7 @@ var ChannelAdaptor = map[model.ChannelType]adaptor.Adaptor{
 	model.ChannelTypeSangforAICP:             &sangforaicp.Adaptor{},
 	model.ChannelTypeStreamlake:              &streamlake.Adaptor{},
 	model.ChannelTypeZhipuCoding:             &zhipucoding.Adaptor{},
+	model.ChannelTypePPIO:                    &ppio.Adaptor{},
 }
 
 func GetAdaptor(channelType model.ChannelType) (adaptor.Adaptor, bool) {

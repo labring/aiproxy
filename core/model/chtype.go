@@ -52,6 +52,7 @@ const (
 	ChannelTypeSangforAICP             ChannelType = 50
 	ChannelTypeStreamlake              ChannelType = 51
 	ChannelTypeZhipuCoding             ChannelType = 52
+	ChannelTypePPIO                    ChannelType = 53
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -95,6 +96,7 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeSangforAICP:             "Sangfor AICP",
 	ChannelTypeStreamlake:              "Streamlake",
 	ChannelTypeZhipuCoding:             "zhipu coding",
+	ChannelTypePPIO:                    "ppio",
 }
 
 func AllChannelTypes() []ChannelType {
