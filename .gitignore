@@ -1,3 +1,7 @@
 **/.vscode
 **/__debug_bin*
 **/.DS_Store
+core/.env.local
+core/.env.aiproxy.local
+core/aiproxy-enterprise
+core/aiproxy.db
