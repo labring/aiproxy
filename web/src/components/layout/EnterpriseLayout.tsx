@@ -23,6 +23,7 @@ interface EnterpriseSidebarItem {
     icon: React.ComponentType<{ className?: string }>
     href: string
     divider?: boolean
+    external?: boolean
 }
 
 function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
@@ -52,6 +53,7 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             title: t("enterprise.sidebar.adminPanel"),
             icon: Monitor,
             href: ROUTES.MONITOR,
+            external: true,
         },
     ]
 }
@@ -196,12 +198,20 @@ export function EnterpriseLayout() {
                                 collapsed ? "justify-center" : "",
                             )
 
+                            const linkElement = item.external ? (
+                                <a href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
+                                    {content}
+                                </a>
+                            ) : (
+                                <Link to={item.href} className={className}>
+                                    {content}
+                                </Link>
+                            )
+
                             return (
                                 <Tooltip key={item.title}>
                                     <TooltipTrigger asChild>
-                                        <Link to={item.href} className={className}>
-                                            {content}
-                                        </Link>
+                                        {linkElement}
                                     </TooltipTrigger>
                                     {collapsed && <TooltipContent side="right">{item.title}</TooltipContent>}
                                 </Tooltip>
