@@ -50,6 +50,8 @@ const defaultPolicy: QuotaPolicyInput = {
 }
 
 function TierIndicator({ ratio, label }: { ratio: number; label: string }) {
+    // Clamp ratio to 0-1 range for display
+    const clampedRatio = Math.max(0, Math.min(1, ratio))
     return (
         <div className="flex items-center gap-2">
             <div
@@ -58,7 +60,7 @@ function TierIndicator({ ratio, label }: { ratio: number; label: string }) {
             >
                 <div
                     className="h-2 w-1 bg-black rounded-full relative"
-                    style={{ marginLeft: `${ratio * 100}%`, transform: "translateX(-50%)" }}
+                    style={{ marginLeft: `${clampedRatio * 100}%`, transform: "translateX(-50%)" }}
                 />
             </div>
             <span className="text-xs text-muted-foreground">{label}: {(ratio * 100).toFixed(0)}%</span>
@@ -98,7 +100,10 @@ function PolicyForm({
                             <Input
                                 type="number"
                                 value={(policy.tier1_ratio * 100).toFixed(0)}
-                                onChange={(e) => onChange({ ...policy, tier1_ratio: (parseFloat(e.target.value) || 0) / 100 })}
+                                onChange={(e) => {
+                                    const val = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0))
+                                    onChange({ ...policy, tier1_ratio: val / 100 })
+                                }}
                                 min={0}
                                 max={100}
                                 step={5}
@@ -114,7 +119,10 @@ function PolicyForm({
                             <Input
                                 type="number"
                                 value={(policy.tier2_ratio * 100).toFixed(0)}
-                                onChange={(e) => onChange({ ...policy, tier2_ratio: (parseFloat(e.target.value) || 0) / 100 })}
+                                onChange={(e) => {
+                                    const val = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0))
+                                    onChange({ ...policy, tier2_ratio: val / 100 })
+                                }}
                                 min={0}
                                 max={100}
                                 step={5}
@@ -142,9 +150,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier1_rpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier1_rpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier1_rpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                 />
@@ -154,9 +165,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier1_tpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier1_tpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier1_tpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                 />
@@ -175,9 +189,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier2_rpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier2_rpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier2_rpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                 />
@@ -187,9 +204,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier2_tpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier2_tpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier2_tpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                 />
@@ -208,9 +228,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier3_rpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier3_rpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier3_rpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                     disabled={policy.block_at_tier3}
@@ -221,9 +244,12 @@ function PolicyForm({
                                 <Input
                                     type="number"
                                     value={policy.tier3_tpm_multiplier}
-                                    onChange={(e) => onChange({ ...policy, tier3_tpm_multiplier: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => {
+                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
+                                        onChange({ ...policy, tier3_tpm_multiplier: val })
+                                    }}
                                     step={0.1}
-                                    min={0}
+                                    min={0.01}
                                     max={2}
                                     className="h-8"
                                     disabled={policy.block_at_tier3}
@@ -332,7 +358,8 @@ export default function QuotaPoliciesPage() {
             toast.error(t("enterprise.quota.nameRequired"))
             return
         }
-        if (formData.tier1_ratio >= formData.tier2_ratio) {
+        // Validate: 0 < tier1 < tier2 <= 1
+        if (formData.tier1_ratio <= 0 || formData.tier1_ratio >= formData.tier2_ratio || formData.tier2_ratio > 1) {
             toast.error(t("enterprise.quota.ratioError"))
             return
         }
@@ -443,6 +470,7 @@ export default function QuotaPoliciesPage() {
                 if (!open) {
                     setIsCreating(false)
                     setEditingPolicy(null)
+                    setFormData(defaultPolicy)
                 }
             }}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -483,8 +511,9 @@ export default function QuotaPoliciesPage() {
                         <AlertDialogAction
                             className="bg-red-500 hover:bg-red-600"
                             onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+                            disabled={deleteMutation.isPending}
                         >
-                            {t("common.delete")}
+                            {deleteMutation.isPending ? t("common.deleting") : t("common.delete")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -21,6 +21,20 @@ export default function FeishuCallbackPage() {
         if (processedRef.current) return
         processedRef.current = true
 
+        // Case 1: Backend redirected here with token_key directly (browser OAuth flow)
+        const tokenKey = searchParams.get("token_key")
+        if (tokenKey) {
+            const user = {
+                name: searchParams.get("name") || "",
+                avatar: searchParams.get("avatar") || "",
+                openId: searchParams.get("open_id") || "",
+            }
+            loginWithFeishu(tokenKey, user)
+            navigate(ROUTES.ENTERPRISE, { replace: true })
+            return
+        }
+
+        // Case 2: Frontend-initiated flow with authorization code
         const code = searchParams.get("code")
         if (!code) {
             setError(t("auth.feishuCallback.noCode"))

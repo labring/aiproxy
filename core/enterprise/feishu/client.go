@@ -34,6 +34,16 @@ func GetRedirectURI() string {
 	return os.Getenv("FEISHU_REDIRECT_URI")
 }
 
+// GetFrontendURL returns the frontend base URL for post-auth redirect.
+// Defaults to "http://localhost:5173" if not set.
+func GetFrontendURL() string {
+	if v := os.Getenv("FEISHU_FRONTEND_URL"); v != "" {
+		return v
+	}
+
+	return "http://localhost:5173"
+}
+
 // GetClient returns the singleton Feishu Lark SDK client.
 // The SDK handles tenant_access_token caching internally.
 func GetClient() *lark.Client {

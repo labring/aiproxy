@@ -174,13 +174,36 @@ func HandleCallback(c *gin.Context) {
 		model.DB.Model(&feishuUser).Update("token_id", token.ID)
 	}
 
-	middleware.SuccessResponse(c, gin.H{
-		"token_key": token.Key,
-		"user": gin.H{
-			"open_id": userInfo.OpenID,
-			"name":    userInfo.Name,
-			"email":   userInfo.Email,
-			"avatar":  userInfo.Avatar,
-		},
-	})
+	// If the request comes from the frontend API call (has Accept: application/json
+	// or X-Requested-With header), return JSON response.
+	// Otherwise (direct browser redirect from Feishu), redirect to the frontend
+	// callback page with auth data in URL fragment.
+	if c.GetHeader("X-Requested-With") != "" ||
+		c.NegotiateFormat(gin.MIMEJSON) == gin.MIMEJSON {
+		middleware.SuccessResponse(c, gin.H{
+			"token_key": token.Key,
+			"user": gin.H{
+				"open_id": userInfo.OpenID,
+				"name":    userInfo.Name,
+				"email":   userInfo.Email,
+				"avatar":  userInfo.Avatar,
+			},
+		})
+
+		return
+	}
+
+	// Browser redirect: pass auth data to frontend via URL params
+	frontendURL := GetFrontendURL()
+	params := url.Values{}
+	params.Set("token_key", token.Key)
+	params.Set("open_id", userInfo.OpenID)
+	params.Set("name", userInfo.Name)
+	params.Set("avatar", userInfo.Avatar)
+	if userInfo.Email != "" {
+		params.Set("email", userInfo.Email)
+	}
+
+	redirectURL := fmt.Sprintf("%s/feishu/callback?%s", frontendURL, params.Encode())
+	c.Redirect(http.StatusFound, redirectURL)
 }
