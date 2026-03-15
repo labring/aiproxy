@@ -274,7 +274,10 @@
       "departmentsSelected": "已选 {{count}} 个部门",
       "selectAll": "全选",
       "deselectAll": "取消全选",
-      "clearSelection": "清除选择"
+      "clearSelection": "清除选择",
+      "columns": "显示列",
+      "totalCount": "共 {{count}} 条记录",
+      "rank": "排名"
     },
     "department": {
       "title": "部门趋势",
@@ -285,6 +288,7 @@
       "dashboard": "企业概览",
       "ranking": "员工排行",
       "quota": "额度策略",
+      "customReport": "自定义报表",
       "adminPanel": "管理后台"
     },
     "quota": {
@@ -318,6 +322,33 @@
       "ratioError": "一级阈值必须小于二级阈值",
       "deleteConfirmTitle": "删除策略",
       "deleteConfirmDesc": "确定要删除策略「{{name}}」吗？此操作无法撤销。"
+    },
+    "customReport": {
+      "title": "自定义报表",
+      "description": "灵活选择维度和度量，生成按需分析报表",
+      "dimensions": "维度",
+      "dimensionsDesc": "分组依据",
+      "measures": "度量",
+      "measuresDesc": "计算指标",
+      "filters": "筛选",
+      "generate": "生成报表",
+      "generating": "生成中...",
+      "noData": "暂无数据。请调整选择条件或时间范围后重试。",
+      "selectDimension": "请选择至少一个维度",
+      "selectMeasure": "请选择至少一个度量",
+      "exportCsv": "导出 CSV",
+      "chartView": "图表",
+      "tableView": "表格",
+      "barChart": "柱状图",
+      "lineChart": "折线图",
+      "pieChart": "饼图",
+      "categories": {
+        "requests": "请求与状态",
+        "tokens": "Token 用量",
+        "cost": "费用",
+        "performance": "性能",
+        "computed": "计算指标"
+      }
     }
   },
   "token": {

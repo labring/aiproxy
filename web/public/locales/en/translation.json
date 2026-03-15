@@ -285,7 +285,10 @@
       "departmentsSelected": "{{count}} departments",
       "selectAll": "Select All",
       "deselectAll": "Deselect All",
-      "clearSelection": "Clear Selection"
+      "clearSelection": "Clear Selection",
+      "columns": "Columns",
+      "totalCount": "Total: {{count}} records",
+      "rank": "Rank"
     },
     "department": {
       "title": "Department Trend",
@@ -296,7 +299,35 @@
       "dashboard": "Overview",
       "ranking": "Ranking",
       "quota": "Quota Policy",
+      "customReport": "Custom Report",
       "adminPanel": "Admin Panel"
+    },
+    "customReport": {
+      "title": "Custom Report",
+      "description": "Build flexible analytics reports by selecting dimensions and measures",
+      "dimensions": "Dimensions",
+      "dimensionsDesc": "Group data by",
+      "measures": "Measures",
+      "measuresDesc": "Metrics to calculate",
+      "filters": "Filters",
+      "generate": "Generate Report",
+      "generating": "Generating...",
+      "noData": "No data available. Try adjusting your selections or time range.",
+      "selectDimension": "Select at least one dimension",
+      "selectMeasure": "Select at least one measure",
+      "exportCsv": "Export CSV",
+      "chartView": "Chart",
+      "tableView": "Table",
+      "barChart": "Bar Chart",
+      "lineChart": "Line Chart",
+      "pieChart": "Pie Chart",
+      "categories": {
+        "requests": "Requests",
+        "tokens": "Tokens",
+        "cost": "Cost",
+        "performance": "Performance",
+        "computed": "Computed"
+      }
     },
     "quota": {
       "title": "Quota Policy Management",
