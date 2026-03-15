@@ -8,6 +8,7 @@ import {
     ChevronLeft,
     ChevronRight,
     LogOut,
+    Shield,
 } from "lucide-react"
 import type React from "react"
 import type { TFunction } from "i18next"
@@ -35,6 +36,11 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             title: t("enterprise.sidebar.ranking"),
             icon: Trophy,
             href: ROUTES.ENTERPRISE_RANKING,
+        },
+        {
+            title: t("enterprise.sidebar.quota"),
+            icon: Shield,
+            href: ROUTES.ENTERPRISE_QUOTA,
         },
         {
             title: "",

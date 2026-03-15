@@ -26,6 +26,7 @@ const FeishuCallbackPage = lazy(() => import("@/pages/auth/feishu-callback"))
 const EnterpriseDashboard = lazy(() => import("@/pages/enterprise/dashboard"))
 const EnterpriseRanking = lazy(() => import("@/pages/enterprise/ranking"))
 const EnterpriseDepartment = lazy(() => import("@/pages/enterprise/department"))
+const EnterpriseQuota = lazy(() => import("@/pages/enterprise/quota"))
 
 // lazy load component wrapper
 const lazyLoad = (Component: React.ComponentType) => (
@@ -100,6 +101,10 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: `${ROUTES.ENTERPRISE_DEPARTMENT}/:id`,
                         element: lazyLoad(EnterpriseDepartment),
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_QUOTA,
+                        element: lazyLoad(EnterpriseQuota),
                     },
                 ]
             }

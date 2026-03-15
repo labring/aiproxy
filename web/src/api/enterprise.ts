@@ -1,6 +1,37 @@
-import { get } from './index'
+import { get, post, put, del } from './index'
 import type { EnterpriseUser } from '@/store/auth'
 import apiClient from './index'
+
+// Quota Policy types
+export interface QuotaPolicy {
+    id: number
+    created_at: string
+    updated_at: string
+    name: string
+    tier1_ratio: number
+    tier2_ratio: number
+    tier1_rpm_multiplier: number
+    tier1_tpm_multiplier: number
+    tier2_rpm_multiplier: number
+    tier2_tpm_multiplier: number
+    tier3_rpm_multiplier: number
+    tier3_tpm_multiplier: number
+    block_at_tier3: boolean
+}
+
+export type QuotaPolicyInput = Omit<QuotaPolicy, 'id' | 'created_at' | 'updated_at'>
+
+export interface QuotaPolicyListResponse {
+    policies: QuotaPolicy[]
+    total: number
+}
+
+export interface GroupQuotaPolicy {
+    id: number
+    group_id: string
+    quota_policy_id: number
+    quota_policy?: QuotaPolicy
+}
 
 // Enterprise API response types
 export interface FeishuCallbackResponse {
@@ -223,5 +254,40 @@ export const enterpriseApi = {
             avatar: resp.user.avatar,
             openId: resp.user.open_id,
         }
+    },
+
+    // Quota Policy APIs
+    listQuotaPolicies: (page?: number, perPage?: number): Promise<QuotaPolicyListResponse> => {
+        const params: Record<string, string> = {}
+        if (page) params.page = String(page)
+        if (perPage) params.per_page = String(perPage)
+        return get<QuotaPolicyListResponse>('/enterprise/quota/policies', { params })
+    },
+
+    getQuotaPolicy: (id: number): Promise<QuotaPolicy> => {
+        return get<QuotaPolicy>(`/enterprise/quota/policies/${id}`)
+    },
+
+    createQuotaPolicy: (policy: QuotaPolicyInput): Promise<QuotaPolicy> => {
+        return post<QuotaPolicy>('/enterprise/quota/policies', policy)
+    },
+
+    updateQuotaPolicy: (id: number, policy: QuotaPolicyInput): Promise<QuotaPolicy> => {
+        return put<QuotaPolicy>(`/enterprise/quota/policies/${id}`, policy)
+    },
+
+    deleteQuotaPolicy: (id: number): Promise<void> => {
+        return del<void>(`/enterprise/quota/policies/${id}`)
+    },
+
+    bindQuotaPolicy: (groupId: string, quotaPolicyId: number): Promise<GroupQuotaPolicy> => {
+        return post<GroupQuotaPolicy>('/enterprise/quota/bind', {
+            group_id: groupId,
+            quota_policy_id: quotaPolicyId,
+        })
+    },
+
+    unbindQuotaPolicy: (groupId: string): Promise<void> => {
+        return del<void>(`/enterprise/quota/bind/${groupId}`)
     },
 }

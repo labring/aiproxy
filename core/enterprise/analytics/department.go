@@ -103,7 +103,7 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 			"SUM(total_tokens) as total_tokens",
 			"SUM(input_tokens) as input_tokens",
 			"SUM(output_tokens) as output_tokens",
-			"SUM(status_2xx_count) as success_count",
+			"SUM(status2xx_count) as success_count",
 			"COUNT(DISTINCT model) as unique_models",
 		).
 		Where("group_id IN ?", groupIDs).

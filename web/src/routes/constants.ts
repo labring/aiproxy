@@ -11,6 +11,7 @@ export const ROUTES = {
     ENTERPRISE: "/enterprise",
     ENTERPRISE_RANKING: "/enterprise/ranking",
     ENTERPRISE_DEPARTMENT: "/enterprise/department",
+    ENTERPRISE_QUOTA: "/enterprise/quota",
     FEISHU_CALLBACK: "/feishu/callback",
 } as const
 
