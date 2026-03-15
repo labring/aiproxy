@@ -35,7 +35,7 @@ const COLUMNS: ColumnConfig[] = [
     { key: "total_tokens", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
     { key: "input_tokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
     { key: "output_tokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
-    { key: "unique_models", align: "right", defaultVisible: true, sortable: true },
+    { key: "unique_models", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
 ]
 
 // Translation keys for column labels
@@ -121,8 +121,17 @@ export default function EnterpriseRanking() {
         if (!ranking.length) return ranking
 
         return [...ranking].sort((a, b) => {
-            let aVal: string | number = a[sortField] ?? ""
-            let bVal: string | number = b[sortField] ?? ""
+            let aVal: string | number
+            let bVal: string | number
+
+            // Special handling for department_name: use department_id as fallback (consistent with display)
+            if (sortField === "department_name") {
+                aVal = a.department_name || a.department_id || ""
+                bVal = b.department_name || b.department_id || ""
+            } else {
+                aVal = a[sortField] ?? ""
+                bVal = b[sortField] ?? ""
+            }
 
             // Handle string comparison
             if (typeof aVal === "string" && typeof bVal === "string") {
@@ -153,6 +162,11 @@ export default function EnterpriseRanking() {
                 // Don't allow hiding all columns - keep at least rank and user_name
                 if (key !== "rank" && key !== "user_name") {
                     next.delete(key)
+                    // Reset sort if hiding the currently sorted column
+                    if (sortField === key) {
+                        setSortField("rank")
+                        setSortDirection("asc")
+                    }
                 }
             } else {
                 next.add(key)
