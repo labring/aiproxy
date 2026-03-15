@@ -116,6 +116,36 @@ func HandleDepartmentRanking(c *gin.Context) {
 	})
 }
 
+// HandleCustomReport generates a custom report based on user-selected dimensions and measures.
+func HandleCustomReport(c *gin.Context) {
+	var req CustomReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+
+	if req.Limit <= 0 {
+		req.Limit = 100
+	}
+
+	if req.Limit > 1000 {
+		req.Limit = 1000
+	}
+
+	report, err := GenerateCustomReport(req)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, report)
+}
+
+// HandleCustomReportFields returns the available field catalog for the custom report builder.
+func HandleCustomReportFields(c *gin.Context) {
+	middleware.SuccessResponse(c, GetAvailableFields())
+}
+
 // HandleExport generates and returns an Excel report of department analytics.
 func HandleExport(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)

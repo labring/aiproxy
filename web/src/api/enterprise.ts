@@ -148,6 +148,42 @@ export interface DepartmentRankingResponse {
     total: number
 }
 
+// Custom Report types
+export interface CustomReportRequest {
+    dimensions: string[]
+    measures: string[]
+    filters: {
+        department_ids?: string[]
+        models?: string[]
+        user_names?: string[]
+    }
+    time_range: {
+        start_timestamp: number
+        end_timestamp: number
+    }
+    sort_by?: string
+    sort_order?: string
+    limit?: number
+}
+
+export interface CustomReportColumn {
+    key: string
+    label: string
+    type: 'dimension' | 'measure' | 'computed'
+}
+
+export interface CustomReportResponse {
+    columns: CustomReportColumn[]
+    rows: Record<string, unknown>[]
+    total: number
+}
+
+export interface FieldCatalog {
+    dimensions: { key: string; label: string }[]
+    measures: { key: string; label: string; type: string }[]
+    computed_measures: { key: string; label: string; type: string }[]
+}
+
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
     const params: Record<string, string> = {}
     if (startTimestamp) params.start_timestamp = String(startTimestamp)
@@ -289,5 +325,14 @@ export const enterpriseApi = {
 
     unbindQuotaPolicy: (groupId: string): Promise<void> => {
         return del<void>(`/enterprise/quota/bind/${groupId}`)
+    },
+
+    // Custom Report APIs
+    getCustomReportFields: (): Promise<FieldCatalog> => {
+        return get<FieldCatalog>('/enterprise/analytics/custom-report/fields')
+    },
+
+    generateCustomReport: (req: CustomReportRequest): Promise<CustomReportResponse> => {
+        return post<CustomReportResponse>('/enterprise/analytics/custom-report', req)
     },
 }

@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router"
 import { useTranslation } from "react-i18next"
 import {
     BarChart2,
+    FileBarChart,
     Trophy,
     Monitor,
     ChevronLeft,
@@ -42,6 +43,11 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             title: t("enterprise.sidebar.quota"),
             icon: Shield,
             href: ROUTES.ENTERPRISE_QUOTA,
+        },
+        {
+            title: t("enterprise.sidebar.customReport"),
+            icon: FileBarChart,
+            href: ROUTES.ENTERPRISE_CUSTOM_REPORT,
         },
         {
             title: "",

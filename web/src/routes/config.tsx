@@ -27,6 +27,7 @@ const EnterpriseDashboard = lazy(() => import("@/pages/enterprise/dashboard"))
 const EnterpriseRanking = lazy(() => import("@/pages/enterprise/ranking"))
 const EnterpriseDepartment = lazy(() => import("@/pages/enterprise/department"))
 const EnterpriseQuota = lazy(() => import("@/pages/enterprise/quota"))
+const EnterpriseCustomReport = lazy(() => import("@/pages/enterprise/custom-report"))
 
 // lazy load component wrapper
 const lazyLoad = (Component: React.ComponentType) => (
@@ -105,6 +106,10 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: ROUTES.ENTERPRISE_QUOTA,
                         element: lazyLoad(EnterpriseQuota),
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_CUSTOM_REPORT,
+                        element: lazyLoad(EnterpriseCustomReport),
                     },
                 ]
             }

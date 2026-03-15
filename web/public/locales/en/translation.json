@@ -327,7 +327,25 @@
         "cost": "Cost",
         "performance": "Performance",
         "computed": "Computed"
-      }
+      },
+      "templates": {
+        "title": "Quick Start",
+        "deptCostTop10": "Dept Cost Top 10",
+        "modelUsageTrend": "Model Usage Trend",
+        "userActivityRank": "User Activity Rank",
+        "deptModelPivot": "Dept × Model Pivot",
+        "dailyPerformance": "Daily Performance"
+      },
+      "pivotView": "Pivot Table",
+      "pivotMeasure": "Display Measure",
+      "filterDepartments": "Filter Departments",
+      "filterModels": "Filter Models",
+      "filterUsers": "Filter Users",
+      "allDepartments": "All Departments",
+      "addFilter": "Press Enter to add",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "clearSelection": "Clear"
     },
     "quota": {
       "title": "Quota Policy Management",

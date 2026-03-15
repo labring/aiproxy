@@ -15,5 +15,7 @@ func RegisterRoutes(admin *gin.RouterGroup) {
 		analytics.GET("/model/distribution", HandleModelDistribution)
 		analytics.GET("/comparison", HandlePeriodComparison)
 		analytics.GET("/export", HandleExport)
+		analytics.POST("/custom-report", HandleCustomReport)
+		analytics.GET("/custom-report/fields", HandleCustomReportFields)
 	}
 }

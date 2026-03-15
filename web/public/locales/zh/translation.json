@@ -348,7 +348,25 @@
         "cost": "费用",
         "performance": "性能",
         "computed": "计算指标"
-      }
+      },
+      "templates": {
+        "title": "快速开始",
+        "deptCostTop10": "部门费用 Top 10",
+        "modelUsageTrend": "模型使用趋势",
+        "userActivityRank": "用户活跃度排行",
+        "deptModelPivot": "部门×模型交叉分析",
+        "dailyPerformance": "每日性能概览"
+      },
+      "pivotView": "透视表",
+      "pivotMeasure": "展示指标",
+      "filterDepartments": "筛选部门",
+      "filterModels": "筛选模型",
+      "filterUsers": "筛选用户",
+      "allDepartments": "全部部门",
+      "addFilter": "输入后按回车添加",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "clearSelection": "清除选择"
     }
   },
   "token": {
