@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -42,6 +43,45 @@ func GetFrontendURL() string {
 	}
 
 	return "http://localhost:5173"
+}
+
+// GetAllowedTenants returns the list of allowed tenant keys from environment.
+// Multiple tenants can be specified as comma-separated values.
+// If empty, all tenants are allowed (no restriction).
+func GetAllowedTenants() []string {
+	v := os.Getenv("FEISHU_ALLOWED_TENANTS")
+	if v == "" {
+		return nil
+	}
+
+	var tenants []string
+	for _, t := range strings.Split(v, ",") {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			tenants = append(tenants, t)
+		}
+	}
+
+	return tenants
+}
+
+// IsTenantAllowed checks if the given tenant key is in the allowed list.
+// Returns true if:
+// - The allowed list is empty (no restriction)
+// - The tenant key is in the allowed list
+func IsTenantAllowed(tenantKey string) bool {
+	allowed := GetAllowedTenants()
+	if len(allowed) == 0 {
+		return true // No restriction
+	}
+
+	for _, t := range allowed {
+		if t == tenantKey {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetClient returns the singleton Feishu Lark SDK client.

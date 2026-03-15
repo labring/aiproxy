@@ -24,6 +24,7 @@ type FeishuUser struct {
 	OpenID       string         `json:"open_id"       gorm:"size:64;uniqueIndex;not null"`
 	UnionID      string         `json:"union_id"      gorm:"size:64;index"`
 	UserID       string         `json:"user_id"       gorm:"size:64;index"`
+	TenantID     string         `json:"tenant_id"     gorm:"size:64;index"`
 	Name         string         `json:"name"          gorm:"size:128"`
 	Email        string         `json:"email"         gorm:"size:256"`
 	Avatar       string         `json:"avatar"        gorm:"size:512"`

@@ -21,6 +21,14 @@ export default function FeishuCallbackPage() {
         if (processedRef.current) return
         processedRef.current = true
 
+        // Case 0: Backend redirected with error (e.g., unauthorized tenant)
+        const errorParam = searchParams.get("error")
+        if (errorParam) {
+            const message = searchParams.get("message") || t("auth.feishuCallback.error")
+            setError(message)
+            return
+        }
+
         // Case 1: Backend redirected here with token_key directly (browser OAuth flow)
         const tokenKey = searchParams.get("token_key")
         if (tokenKey) {

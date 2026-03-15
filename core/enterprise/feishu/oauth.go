@@ -102,17 +102,40 @@ func HandleCallback(c *gin.Context) {
 		return
 	}
 
+	// Validate tenant whitelist
+	if !IsTenantAllowed(userInfo.TenantID) {
+		log.Warnf("feishu login rejected: tenant %q not in allowed list, user: %s (%s)",
+			userInfo.TenantID, userInfo.Name, userInfo.OpenID)
+
+		// Check if this is a browser request or API request
+		accept := c.GetHeader("Accept")
+		if c.GetHeader("X-Requested-With") != "" || strings.Contains(accept, "application/json") {
+			middleware.ErrorResponse(c, http.StatusForbidden, "your organization is not authorized to access this service")
+		} else {
+			// Browser flow: redirect to frontend with error
+			frontendURL := GetFrontendURL()
+			params := url.Values{}
+			params.Set("error", "unauthorized_tenant")
+			params.Set("message", "your organization is not authorized to access this service")
+			redirectURL := fmt.Sprintf("%s/feishu/callback?%s", frontendURL, params.Encode())
+			c.Redirect(http.StatusFound, redirectURL)
+		}
+
+		return
+	}
+
 	// Upsert FeishuUser record
 	groupID := fmt.Sprintf("feishu_%s", userInfo.OpenID)
 	feishuUser := models.FeishuUser{
-		OpenID:       userInfo.OpenID,
-		UnionID:      userInfo.UnionID,
-		UserID:       userInfo.UserID,
-		Name:         userInfo.Name,
-		Email:        userInfo.Email,
-		Avatar:       userInfo.Avatar,
-		GroupID:      groupID,
-		Status:       1,
+		OpenID:   userInfo.OpenID,
+		UnionID:  userInfo.UnionID,
+		UserID:   userInfo.UserID,
+		TenantID: userInfo.TenantID,
+		Name:     userInfo.Name,
+		Email:    userInfo.Email,
+		Avatar:   userInfo.Avatar,
+		GroupID:  groupID,
+		Status:   1,
 	}
 
 	result := model.DB.
@@ -120,6 +143,7 @@ func HandleCallback(c *gin.Context) {
 		Assign(models.FeishuUser{
 			UnionID:  userInfo.UnionID,
 			UserID:   userInfo.UserID,
+			TenantID: userInfo.TenantID,
 			Name:     userInfo.Name,
 			Email:    userInfo.Email,
 			Avatar:   userInfo.Avatar,
