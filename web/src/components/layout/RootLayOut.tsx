@@ -17,6 +17,7 @@ export function RootLayout() {
           log: true,
           doc: true,
           github: true,
+          enterprise: true,
         }}
         collapsed={collapsed}
         onToggle={() => setCollapsed(!collapsed)}

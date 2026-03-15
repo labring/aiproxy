@@ -67,6 +67,11 @@ apiClient.interceptors.request.use(
 // 响应拦截器 - 统一处理错误和响应格式
 apiClient.interceptors.response.use(
     (response) => {
+        // Skip JSON parsing for blob responses (e.g., file downloads)
+        if (response.config.responseType === 'blob') {
+            return response
+        }
+
         // Check if response format matches API standard format
         const data = response.data as APIResponse
 

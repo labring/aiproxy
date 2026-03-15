@@ -132,3 +132,23 @@ The project uses golangci-lint v2 with a comprehensive config at `.golangci.yml`
 ## Enterprise Branch Context
 
 This fork maintains an `enterprise` branch for custom features (Feishu SSO, progressive quota tiers, department analytics). Enterprise code lives in `enterprise/` (top-level, separate from `core/`). See `AI_Proxy_企业版产品目标文档.md` for the full product spec.
+
+## User Preferences
+
+- **Language**: 中文交流，代码注释用英文
+- **Commit Style**: 中文 commit message，遵循 Conventional Commits
+- **Code Style**: 遵循 golangci-lint 规则，自动格式化
+- **Testing**: 修改代码后运行相关测试验证
+
+## Quick Commands
+
+```bash
+# 一键启动开发环境
+docker compose up -d pgsql redis && cd core && go run .
+
+# 快速测试
+cd core && go test -v -run TestXxx ./...
+
+# 提交前检查
+cd core && golangci-lint run --fix && go test ./...
+```

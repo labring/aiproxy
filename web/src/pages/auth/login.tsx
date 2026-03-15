@@ -13,6 +13,7 @@ import { useLoginMutation } from "@/feature/auth/hooks"
 import { LanguageSelector } from "@/components/common/LanguageSelector"
 import { ParticlesBackground } from "@/components/ui/animation/components/particles-background"
 import { ThemeToggle } from "@/components/common/ThemeToggle"
+import { enterpriseApi } from "@/api/enterprise"
 
 export default function LoginPage() {
     const { t } = useTranslation()
@@ -167,6 +168,36 @@ export default function LoginPage() {
                                 </Button>
                             </form>
                         </Form>
+
+                        {/* Divider */}
+                        <div className="relative my-4">
+                            <div className="absolute inset-0 flex items-center">
+                                <span className="w-full border-t border-gray-200 dark:border-gray-700" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                                <span className="bg-white dark:bg-gray-900 px-2 text-gray-500">
+                                    {t("auth.login.orDivider")}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Feishu Login */}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full h-11 rounded-lg font-medium border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            onClick={() => {
+                                window.location.href = enterpriseApi.feishuLoginUrl()
+                            }}
+                        >
+                            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none">
+                                <path d="M3.5 7.5L8.5 2L12 7L7 12.5L3.5 7.5Z" fill="#00D6B9" />
+                                <path d="M8.5 2L16 6L12 7L8.5 2Z" fill="#3370FF" />
+                                <path d="M16 6L20.5 16.5L12 7L16 6Z" fill="#3370FF" />
+                                <path d="M7 12.5L12 7L20.5 16.5L14 22L7 12.5Z" fill="#00D6B9" />
+                            </svg>
+                            {t("auth.login.feishuLogin")}
+                        </Button>
                     </CardContent>
 
                     <CardFooter className="border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/70 px-6 py-4">

@@ -8,6 +8,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Enterprise user roles.
+const (
+	RoleViewer  = "viewer"  // can only see own department data
+	RoleAnalyst = "analyst" // can see all departments + ranking + export
+	RoleAdmin   = "admin"   // full access, equivalent to AdminKey
+)
+
 // FeishuUser maps a Feishu (Lark) user to an AI Proxy group and token.
 type FeishuUser struct {
 	ID           int            `json:"id"            gorm:"primaryKey"`
@@ -23,6 +30,7 @@ type FeishuUser struct {
 	DepartmentID string         `json:"department_id" gorm:"size:64;index"`
 	GroupID      string         `json:"group_id"      gorm:"size:64;index;not null"`
 	TokenID      int            `json:"token_id"      gorm:"index"`
+	Role         string         `json:"role"          gorm:"size:32;default:viewer;index"`
 	Status       int            `json:"status"        gorm:"default:1;index"`
 }
 

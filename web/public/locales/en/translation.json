@@ -9,7 +9,8 @@
     "log": "Logs",
     "doc": "Document",
     "github": "GitHub",
-    "logout": "Logout"
+    "logout": "Logout",
+    "enterprise": "Enterprise"
   },
   "common": {
     "noResult": "No Data",
@@ -227,7 +228,59 @@
       "loading": "Logging in...",
       "submit": "Login",
       "keepSafe": "Please keep your access token safe",
-      "allRightsReserved": "All rights reserved"
+      "allRightsReserved": "All rights reserved",
+      "feishuLogin": "Login with Feishu",
+      "feishuLoginDesc": "Sign in with your Feishu account",
+      "orDivider": "or"
+    },
+    "feishuCallback": {
+      "processing": "Processing Feishu login...",
+      "error": "Feishu login failed",
+      "retry": "Login again",
+      "noCode": "Missing authorization code, please initiate Feishu login again"
+    }
+  },
+  "enterprise": {
+    "title": "Enterprise Analytics",
+    "dashboard": {
+      "title": "Enterprise Overview",
+      "timeRange": "Time Range",
+      "last7Days": "Last 7 Days",
+      "last30Days": "Last 30 Days",
+      "thisMonth": "This Month",
+      "totalRequests": "Total Requests",
+      "totalAmount": "Total Usage",
+      "totalTokens": "Total Tokens",
+      "activeDepartments": "Active Departments",
+      "departmentSummary": "Department Summary",
+      "departmentChart": "Usage Distribution",
+      "department": "Department",
+      "requests": "Requests",
+      "amount": "Usage",
+      "tokens": "Tokens",
+      "activeUsers": "Active Users",
+      "viewTrend": "View Trend"
+    },
+    "ranking": {
+      "title": "Employee Ranking",
+      "userName": "Name",
+      "department": "Department",
+      "requests": "Requests",
+      "amount": "Usage",
+      "tokens": "Tokens",
+      "allDepartments": "All Departments",
+      "top": "Top {{count}}",
+      "export": "Export Report"
+    },
+    "department": {
+      "title": "Department Trend",
+      "trend": "Usage Trend",
+      "back": "Back to Overview"
+    },
+    "sidebar": {
+      "dashboard": "Overview",
+      "ranking": "Ranking",
+      "adminPanel": "Admin Panel"
     }
   },
   "token": {

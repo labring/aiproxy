@@ -9,7 +9,8 @@
     "log": "日志",
     "doc": "文档",
     "github": "GitHub",
-    "logout": "登出"
+    "logout": "登出",
+    "enterprise": "企业分析"
   },
   "common": {
     "noResult": "没有数据",
@@ -216,7 +217,59 @@
       "loading": "登录中...",
       "submit": "登录",
       "keepSafe": "请妥善保管您的访问令牌",
-      "allRightsReserved": "保留所有权利"
+      "allRightsReserved": "保留所有权利",
+      "feishuLogin": "飞书登录",
+      "feishuLoginDesc": "使用飞书账号登录企业版",
+      "orDivider": "或"
+    },
+    "feishuCallback": {
+      "processing": "正在处理飞书登录...",
+      "error": "飞书登录失败",
+      "retry": "重新登录",
+      "noCode": "缺少授权码，请重新发起飞书登录"
+    }
+  },
+  "enterprise": {
+    "title": "企业分析",
+    "dashboard": {
+      "title": "企业概览",
+      "timeRange": "时间范围",
+      "last7Days": "最近 7 天",
+      "last30Days": "最近 30 天",
+      "thisMonth": "本月",
+      "totalRequests": "总请求数",
+      "totalAmount": "总用量",
+      "totalTokens": "总 Token 数",
+      "activeDepartments": "活跃部门",
+      "departmentSummary": "部门汇总",
+      "departmentChart": "部门用量分布",
+      "department": "部门",
+      "requests": "请求数",
+      "amount": "用量",
+      "tokens": "Token 数",
+      "activeUsers": "活跃用户",
+      "viewTrend": "查看趋势"
+    },
+    "ranking": {
+      "title": "员工排行榜",
+      "userName": "姓名",
+      "department": "部门",
+      "requests": "请求数",
+      "amount": "用量",
+      "tokens": "Token 数",
+      "allDepartments": "全部部门",
+      "top": "前 {{count}} 名",
+      "export": "导出报表"
+    },
+    "department": {
+      "title": "部门趋势",
+      "trend": "用量趋势",
+      "back": "返回概览"
+    },
+    "sidebar": {
+      "dashboard": "企业概览",
+      "ranking": "员工排行",
+      "adminPanel": "管理后台"
     }
   },
   "token": {

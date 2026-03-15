@@ -1,12 +1,21 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+export interface EnterpriseUser {
+    name: string
+    avatar: string
+    openId: string
+}
+
 export interface AuthState {
     token: string | null
     isAuthenticated: boolean
     isAuthenticating: boolean
+    enterpriseUser: EnterpriseUser | null
     login: (token: string) => void
+    loginWithFeishu: (token: string, user: EnterpriseUser) => void
     logout: () => void
+    setToken: (token: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -15,11 +24,21 @@ export const useAuthStore = create<AuthState>()(
             token: null,
             isAuthenticated: false,
             isAuthenticating: false,
+            enterpriseUser: null,
 
             login: (token: string) => {
                 set({
                     token,
                     isAuthenticated: true,
+                    enterpriseUser: null,
+                })
+            },
+
+            loginWithFeishu: (token: string, user: EnterpriseUser) => {
+                set({
+                    token,
+                    isAuthenticated: true,
+                    enterpriseUser: user,
                 })
             },
 
@@ -27,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
                 set({
                     token: null,
                     isAuthenticated: false,
+                    enterpriseUser: null,
                 })
             },
 
@@ -38,10 +58,10 @@ export const useAuthStore = create<AuthState>()(
         }),
         {
             name: 'auth-storage',
-            // Only persist these fields
             partialize: (state) => ({
                 token: state.token,
                 isAuthenticated: state.isAuthenticated,
+                enterpriseUser: state.enterpriseUser,
             }),
         }
     )

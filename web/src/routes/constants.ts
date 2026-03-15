@@ -8,10 +8,14 @@ export const ROUTES = {
     MODEL: "/model",
     LOG: "/log",
     MCP: "/mcp-front",
+    ENTERPRISE: "/enterprise",
+    ENTERPRISE_RANKING: "/enterprise/ranking",
+    ENTERPRISE_DEPARTMENT: "/enterprise/department",
+    FEISHU_CALLBACK: "/feishu/callback",
 } as const
 
 export type RouteKey = keyof typeof ROUTES
 export type RoutePath = typeof ROUTES[RouteKey]
 
 // get route path by key
-export const getRoute = (key: RouteKey): RoutePath => ROUTES[key] 
+export const getRoute = (key: RouteKey): RoutePath => ROUTES[key]

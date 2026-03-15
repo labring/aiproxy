@@ -3,6 +3,7 @@ import type React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import {
     Bot,
+    Building2,
     Layers,
     BarChart2,
     Database,
@@ -89,6 +90,12 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             display: true,
             external: true,
         },
+        {
+            title: t("sidebar.enterprise"),
+            icon: Building2,
+            href: ROUTES.ENTERPRISE,
+            display: true,
+        },
     ]
 }
 
@@ -102,6 +109,7 @@ interface SidebarDisplayConfig {
     log?: boolean
     doc?: boolean
     github?: boolean
+    enterprise?: boolean
 }
 
 interface SidebarProps {
@@ -129,6 +137,7 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
         if (item.href === ROUTES.LOG) configKey = "log"
         if (item.href === "https://sealos.run/docs/guides/ai-proxy") configKey = "doc"
         if (item.href === "https://github.com/labring/aiproxy") configKey = "github"
+        if (item.href === ROUTES.ENTERPRISE) configKey = "enterprise"
 
         const shouldDisplay = displayConfig[configKey] !== undefined ? displayConfig[configKey] : item.display
 

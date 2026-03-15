@@ -18,11 +18,18 @@ func RegisterRoutes(router *gin.Engine) {
 	// Public routes (no admin auth needed, e.g., OAuth callbacks)
 	RegisterPublicRoutes(enterprise)
 
-	// Admin-authenticated routes
+	// Admin-authenticated routes (feishu sync, quota management)
 	admin := enterprise.Group("")
 	admin.Use(middleware.AdminAuth)
 
 	RegisterAdminRoutes(admin)
+
+	// Enterprise-authenticated routes (AdminKey or Feishu user token)
+	// Analytics routes are accessible by both admins and enterprise users.
+	enterpriseAuth := enterprise.Group("")
+	enterpriseAuth.Use(EnterpriseAuth)
+
+	analytics.RegisterRoutes(enterpriseAuth)
 }
 
 // RegisterPublicRoutes registers routes that don't require admin authentication.
@@ -34,5 +41,4 @@ func RegisterPublicRoutes(public *gin.RouterGroup) {
 func RegisterAdminRoutes(admin *gin.RouterGroup) {
 	feishu.RegisterRoutes(nil, admin)
 	quota.RegisterRoutes(admin)
-	analytics.RegisterRoutes(admin)
 }
