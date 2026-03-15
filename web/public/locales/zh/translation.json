@@ -267,7 +267,14 @@
       "models": "模型数",
       "allDepartments": "全部部门",
       "top": "前 {{count}} 名",
-      "export": "导出报表"
+      "export": "导出报表",
+      "customRange": "自定义周期",
+      "customLimit": "自定义数量",
+      "showAll": "显示全部",
+      "departmentsSelected": "已选 {{count}} 个部门",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "clearSelection": "清除选择"
     },
     "department": {
       "title": "部门趋势",

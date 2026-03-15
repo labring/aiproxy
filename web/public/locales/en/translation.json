@@ -278,7 +278,14 @@
       "models": "Models",
       "allDepartments": "All Departments",
       "top": "Top {{count}}",
-      "export": "Export Report"
+      "export": "Export Report",
+      "customRange": "Custom Range",
+      "customLimit": "Custom",
+      "showAll": "Show All",
+      "departmentsSelected": "{{count}} departments",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "clearSelection": "Clear Selection"
     },
     "department": {
       "title": "Department Trend",

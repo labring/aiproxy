@@ -1,6 +1,6 @@
-export type TimeRange = "7d" | "30d" | "month"
+export type TimeRange = "7d" | "30d" | "month" | "custom"
 
-export function getTimeRange(range: TimeRange): { start: number; end: number } {
+export function getTimeRange(range: TimeRange, customStart?: number, customEnd?: number): { start: number; end: number } {
     const now = Math.floor(Date.now() / 1000)
     switch (range) {
         case "7d":
@@ -13,6 +13,11 @@ export function getTimeRange(range: TimeRange): { start: number; end: number } {
             d.setHours(0, 0, 0, 0)
             return { start: Math.floor(d.getTime() / 1000), end: now }
         }
+        case "custom":
+            return {
+                start: customStart || now - 7 * 86400,
+                end: customEnd || now,
+            }
     }
 }
 
