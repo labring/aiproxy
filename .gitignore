@@ -5,3 +5,5 @@ core/.env.local
 core/.env.aiproxy.local
 core/aiproxy-enterprise
 core/aiproxy.db
+core/aiproxy
+.claude/settings.local.json

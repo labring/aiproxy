@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_FILE_PATH\" == *.go ]]; then gofmt -w \"$CLAUDE_FILE_PATH\" 2>/dev/null; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE '(git push|rm -rf|docker rm|DROP TABLE)'; then python3 ~/.claude/scripts/feishu_confirm.py \"Claude Code 请求执行危险操作:\\n$CLAUDE_TOOL_INPUT\\n\\n是否允许？\"; fi"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/scripts/feishu_notify.py \"$CLAUDE_NOTIFICATION\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
