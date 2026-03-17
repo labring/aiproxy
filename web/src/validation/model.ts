@@ -131,8 +131,21 @@ export const priceSchema = z.object({
     conditional_prices: z.array(conditionalPriceSchema).optional(),
 }).optional()
 
+const modelConfigSchema = z.object({
+    max_input_tokens: z.number().nonnegative('Max input tokens must be a non-negative number').optional(),
+    max_output_tokens: z.number().nonnegative('Max output tokens must be a non-negative number').optional(),
+    max_context_tokens: z.number().nonnegative('Max context tokens must be a non-negative number').optional(),
+    vision: z.boolean().optional(),
+    tool_choice: z.boolean().optional(),
+    coder: z.boolean().optional(),
+    limited_time_free: z.boolean().optional(),
+    support_formats: z.array(z.string()).optional(),
+    support_voices: z.array(z.string()).optional(),
+}).optional()
+
 export const modelCreateSchema = z.object({
     model: z.string().min(1, 'Model name is required'),
+    config: modelConfigSchema,
     owner: z.string().optional(),
     type: z.number().min(0, 'Type is required'),
     rpm: z.number().nonnegative('RPM must be a non-negative number').optional(),

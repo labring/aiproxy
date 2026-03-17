@@ -156,6 +156,40 @@ export function ModelTable() {
     return rest;
   };
 
+  const getConfigSummary = (config?: ModelConfig["config"]) => {
+    if (!config) return [];
+
+    const summary: string[] = [];
+    if (config.max_context_tokens) {
+      summary.push(`ctx ${config.max_context_tokens.toLocaleString()}`);
+    }
+    if (config.max_input_tokens) {
+      summary.push(`in ${config.max_input_tokens.toLocaleString()}`);
+    }
+    if (config.max_output_tokens) {
+      summary.push(`out ${config.max_output_tokens.toLocaleString()}`);
+    }
+    if (config.tool_choice) {
+      summary.push("tool");
+    }
+    if (config.vision) {
+      summary.push("vision");
+    }
+    if (config.coder) {
+      summary.push("coder");
+    }
+    if (config.limited_time_free) {
+      summary.push("free");
+    }
+    if (config.support_formats?.length) {
+      summary.push(`formats ${config.support_formats.length}`);
+    }
+    if (config.support_voices?.length) {
+      summary.push(`voices ${config.support_voices.length}`);
+    }
+    return summary;
+  };
+
   // Create table columns
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
@@ -349,6 +383,49 @@ export function ModelTable() {
                 {pluginName}
               </Badge>
             ))}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "config",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.configInfo")}</div>
+      ),
+      cell: ({ row }) => {
+        const config = row.original.config;
+        const summary = getConfigSummary(config);
+
+        if (!config || summary.length === 0) {
+          return (
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
+              {t("model.noConfigConfigured")}
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className="flex flex-wrap gap-1 cursor-pointer"
+            onClick={() => openUpdateDialog(row.original)}
+          >
+            {summary.slice(0, 6).map((item) => (
+              <Badge
+                key={item}
+                variant="outline"
+                className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
+              >
+                {item}
+              </Badge>
+            ))}
+            {summary.length > 6 && (
+              <Badge variant="outline" className="text-xs">
+                +{summary.length - 6}
+              </Badge>
+            )}
           </div>
         );
       },

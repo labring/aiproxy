@@ -28,7 +28,6 @@ import { AnimatedContainer } from '@/components/ui/animation/components/animated
 import { toast } from 'sonner'
 import { FlaskConical, Loader2, Info } from 'lucide-react'
 import { ChannelTestDialog } from './ChannelTestDialog'
-import { Badge } from '@/components/ui/badge'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
 
@@ -134,6 +133,11 @@ export function ChannelForm({
 
     // Effective flag follows user's selected mode even when no defaults exist yet.
     const effectiveUseDefault = useDefaultModels
+
+    const openDefaultModelsEditor = () => {
+        if (!watchedType) return
+        setDefaultModelsDialogOpen(true)
+    }
 
     // 防止意外的表单提交
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -382,7 +386,7 @@ export function ChannelForm({
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => setDefaultModelsDialogOpen(true)}
+                            onClick={openDefaultModelsEditor}
                         >
                             {t('channel.dialog.configureDefaultModels')}
                         </Button>
@@ -393,28 +397,44 @@ export function ChannelForm({
 
         return (
             <div className="space-y-3">
-                <div className="rounded-lg border border-dashed border-primary/20 bg-muted/30 p-4">
+                <div className="rounded-lg border border-dashed border-primary/20 bg-muted/30 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Info className="h-3.5 w-3.5" />
+                            {t('channel.dialog.defaultModelsHint')}
+                        </p>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={openDefaultModelsEditor}
+                        >
+                            {t('channel.dialog.configureDefaultModels')}
+                        </Button>
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                         {defaultModelsData!.models.map((model) => (
-                            <Badge
+                            <button
                                 key={model}
-                                variant="secondary"
-                                className="text-xs font-mono"
+                                type="button"
+                                onClick={openDefaultModelsEditor}
+                                className="inline-flex items-center rounded-md border border-transparent bg-secondary px-2 py-0.5 text-xs font-mono text-secondary-foreground transition-colors hover:border-primary/30 hover:bg-secondary/80"
+                                title={t('channel.dialog.configureDefaultModels')}
                             >
                                 {model}
-                            </Badge>
+                            </button>
                         ))}
                     </div>
                 </div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Info className="h-3.5 w-3.5" />
-                    {t('channel.dialog.defaultModelsHint')}
-                </p>
                 {/* Show default mapping if exists */}
                 {defaultModelsData!.mapping && Object.keys(defaultModelsData!.mapping).length > 0 && (
                     <div className="space-y-2">
                         <FormLabel className="text-sm">{t('channel.dialog.defaultModelMapping')}</FormLabel>
-                        <div className="rounded-lg border border-dashed border-primary/20 bg-muted/30 p-3">
+                        <button
+                            type="button"
+                            onClick={openDefaultModelsEditor}
+                            className="block w-full rounded-lg border border-dashed border-primary/20 bg-muted/30 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/50"
+                        >
                             <div className="space-y-1">
                                 {Object.entries(defaultModelsData!.mapping).map(([from, to]) => (
                                     <div key={from} className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
@@ -424,7 +444,7 @@ export function ChannelForm({
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </button>
                     </div>
                 )}
             </div>
@@ -887,6 +907,7 @@ export function ChannelForm({
                 <DefaultModelsDialog
                     open={defaultModelsDialogOpen}
                     onOpenChange={setDefaultModelsDialogOpen}
+                    initialTypeId={watchedType || undefined}
                 />
             </div>
         </AnimatedContainer>
