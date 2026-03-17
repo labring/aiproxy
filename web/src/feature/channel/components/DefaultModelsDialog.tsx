@@ -1,5 +1,5 @@
 // src/feature/channel/components/DefaultModelsDialog.tsx
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
     Dialog,
     DialogContent,
@@ -35,6 +35,7 @@ import { Loader2, Settings, Plus, Pencil, Trash2, ArrowLeft, Download, Upload } 
 interface DefaultModelsDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    initialTypeId?: number
 }
 
 type ViewMode = 'list' | 'edit'
@@ -86,7 +87,7 @@ const normalizeDefaultModelsImport = (raw: unknown): AllDefaultModelsResponse =>
     return { models, mapping }
 }
 
-export function DefaultModelsDialog({ open, onOpenChange }: DefaultModelsDialogProps) {
+export function DefaultModelsDialog({ open, onOpenChange, initialTypeId }: DefaultModelsDialogProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -337,6 +338,27 @@ export function DefaultModelsDialog({ open, onOpenChange }: DefaultModelsDialogP
         if (!typeMetas || !editingType) return undefined
         return typeMetas[String(editingType)]?.name
     }, [typeMetas, editingType])
+
+    const openEditorForType = useCallback((typeId: number) => {
+        if (!typeId) return
+        const hasConfiguredDefaults = configuredTypes.some((entry) => entry.typeId === typeId)
+        if (hasConfiguredDefaults) {
+            handleEdit(typeId)
+            return
+        }
+
+        setIsCreatingNew(true)
+        setEditingType(typeId)
+        setEditModels([])
+        setEditMapping({})
+        setViewMode('edit')
+    }, [configuredTypes, handleEdit])
+
+    useEffect(() => {
+        if (!open || !initialTypeId) return
+        if (viewMode !== 'list' || editingType !== 0 || isCreatingNew) return
+        openEditorForType(initialTypeId)
+    }, [open, initialTypeId, viewMode, editingType, isCreatingNew, openEditorForType])
 
     // Render the list view
     const renderListView = () => (
