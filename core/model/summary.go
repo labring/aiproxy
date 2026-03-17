@@ -40,6 +40,7 @@ var (
 		"image_output_tokens",
 		"cached_tokens",
 		"cache_creation_tokens",
+		"reasoning_tokens",
 		"total_tokens",
 		"web_search_count",
 	}
@@ -429,6 +430,8 @@ func (d *SummaryData) AddServiceTierBreakdown(
 	serviceTier string,
 	usage Usage,
 	amount Amount,
+	totalTimeMilliseconds int64,
+	totalTTFBMilliseconds int64,
 	isRetry bool,
 	status int,
 ) {
@@ -446,6 +449,8 @@ func (d *SummaryData) AddServiceTierBreakdown(
 
 		d.ServiceTierFlex.Usage.Add(usage)
 		d.ServiceTierFlex.Amount.Add(amount)
+		d.ServiceTierFlex.TotalTimeMilliseconds += totalTimeMilliseconds
+		d.ServiceTierFlex.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	case "priority":
 		d.ServiceTierPriority.AddRequest(status, isRetry)
 
@@ -459,6 +464,8 @@ func (d *SummaryData) AddServiceTierBreakdown(
 
 		d.ServiceTierPriority.Usage.Add(usage)
 		d.ServiceTierPriority.Amount.Add(amount)
+		d.ServiceTierPriority.TotalTimeMilliseconds += totalTimeMilliseconds
+		d.ServiceTierPriority.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
 }
 
@@ -559,6 +566,7 @@ func appendSummaryUsageUpdateData(
 		{column: "image_output_tokens", value: int64(usage.ImageOutputTokens)},
 		{column: "cached_tokens", value: int64(usage.CachedTokens)},
 		{column: "cache_creation_tokens", value: int64(usage.CacheCreationTokens)},
+		{column: "reasoning_tokens", value: int64(usage.ReasoningTokens)},
 		{column: "total_tokens", value: int64(usage.TotalTokens)},
 		{column: "web_search_count", value: int64(usage.WebSearchCount)},
 	}
@@ -1135,6 +1143,7 @@ func aggregateDataToSpan(
 		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
+		currentData.ClaudeLongContext.Add(data.ClaudeLongContext)
 
 		dataMap[timestamp] = currentData
 	}
@@ -1157,6 +1166,7 @@ func sumDashboardResponse(chartData []ChartData) DashboardResponse {
 		dashboardResponse.TotalCount = dashboardResponse.RequestCount
 		dashboardResponse.ServiceTierFlex.Add(data.ServiceTierFlex)
 		dashboardResponse.ServiceTierPriority.Add(data.ServiceTierPriority)
+		dashboardResponse.ClaudeLongContext.Add(data.ClaudeLongContext)
 	}
 
 	return dashboardResponse

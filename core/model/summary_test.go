@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/labring/aiproxy/core/model"
@@ -82,6 +83,68 @@ func TestSummaryDataAddClaudeLongContextBreakdown(t *testing.T) {
 	}
 }
 
+func TestAggregateDataToSpan_RetainsBreakdowns(t *testing.T) {
+	location := time.FixedZone("UTC+8", 8*3600)
+	base := time.Date(2026, 3, 17, 1, 0, 0, 0, location)
+
+	input := []model.ChartData{
+		{
+			Timestamp: base.Unix(),
+			SummaryDataSet: model.SummaryDataSet{
+				Count:  model.Count{RequestCount: 1},
+				Amount: model.Amount{UsedAmount: 1.5},
+			},
+			ServiceTierFlex: model.SummaryDataSet{
+				Count: model.Count{RequestCount: 1},
+			},
+			ClaudeLongContext: model.SummaryDataSet{
+				Count:  model.Count{RequestCount: 1},
+				Amount: model.Amount{UsedAmount: 1.5},
+			},
+		},
+		{
+			Timestamp: base.Add(2 * time.Hour).Unix(),
+			SummaryDataSet: model.SummaryDataSet{
+				Count:  model.Count{RequestCount: 2},
+				Amount: model.Amount{UsedAmount: 2.5},
+			},
+			ServiceTierPriority: model.SummaryDataSet{
+				Count: model.Count{RequestCount: 2},
+			},
+			ClaudeLongContext: model.SummaryDataSet{
+				Count:  model.Count{RequestCount: 2},
+				Amount: model.Amount{UsedAmount: 2.5},
+			},
+		},
+	}
+
+	got := model.AggregateDataToSpanForTest(input, model.TimeSpanDay, location)
+	if len(got) != 1 {
+		t.Fatalf("aggregateDataToSpan() len = %d, want 1", len(got))
+	}
+
+	day := got[0]
+	if day.RequestCount != 3 {
+		t.Fatalf("request count = %d, want 3", day.RequestCount)
+	}
+
+	if day.ServiceTierFlex.RequestCount != 1 {
+		t.Fatalf("service tier flex request count = %d, want 1", day.ServiceTierFlex.RequestCount)
+	}
+
+	if day.ServiceTierPriority.RequestCount != 2 {
+		t.Fatalf("service tier priority request count = %d, want 2", day.ServiceTierPriority.RequestCount)
+	}
+
+	if day.ClaudeLongContext.RequestCount != 3 {
+		t.Fatalf("claude long context request count = %d, want 3", day.ClaudeLongContext.RequestCount)
+	}
+
+	if day.ClaudeLongContext.UsedAmount != 4 {
+		t.Fatalf("claude long context used amount = %v, want 4", day.ClaudeLongContext.UsedAmount)
+	}
+}
+
 func TestIsClaudeLongContextSummary(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -121,9 +184,10 @@ func TestIsClaudeLongContextSummary(t *testing.T) {
 
 func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
 	usage := model.Usage{
-		InputTokens:  10,
-		OutputTokens: 20,
-		TotalTokens:  30,
+		InputTokens:     10,
+		OutputTokens:    20,
+		ReasoningTokens: 5,
+		TotalTokens:     30,
 	}
 	amount := model.Amount{
 		InputAmount:  1.5,
@@ -137,19 +201,25 @@ func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
 		wantFlexCount        int64
 		wantPriorityCount    int64
 		wantFlexTotalTokens  int64
+		wantFlexReasoning    int64
 		wantPriorityUsedCost float64
+		wantPriorityTimeMs   int64
+		wantPriorityTTFBMs   int64
 	}{
 		{
 			name:                "flex tier tracked separately",
 			serviceTier:         "flex",
 			wantFlexCount:       1,
 			wantFlexTotalTokens: 30,
+			wantFlexReasoning:   5,
 		},
 		{
 			name:                 "priority tier tracked separately",
 			serviceTier:          "priority",
 			wantPriorityCount:    1,
 			wantPriorityUsedCost: 4,
+			wantPriorityTimeMs:   1200,
+			wantPriorityTTFBMs:   300,
 		},
 		{
 			name:        "auto maps to default total only",
@@ -176,7 +246,7 @@ func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var data model.SummaryData
-			data.AddServiceTierBreakdown(tt.serviceTier, usage, amount, true, 429)
+			data.AddServiceTierBreakdown(tt.serviceTier, usage, amount, 1200, 300, true, 429)
 
 			if got := data.ServiceTierFlex.RequestCount; got != tt.wantFlexCount {
 				t.Fatalf("flex request count = %d, want %d", got, tt.wantFlexCount)
@@ -190,10 +260,42 @@ func TestSummaryDataAddServiceTierBreakdown(t *testing.T) {
 				t.Fatalf("flex total tokens = %d, want %d", got, tt.wantFlexTotalTokens)
 			}
 
+			if got := int64(data.ServiceTierFlex.ReasoningTokens); got != tt.wantFlexReasoning {
+				t.Fatalf("flex reasoning tokens = %d, want %d", got, tt.wantFlexReasoning)
+			}
+
 			if got := data.ServiceTierPriority.UsedAmount; got != tt.wantPriorityUsedCost {
 				t.Fatalf("priority used amount = %v, want %v", got, tt.wantPriorityUsedCost)
 			}
+
+			if got := data.ServiceTierPriority.TotalTimeMilliseconds; got != tt.wantPriorityTimeMs {
+				t.Fatalf("priority total time = %d, want %d", got, tt.wantPriorityTimeMs)
+			}
+
+			if got := data.ServiceTierPriority.TotalTTFBMilliseconds; got != tt.wantPriorityTTFBMs {
+				t.Fatalf("priority total ttfb = %d, want %d", got, tt.wantPriorityTTFBMs)
+			}
 		})
+	}
+}
+
+func TestParseSummaryFields_ReasoningTokensIncluded(t *testing.T) {
+	got := model.ParseSummaryFields("usage")
+	if got == nil {
+		t.Fatal("ParseSummaryFields returned nil")
+	}
+
+	wantContains := []string{
+		"reasoning_tokens",
+		"service_tier_flex_reasoning_tokens",
+		"service_tier_priority_reasoning_tokens",
+		"claude_long_context_reasoning_tokens",
+	}
+
+	for _, field := range wantContains {
+		if !slices.Contains(got, field) {
+			t.Fatalf("ParseSummaryFields result %v does not contain %q", got, field)
+		}
 	}
 }
 
