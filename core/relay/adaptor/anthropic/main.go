@@ -358,6 +358,7 @@ func convertImageURLToBase64(ctx context.Context, contentItem *ast.Node) error {
 	return nil
 }
 
+//nolint:gocyclo
 func StreamHandler(
 	m *meta.Meta,
 	c *gin.Context,

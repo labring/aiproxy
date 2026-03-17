@@ -1319,6 +1319,7 @@ func aggregatToSpan(
 		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
+		currentData.ClaudeLongContext.Add(data.ClaudeLongContext)
 
 		if data.MaxRPM > currentData.MaxRPM {
 			currentData.MaxRPM = data.MaxRPM
@@ -1405,6 +1406,7 @@ func aggregatToSpanGroup(
 		currentData.Add(data.SummaryDataSet)
 		currentData.ServiceTierFlex.Add(data.ServiceTierFlex)
 		currentData.ServiceTierPriority.Add(data.ServiceTierPriority)
+		currentData.ClaudeLongContext.Add(data.ClaudeLongContext)
 
 		if data.MaxRPM > currentData.MaxRPM {
 			currentData.MaxRPM = data.MaxRPM
