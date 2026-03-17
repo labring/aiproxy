@@ -85,7 +85,7 @@ func TestSummaryDataAddClaudeLongContextBreakdown(t *testing.T) {
 
 func TestAggregateDataToSpan_RetainsBreakdowns(t *testing.T) {
 	location := time.FixedZone("UTC+8", 8*3600)
-	base := time.Date(2026, 3, 17, 1, 0, 0, 0, location)
+	base := time.Date(2026, time.March, 17, 1, 0, 0, 0, location)
 
 	input := []model.ChartData{
 		{
@@ -133,11 +133,17 @@ func TestAggregateDataToSpan_RetainsBreakdowns(t *testing.T) {
 	}
 
 	if day.ServiceTierPriority.RequestCount != 2 {
-		t.Fatalf("service tier priority request count = %d, want 2", day.ServiceTierPriority.RequestCount)
+		t.Fatalf(
+			"service tier priority request count = %d, want 2",
+			day.ServiceTierPriority.RequestCount,
+		)
 	}
 
 	if day.ClaudeLongContext.RequestCount != 3 {
-		t.Fatalf("claude long context request count = %d, want 3", day.ClaudeLongContext.RequestCount)
+		t.Fatalf(
+			"claude long context request count = %d, want 3",
+			day.ClaudeLongContext.RequestCount,
+		)
 	}
 
 	if day.ClaudeLongContext.UsedAmount != 4 {

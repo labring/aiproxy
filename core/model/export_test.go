@@ -1,5 +1,7 @@
 package model
 
 // Export for testing
-var ToLimitOffset = toLimitOffset
-var AggregateDataToSpanForTest = aggregateDataToSpan
+var (
+	ToLimitOffset              = toLimitOffset
+	AggregateDataToSpanForTest = aggregateDataToSpan
+)
