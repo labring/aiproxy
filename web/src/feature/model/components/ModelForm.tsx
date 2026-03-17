@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
     Form,
     FormControl,
@@ -28,7 +29,7 @@ import { modelCreateSchema } from '@/validation/model'
 import { useCreateModel, useUpdateModel } from '../hooks'
 import { useTranslation } from 'react-i18next'
 import { ModelCreateForm } from '@/validation/model'
-import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest, ModelConfig } from '@/types/model'
+import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest, ModelConfig, ModelConfigDetail } from '@/types/model'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { useState } from 'react'
@@ -60,6 +61,7 @@ const KNOWN_PRICE_KEYS = new Set([
 ])
 
 const MANAGED_MODEL_KEYS = new Set([
+    'config',
     'owner',
     'type',
     'rpm',
@@ -96,6 +98,18 @@ const MANAGED_PLUGIN_KEYS = {
     'think-split': new Set(['enable']),
     'stream-fake': new Set(['enable']),
 } as const
+
+const KNOWN_CONFIG_KEYS = new Set([
+    'max_input_tokens',
+    'max_output_tokens',
+    'max_context_tokens',
+    'vision',
+    'tool_choice',
+    'coder',
+    'limited_time_free',
+    'support_formats',
+    'support_voices',
+])
 
 interface ModelFormProps {
     mode?: 'create' | 'update'
@@ -135,11 +149,19 @@ export function ModelForm({
     },
 }: ModelFormProps) {
     const { t } = useTranslation()
+    const [configExpanded, setConfigExpanded] = useState(false)
 
     // Collapsible expanded states
     const [priceExpanded, setPriceExpanded] = useState(false)
     const [cachePluginExpanded, setCachePluginExpanded] = useState(false)
     const [webSearchPluginExpanded, setWebSearchPluginExpanded] = useState(false)
+    const [configExtrasText, setConfigExtrasText] = useState(() => {
+        const extras = Object.fromEntries(
+            Object.entries(defaultValues.config || {}).filter(([key]) => !KNOWN_CONFIG_KEYS.has(key))
+        )
+        return Object.keys(extras).length > 0 ? JSON.stringify(extras, null, 2) : ''
+    })
+    const [configExtrasError, setConfigExtrasError] = useState<string | null>(null)
 
     // API hooks
     const {
@@ -167,6 +189,17 @@ export function ModelForm({
         mode: 'onChange', // 启用实时验证
         defaultValues: {
             model: defaultValues.model || '',
+            config: {
+                max_input_tokens: defaultValues.config?.max_input_tokens,
+                max_output_tokens: defaultValues.config?.max_output_tokens,
+                max_context_tokens: defaultValues.config?.max_context_tokens,
+                vision: defaultValues.config?.vision ?? false,
+                tool_choice: defaultValues.config?.tool_choice ?? false,
+                coder: defaultValues.config?.coder ?? false,
+                limited_time_free: defaultValues.config?.limited_time_free ?? false,
+                support_formats: defaultValues.config?.support_formats,
+                support_voices: defaultValues.config?.support_voices,
+            },
             owner: defaultValues.owner ?? '',
             type: defaultValues.type || 1,
             rpm: defaultValues.rpm,
@@ -188,9 +221,76 @@ export function ModelForm({
     })
 
     // Watch plugin enable states
+    const watchedType = form.watch('type')
     const cacheEnabled = form.watch('plugin.cache.enable')
     const webSearchEnabled = form.watch('plugin.web-search.enable')
     const searchEngines = form.watch('plugin.web-search.search_from') || []
+
+    const supportFormatsValue = form.watch('config.support_formats')
+    const supportVoicesValue = form.watch('config.support_voices')
+
+    const configFieldVisibility = (() => {
+        switch (watchedType) {
+            case 7:
+                return {
+                    tokenFields: ['max_input_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: false,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: true,
+                }
+            case 8:
+                return {
+                    tokenFields: ['max_input_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: false,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: false,
+                }
+            case 3:
+            case 10:
+            case 11:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: watchedType === 3,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: false,
+                    showSupportVoices: false,
+                }
+            case 5:
+            case 9:
+            case 13:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_output_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: true,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: false,
+                }
+            case 1:
+            case 2:
+            case 4:
+            case 6:
+            default:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_output_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: true,
+                    showVision: true,
+                    showCoder: true,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: false,
+                    showSupportVoices: false,
+                }
+        }
+    })()
 
     // Available search engine types
     const availableEngineTypes = ['bing', 'google', 'arxiv', 'searchxng'] as const
@@ -303,6 +403,23 @@ export function ModelForm({
 
         // Clear previous errors
         if (clearError) clearError()
+        setConfigExtrasError(null)
+
+        let configExtras: Record<string, unknown> = {}
+        const rawConfigExtras = configExtrasText.trim()
+        if (rawConfigExtras) {
+            try {
+                const parsed = JSON.parse(rawConfigExtras) as unknown
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    setConfigExtrasError(t('model.dialog.config.extrasJsonObjectError'))
+                    return
+                }
+                configExtras = parsed as Record<string, unknown>
+            } catch {
+                setConfigExtrasError(t('model.dialog.config.extrasJsonInvalid'))
+                return
+            }
+        }
 
         // Prepare plugin data - only include enabled plugins with their configured values
         const pluginData = {}
@@ -483,9 +600,47 @@ export function ModelForm({
             return undefined
         })()
 
+        const cleanedConfig = (() => {
+            const config = data.config || {}
+            const nextConfig: Record<string, unknown> = {
+                ...configExtras,
+            }
+
+            for (const [key, value] of Object.entries(config)) {
+                if (Array.isArray(value)) {
+                    const trimmed = value.map((item) => String(item).trim()).filter(Boolean)
+                    if (trimmed.length > 0) {
+                        nextConfig[key] = trimmed
+                    }
+                    continue
+                }
+
+                if (typeof value === 'boolean') {
+                    if (value) {
+                        nextConfig[key] = value
+                    }
+                    continue
+                }
+
+                if (typeof value === 'string') {
+                    if (value !== '') {
+                        nextConfig[key] = value
+                    }
+                    continue
+                }
+
+                if (value !== undefined && value !== null) {
+                    nextConfig[key] = value
+                }
+            }
+
+            return Object.keys(nextConfig).length > 0 ? nextConfig as ModelConfigDetail : undefined
+        })()
+
         // Prepare data for API - 如果没有启用的插件，则不传递 plugin 字段
         const formData: Omit<ModelCreateRequest, 'model'> = {
             ...preservedTopLevelFields,
+            ...(cleanedConfig && { config: cleanedConfig }),
             owner: data.owner ?? '',
             type: Number(data.type),
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
@@ -504,6 +659,7 @@ export function ModelForm({
             // For create mode, include the model name
             createModel({
                 model: data.model,
+                ...(cleanedConfig && { config: cleanedConfig }),
                 owner: data.owner ?? '',
                 type: Number(data.type),
                 ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
@@ -560,6 +716,10 @@ export function ModelForm({
                     {/* API error alert */}
                     {error && (
                         <AdvancedErrorDisplay error={error} />
+                    )}
+
+                    {configExtrasError && (
+                        <AdvancedErrorDisplay error={new Error(configExtrasError)} />
                     )}
 
                     {/* Model name field */}
@@ -796,6 +956,237 @@ export function ModelForm({
                             </FormItem>
                         )}
                     />
+
+                    <Collapsible open={configExpanded} onOpenChange={setConfigExpanded}>
+                        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="text-left">
+                                <h3 className="text-sm font-medium">{t("model.dialog.config.title")}</h3>
+                                <p className="text-xs text-muted-foreground">{t("model.dialog.config.description")}</p>
+                            </div>
+                            {configExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-3 px-1 space-y-4">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                                {t("model.dialog.config.note")}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                {configFieldVisibility.tokenFields.includes('max_context_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_context_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxContextTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxContextTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.tokenFields.includes('max_input_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_input_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxInputTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxInputTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.tokenFields.includes('max_output_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_output_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxOutputTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxOutputTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                {configFieldVisibility.showToolChoice && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.tool_choice"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.toolChoice")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.toolChoiceDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showVision && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.vision"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.vision")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.visionDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showCoder && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.coder"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.coder")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.coderDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showLimitedTimeFree && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.limited_time_free"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.limitedTimeFree")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.limitedTimeFreeDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+
+                            {configFieldVisibility.showSupportFormats && (
+                                <FormField
+                                    control={form.control}
+                                    name="config.support_formats"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.config.supportFormats")}</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder={t("model.dialog.config.supportFormatsPlaceholder")}
+                                                    value={(supportFormatsValue || []).join('\n')}
+                                                    onChange={(e) => {
+                                                        const values = e.target.value
+                                                            .split('\n')
+                                                            .map((item) => item.trim())
+                                                            .filter(Boolean)
+                                                        form.setValue('config.support_formats', values.length > 0 ? values : undefined, { shouldDirty: true })
+                                                    }}
+                                                    className="min-h-[96px]"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.config.supportFormatsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+
+                            {configFieldVisibility.showSupportVoices && (
+                                <FormField
+                                    control={form.control}
+                                    name="config.support_voices"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.config.supportVoices")}</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder={t("model.dialog.config.supportVoicesPlaceholder")}
+                                                    value={(supportVoicesValue || []).join('\n')}
+                                                    onChange={(e) => {
+                                                        const values = e.target.value
+                                                            .split('\n')
+                                                            .map((item) => item.trim())
+                                                            .filter(Boolean)
+                                                        form.setValue('config.support_voices', values.length > 0 ? values : undefined, { shouldDirty: true })
+                                                    }}
+                                                    className="min-h-[140px]"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.config.supportVoicesDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+
+                            <div className="space-y-2">
+                                <Label>{t("model.dialog.config.extrasJson")}</Label>
+                                <Textarea
+                                    placeholder={t("model.dialog.config.extrasJsonPlaceholder")}
+                                    value={configExtrasText}
+                                    onChange={(e) => setConfigExtrasText(e.target.value)}
+                                    className="min-h-[140px] font-mono text-xs"
+                                />
+                                <p className="text-xs text-muted-foreground">{t("model.dialog.config.extrasJsonDescription")}</p>
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
 
                     {/* Price Configuration Section */}
                     <Collapsible open={priceExpanded} onOpenChange={setPriceExpanded}>
