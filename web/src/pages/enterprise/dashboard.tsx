@@ -4,9 +4,12 @@ import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
 import { BarChart2, DollarSign, Hash, Building2, ArrowRight, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import * as echarts from "echarts"
+import { type DateRange } from "react-day-picker"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DateRangePicker } from "@/components/common/DateRangePicker"
+import { DepartmentFilter } from "@/components/common/DepartmentFilter"
 import { enterpriseApi, type DepartmentSummary, type ModelDistributionItem } from "@/api/enterprise"
 import { ROUTES } from "@/routes/constants"
 import { type TimeRange, getTimeRange, formatNumber, formatAmount } from "@/lib/enterprise"
@@ -189,28 +192,48 @@ export default function EnterpriseDashboard() {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [timeRange, setTimeRange] = useState<TimeRange>("7d")
+    const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
+    const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
 
-    const { start, end } = useMemo(() => getTimeRange(timeRange), [timeRange])
+    const { start, end } = useMemo(() => {
+        if (timeRange === "custom" && customDateRange?.from) {
+            const startTs = Math.floor(customDateRange.from.getTime() / 1000)
+            const endTs = customDateRange.to
+                ? Math.floor(customDateRange.to.getTime() / 1000) + 86399 // End of day
+                : Math.floor(Date.now() / 1000)
+            return getTimeRange("custom", startTs, endTs)
+        }
+        return getTimeRange(timeRange)
+    }, [timeRange, customDateRange])
+
+    const departmentFilter = useMemo(() => {
+        if (selectedDepartments.length === 0) return undefined
+        return selectedDepartments.join(",")
+    }, [selectedDepartments])
 
     const { data, isLoading } = useQuery({
-        queryKey: ["enterprise", "department-summary", start, end],
+        queryKey: ["enterprise", "department-summary", start, end, departmentFilter],
         queryFn: () => enterpriseApi.getDepartmentSummary(start, end),
     })
 
     const { data: comparisonData } = useQuery({
-        queryKey: ["enterprise", "comparison", timeRange],
+        queryKey: ["enterprise", "comparison", timeRange, departmentFilter],
         queryFn: () => {
-            const period = timeRange === "7d" ? "weekly" : "monthly"
-            return enterpriseApi.getComparison(period)
+            const period = timeRange === "7d" || timeRange === "last_week" ? "weekly" : "monthly"
+            return enterpriseApi.getComparison(period, departmentFilter)
         },
     })
 
     const { data: modelData } = useQuery({
-        queryKey: ["enterprise", "model-distribution", start, end],
-        queryFn: () => enterpriseApi.getModelDistribution(undefined, start, end),
+        queryKey: ["enterprise", "model-distribution", start, end, departmentFilter],
+        queryFn: () => enterpriseApi.getModelDistribution(departmentFilter, start, end),
     })
 
-    const departments = data?.departments || []
+    const departments = useMemo(() => {
+        const allDepts = data?.departments || []
+        if (selectedDepartments.length === 0) return allDepts
+        return allDepts.filter(d => selectedDepartments.includes(d.department_id))
+    }, [data?.departments, selectedDepartments])
     const models = modelData?.distribution || []
     const changes = comparisonData?.changes
 
@@ -228,19 +251,50 @@ export default function EnterpriseDashboard() {
 
     return (
         <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            {/* Header with filters */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold">{t("enterprise.dashboard.title")}</h1>
-                <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-                    <SelectTrigger className="w-40">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="7d">{t("enterprise.dashboard.last7Days")}</SelectItem>
-                        <SelectItem value="30d">{t("enterprise.dashboard.last30Days")}</SelectItem>
-                        <SelectItem value="month">{t("enterprise.dashboard.thisMonth")}</SelectItem>
-                    </SelectContent>
-                </Select>
+
+                <div className="flex items-center gap-3">
+                    {/* Department Filter */}
+                    <DepartmentFilter
+                        selected={selectedDepartments}
+                        onChange={setSelectedDepartments}
+                        timeRange={{ start, end }}
+                    />
+
+                    {/* Time Range Selector */}
+                    <div className="flex items-center gap-2">
+                        <Select value={timeRange} onValueChange={(v) => {
+                            setTimeRange(v as TimeRange)
+                            if (v !== "custom") {
+                                setCustomDateRange(undefined)
+                            }
+                        }}>
+                            <SelectTrigger className="w-40">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="7d">{t("enterprise.dashboard.last7Days")}</SelectItem>
+                                <SelectItem value="30d">{t("enterprise.dashboard.last30Days")}</SelectItem>
+                                <SelectItem value="month">{t("enterprise.dashboard.thisMonth")}</SelectItem>
+                                <SelectItem value="last_week">{t("enterprise.dashboard.lastWeek")}</SelectItem>
+                                <SelectItem value="last_month">{t("enterprise.dashboard.lastMonth")}</SelectItem>
+                                <SelectItem value="custom">{t("enterprise.dashboard.customRange")}</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        {/* Custom Date Range Picker */}
+                        {timeRange === "custom" && (
+                            <DateRangePicker
+                                value={customDateRange}
+                                onChange={setCustomDateRange}
+                                placeholder={t("enterprise.dashboard.selectDateRange")}
+                                className="w-64"
+                            />
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Metric cards */}

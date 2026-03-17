@@ -65,18 +65,16 @@ func GetAllowedTenants() []string {
 	return tenants
 }
 
-// IsTenantAllowed checks if the given tenant key is in the allowed list.
-// Returns true if:
-// - The allowed list is empty (no restriction)
-// - The tenant key is in the allowed list
-func IsTenantAllowed(tenantKey string) bool {
+// IsTenantAllowedByEnv checks tenant against environment variable only.
+// This is exported for use by enterprise.IsTenantAllowed.
+func IsTenantAllowedByEnv(tenantKey string) bool {
 	allowed := GetAllowedTenants()
 	if len(allowed) == 0 {
 		return true // No restriction
 	}
 
 	for _, t := range allowed {
-		if t == tenantKey {
+		if t == "*" || t == tenantKey {
 			return true
 		}
 	}
@@ -204,6 +202,10 @@ func ListDepartments(ctx context.Context, parentID string) ([]*DepartmentInfo, e
 
 			if dept.OpenDepartmentId != nil {
 				d.OpenDepartmentID = *dept.OpenDepartmentId
+				// Use OpenDepartmentID as DepartmentID if DepartmentID is empty
+				if d.DepartmentID == "" {
+					d.DepartmentID = d.OpenDepartmentID
+				}
 			}
 
 			if dept.ParentDepartmentId != nil {

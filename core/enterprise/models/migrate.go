@@ -11,5 +11,9 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&FeishuDepartment{},
 		&QuotaPolicy{},
 		&GroupQuotaPolicy{},
+		&TenantWhitelist{},
+		&TenantWhitelistConfig{},
+		&DepartmentQuotaPolicy{},
+		&UserQuotaPolicy{},
 	)
 }

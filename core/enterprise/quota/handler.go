@@ -260,3 +260,147 @@ func parsePageParams(c *gin.Context) (int, int) {
 
 	return page, perPage
 }
+
+// BindPolicyToDepartment binds a quota policy to a department.
+func BindPolicyToDepartment(c *gin.Context) {
+	var req struct {
+		DepartmentID  string `json:"department_id"  binding:"required"`
+		QuotaPolicyID int    `json:"quota_policy_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Verify policy exists
+	var policy models.QuotaPolicy
+	if err := model.DB.First(&policy, req.QuotaPolicyID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			middleware.ErrorResponse(c, http.StatusNotFound, "policy not found")
+			return
+		}
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	binding := models.DepartmentQuotaPolicy{
+		DepartmentID:  req.DepartmentID,
+		QuotaPolicyID: req.QuotaPolicyID,
+	}
+
+	// Upsert
+	var existing models.DepartmentQuotaPolicy
+	err := model.DB.Where("department_id = ?", req.DepartmentID).First(&existing).Error
+	if err == nil {
+		existing.QuotaPolicyID = req.QuotaPolicyID
+		if err := model.DB.Save(&existing).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		binding = existing
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := model.DB.Create(&binding).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, binding)
+}
+
+// BindPolicyToUser binds a quota policy to a specific user (overrides department policy).
+func BindPolicyToUser(c *gin.Context) {
+	var req struct {
+		OpenID        string `json:"open_id"        binding:"required"`
+		QuotaPolicyID int    `json:"quota_policy_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Verify policy exists
+	var policy models.QuotaPolicy
+	if err := model.DB.First(&policy, req.QuotaPolicyID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			middleware.ErrorResponse(c, http.StatusNotFound, "policy not found")
+			return
+		}
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	binding := models.UserQuotaPolicy{
+		OpenID:        req.OpenID,
+		QuotaPolicyID: req.QuotaPolicyID,
+	}
+
+	// Upsert
+	var existing models.UserQuotaPolicy
+	err := model.DB.Where("open_id = ?", req.OpenID).First(&existing).Error
+	if err == nil {
+		existing.QuotaPolicyID = req.QuotaPolicyID
+		if err := model.DB.Save(&existing).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		binding = existing
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := model.DB.Create(&binding).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, binding)
+}
+
+// UnbindPolicyFromDepartment removes the quota policy binding for a department.
+func UnbindPolicyFromDepartment(c *gin.Context) {
+	deptID := c.Param("department_id")
+	if deptID == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "department_id is required")
+		return
+	}
+
+	result := model.DB.Where("department_id = ?", deptID).Delete(&models.DepartmentQuotaPolicy{})
+	if result.Error != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, result.Error.Error())
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		middleware.ErrorResponse(c, http.StatusNotFound, "no policy binding found")
+		return
+	}
+
+	middleware.SuccessResponse(c, nil)
+}
+
+// UnbindPolicyFromUser removes the quota policy binding for a user.
+func UnbindPolicyFromUser(c *gin.Context) {
+	openID := c.Param("open_id")
+	if openID == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "open_id is required")
+		return
+	}
+
+	result := model.DB.Where("open_id = ?", openID).Delete(&models.UserQuotaPolicy{})
+	if result.Error != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, result.Error.Error())
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		middleware.ErrorResponse(c, http.StatusNotFound, "no policy binding found")
+		return
+	}
+
+	middleware.SuccessResponse(c, nil)
+}

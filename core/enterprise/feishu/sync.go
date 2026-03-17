@@ -393,8 +393,31 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string) 
 }
 
 // StartSyncScheduler starts a background goroutine that performs a full sync every 6 hours.
+// It waits for DB initialization before performing the initial sync.
 func StartSyncScheduler(ctx context.Context) {
 	go func() {
+		// Wait for model.DB to be initialized (max 30 seconds)
+		log.Info("feishu sync: waiting for database initialization")
+		for i := 0; i < 60; i++ {
+			if model.DB != nil {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+
+		if model.DB == nil {
+			log.Error("feishu sync: database not initialized after 30s, skipping initial sync")
+		} else {
+			// Perform initial sync on startup
+			log.Info("feishu sync: performing initial sync on startup")
+			if err := SyncAll(model.DB); err != nil {
+				log.Errorf("feishu initial sync failed: %v", err)
+			} else {
+				log.Info("feishu initial sync completed successfully")
+			}
+		}
+
+		// Start periodic sync
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
 

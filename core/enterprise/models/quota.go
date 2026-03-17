@@ -55,3 +55,33 @@ type GroupQuotaPolicy struct {
 func (GroupQuotaPolicy) TableName() string {
 	return "enterprise_group_quota_policies"
 }
+
+// DepartmentQuotaPolicy binds a QuotaPolicy to a department (all users in dept inherit it).
+type DepartmentQuotaPolicy struct {
+	ID            int            `json:"id"             gorm:"primaryKey"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `json:"-"              gorm:"index"`
+	DepartmentID  string         `json:"department_id"  gorm:"size:64;uniqueIndex;not null"`
+	QuotaPolicyID int            `json:"quota_policy_id" gorm:"index;not null"`
+	QuotaPolicy   *QuotaPolicy   `json:"quota_policy"   gorm:"foreignKey:QuotaPolicyID"`
+}
+
+func (DepartmentQuotaPolicy) TableName() string {
+	return "enterprise_department_quota_policies"
+}
+
+// UserQuotaPolicy binds a QuotaPolicy to a specific user (overrides department policy).
+type UserQuotaPolicy struct {
+	ID            int            `json:"id"             gorm:"primaryKey"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `json:"-"              gorm:"index"`
+	OpenID        string         `json:"open_id"        gorm:"size:64;uniqueIndex;not null"`
+	QuotaPolicyID int            `json:"quota_policy_id" gorm:"index;not null"`
+	QuotaPolicy   *QuotaPolicy   `json:"quota_policy"   gorm:"foreignKey:QuotaPolicyID"`
+}
+
+func (UserQuotaPolicy) TableName() string {
+	return "enterprise_user_quota_policies"
+}

@@ -12,9 +12,11 @@ import (
 	larkauthen "github.com/larksuite/oapi-sdk-go/v3/service/authen/v1"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
+
+	// Import for tenant check (will be resolved by enterprise package)
+	enterprisemodels "github.com/labring/aiproxy/core/enterprise/models"
 )
 
 const feishuOAuthAuthorizeURL = "https://open.feishu.cn/open-apis/authen/v1/authorize"
@@ -103,20 +105,25 @@ func HandleCallback(c *gin.Context) {
 	}
 
 	// Validate tenant whitelist
-	if !IsTenantAllowed(userInfo.TenantID) {
+	// Check using database-backed whitelist (imported from parent enterprise package)
+	isTenantAllowed := checkTenantAccess(userInfo.TenantID)
+
+	if !isTenantAllowed {
 		log.Warnf("feishu login rejected: tenant %q not in allowed list, user: %s (%s)",
 			userInfo.TenantID, userInfo.Name, userInfo.OpenID)
 
 		// Check if this is a browser request or API request
 		accept := c.GetHeader("Accept")
+		errorMsg := fmt.Sprintf("Your organization (Tenant ID: %s) is not authorized to access this service. Please contact the administrator to add this tenant ID to the whitelist.", userInfo.TenantID)
 		if c.GetHeader("X-Requested-With") != "" || strings.Contains(accept, "application/json") {
-			middleware.ErrorResponse(c, http.StatusForbidden, "your organization is not authorized to access this service")
+			middleware.ErrorResponse(c, http.StatusForbidden, errorMsg)
 		} else {
 			// Browser flow: redirect to frontend with error
 			frontendURL := GetFrontendURL()
 			params := url.Values{}
 			params.Set("error", "unauthorized_tenant")
-			params.Set("message", "your organization is not authorized to access this service")
+			params.Set("message", errorMsg)
+			params.Set("tenant_id", userInfo.TenantID)
 			redirectURL := fmt.Sprintf("%s/feishu/callback?%s", frontendURL, params.Encode())
 			c.Redirect(http.StatusFound, redirectURL)
 		}
@@ -126,7 +133,7 @@ func HandleCallback(c *gin.Context) {
 
 	// Upsert FeishuUser record
 	groupID := fmt.Sprintf("feishu_%s", userInfo.OpenID)
-	feishuUser := models.FeishuUser{
+	feishuUser := enterprisemodels.FeishuUser{
 		OpenID:   userInfo.OpenID,
 		UnionID:  userInfo.UnionID,
 		UserID:   userInfo.UserID,
@@ -140,7 +147,7 @@ func HandleCallback(c *gin.Context) {
 
 	result := model.DB.
 		Where("open_id = ?", userInfo.OpenID).
-		Assign(models.FeishuUser{
+		Assign(enterprisemodels.FeishuUser{
 			UnionID:  userInfo.UnionID,
 			UserID:   userInfo.UserID,
 			TenantID: userInfo.TenantID,
@@ -231,4 +238,45 @@ func HandleCallback(c *gin.Context) {
 
 	redirectURL := fmt.Sprintf("%s/feishu/callback?%s", frontendURL, params.Encode())
 	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// checkTenantAccess checks if a tenant is allowed using database or env config.
+func checkTenantAccess(tenantKey string) bool {
+	// Get config from database
+	var config enterprisemodels.TenantWhitelistConfig
+	err := model.DB.FirstOrCreate(&config, enterprisemodels.TenantWhitelistConfig{ID: 1}).Error
+	if err != nil {
+		// Fallback to environment variable
+		return IsTenantAllowedByEnv(tenantKey)
+	}
+
+	// Use environment variable if env_override is enabled
+	if config.EnvOverride {
+		return IsTenantAllowedByEnv(tenantKey)
+	}
+
+	// Wildcard mode: allow all
+	if config.WildcardMode {
+		return true
+	}
+
+	// Check database whitelist
+	var count int64
+	model.DB.Model(&enterprisemodels.TenantWhitelist{}).
+		Where("tenant_id = ?", tenantKey).
+		Count(&count)
+
+	if count > 0 {
+		return true
+	}
+
+	// If database has records but tenant not found, deny
+	var totalCount int64
+	model.DB.Model(&enterprisemodels.TenantWhitelist{}).Count(&totalCount)
+	if totalCount > 0 {
+		return false
+	}
+
+	// No database records, fallback to environment variable
+	return IsTenantAllowedByEnv(tenantKey)
 }

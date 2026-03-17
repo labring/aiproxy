@@ -33,6 +33,59 @@ export interface GroupQuotaPolicy {
     quota_policy?: QuotaPolicy
 }
 
+// Feishu User types
+export interface FeishuUser {
+    id: number
+    open_id: string
+    union_id: string
+    user_id: string
+    tenant_id: string
+    name: string
+    email: string
+    avatar: string
+    department_id: string
+    group_id: string
+    token_id: number
+    role: 'viewer' | 'analyst' | 'admin'
+    status: number
+    created_at: string
+    updated_at: string
+}
+
+export interface FeishuUsersResponse {
+    users: FeishuUser[]
+    total: number
+}
+
+// Feishu Department types
+export interface FeishuDepartment {
+    id: number
+    department_id: string
+    parent_id: string
+    name: string
+    open_department_id: string
+    member_count: number
+    order: number
+    status: number
+    created_at: string
+    updated_at: string
+}
+
+export interface FeishuDepartmentsResponse {
+    departments: FeishuDepartment[]
+    total: number
+}
+
+// User Quota Policy Assignment
+export interface UserQuotaPolicy {
+    id: number
+    open_id: string
+    quota_policy_id: number
+    quota_policy?: QuotaPolicy
+    created_at: string
+    updated_at: string
+}
+
 // Enterprise API response types
 export interface FeishuCallbackResponse {
     token_key: string
@@ -334,5 +387,78 @@ export const enterpriseApi = {
 
     generateCustomReport: (req: CustomReportRequest): Promise<CustomReportResponse> => {
         return post<CustomReportResponse>('/enterprise/analytics/custom-report', req)
+    },
+
+    // Tenant Whitelist Management
+    getTenantWhitelist: (): Promise<{
+        tenants: Array<{
+            id: number
+            tenant_id: string
+            name: string
+            added_by: string
+            created_at: string
+        }>
+        config: {
+            wildcard_mode: boolean
+            env_override: boolean
+            description: string
+        }
+    }> => {
+        return get('/enterprise/tenant-whitelist')
+    },
+
+    addTenantToWhitelist: (tenant_id: string, name?: string): Promise<{ id: number; tenant_id: string; name: string }> => {
+        return post('/enterprise/tenant-whitelist', { tenant_id, name })
+    },
+
+    removeTenantFromWhitelist: (id: number): Promise<void> => {
+        return del(`/enterprise/tenant-whitelist/${id}`)
+    },
+
+    updateWhitelistConfig: (config: {
+        wildcard_mode: boolean
+        env_override: boolean
+        description?: string
+    }): Promise<void> => {
+        return put('/enterprise/tenant-whitelist/config', config)
+    },
+
+    // Feishu User Management APIs
+    getFeishuUsers: (page?: number, per_page?: number, keyword?: string): Promise<FeishuUsersResponse> => {
+        return get<FeishuUsersResponse>('/enterprise/feishu/users', {
+            params: { page, per_page, keyword }
+        })
+    },
+
+    getFeishuDepartments: (page?: number, per_page?: number, keyword?: string): Promise<FeishuDepartmentsResponse> => {
+        return get<FeishuDepartmentsResponse>('/enterprise/feishu/departments', {
+            params: { page, per_page, keyword }
+        })
+    },
+
+    triggerFeishuSync: (): Promise<{ message: string }> => {
+        return post('/enterprise/feishu/sync', {})
+    },
+
+    updateFeishuUserRole: (open_id: string, role: string): Promise<void> => {
+        return put(`/enterprise/feishu/users/${open_id}/role`, { role })
+    },
+
+    // Department Quota APIs
+    bindPolicyToDepartment: (department_id: string, quota_policy_id: number): Promise<void> => {
+        return post('/enterprise/quota/bind-department', { department_id, quota_policy_id })
+    },
+
+    unbindPolicyFromDepartment: (department_id: string): Promise<void> => {
+        return del(`/enterprise/quota/bind-department/${department_id}`)
+    },
+
+    // User Quota APIs
+    bindPolicyToUser: (open_id: string, quota_policy_id: number): Promise<void> => {
+        return post('/enterprise/quota/bind-user', { open_id, quota_policy_id })
+    },
+
+    unbindPolicyFromUser: (open_id: string): Promise<void> => {
+        return del(`/enterprise/quota/bind-user/${open_id}`)
     },
 }

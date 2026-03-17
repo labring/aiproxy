@@ -24,7 +24,11 @@ export default function FeishuCallbackPage() {
         // Case 0: Backend redirected with error (e.g., unauthorized tenant)
         const errorParam = searchParams.get("error")
         if (errorParam) {
-            const message = searchParams.get("message") || t("auth.feishuCallback.error")
+            let message = searchParams.get("message") || t("auth.feishuCallback.error")
+            const tenantId = searchParams.get("tenant_id")
+            if (tenantId && errorParam === "unauthorized_tenant") {
+                message += `\n\nTenant ID: ${tenantId}`
+            }
             setError(message)
             return
         }

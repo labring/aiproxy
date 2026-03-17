@@ -64,26 +64,29 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		return []UserRankingEntry{}, nil
 	}
 
-	// Build group → user info mapping
+	// Build token_name → user info mapping
 	type userInfo struct {
 		Name         string
+		GroupID      string
 		DepartmentID string
 	}
 
-	groupToUser := make(map[string]userInfo, len(feishuUsers))
-	groupIDs := make([]string, 0, len(feishuUsers))
+	tokenToUser := make(map[string]userInfo, len(feishuUsers))
+	tokenNames := make([]string, 0, len(feishuUsers))
 
 	for _, u := range feishuUsers {
-		groupToUser[u.GroupID] = userInfo{
+		tokenName := "Token-" + u.Name
+		tokenToUser[tokenName] = userInfo{
 			Name:         u.Name,
+			GroupID:      u.GroupID,
 			DepartmentID: u.DepartmentID,
 		}
-		groupIDs = append(groupIDs, u.GroupID)
+		tokenNames = append(tokenNames, tokenName)
 	}
 
 	// Query aggregated usage from group_summaries
-	type groupAgg struct {
-		GroupID      string  `gorm:"column:group_id"`
+	type tokenAgg struct {
+		TokenName    string  `gorm:"column:token_name"`
 		UsedAmount   float64 `gorm:"column:used_amount"`
 		RequestCount int64   `gorm:"column:request_count"`
 		TotalTokens  int64   `gorm:"column:total_tokens"`
@@ -93,12 +96,12 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		UniqueModels int     `gorm:"column:unique_models"`
 	}
 
-	var results []groupAgg
+	var results []tokenAgg
 
 	err := model.LogDB.
 		Model(&model.GroupSummary{}).
 		Select(
-			"group_id",
+			"token_name",
 			"SUM(used_amount) as used_amount",
 			"SUM(request_count) as request_count",
 			"SUM(total_tokens) as total_tokens",
@@ -107,9 +110,9 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			"SUM(status2xx_count) as success_count",
 			"COUNT(DISTINCT model) as unique_models",
 		).
-		Where("group_id IN ?", groupIDs).
+		Where("token_name IN ?", tokenNames).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
-		Group("group_id").
+		Group("token_name").
 		Order("used_amount DESC").
 		Limit(limit).
 		Find(&results).Error
@@ -130,14 +133,14 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 
 	entries := make([]UserRankingEntry, 0, len(results))
 	for i, r := range results {
-		ui := groupToUser[r.GroupID]
+		ui := tokenToUser[r.TokenName]
 		var successRate float64
 		if r.RequestCount > 0 {
 			successRate = float64(r.SuccessCount) / float64(r.RequestCount) * 100.0
 		}
 		entries = append(entries, UserRankingEntry{
 			Rank:           i + 1,
-			GroupID:        r.GroupID,
+			GroupID:        ui.GroupID,
 			UserName:       ui.Name,
 			DepartmentID:   ui.DepartmentID,
 			DepartmentName: deptNameMap[ui.DepartmentID],

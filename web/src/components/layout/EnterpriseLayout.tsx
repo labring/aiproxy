@@ -10,6 +10,8 @@ import {
     ChevronRight,
     LogOut,
     Shield,
+    Lock,
+    Users,
 } from "lucide-react"
 import type React from "react"
 import type { TFunction } from "i18next"
@@ -43,6 +45,16 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             title: t("enterprise.sidebar.quota"),
             icon: Shield,
             href: ROUTES.ENTERPRISE_QUOTA,
+        },
+        {
+            title: t("enterprise.sidebar.accessControl"),
+            icon: Lock,
+            href: ROUTES.ENTERPRISE_ACCESS_CONTROL,
+        },
+        {
+            title: t("enterprise.sidebar.users"),
+            icon: Users,
+            href: ROUTES.ENTERPRISE_USERS,
         },
         {
             title: t("enterprise.sidebar.customReport"),

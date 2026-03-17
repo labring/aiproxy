@@ -31,14 +31,22 @@ func RegisterRoutes(router *gin.Engine) {
 
 	analytics.RegisterRoutes(enterpriseAuth)
 	quota.RegisterRoutes(enterpriseAuth)
+	RegisterTenantWhitelistRoutes(enterpriseAuth)
+	RegisterEnterpriseAuthRoutes(enterpriseAuth)
 }
 
 // RegisterPublicRoutes registers routes that don't require admin authentication.
 func RegisterPublicRoutes(public *gin.RouterGroup) {
-	feishu.RegisterRoutes(public, nil)
+	feishu.RegisterRoutes(public, nil, nil)
 }
 
 // RegisterAdminRoutes registers routes that require admin authentication.
 func RegisterAdminRoutes(admin *gin.RouterGroup) {
-	feishu.RegisterRoutes(nil, admin)
+	// Note: Feishu sync has been moved to EnterpriseAuth to allow Feishu admin users
+	// feishu.RegisterRoutes(nil, admin, nil)
+}
+
+// RegisterEnterpriseAuthRoutes registers routes that require enterprise authentication.
+func RegisterEnterpriseAuthRoutes(enterpriseAuth *gin.RouterGroup) {
+	feishu.RegisterRoutes(nil, nil, enterpriseAuth)
 }

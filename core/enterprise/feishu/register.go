@@ -3,10 +3,12 @@
 package feishu
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/models"
@@ -14,9 +16,9 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
-// RegisterRoutes registers all Feishu-related routes on the public and admin groups.
-// Either public or admin may be nil; only non-nil groups get routes registered.
-func RegisterRoutes(public, admin *gin.RouterGroup) {
+// RegisterRoutes registers all Feishu-related routes on the public, admin, and enterpriseAuth groups.
+// Any parameter may be nil; only non-nil groups get routes registered.
+func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 	if public != nil {
 		// Public routes (no admin auth required)
 		public.GET("/auth/feishu/login", HandleLogin)
@@ -25,10 +27,16 @@ func RegisterRoutes(public, admin *gin.RouterGroup) {
 	}
 
 	if admin != nil {
-		// Admin routes (require admin auth)
-		admin.GET("/feishu/users", GetFeishuUsers)
-		admin.GET("/feishu/departments", GetFeishuDepartments)
-		admin.POST("/feishu/sync", TriggerSync)
+		// Admin routes (require strict admin key auth)
+		// Currently empty - moved to enterpriseAuth
+	}
+
+	if enterpriseAuth != nil {
+		// Enterprise auth routes (AdminKey or Feishu admin user)
+		enterpriseAuth.GET("/feishu/users", GetFeishuUsers)
+		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
+		enterpriseAuth.POST("/feishu/sync", TriggerSync)
+		enterpriseAuth.PUT("/feishu/users/:open_id/role", UpdateUserRole)
 	}
 }
 
@@ -135,7 +143,27 @@ func GetFeishuDepartments(c *gin.Context) {
 }
 
 // TriggerSync triggers a full Feishu organization sync.
+// Only admin role users can trigger sync.
 func TriggerSync(c *gin.Context) {
+	// Check if user has admin role
+	roleVal, exists := c.Get("enterprise_role")
+	log.Infof("TriggerSync: role exists=%v, roleVal=%v, roleVal type=%T", exists, roleVal, roleVal)
+
+	if !exists {
+		log.Errorf("TriggerSync: role not found in context")
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can trigger sync")
+		return
+	}
+
+	role, ok := roleVal.(string)
+	log.Infof("TriggerSync: role cast ok=%v, role=%s, expected=%s", ok, role, models.RoleAdmin)
+
+	if !ok || role != models.RoleAdmin {
+		log.Errorf("TriggerSync: role check failed - ok=%v, role=%s, expected=%s", ok, role, models.RoleAdmin)
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can trigger sync")
+		return
+	}
+
 	go func() {
 		if err := SyncAll(model.DB); err != nil {
 			log.Errorf("feishu manual sync failed: %v", err)
@@ -145,4 +173,53 @@ func TriggerSync(c *gin.Context) {
 	middleware.SuccessResponse(c, gin.H{
 		"message": "sync started",
 	})
+}
+
+// UpdateUserRole updates the role of a Feishu user.
+// Only admin role users can update user roles.
+func UpdateUserRole(c *gin.Context) {
+	// Check if user has admin role
+	roleVal, exists := c.Get("enterprise_role")
+	if !exists {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can update user roles")
+		return
+	}
+
+	role, ok := roleVal.(string)
+	if !ok || role != models.RoleAdmin {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can update user roles")
+		return
+	}
+
+	openID := c.Param("open_id")
+	if openID == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "open_id is required")
+		return
+	}
+
+	var req struct {
+		Role string `json:"role" binding:"required,oneof=viewer analyst admin"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var user models.FeishuUser
+	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			middleware.ErrorResponse(c, http.StatusNotFound, "user not found")
+			return
+		}
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	user.Role = req.Role
+	if err := model.DB.Save(&user).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, user)
 }

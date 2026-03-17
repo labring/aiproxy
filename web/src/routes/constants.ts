@@ -13,6 +13,8 @@ export const ROUTES = {
     ENTERPRISE_DEPARTMENT: "/enterprise/department",
     ENTERPRISE_QUOTA: "/enterprise/quota",
     ENTERPRISE_CUSTOM_REPORT: "/enterprise/custom-report",
+    ENTERPRISE_ACCESS_CONTROL: "/enterprise/access-control",
+    ENTERPRISE_USERS: "/enterprise/users",
     FEISHU_CALLBACK: "/feishu/callback",
 } as const
 

@@ -127,3 +127,35 @@ func InvalidateGroupQuotaPolicy(ctx context.Context, groupID string) error {
 
 	return common.RDB.Del(ctx, key).Err()
 }
+
+// GetPolicyForUser returns the effective quota policy for a FeishuUser.
+// Priority: UserQuotaPolicy > DepartmentQuotaPolicy > GroupQuotaPolicy
+func GetPolicyForUser(ctx context.Context, openID string) (*models.QuotaPolicy, error) {
+	var user models.FeishuUser
+	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// 1. Check user-level policy (highest priority)
+	var userPolicy models.UserQuotaPolicy
+	err := model.DB.Preload("QuotaPolicy").Where("open_id = ?", openID).First(&userPolicy).Error
+	if err == nil && userPolicy.QuotaPolicy != nil {
+		return userPolicy.QuotaPolicy, nil
+	}
+
+	// 2. Check department-level policy
+	if user.DepartmentID != "" {
+		var deptPolicy models.DepartmentQuotaPolicy
+		err = model.DB.Preload("QuotaPolicy").Where("department_id = ?", user.DepartmentID).First(&deptPolicy).Error
+		if err == nil && deptPolicy.QuotaPolicy != nil {
+			return deptPolicy.QuotaPolicy, nil
+		}
+	}
+
+	// 3. Check group-level policy (lowest priority, backwards compatible)
+	if user.GroupID != "" {
+		return GetGroupQuotaPolicy(ctx, user.GroupID)
+	}
+
+	return nil, gorm.ErrRecordNotFound
+}

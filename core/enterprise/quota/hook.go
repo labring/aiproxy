@@ -4,13 +4,16 @@ package quota
 
 import (
 	"context"
+	"errors"
 
+	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
-// CheckQuotaTier evaluates the token's period usage against the group's quota policy
-// and returns adjusted RPM/TPM multipliers or a block signal.
+// CheckQuotaTier evaluates the token's period usage against the quota policy
+// with multi-level priority: user policy > department policy > group policy.
 // Returns: effectiveModel, rpmMultiplier, tpmMultiplier, blocked
 func CheckQuotaTier(
 	group model.GroupCache,
@@ -19,6 +22,25 @@ func CheckQuotaTier(
 ) (string, float64, float64, bool) {
 	ctx := context.Background()
 
+	// Check if this group is associated with a Feishu user
+	// If so, use multi-level policy (user > department > group)
+	var feishuUser models.FeishuUser
+	err := model.DB.Where("group_id = ?", group.ID).First(&feishuUser).Error
+	if err == nil {
+		// This is a Feishu user group, check multi-level policies
+		policy, err := GetPolicyForUser(ctx, feishuUser.OpenID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Errorf("failed to get multi-level quota policy for user %s: %v", feishuUser.OpenID, err)
+		}
+		if policy != nil {
+			// Apply the user/department/group policy
+			return applyPolicyTiers(policy, token, requestModel)
+		}
+		// No policy found for this Feishu user, fall through to default
+		return requestModel, 1.0, 1.0, false
+	}
+
+	// Not a Feishu user or user not found, use traditional group-level policy
 	policy, err := GetGroupQuotaPolicy(ctx, group.ID)
 	if err != nil {
 		log.Errorf("failed to get quota policy for group %s: %v", group.ID, err)
@@ -28,6 +50,12 @@ func CheckQuotaTier(
 	if policy == nil {
 		return requestModel, 1.0, 1.0, false
 	}
+
+	return applyPolicyTiers(policy, token, requestModel)
+}
+
+// applyPolicyTiers applies the tiered policy logic based on usage ratio.
+func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, requestModel string) (string, float64, float64, bool) {
 
 	// Guard against zero PeriodQuota to avoid division by zero
 	if token.PeriodQuota <= 0 {
