@@ -30,6 +30,7 @@ const EnterpriseQuota = lazy(() => import("@/pages/enterprise/quota"))
 const EnterpriseCustomReport = lazy(() => import("@/pages/enterprise/custom-report"))
 const EnterpriseAccessControl = lazy(() => import("@/pages/enterprise/access-control"))
 const EnterpriseUsers = lazy(() => import("@/pages/enterprise/users"))
+const EnterprisePPIOSync = lazy(() => import("@/pages/enterprise/ppio-sync"))
 
 // lazy load component wrapper
 const lazyLoad = (Component: React.ComponentType) => (
@@ -120,6 +121,10 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: ROUTES.ENTERPRISE_USERS,
                         element: lazyLoad(EnterpriseUsers),
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_PPIO_SYNC,
+                        element: lazyLoad(EnterprisePPIOSync),
                     },
                 ]
             }

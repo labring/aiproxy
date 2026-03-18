@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/enterprise/analytics"
 	"github.com/labring/aiproxy/core/enterprise/feishu"
+	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	"github.com/labring/aiproxy/core/middleware"
 )
@@ -44,6 +45,9 @@ func RegisterPublicRoutes(public *gin.RouterGroup) {
 func RegisterAdminRoutes(admin *gin.RouterGroup) {
 	// Note: Feishu sync has been moved to EnterpriseAuth to allow Feishu admin users
 	// feishu.RegisterRoutes(nil, admin, nil)
+
+	// PPIO model sync routes (admin only)
+	ppio.RegisterRoutes(admin)
 }
 
 // RegisterEnterpriseAuthRoutes registers routes that require enterprise authentication.

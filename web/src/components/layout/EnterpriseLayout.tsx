@@ -12,6 +12,7 @@ import {
     Shield,
     Lock,
     Users,
+    RefreshCw,
 } from "lucide-react"
 import type React from "react"
 import type { TFunction } from "i18next"
@@ -60,6 +61,11 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             title: t("enterprise.sidebar.customReport"),
             icon: FileBarChart,
             href: ROUTES.ENTERPRISE_CUSTOM_REPORT,
+        },
+        {
+            title: "PPIO 模型同步",
+            icon: RefreshCw,
+            href: ROUTES.ENTERPRISE_PPIO_SYNC,
         },
         {
             title: "",

@@ -33,6 +33,17 @@ export interface GroupQuotaPolicy {
     quota_policy?: QuotaPolicy
 }
 
+// Feishu Department Path types
+export interface DepartmentPath {
+    level1_id: string
+    level1_name: string
+    level2_id: string
+    level2_name: string
+    level3_id: string
+    level3_name: string
+    full_path: string
+}
+
 // Feishu User types
 export interface FeishuUser {
     id: number
@@ -50,6 +61,7 @@ export interface FeishuUser {
     status: number
     created_at: string
     updated_at: string
+    department_path?: DepartmentPath
 }
 
 export interface FeishuUsersResponse {
@@ -424,15 +436,32 @@ export const enterpriseApi = {
     },
 
     // Feishu User Management APIs
-    getFeishuUsers: (page?: number, per_page?: number, keyword?: string): Promise<FeishuUsersResponse> => {
+    getFeishuUsers: (
+        page?: number,
+        per_page?: number,
+        keyword?: string,
+        sort_by?: string,
+        order?: 'asc' | 'desc',
+        level1_department?: string,
+        level2_department?: string
+    ): Promise<FeishuUsersResponse> => {
         return get<FeishuUsersResponse>('/enterprise/feishu/users', {
-            params: { page, per_page, keyword }
+            params: { page, per_page, keyword, sort_by, order, level1_department, level2_department }
         })
     },
 
     getFeishuDepartments: (page?: number, per_page?: number, keyword?: string): Promise<FeishuDepartmentsResponse> => {
         return get<FeishuDepartmentsResponse>('/enterprise/feishu/departments', {
             params: { page, per_page, keyword }
+        })
+    },
+
+    getDepartmentLevels: (level1_id?: string): Promise<{
+        level1_departments: FeishuDepartment[]
+        level2_departments: FeishuDepartment[]
+    }> => {
+        return get('/enterprise/feishu/department-levels', {
+            params: { level1_id }
         })
     },
 

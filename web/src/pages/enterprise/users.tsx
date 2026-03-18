@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { DataTable } from "@/components/table/motion-data-table"
 import { ServerPagination } from "@/components/table/server-pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { enterpriseApi, type FeishuUser, type QuotaPolicy } from "@/api/enterprise"
+import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -29,6 +29,10 @@ export default function UsersPage() {
     const [pageSize, setPageSize] = useState(20)
     const [searchInput, setSearchInput] = useState("")
     const [keyword, setKeyword] = useState("")
+    const [sortBy, setSortBy] = useState<string>("id")
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+    const [level1Department, setLevel1Department] = useState<string>("all")
+    const [level2Department, setLevel2Department] = useState<string>("all")
     const [roleDialogOpen, setRoleDialogOpen] = useState(false)
     const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [selectedUser, setSelectedUser] = useState<FeishuUser | null>(null)
@@ -46,11 +50,72 @@ export default function UsersPage() {
         }, 300)
     }, [])
 
+    // Department filter handlers
+    const handleLevel1Change = useCallback((value: string) => {
+        setLevel1Department(value)
+        setLevel2Department("all") // Reset level2 when level1 changes
+        setPage(1)
+    }, [])
+
+    const handleLevel2Change = useCallback((value: string) => {
+        setLevel2Department(value)
+        setPage(1)
+    }, [])
+
+    const handleClearFilters = useCallback(() => {
+        setLevel1Department("all")
+        setLevel2Department("all")
+        setSearchInput("")
+        setKeyword("")
+        setPage(1)
+    }, [])
+
+    // Sort handler
+    const handleSort = useCallback((field: string) => {
+        if (sortBy === field) {
+            // Toggle order if same field
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+        } else {
+            // New field, default to ascending
+            setSortBy(field)
+            setSortOrder("asc")
+        }
+        setPage(1) // Reset to first page when sorting
+    }, [sortBy, sortOrder])
+
+    // Render sort icon
+    const renderSortIcon = useCallback((field: string) => {
+        if (sortBy !== field) {
+            return <ArrowUpDown className="w-4 h-4 ml-1 opacity-40" />
+        }
+        return sortOrder === "asc"
+            ? <ArrowUp className="w-4 h-4 ml-1" />
+            : <ArrowDown className="w-4 h-4 ml-1" />
+    }, [sortBy, sortOrder])
+
     // Fetch users
     const { data, isLoading, refetch } = useQuery({
-        queryKey: ["feishu-users", page, pageSize, keyword],
-        queryFn: () => enterpriseApi.getFeishuUsers(page, pageSize, keyword),
+        queryKey: ["feishu-users", page, pageSize, keyword, sortBy, sortOrder, level1Department, level2Department],
+        queryFn: () => enterpriseApi.getFeishuUsers(
+            page,
+            pageSize,
+            keyword,
+            sortBy,
+            sortOrder,
+            level1Department === "all" ? undefined : level1Department,
+            level2Department === "all" ? undefined : level2Department
+        ),
         staleTime: 30000, // 30 seconds
+        refetchOnWindowFocus: false,
+    })
+
+    // Fetch department levels for filters
+    const { data: deptLevelsData } = useQuery({
+        queryKey: ["dept-levels", level1Department],
+        queryFn: () => enterpriseApi.getDepartmentLevels(
+            level1Department === "all" ? undefined : level1Department
+        ),
+        staleTime: 60000, // 1 minute
         refetchOnWindowFocus: false,
     })
 
@@ -132,7 +197,15 @@ export default function UsersPage() {
     const columns: ColumnDef<FeishuUser>[] = useMemo(() => [
         {
             accessorKey: "name",
-            header: () => <div className="font-medium">{t("enterprise.users.name")}</div>,
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("name")}
+                >
+                    {t("enterprise.users.name")}
+                    {renderSortIcon("name")}
+                </div>
+            ),
             cell: ({ row }) => (
                 <div className="flex items-center gap-2">
                     {row.original.avatar && (
@@ -147,7 +220,15 @@ export default function UsersPage() {
         },
         {
             accessorKey: "role",
-            header: () => <div className="font-medium">{t("enterprise.users.role")}</div>,
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("role")}
+                >
+                    {t("enterprise.users.role")}
+                    {renderSortIcon("role")}
+                </div>
+            ),
             cell: ({ row }) => (
                 <Badge className={roleColors[row.original.role as keyof typeof roleColors]}>
                     {t(`enterprise.users.roles.${row.original.role}`)}
@@ -156,17 +237,56 @@ export default function UsersPage() {
         },
         {
             accessorKey: "department_id",
-            header: () => <div className="font-medium">{t("enterprise.users.department")}</div>,
-            cell: ({ row }) => <span>{row.original.department_id || "-"}</span>,
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("department_id")}
+                >
+                    {t("enterprise.users.department")}
+                    {renderSortIcon("department_id")}
+                </div>
+            ),
+            cell: ({ row }) => {
+                const deptPath = row.original.department_path
+                if (!deptPath || !deptPath.full_path) {
+                    return <span className="text-muted-foreground">-</span>
+                }
+                return (
+                    <div className="text-sm">
+                        <div className="font-medium">{deptPath.level1_name || "-"}</div>
+                        {deptPath.level2_name && (
+                            <div className="text-xs text-muted-foreground">
+                                {deptPath.level2_name}
+                            </div>
+                        )}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "group_id",
-            header: () => <div className="font-medium">{t("enterprise.users.group")}</div>,
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("group_id")}
+                >
+                    {t("enterprise.users.group")}
+                    {renderSortIcon("group_id")}
+                </div>
+            ),
             cell: ({ row }) => <code className="text-xs">{row.original.group_id}</code>,
         },
         {
             accessorKey: "created_at",
-            header: () => <div className="font-medium">{t("enterprise.users.createdAt")}</div>,
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("created_at")}
+                >
+                    {t("enterprise.users.createdAt")}
+                    {renderSortIcon("created_at")}
+                </div>
+            ),
             cell: ({ row }) => format(new Date(row.original.created_at), "yyyy-MM-dd HH:mm"),
         },
         {
@@ -191,7 +311,7 @@ export default function UsersPage() {
                 </div>
             ),
         },
-    ], [t, handleRoleEdit, handleQuotaAssign])
+    ], [t, handleRoleEdit, handleQuotaAssign, handleSort, renderSortIcon])
 
     const users = data?.users || []
     const total = data?.total || 0
@@ -225,14 +345,64 @@ export default function UsersPage() {
             {/* Search and Table Card */}
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-4">
                         <CardTitle>{t("enterprise.users.userList")}</CardTitle>
-                        <Input
-                            placeholder={t("enterprise.users.searchPlaceholder")}
-                            value={searchInput}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            className="w-64"
-                        />
+                        <div className="flex items-center gap-2">
+                            {/* Level 1 Department Filter */}
+                            <Select value={level1Department} onValueChange={handleLevel1Change}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue placeholder={t("enterprise.users.level1Department")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">{t("enterprise.users.allDepartments")}</SelectItem>
+                                    {deptLevelsData?.level1_departments
+                                        ?.filter(dept => dept.department_id && dept.department_id !== "")
+                                        .map((dept) => (
+                                            <SelectItem key={dept.department_id} value={dept.department_id}>
+                                                {dept.name || dept.department_id}
+                                            </SelectItem>
+                                        ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Level 2 Department Filter */}
+                            {level1Department && level1Department !== "all" && (
+                                <Select value={level2Department} onValueChange={handleLevel2Change}>
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder={t("enterprise.users.level2Department")} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">{t("enterprise.users.allSubDepartments")}</SelectItem>
+                                        {deptLevelsData?.level2_departments
+                                            ?.filter(dept => dept.department_id && dept.department_id !== "")
+                                            .map((dept) => (
+                                                <SelectItem key={dept.department_id} value={dept.department_id}>
+                                                    {dept.name || dept.department_id}
+                                                </SelectItem>
+                                            ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+
+                            {/* Search Input */}
+                            <Input
+                                placeholder={t("enterprise.users.searchPlaceholder")}
+                                value={searchInput}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="w-64"
+                            />
+
+                            {/* Clear Filters */}
+                            {(level1Department !== "all" || level2Department !== "all" || keyword) && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleClearFilters}
+                                >
+                                    {t("common.clearFilters")}
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -305,18 +475,20 @@ export default function UsersPage() {
                         <div className="space-y-2">
                             <Label>{t("enterprise.users.selectPolicy")}</Label>
                             <Select
-                                value={selectedPolicyId?.toString() || ""}
+                                value={selectedPolicyId?.toString()}
                                 onValueChange={(v) => setSelectedPolicyId(Number(v))}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder={t("enterprise.users.selectPolicyPlaceholder")} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {policies.map((p) => (
-                                        <SelectItem key={p.id} value={p.id.toString()}>
-                                            {p.name}
-                                        </SelectItem>
-                                    ))}
+                                    {policies
+                                        .filter(p => p.id && p.id.toString() !== "")
+                                        .map((p) => (
+                                            <SelectItem key={p.id} value={p.id.toString()}>
+                                                {p.name}
+                                            </SelectItem>
+                                        ))}
                                 </SelectContent>
                             </Select>
                         </div>

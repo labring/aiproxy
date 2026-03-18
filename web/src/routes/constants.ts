@@ -15,6 +15,7 @@ export const ROUTES = {
     ENTERPRISE_CUSTOM_REPORT: "/enterprise/custom-report",
     ENTERPRISE_ACCESS_CONTROL: "/enterprise/access-control",
     ENTERPRISE_USERS: "/enterprise/users",
+    ENTERPRISE_PPIO_SYNC: "/enterprise/ppio-sync",
     FEISHU_CALLBACK: "/feishu/callback",
 } as const
 

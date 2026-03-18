@@ -13,6 +13,7 @@
     "enterprise": "企业分析"
   },
   "common": {
+    "clearFilters": "清除筛选",
     "noResult": "没有数据",
     "copied": "已复制到剪贴板",
     "copyFailed": "复制失败",
@@ -437,7 +438,11 @@
       "selectPolicy": "选择策略",
       "selectPolicyPlaceholder": "请选择额度策略",
       "quotaAssigned": "额度策略已分配",
-      "quotaAssignFailed": "额度策略分配失败"
+      "quotaAssignFailed": "额度策略分配失败",
+      "level1Department": "一级部门",
+      "level2Department": "二级部门",
+      "allDepartments": "全部部门",
+      "allSubDepartments": "全部子部门"
     }
   },
   "token": {

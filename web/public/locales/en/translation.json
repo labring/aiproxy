@@ -13,6 +13,7 @@
     "enterprise": "Enterprise"
   },
   "common": {
+    "clearFilters": "Clear Filters",
     "noResult": "No Data",
     "copied": "Copied to clipboard",
     "copyFailed": "Copy failed",
@@ -416,7 +417,11 @@
       "selectPolicy": "Select Policy",
       "selectPolicyPlaceholder": "Please select a quota policy",
       "quotaAssigned": "Quota policy assigned successfully",
-      "quotaAssignFailed": "Failed to assign quota policy"
+      "quotaAssignFailed": "Failed to assign quota policy",
+      "level1Department": "Level 1 Department",
+      "level2Department": "Level 2 Department",
+      "allDepartments": "All Departments",
+      "allSubDepartments": "All Sub-departments"
     },
     "quota": {
       "title": "Quota Policy Management",

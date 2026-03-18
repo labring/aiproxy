@@ -35,12 +35,19 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 		// Enterprise auth routes (AdminKey or Feishu admin user)
 		enterpriseAuth.GET("/feishu/users", GetFeishuUsers)
 		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
+		enterpriseAuth.GET("/feishu/department-levels", GetDepartmentLevels)
 		enterpriseAuth.POST("/feishu/sync", TriggerSync)
 		enterpriseAuth.PUT("/feishu/users/:open_id/role", UpdateUserRole)
 	}
 }
 
-// GetFeishuUsers returns a paginated list of Feishu users.
+// FeishuUserWithDepartment extends FeishuUser with department path information
+type FeishuUserWithDepartment struct {
+	models.FeishuUser
+	DepartmentPath *DepartmentPath `json:"department_path"`
+}
+
+// GetFeishuUsers returns a paginated list of Feishu users with department information.
 func GetFeishuUsers(c *gin.Context) {
 	page, perPage := utils.ParsePageParams(c)
 
@@ -50,10 +57,32 @@ func GetFeishuUsers(c *gin.Context) {
 
 	tx := model.DB.Model(&models.FeishuUser{})
 
+	// Keyword search
 	keyword := c.Query("keyword")
 	if keyword != "" {
 		tx = tx.Where("name LIKE ? OR email LIKE ? OR open_id LIKE ?",
 			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	// Department filters
+	level1Dept := c.Query("level1_department")
+	level2Dept := c.Query("level2_department")
+
+	if level1Dept != "" || level2Dept != "" {
+		// Get all department IDs that match the filter
+		var matchingDepts []string
+
+		if level2Dept != "" {
+			// Filter by level 2 department (and all its children)
+			matchingDepts = getDescendantDepartmentIDs(level2Dept)
+		} else if level1Dept != "" {
+			// Filter by level 1 department (and all its children)
+			matchingDepts = getDescendantDepartmentIDs(level1Dept)
+		}
+
+		if len(matchingDepts) > 0 {
+			tx = tx.Where("department_id IN ?", matchingDepts)
+		}
 	}
 
 	if err := tx.Count(&total).Error; err != nil {
@@ -63,7 +92,7 @@ func GetFeishuUsers(c *gin.Context) {
 
 	if total <= 0 {
 		middleware.SuccessResponse(c, gin.H{
-			"users": []models.FeishuUser{},
+			"users": []FeishuUserWithDepartment{},
 			"total": 0,
 		})
 
@@ -80,15 +109,69 @@ func GetFeishuUsers(c *gin.Context) {
 		offset = 0
 	}
 
-	if err := tx.Order("id desc").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+	// Support sorting
+	sortBy := c.Query("sort_by")
+	order := c.Query("order")
+	if sortBy == "" {
+		sortBy = "id"
+	}
+	if order == "" {
+		order = "desc"
+	}
+
+	// Validate sort_by field to prevent SQL injection
+	validSortFields := map[string]bool{
+		"id":            true,
+		"name":          true,
+		"role":          true,
+		"department_id": true,
+		"group_id":      true,
+		"created_at":    true,
+		"email":         true,
+	}
+	if !validSortFields[sortBy] {
+		sortBy = "id"
+	}
+
+	// Validate order
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
+
+	orderClause := sortBy + " " + order
+	if err := tx.Order(orderClause).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	// Enrich with department path information
+	usersWithDept := make([]FeishuUserWithDepartment, len(users))
+	for i, user := range users {
+		usersWithDept[i] = FeishuUserWithDepartment{
+			FeishuUser:     user,
+			DepartmentPath: GetDepartmentPath(user.DepartmentID),
+		}
+	}
+
 	middleware.SuccessResponse(c, gin.H{
-		"users": users,
+		"users": usersWithDept,
 		"total": total,
 	})
+}
+
+// getDescendantDepartmentIDs returns all department IDs that are descendants of the given department
+func getDescendantDepartmentIDs(departmentID string) []string {
+	var result []string
+	result = append(result, departmentID)
+
+	var children []models.FeishuDepartment
+	model.DB.Where("parent_id = ? AND status = 1", departmentID).Find(&children)
+
+	for _, child := range children {
+		result = append(result, getDescendantDepartmentIDs(child.DepartmentID)...)
+	}
+
+	return result
 }
 
 // GetFeishuDepartments returns a paginated list of Feishu departments.
@@ -139,6 +222,30 @@ func GetFeishuDepartments(c *gin.Context) {
 	middleware.SuccessResponse(c, gin.H{
 		"departments": departments,
 		"total":       total,
+	})
+}
+
+// GetDepartmentLevels returns departments grouped by level for filtering
+func GetDepartmentLevels(c *gin.Context) {
+	level1Depts, err := GetLevel1Departments()
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	level1ID := c.Query("level1_id")
+	var level2Depts []*models.FeishuDepartment
+	if level1ID != "" {
+		level2Depts, err = GetLevel2Departments(level1ID)
+		if err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"level1_departments": level1Depts,
+		"level2_departments": level2Depts,
 	})
 }
 
