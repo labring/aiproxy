@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	gosync "sync"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -18,6 +19,52 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
+
+// syncStats tracks sync statistics for logging
+type syncStats struct {
+	totalDepts     int
+	deptsWithName  int
+	totalUsers     int
+	usersWithName  int
+	usersWithEmail int
+}
+
+// SyncStatus holds the result of the last Feishu sync operation.
+type SyncStatus struct {
+	LastSyncAt     time.Time `json:"last_sync_at"`
+	Status         string    `json:"status"`
+	TotalDepts     int       `json:"total_depts"`
+	DeptsWithName  int       `json:"depts_with_name"`
+	TotalUsers     int       `json:"total_users"`
+	UsersWithName  int       `json:"users_with_name"`
+	UsersWithEmail int       `json:"users_with_email"`
+	Error          string    `json:"error,omitempty"`
+}
+
+var (
+	lastSyncStatus SyncStatus
+	syncStatusMu   gosync.Mutex
+)
+
+// GetSyncStatus returns the current sync status.
+func GetSyncStatus() SyncStatus {
+	syncStatusMu.Lock()
+	defer syncStatusMu.Unlock()
+
+	return lastSyncStatus
+}
+
+func setSyncStatus(s SyncStatus) {
+	syncStatusMu.Lock()
+	defer syncStatusMu.Unlock()
+
+	lastSyncStatus = s
+}
+
+// GetSyncStatusHandler returns the current Feishu sync status.
+func GetSyncStatusHandler(c *gin.Context) {
+	middleware.SuccessResponse(c, GetSyncStatus())
+}
 
 // feishuEvent is the top-level event payload from Feishu.
 type feishuEvent struct {
@@ -44,13 +91,13 @@ type feishuUserEvent struct {
 }
 
 type feishuUserObject struct {
-	OpenID       string   `json:"open_id"`
-	UnionID      string   `json:"union_id"`
-	UserID       string   `json:"user_id"`
-	Name         string   `json:"name"`
-	Email        string   `json:"email"`
-	Avatar       *feishuAvatarObj `json:"avatar"`
-	DepartmentIDs []string `json:"department_ids"`
+	OpenID        string           `json:"open_id"`
+	UnionID       string           `json:"union_id"`
+	UserID        string           `json:"user_id"`
+	Name          string           `json:"name"`
+	Email         string           `json:"email"`
+	Avatar        *feishuAvatarObj `json:"avatar"`
+	DepartmentIDs []string         `json:"department_ids"`
 }
 
 type feishuAvatarObj struct {
@@ -63,12 +110,12 @@ type feishuDeptEvent struct {
 }
 
 type feishuDeptObject struct {
-	DepartmentID     string `json:"department_id"`
-	OpenDepartmentID string `json:"open_department_id"`
+	DepartmentID       string `json:"department_id"`
+	OpenDepartmentID   string `json:"open_department_id"`
 	ParentDepartmentID string `json:"parent_department_id"`
-	Name             string `json:"name"`
-	MemberCount      int    `json:"member_count"`
-	Order            int    `json:"order"`
+	Name               string `json:"name"`
+	MemberCount        int    `json:"member_count"`
+	Order              int    `json:"order"`
 }
 
 // HandleWebhook processes Feishu event subscription callbacks.
@@ -126,8 +173,14 @@ func handleUserEvent(data json.RawMessage) {
 	groupID := fmt.Sprintf("feishu_%s", obj.OpenID)
 
 	var deptID string
+	var deptIDsJSON string
+
 	if len(obj.DepartmentIDs) > 0 {
 		deptID = obj.DepartmentIDs[0]
+
+		if encoded, err := sonic.Marshal(obj.DepartmentIDs); err == nil {
+			deptIDsJSON = string(encoded)
+		}
 	}
 
 	var avatar string
@@ -135,30 +188,47 @@ func handleUserEvent(data json.RawMessage) {
 		avatar = obj.Avatar.AvatarOrigin
 	}
 
+	// Compute department hierarchy
+	deptPath := GetDepartmentPath(deptID)
+
+	assignFields := models.FeishuUser{
+		UnionID:        obj.UnionID,
+		UserID:         obj.UserID,
+		Name:           obj.Name,
+		Email:          obj.Email,
+		Avatar:         avatar,
+		DepartmentID:   deptID,
+		DepartmentIDs:  deptIDsJSON,
+		Level1DeptID:   deptPath.Level1ID,
+		Level1DeptName: deptPath.Level1Name,
+		Level2DeptID:   deptPath.Level2ID,
+		Level2DeptName: deptPath.Level2Name,
+		DeptFullPath:   deptPath.FullPath,
+		GroupID:        groupID,
+		Status:         1,
+	}
+
 	feishuUser := models.FeishuUser{
-		OpenID:       obj.OpenID,
-		UnionID:      obj.UnionID,
-		UserID:       obj.UserID,
-		Name:         obj.Name,
-		Email:        obj.Email,
-		Avatar:       avatar,
-		DepartmentID: deptID,
-		GroupID:      groupID,
-		Status:       1,
+		OpenID:         obj.OpenID,
+		UnionID:        obj.UnionID,
+		UserID:         obj.UserID,
+		Name:           obj.Name,
+		Email:          obj.Email,
+		Avatar:         avatar,
+		DepartmentID:   deptID,
+		DepartmentIDs:  deptIDsJSON,
+		Level1DeptID:   deptPath.Level1ID,
+		Level1DeptName: deptPath.Level1Name,
+		Level2DeptID:   deptPath.Level2ID,
+		Level2DeptName: deptPath.Level2Name,
+		DeptFullPath:   deptPath.FullPath,
+		GroupID:        groupID,
+		Status:         1,
 	}
 
 	result := model.DB.
 		Where("open_id = ?", obj.OpenID).
-		Assign(models.FeishuUser{
-			UnionID:      obj.UnionID,
-			UserID:       obj.UserID,
-			Name:         obj.Name,
-			Email:        obj.Email,
-			Avatar:       avatar,
-			DepartmentID: deptID,
-			GroupID:      groupID,
-			Status:       1,
-		}).
+		Assign(assignFields).
 		FirstOrCreate(&feishuUser)
 	if result.Error != nil {
 		log.Errorf("feishu webhook: failed to upsert user %s: %v", obj.OpenID, result.Error)
@@ -261,47 +331,93 @@ func handleDeptDeletedEvent(data json.RawMessage) {
 // SyncAll performs a full synchronization of all departments and users from Feishu.
 func SyncAll(db *gorm.DB) error {
 	ctx := context.Background()
+	stats := &syncStats{}
+
+	setSyncStatus(SyncStatus{
+		LastSyncAt: time.Now(),
+		Status:     "syncing",
+	})
 
 	log.Info("feishu sync: starting full organization sync")
 
 	// Sync departments recursively starting from root "0"
-	if err := syncDepartmentsRecursive(ctx, db, "0"); err != nil {
-		return fmt.Errorf("failed to sync departments: %w", err)
+	// Returns only the department IDs actually fetched from Feishu API
+	syncedDeptIDs, err := syncDepartmentsRecursive(ctx, db, "0", stats)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to sync departments: %v", err)
+		setSyncStatus(SyncStatus{
+			LastSyncAt: time.Now(),
+			Status:     "failed",
+			Error:      errMsg,
+		})
+
+		return fmt.Errorf("%s", errMsg)
 	}
 
-	// Get all synced departments
-	var departments []models.FeishuDepartment
+	log.Infof("feishu sync: departments done — total=%d, with_name=%d, missing_name=%d",
+		stats.totalDepts, stats.deptsWithName, stats.totalDepts-stats.deptsWithName)
 
-	if err := db.Find(&departments).Error; err != nil {
-		return fmt.Errorf("failed to list departments: %w", err)
-	}
-
-	// Sync users for each department
-	for _, dept := range departments {
-		if err := syncDepartmentUsers(ctx, db, dept.DepartmentID); err != nil {
-			log.Errorf("feishu sync: failed to sync users for department %s: %v", dept.DepartmentID, err)
+	// Only iterate departments that came from the Feishu API (not mock data in DB)
+	for _, deptID := range syncedDeptIDs {
+		if err := syncDepartmentUsers(ctx, db, deptID, stats); err != nil {
+			log.Errorf("feishu sync: failed to sync users for department %s: %v", deptID, err)
 
 			continue
 		}
 	}
 
 	// Also sync root department users
-	if err := syncDepartmentUsers(ctx, db, "0"); err != nil {
+	if err := syncDepartmentUsers(ctx, db, "0", stats); err != nil {
 		log.Errorf("feishu sync: failed to sync root department users: %v", err)
+	}
+
+	log.Infof("feishu sync: users done — total=%d, with_name=%d, with_email=%d, missing_name=%d",
+		stats.totalUsers, stats.usersWithName, stats.usersWithEmail, stats.totalUsers-stats.usersWithName)
+
+	if stats.totalUsers > 0 && stats.usersWithName == 0 {
+		log.Warn("feishu sync: ALL users are missing names — check Feishu app permissions: " +
+			"contact:user.base:readonly, contact:user.email:readonly, contact:user.department:readonly")
+	}
+
+	if stats.totalDepts > 0 && stats.deptsWithName == 0 {
+		log.Warn("feishu sync: ALL departments are missing names — check Feishu app permissions: " +
+			"contact:department.base:readonly")
 	}
 
 	log.Info("feishu sync: full organization sync completed")
 
+	setSyncStatus(SyncStatus{
+		LastSyncAt:     time.Now(),
+		Status:         "success",
+		TotalDepts:     stats.totalDepts,
+		DeptsWithName:  stats.deptsWithName,
+		TotalUsers:     stats.totalUsers,
+		UsersWithName:  stats.usersWithName,
+		UsersWithEmail: stats.usersWithEmail,
+	})
+
 	return nil
 }
 
-func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string) error {
+// syncDepartmentsRecursive fetches departments from Feishu API recursively and
+// returns the list of department IDs that were actually synced from the API.
+func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string, stats *syncStats) ([]string, error) {
 	departments, err := ListDepartments(ctx, parentID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var syncedIDs []string
+
 	for _, dept := range departments {
+		stats.totalDepts++
+
+		if dept.Name != "" {
+			stats.deptsWithName++
+		} else {
+			log.Warnf("feishu sync: department %s has empty name (parent=%s)", dept.DepartmentID, dept.ParentID)
+		}
+
 		record := models.FeishuDepartment{
 			DepartmentID:     dept.DepartmentID,
 			OpenDepartmentID: dept.OpenDepartmentID,
@@ -329,16 +445,21 @@ func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string)
 			continue
 		}
 
+		syncedIDs = append(syncedIDs, dept.DepartmentID)
+
 		// Recurse into child departments
-		if err := syncDepartmentsRecursive(ctx, db, dept.DepartmentID); err != nil {
+		childIDs, err := syncDepartmentsRecursive(ctx, db, dept.DepartmentID, stats)
+		if err != nil {
 			log.Errorf("feishu sync: failed to sync children of department %s: %v", dept.DepartmentID, err)
+		} else {
+			syncedIDs = append(syncedIDs, childIDs...)
 		}
 	}
 
-	return nil
+	return syncedIDs, nil
 }
 
-func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string) error {
+func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, stats *syncStats) error {
 	users, err := ListDepartmentUsers(ctx, departmentID)
 	if err != nil {
 		return err
@@ -349,32 +470,79 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string) 
 			continue
 		}
 
+		stats.totalUsers++
+
+		if u.Name != "" {
+			stats.usersWithName++
+		}
+
+		if u.Email != "" {
+			stats.usersWithEmail++
+		}
+
 		groupID := fmt.Sprintf("feishu_%s", u.OpenID)
 
+		// Use the department from API response; fallback to the department being iterated
+		// when Feishu doesn't return department info (insufficient permissions)
+		userDeptID := u.DepartmentID
+		if userDeptID == "" {
+			userDeptID = departmentID
+		}
+
+		userDeptIDs := u.DepartmentIDs
+		if len(userDeptIDs) == 0 && departmentID != "0" {
+			userDeptIDs = []string{departmentID}
+		}
+
+		// Serialize all department IDs
+		var deptIDsJSON string
+		if len(userDeptIDs) > 0 {
+			if encoded, err := sonic.Marshal(userDeptIDs); err == nil {
+				deptIDsJSON = string(encoded)
+			}
+		}
+
+		// Compute department hierarchy
+		deptPath := GetDepartmentPath(userDeptID)
+
+		assignFields := models.FeishuUser{
+			UnionID:        u.UnionID,
+			UserID:         u.UserID,
+			Name:           u.Name,
+			Email:          u.Email,
+			Avatar:         u.Avatar,
+			DepartmentID:   userDeptID,
+			DepartmentIDs:  deptIDsJSON,
+			Level1DeptID:   deptPath.Level1ID,
+			Level1DeptName: deptPath.Level1Name,
+			Level2DeptID:   deptPath.Level2ID,
+			Level2DeptName: deptPath.Level2Name,
+			DeptFullPath:   deptPath.FullPath,
+			GroupID:        groupID,
+			Status:         1,
+		}
+
 		feishuUser := models.FeishuUser{
-			OpenID:       u.OpenID,
-			UnionID:      u.UnionID,
-			UserID:       u.UserID,
-			Name:         u.Name,
-			Email:        u.Email,
-			Avatar:       u.Avatar,
-			DepartmentID: u.DepartmentID,
-			GroupID:      groupID,
-			Status:       1,
+			OpenID:         u.OpenID,
+			UnionID:        u.UnionID,
+			UserID:         u.UserID,
+			Name:           u.Name,
+			Email:          u.Email,
+			Avatar:         u.Avatar,
+			DepartmentID:   userDeptID,
+			DepartmentIDs:  deptIDsJSON,
+			Level1DeptID:   deptPath.Level1ID,
+			Level1DeptName: deptPath.Level1Name,
+			Level2DeptID:   deptPath.Level2ID,
+			Level2DeptName: deptPath.Level2Name,
+			DeptFullPath:   deptPath.FullPath,
+			GroupID:        groupID,
+			Status:         1,
 		}
 
 		result := db.
 			Where("open_id = ?", u.OpenID).
-			Assign(models.FeishuUser{
-				UnionID:      u.UnionID,
-				UserID:       u.UserID,
-				Name:         u.Name,
-				Email:        u.Email,
-				Avatar:       u.Avatar,
-				DepartmentID: u.DepartmentID,
-				GroupID:      groupID,
-				Status:       1,
-			}).
+			Assign(assignFields).
 			FirstOrCreate(&feishuUser)
 		if result.Error != nil {
 			log.Errorf("feishu sync: failed to upsert user %s: %v", u.OpenID, result.Error)
@@ -402,6 +570,7 @@ func StartSyncScheduler(ctx context.Context) {
 			if model.DB != nil {
 				break
 			}
+
 			time.Sleep(500 * time.Millisecond)
 		}
 

@@ -177,6 +177,7 @@ func ListDepartments(ctx context.Context, parentID string) ([]*DepartmentInfo, e
 
 	for {
 		reqBuilder := larkcontact.NewChildrenDepartmentReqBuilder().
+			DepartmentIdType("department_id").
 			DepartmentId(parentID).
 			PageSize(50)
 
@@ -241,13 +242,14 @@ func ListDepartments(ctx context.Context, parentID string) ([]*DepartmentInfo, e
 
 // DepartmentUserInfo holds a user's core fields from the contact API.
 type DepartmentUserInfo struct {
-	OpenID       string
-	UnionID      string
-	UserID       string
-	Name         string
-	Email        string
-	Avatar       string
-	DepartmentID string
+	OpenID        string
+	UnionID       string
+	UserID        string
+	Name          string
+	Email         string
+	Avatar        string
+	DepartmentID  string
+	DepartmentIDs []string
 }
 
 // ListDepartmentUsers fetches all users in the given department.
@@ -260,6 +262,8 @@ func ListDepartmentUsers(ctx context.Context, departmentID string) ([]*Departmen
 
 	for {
 		reqBuilder := larkcontact.NewFindByDepartmentUserReqBuilder().
+			UserIdType("open_id").
+			DepartmentIdType("department_id").
 			DepartmentId(departmentID).
 			PageSize(50)
 
@@ -273,7 +277,8 @@ func ListDepartmentUsers(ctx context.Context, departmentID string) ([]*Departmen
 		}
 
 		if !resp.Success() {
-			log.Errorf("feishu list department users failed: code=%d, msg=%s", resp.Code, resp.Msg)
+			// //go:build enterprise
+			log.Warnf("feishu list dept users: dept=%s, code=%d, msg=%s", departmentID, resp.Code, resp.Msg)
 			return nil, resp.CodeError
 		}
 
@@ -305,6 +310,7 @@ func ListDepartmentUsers(ctx context.Context, departmentID string) ([]*Departmen
 
 			if len(u.DepartmentIds) > 0 {
 				user.DepartmentID = u.DepartmentIds[0]
+				user.DepartmentIDs = u.DepartmentIds
 			}
 
 			users = append(users, user)

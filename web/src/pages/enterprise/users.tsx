@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { DataTable } from "@/components/table/motion-data-table"
 import { ServerPagination } from "@/components/table/server-pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
+import { enterpriseApi, type FeishuUser, type SyncStatus } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -127,12 +127,30 @@ export default function UsersPage() {
         refetchOnWindowFocus: false,
     })
 
+    // Fetch sync status
+    const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
+        queryKey: ["feishu-sync-status"],
+        queryFn: () => enterpriseApi.getFeishuSyncStatus(),
+        staleTime: 10000,
+        refetchOnWindowFocus: false,
+    })
+
     // Sync mutation
     const syncMutation = useMutation({
         mutationFn: () => enterpriseApi.triggerFeishuSync(),
         onSuccess: () => {
             toast.success(t("enterprise.users.syncStarted"))
-            setTimeout(() => refetch(), 3000)
+            // Poll sync status until done
+            const pollInterval = setInterval(() => {
+                refetchSyncStatus().then(({ data }) => {
+                    if (data && data.status !== "syncing") {
+                        clearInterval(pollInterval)
+                        refetch()
+                    }
+                })
+            }, 3000)
+            // Safety: stop polling after 5 minutes
+            setTimeout(() => clearInterval(pollInterval), 300000)
         },
         onError: (error: Error) => {
             toast.error(error.message || t("enterprise.users.syncFailed"))
@@ -240,19 +258,20 @@ export default function UsersPage() {
             header: () => (
                 <div
                     className="font-medium flex items-center cursor-pointer hover:text-primary"
-                    onClick={() => handleSort("department_id")}
+                    onClick={() => handleSort("level1_dept_name")}
                 >
                     {t("enterprise.users.department")}
-                    {renderSortIcon("department_id")}
+                    {renderSortIcon("level1_dept_name")}
                 </div>
             ),
             cell: ({ row }) => {
                 const deptPath = row.original.department_path
+                const fullPath = row.original.dept_full_path
                 if (!deptPath || !deptPath.full_path) {
                     return <span className="text-muted-foreground">-</span>
                 }
                 return (
-                    <div className="text-sm">
+                    <div className="text-sm" title={fullPath || deptPath.full_path}>
                         <div className="font-medium">{deptPath.level1_name || "-"}</div>
                         {deptPath.level2_name && (
                             <div className="text-xs text-muted-foreground">
@@ -341,6 +360,78 @@ export default function UsersPage() {
                     {t("enterprise.users.syncNow")}
                 </Button>
             </div>
+
+            {/* Sync Status Card */}
+            {syncStatus && (
+                <Card>
+                    <CardContent className="pt-4 pb-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                {/* Status badge */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground">{t("enterprise.users.syncStatus")}:</span>
+                                    {syncStatus.status === "syncing" && (
+                                        <Badge className="bg-blue-100 text-blue-800">
+                                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                            {t("enterprise.users.syncing")}
+                                        </Badge>
+                                    )}
+                                    {syncStatus.status === "success" && (
+                                        <Badge className="bg-green-100 text-green-800">
+                                            <CheckCircle className="w-3 h-3 mr-1" />
+                                            {t("enterprise.users.syncSuccess")}
+                                        </Badge>
+                                    )}
+                                    {syncStatus.status === "failed" && (
+                                        <Badge className="bg-red-100 text-red-800">
+                                            <AlertTriangle className="w-3 h-3 mr-1" />
+                                            {t("enterprise.users.syncError")}
+                                        </Badge>
+                                    )}
+                                    {!syncStatus.status && (
+                                        <Badge variant="outline">
+                                            <Clock className="w-3 h-3 mr-1" />
+                                            {t("enterprise.users.neverSynced")}
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                {/* Last sync time */}
+                                {syncStatus.last_sync_at && syncStatus.last_sync_at !== "0001-01-01T00:00:00Z" && (
+                                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                        <Clock className="w-3 h-3" />
+                                        {t("enterprise.users.lastSyncTime")}: {format(new Date(syncStatus.last_sync_at), "yyyy-MM-dd HH:mm:ss")}
+                                    </div>
+                                )}
+
+                                {/* Stats */}
+                                {syncStatus.status === "success" && (
+                                    <div className="flex items-center gap-4 text-sm">
+                                        <span>{t("enterprise.users.totalDepts")}: <strong>{syncStatus.total_depts}</strong></span>
+                                        <span>{t("enterprise.users.totalUsers")}: <strong>{syncStatus.total_users}</strong></span>
+                                        <span>{t("enterprise.users.withName")}: <strong>{syncStatus.users_with_name}</strong></span>
+                                        <span>{t("enterprise.users.withEmail")}: <strong>{syncStatus.users_with_email}</strong></span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Error message */}
+                            {syncStatus.error && (
+                                <span className="text-sm text-red-600">{syncStatus.error}</span>
+                            )}
+                        </div>
+
+                        {/* Permission warning */}
+                        {syncStatus.status === "success" && syncStatus.total_users > 0 &&
+                            (syncStatus.users_with_name < syncStatus.total_users || syncStatus.users_with_email < syncStatus.total_users) && (
+                            <div className="mt-2 flex items-center gap-2 text-sm text-amber-600">
+                                <AlertTriangle className="w-4 h-4" />
+                                {t("enterprise.users.permissionWarning")}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Search and Table Card */}
             <Card>

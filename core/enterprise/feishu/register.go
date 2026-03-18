@@ -33,9 +33,11 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 
 	if enterpriseAuth != nil {
 		// Enterprise auth routes (AdminKey or Feishu admin user)
+		// //go:build enterprise
 		enterpriseAuth.GET("/feishu/users", GetFeishuUsers)
 		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
 		enterpriseAuth.GET("/feishu/department-levels", GetDepartmentLevels)
+		enterpriseAuth.GET("/feishu/sync-status", GetSyncStatusHandler)
 		enterpriseAuth.POST("/feishu/sync", TriggerSync)
 		enterpriseAuth.PUT("/feishu/users/:open_id/role", UpdateUserRole)
 	}
@@ -64,25 +66,19 @@ func GetFeishuUsers(c *gin.Context) {
 			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
-	// Department filters
+	// Department filters — use stored level fields for faster filtering
 	level1Dept := c.Query("level1_department")
 	level2Dept := c.Query("level2_department")
 
-	if level1Dept != "" || level2Dept != "" {
-		// Get all department IDs that match the filter
-		var matchingDepts []string
-
-		if level2Dept != "" {
-			// Filter by level 2 department (and all its children)
-			matchingDepts = getDescendantDepartmentIDs(level2Dept)
-		} else if level1Dept != "" {
-			// Filter by level 1 department (and all its children)
-			matchingDepts = getDescendantDepartmentIDs(level1Dept)
-		}
-
+	if level2Dept != "" {
+		// Filter by level 2 department (and all its children)
+		matchingDepts := getDescendantDepartmentIDs(level2Dept)
 		if len(matchingDepts) > 0 {
 			tx = tx.Where("department_id IN ?", matchingDepts)
 		}
+	} else if level1Dept != "" {
+		// Use stored level1_dept_id for indexed lookup
+		tx = tx.Where("level1_dept_id = ?", level1Dept)
 	}
 
 	if err := tx.Count(&total).Error; err != nil {
@@ -115,19 +111,22 @@ func GetFeishuUsers(c *gin.Context) {
 	if sortBy == "" {
 		sortBy = "id"
 	}
+
 	if order == "" {
 		order = "desc"
 	}
 
 	// Validate sort_by field to prevent SQL injection
 	validSortFields := map[string]bool{
-		"id":            true,
-		"name":          true,
-		"role":          true,
-		"department_id": true,
-		"group_id":      true,
-		"created_at":    true,
-		"email":         true,
+		"id":              true,
+		"name":            true,
+		"role":            true,
+		"department_id":   true,
+		"level1_dept_name": true,
+		"level2_dept_name": true,
+		"group_id":        true,
+		"created_at":      true,
+		"email":           true,
 	}
 	if !validSortFields[sortBy] {
 		sortBy = "id"
@@ -144,12 +143,18 @@ func GetFeishuUsers(c *gin.Context) {
 		return
 	}
 
-	// Enrich with department path information
+	// Build response with department path from stored fields
 	usersWithDept := make([]FeishuUserWithDepartment, len(users))
 	for i, user := range users {
 		usersWithDept[i] = FeishuUserWithDepartment{
-			FeishuUser:     user,
-			DepartmentPath: GetDepartmentPath(user.DepartmentID),
+			FeishuUser: user,
+			DepartmentPath: &DepartmentPath{
+				Level1ID:   user.Level1DeptID,
+				Level1Name: user.Level1DeptName,
+				Level2ID:   user.Level2DeptID,
+				Level2Name: user.Level2DeptName,
+				FullPath:   user.DeptFullPath,
+			},
 		}
 	}
 
@@ -234,6 +239,7 @@ func GetDepartmentLevels(c *gin.Context) {
 	}
 
 	level1ID := c.Query("level1_id")
+
 	var level2Depts []*models.FeishuDepartment
 	if level1ID != "" {
 		level2Depts, err = GetLevel2Departments(level1ID)
@@ -318,6 +324,7 @@ func UpdateUserRole(c *gin.Context) {
 			middleware.ErrorResponse(c, http.StatusNotFound, "user not found")
 			return
 		}
+
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}

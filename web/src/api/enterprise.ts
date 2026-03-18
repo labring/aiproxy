@@ -55,6 +55,12 @@ export interface FeishuUser {
     email: string
     avatar: string
     department_id: string
+    department_ids: string
+    level1_dept_id: string
+    level1_dept_name: string
+    level2_dept_id: string
+    level2_dept_name: string
+    dept_full_path: string
     group_id: string
     token_id: number
     role: 'viewer' | 'analyst' | 'admin'
@@ -247,6 +253,18 @@ export interface FieldCatalog {
     dimensions: { key: string; label: string }[]
     measures: { key: string; label: string; type: string }[]
     computed_measures: { key: string; label: string; type: string }[]
+}
+
+// Feishu Sync Status
+export interface SyncStatus {
+    last_sync_at: string
+    status: string
+    total_depts: number
+    depts_with_name: number
+    total_users: number
+    users_with_name: number
+    users_with_email: number
+    error?: string
 }
 
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
@@ -463,6 +481,10 @@ export const enterpriseApi = {
         return get('/enterprise/feishu/department-levels', {
             params: { level1_id }
         })
+    },
+
+    getFeishuSyncStatus: (): Promise<SyncStatus> => {
+        return get<SyncStatus>('/enterprise/feishu/sync-status')
     },
 
     triggerFeishuSync: (): Promise<{ message: string }> => {

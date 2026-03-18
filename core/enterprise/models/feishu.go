@@ -17,22 +17,28 @@ const (
 
 // FeishuUser maps a Feishu (Lark) user to an AI Proxy group and token.
 type FeishuUser struct {
-	ID           int            `json:"id"            gorm:"primaryKey"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"-"             gorm:"index"`
-	OpenID       string         `json:"open_id"       gorm:"size:64;uniqueIndex;not null"`
-	UnionID      string         `json:"union_id"      gorm:"size:64;index"`
-	UserID       string         `json:"user_id"       gorm:"size:64;index"`
-	TenantID     string         `json:"tenant_id"     gorm:"size:64;index"`
-	Name         string         `json:"name"          gorm:"size:128"`
-	Email        string         `json:"email"         gorm:"size:256"`
-	Avatar       string         `json:"avatar"        gorm:"size:512"`
-	DepartmentID string         `json:"department_id" gorm:"size:64;index"`
-	GroupID      string         `json:"group_id"      gorm:"size:64;index;not null"`
-	TokenID      int            `json:"token_id"      gorm:"index"`
-	Role         string         `json:"role"          gorm:"size:32;default:viewer;index"`
-	Status       int            `json:"status"        gorm:"default:1;index"`
+	ID             int            `json:"id"              gorm:"primaryKey"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `json:"-"               gorm:"index"`
+	OpenID         string         `json:"open_id"         gorm:"size:64;uniqueIndex;not null"`
+	UnionID        string         `json:"union_id"        gorm:"size:64;index"`
+	UserID         string         `json:"user_id"         gorm:"size:64;index"`
+	TenantID       string         `json:"tenant_id"       gorm:"size:64;index"`
+	Name           string         `json:"name"            gorm:"size:128"`
+	Email          string         `json:"email"           gorm:"size:256"`
+	Avatar         string         `json:"avatar"          gorm:"size:512"`
+	DepartmentID   string         `json:"department_id"   gorm:"size:64;index"`
+	DepartmentIDs  string         `json:"department_ids"  gorm:"size:1024"`
+	Level1DeptID   string         `json:"level1_dept_id"  gorm:"size:64;index"`
+	Level1DeptName string         `json:"level1_dept_name" gorm:"size:256"`
+	Level2DeptID   string         `json:"level2_dept_id"  gorm:"size:64;index"`
+	Level2DeptName string         `json:"level2_dept_name" gorm:"size:256"`
+	DeptFullPath   string         `json:"dept_full_path"  gorm:"size:1024"`
+	GroupID        string         `json:"group_id"        gorm:"size:64;index;not null"`
+	TokenID        int            `json:"token_id"        gorm:"index"`
+	Role           string         `json:"role"            gorm:"size:32;default:viewer;index"`
+	Status         int            `json:"status"          gorm:"default:1;index"`
 }
 
 func (FeishuUser) TableName() string {

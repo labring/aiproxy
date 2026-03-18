@@ -63,7 +63,7 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             href: ROUTES.ENTERPRISE_CUSTOM_REPORT,
         },
         {
-            title: "PPIO 模型同步",
+            title: t("enterprise.sidebar.ppioSync"),
             icon: RefreshCw,
             href: ROUTES.ENTERPRISE_PPIO_SYNC,
         },

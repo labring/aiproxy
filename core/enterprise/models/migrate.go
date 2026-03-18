@@ -4,6 +4,22 @@ package models
 
 import "gorm.io/gorm"
 
+// PPIOSyncHistory mirrors ppio.SyncHistory for migration purposes.
+// Defined here to avoid circular dependency (ppio → model → models → ppio).
+type PPIOSyncHistory struct {
+	ID          int64  `gorm:"primaryKey"`
+	SyncedAt    int64  `gorm:"index"`
+	Operator    string
+	SyncOptions string
+	Result      string
+	Status      string
+	CreatedAt   int64  `gorm:"autoCreateTime"`
+}
+
+func (PPIOSyncHistory) TableName() string {
+	return "ppio_sync_history"
+}
+
 // EnterpriseAutoMigrate runs database migrations for all enterprise tables.
 func EnterpriseAutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
@@ -15,5 +31,6 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&TenantWhitelistConfig{},
 		&DepartmentQuotaPolicy{},
 		&UserQuotaPolicy{},
+		&PPIOSyncHistory{},
 	)
 }
