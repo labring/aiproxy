@@ -5,8 +5,11 @@ export interface ModelConfigDetail {
     max_context_tokens?: number
     vision?: boolean
     tool_choice?: boolean
+    coder?: boolean
+    limited_time_free?: boolean
     support_formats?: string[]
     support_voices?: string[]
+    [key: string]: unknown
 }
 
 export interface PriceCondition {

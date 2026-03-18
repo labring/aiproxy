@@ -625,6 +625,12 @@ func updateGroupSummaryData(
 		firstByteAt = requestAt
 	}
 
+	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
+		createAt,
+		requestAt,
+		firstByteAt,
+	)
+
 	groupUnique := GroupSummaryUnique{
 		GroupID:       group,
 		TokenName:     tokenName,
@@ -642,19 +648,25 @@ func updateGroupSummaryData(
 
 	groupSummary.Amount.Add(amount)
 
-	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTimeMilliseconds += totalTimeMilliseconds
+	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
-	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+	groupSummary.AddServiceTierBreakdown(
+		serviceTier,
+		usage,
+		amount,
+		totalTimeMilliseconds,
+		totalTTFBMilliseconds,
+		false,
+		code,
+	)
 
 	if summaryClaudeLongContext {
 		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
-			Milliseconds()
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
-			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
 
 	if usage.CachedTokens > 0 {
@@ -689,6 +701,12 @@ func updateGroupSummaryDataMinute(
 		firstByteAt = requestAt
 	}
 
+	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
+		createAt,
+		requestAt,
+		firstByteAt,
+	)
+
 	groupUnique := GroupSummaryMinuteUnique{
 		GroupID:         group,
 		TokenName:       tokenName,
@@ -706,19 +724,25 @@ func updateGroupSummaryDataMinute(
 
 	groupSummary.Amount.Add(amount)
 
-	groupSummary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	groupSummary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	groupSummary.TotalTimeMilliseconds += totalTimeMilliseconds
+	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	groupSummary.Usage.Add(usage)
 	groupSummary.AddRequest(code, false)
-	groupSummary.AddServiceTierBreakdown(serviceTier, usage, amount, false, code)
+	groupSummary.AddServiceTierBreakdown(
+		serviceTier,
+		usage,
+		amount,
+		totalTimeMilliseconds,
+		totalTTFBMilliseconds,
+		false,
+		code,
+	)
 
 	if summaryClaudeLongContext {
 		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).
-			Milliseconds()
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).
-			Milliseconds()
+		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
+		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
 
 	if usage.CachedTokens > 0 {
@@ -755,6 +779,12 @@ func updateSummaryData(
 		firstByteAt = requestAt
 	}
 
+	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
+		createAt,
+		requestAt,
+		firstByteAt,
+	)
+
 	summaryUnique := SummaryUnique{
 		ChannelID:     channelID,
 		Model:         modelName,
@@ -771,17 +801,25 @@ func updateSummaryData(
 
 	summary.Amount.Add(amount)
 
-	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	summary.TotalTimeMilliseconds += totalTimeMilliseconds
+	summary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
-	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+	summary.AddServiceTierBreakdown(
+		serviceTier,
+		usage,
+		amount,
+		totalTimeMilliseconds,
+		totalTTFBMilliseconds,
+		isRetry,
+		code,
+	)
 
 	if summaryClaudeLongContext {
 		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
-		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
 
 	if usage.CachedTokens > 0 {
@@ -818,6 +856,12 @@ func updateSummaryDataMinute(
 		firstByteAt = requestAt
 	}
 
+	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
+		createAt,
+		requestAt,
+		firstByteAt,
+	)
+
 	summaryUnique := SummaryMinuteUnique{
 		ChannelID:       channelID,
 		Model:           modelName,
@@ -834,17 +878,25 @@ func updateSummaryDataMinute(
 
 	summary.Amount.Add(amount)
 
-	summary.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-	summary.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+	summary.TotalTimeMilliseconds += totalTimeMilliseconds
+	summary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	summary.Usage.Add(usage)
 	summary.AddRequest(code, isRetry)
-	summary.AddServiceTierBreakdown(serviceTier, usage, amount, isRetry, code)
+	summary.AddServiceTierBreakdown(
+		serviceTier,
+		usage,
+		amount,
+		totalTimeMilliseconds,
+		totalTTFBMilliseconds,
+		isRetry,
+		code,
+	)
 
 	if summaryClaudeLongContext {
 		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
-		summary.ClaudeLongContext.TotalTimeMilliseconds += createAt.Sub(requestAt).Milliseconds()
-		summary.ClaudeLongContext.TotalTTFBMilliseconds += firstByteAt.Sub(requestAt).Milliseconds()
+		summary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
+		summary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
 
 	if usage.CachedTokens > 0 {
@@ -854,4 +906,10 @@ func updateSummaryDataMinute(
 	if usage.CacheCreationTokens > 0 {
 		summary.CacheCreationCount++
 	}
+}
+
+func getSummaryLatencyMetrics(
+	createAt, requestAt, firstByteAt time.Time,
+) (totalTimeMilliseconds, totalTTFBMilliseconds int64) {
+	return createAt.Sub(requestAt).Milliseconds(), firstByteAt.Sub(requestAt).Milliseconds()
 }

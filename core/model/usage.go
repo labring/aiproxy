@@ -416,6 +416,7 @@ func (u *Usage) Add(other Usage) {
 	u.ImageOutputTokens += other.ImageOutputTokens
 	u.CachedTokens += other.CachedTokens
 	u.CacheCreationTokens += other.CacheCreationTokens
+	u.ReasoningTokens += other.ReasoningTokens
 	u.TotalTokens += other.TotalTokens
 	u.WebSearchCount += other.WebSearchCount
 }
