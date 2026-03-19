@@ -428,17 +428,28 @@ func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string,
 			Status:           1,
 		}
 
-		result := db.
-			Where("department_id = ?", dept.DepartmentID).
-			Assign(models.FeishuDepartment{
+		// Match by department_id OR open_department_id to avoid duplicates
+		// when the same department was previously synced with a different ID format
+		var existing models.FeishuDepartment
+		found := db.Where("department_id = ? OR (open_department_id = ? AND open_department_id != '')",
+			dept.DepartmentID, dept.OpenDepartmentID).First(&existing).Error == nil
+
+		var result *gorm.DB
+		if found {
+			// Update existing record, including department_id to normalize it
+			result = db.Model(&existing).Updates(models.FeishuDepartment{
+				DepartmentID:     dept.DepartmentID,
 				OpenDepartmentID: dept.OpenDepartmentID,
 				ParentID:         dept.ParentID,
 				Name:             dept.Name,
 				MemberCount:      dept.MemberCount,
 				Order:            dept.Order,
 				Status:           1,
-			}).
-			FirstOrCreate(&record)
+			})
+		} else {
+			result = db.Create(&record)
+		}
+
 		if result.Error != nil {
 			log.Errorf("feishu sync: failed to upsert department %s: %v", dept.DepartmentID, result.Error)
 

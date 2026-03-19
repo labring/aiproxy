@@ -497,7 +497,8 @@
       "withName": "有名称",
       "withEmail": "有邮箱",
       "permissionWarning": "部分用户缺少姓名/邮箱，请检查飞书应用权限配置",
-      "neverSynced": "从未同步"
+      "neverSynced": "从未同步",
+      "actions": "操作"
     }
   },
   "token": {

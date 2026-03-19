@@ -52,16 +52,19 @@ const CenteredLoader = <TData, TValue>({
     columns
 }: {
     columns: ColumnDef<TData, TValue>[]
-}) => (
-    <TableRow>
-        <TableCell colSpan={columns.length} className="h-24">
-            <div className="flex items-center justify-center space-x-2">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">加载中...</span>
-            </div>
-        </TableCell>
-    </TableRow>
-)
+}) => {
+    const { t } = useTranslation()
+    return (
+        <TableRow>
+            <TableCell colSpan={columns.length} className="h-24">
+                <div className="flex items-center justify-center space-x-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">{t("common.loading")}</span>
+                </div>
+            </TableCell>
+        </TableRow>
+    )
+}
 
 // 无数据状态组件
 const NoResults = <TData, TValue>({

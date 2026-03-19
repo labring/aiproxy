@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { DataTable } from "@/components/table/motion-data-table"
 import { ServerPagination } from "@/components/table/server-pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { enterpriseApi, type FeishuUser, type SyncStatus } from "@/api/enterprise"
+import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -107,6 +107,7 @@ export default function UsersPage() {
         ),
         staleTime: 30000, // 30 seconds
         refetchOnWindowFocus: false,
+        placeholderData: keepPreviousData,
     })
 
     // Fetch department levels for filters
@@ -270,10 +271,12 @@ export default function UsersPage() {
                 if (!deptPath || !deptPath.full_path) {
                     return <span className="text-muted-foreground">-</span>
                 }
+                // Only show level2_name if it's a real name (not an od-* ID)
+                const hasLevel2Name = deptPath.level2_name && !deptPath.level2_name.startsWith('od-')
                 return (
                     <div className="text-sm" title={fullPath || deptPath.full_path}>
                         <div className="font-medium">{deptPath.level1_name || "-"}</div>
-                        {deptPath.level2_name && (
+                        {hasLevel2Name && (
                             <div className="text-xs text-muted-foreground">
                                 {deptPath.level2_name}
                             </div>
@@ -310,7 +313,7 @@ export default function UsersPage() {
         },
         {
             id: "actions",
-            header: () => <div className="text-right font-medium">操作</div>,
+            header: () => <div className="text-right font-medium">{t("enterprise.users.actions")}</div>,
             cell: ({ row }) => (
                 <div className="flex justify-end gap-2">
                     <Button
@@ -465,10 +468,10 @@ export default function UsersPage() {
                                     <SelectContent>
                                         <SelectItem value="all">{t("enterprise.users.allSubDepartments")}</SelectItem>
                                         {deptLevelsData?.level2_departments
-                                            ?.filter(dept => dept.department_id && dept.department_id !== "")
+                                            ?.filter(dept => dept.department_id && dept.name)
                                             .map((dept) => (
                                                 <SelectItem key={dept.department_id} value={dept.department_id}>
-                                                    {dept.name || dept.department_id}
+                                                    {dept.name}
                                                 </SelectItem>
                                             ))}
                                     </SelectContent>
@@ -497,7 +500,7 @@ export default function UsersPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <DataTable table={table} columns={columns} isLoading={isLoading} />
+                    <DataTable table={table} columns={columns} isLoading={isLoading && !data} />
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}

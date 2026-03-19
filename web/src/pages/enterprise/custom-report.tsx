@@ -32,7 +32,7 @@ import {
     type CustomReportRequest,
     type CustomReportResponse,
 } from "@/api/enterprise"
-import { type TimeRange, getTimeRange } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
 
 // ─── Field catalog (client-side categories + labels) ─────────────────────────
 
@@ -344,6 +344,7 @@ function ReportChart({
 }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const instance = useRef<echarts.ECharts | null>(null)
+    const isDark = useDarkMode()
 
     useEffect(() => {
         if (!chartRef.current || data.rows.length === 0) return
@@ -351,6 +352,8 @@ function ReportChart({
         if (!instance.current) {
             instance.current = echarts.init(chartRef.current)
         }
+
+        const theme = getEChartsTheme(isDark)
 
         // Build category labels from dimension values
         const labels = data.rows.map((row) =>
@@ -377,7 +380,7 @@ function ReportChart({
                         value: Number(row[measure] ?? 0),
                         itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
                     })),
-                    label: { show: true, formatter: "{b}\n{d}%" },
+                    label: { show: true, formatter: "{b}\n{d}%", color: theme.textColor },
                 }],
             }, true)
         } else {
@@ -391,19 +394,19 @@ function ReportChart({
 
             instance.current.setOption({
                 tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-                legend: { data: numericMeasures.map((m) => getLabel(m, lang)) },
+                legend: { data: numericMeasures.map((m) => getLabel(m, lang)), textStyle: { color: theme.textColor } },
                 grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", containLabel: true },
                 xAxis: {
                     type: "category",
                     data: labels.slice(0, 50),
-                    axisLabel: { rotate: labels[0]?.length > 8 ? 30 : 0, fontSize: 11 },
+                    axisLabel: { rotate: labels[0]?.length > 8 ? 30 : 0, fontSize: 11, color: theme.subTextColor },
                 },
                 yAxis: needDualAxis
                     ? [
-                        { type: "value", name: lang.startsWith("zh") ? "数值" : "Value" },
-                        { type: "value", name: "%", max: 100, min: 0 },
+                        { type: "value", name: lang.startsWith("zh") ? "数值" : "Value", nameTextStyle: { color: theme.subTextColor }, axisLabel: { color: theme.subTextColor }, splitLine: { lineStyle: { color: theme.splitLineColor } } },
+                        { type: "value", name: "%", max: 100, min: 0, nameTextStyle: { color: theme.subTextColor }, axisLabel: { color: theme.subTextColor }, splitLine: { show: false } },
                     ]
-                    : { type: "value" },
+                    : { type: "value", axisLabel: { color: theme.subTextColor }, splitLine: { lineStyle: { color: theme.splitLineColor } } },
                 series: numericMeasures.map((m, i) => ({
                     name: getLabel(m, lang),
                     type: chartType,
@@ -420,7 +423,7 @@ function ReportChart({
         return () => {
             window.removeEventListener("resize", handleResize)
         }
-    }, [data, dimensions, measures, chartType, lang])
+    }, [data, dimensions, measures, chartType, lang, isDark])
 
     // Clean up chart on unmount
     useEffect(() => {

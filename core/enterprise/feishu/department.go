@@ -33,7 +33,10 @@ func GetDepartmentPath(departmentID string) *DepartmentPath {
 	// Max depth of 10 to prevent infinite loops
 	for i := 0; i < 10 && currentID != "" && currentID != "0"; i++ {
 		var dept models.FeishuDepartment
+		// Prefer the record with a name when duplicates exist
+		// (e.g. one with department_id=od-xxx and one with the canonical ID)
 		if err := model.DB.Where("department_id = ? OR open_department_id = ?", currentID, currentID).
+			Order("CASE WHEN name != '' THEN 0 ELSE 1 END, updated_at DESC").
 			First(&dept).Error; err != nil {
 			break
 		}
@@ -99,32 +102,94 @@ func GetDepartmentTree() ([]*models.FeishuDepartment, error) {
 	return roots, nil
 }
 
-// GetLevel1Departments returns all top-level departments
+// GetLevel1Departments returns all top-level departments, deduplicated.
+// When the same logical department has multiple records (e.g. one with custom department_id
+// and one with open_department_id), prefer the record with a name.
 func GetLevel1Departments() ([]*models.FeishuDepartment, error) {
 	var departments []*models.FeishuDepartment
 
 	if err := model.DB.Where("status = 1 AND (parent_id = '0' OR parent_id = '')").
-		Order("`order`, name").
+		Order("CASE WHEN name != '' THEN 0 ELSE 1 END, `order`, name").
 		Find(&departments).Error; err != nil {
 		return nil, err
 	}
 
-	return departments, nil
+	return deduplicateDepartments(departments), nil
 }
 
-// GetLevel2Departments returns all second-level departments under a given parent
+// GetLevel2Departments returns all second-level departments under a given parent, deduplicated.
 func GetLevel2Departments(level1ID string) ([]*models.FeishuDepartment, error) {
 	if level1ID == "" {
 		return nil, nil
 	}
 
+	// Resolve all ID forms for the parent department so we can match parent_id in any format
+	parentIDs := getAllDepartmentIDForms(level1ID)
+
 	var departments []*models.FeishuDepartment
 
-	if err := model.DB.Where("status = 1 AND parent_id = ?", level1ID).
-		Order("`order`, name").
+	if err := model.DB.Where("status = 1 AND parent_id IN ?", parentIDs).
+		Order("CASE WHEN name != '' THEN 0 ELSE 1 END, `order`, name").
 		Find(&departments).Error; err != nil {
 		return nil, err
 	}
 
-	return departments, nil
+	return deduplicateDepartments(departments), nil
+}
+
+// getAllDepartmentIDForms returns all known ID forms (department_id and open_department_id)
+// for a given department identifier. This handles the dual-ID system where the same department
+// can be referenced by its custom ID or its od-* ID.
+func getAllDepartmentIDForms(deptID string) []string {
+	idSet := map[string]struct{}{deptID: {}}
+
+	var depts []models.FeishuDepartment
+	model.DB.Where("department_id = ? OR open_department_id = ?", deptID, deptID).Find(&depts)
+
+	for _, d := range depts {
+		if d.DepartmentID != "" {
+			idSet[d.DepartmentID] = struct{}{}
+		}
+
+		if d.OpenDepartmentID != "" {
+			idSet[d.OpenDepartmentID] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(idSet))
+	for id := range idSet {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+// deduplicateDepartments removes duplicate department entries that represent
+// the same logical department (sharing the same open_department_id).
+// Prefers the record with a non-empty name.
+func deduplicateDepartments(departments []*models.FeishuDepartment) []*models.FeishuDepartment {
+	seen := make(map[string]*models.FeishuDepartment)
+	var result []*models.FeishuDepartment
+
+	for _, dept := range departments {
+		key := dept.OpenDepartmentID
+		if key == "" {
+			key = dept.DepartmentID
+		}
+
+		existing, ok := seen[key]
+		if !ok {
+			seen[key] = dept
+			result = append(result, dept)
+
+			continue
+		}
+
+		// Replace if the new one has a name but the existing one doesn't
+		if existing.Name == "" && dept.Name != "" {
+			*existing = *dept
+		}
+	}
+
+	return result
 }

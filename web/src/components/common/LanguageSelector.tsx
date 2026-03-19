@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,26 +12,23 @@ interface LanguageSelectorProps {
 
 export function LanguageSelector({ variant = "default" }: LanguageSelectorProps) {
     const { i18n } = useTranslation()
-    const [language, setLanguage] = useState(i18n.language || 'zh')
+    const [language, setLanguage] = useState(() => i18n.language || "en")
 
-    // 初始化时从本地存储获取语言设置
+    // Sync state when i18n language changes (e.g. from other sources)
     useEffect(() => {
-        const savedLanguage = localStorage.getItem('i18nextLng')
-        if (savedLanguage && savedLanguage !== language) {
-            setLanguage(savedLanguage)
-            i18n.changeLanguage(savedLanguage)
-        }
-    }, []) // 只在组件挂载时执行一次
+        const handleLanguageChanged = (lng: string) => setLanguage(lng)
+        i18n.on("languageChanged", handleLanguageChanged)
+        return () => { i18n.off("languageChanged", handleLanguageChanged) }
+    }, [i18n])
 
-    const toggleLanguage = () => {
-        const newLanguage = language === 'zh' ? 'en' : 'zh'
-        setLanguage(newLanguage)
+    const isZh = language.startsWith("zh")
+
+    const toggleLanguage = useCallback(() => {
+        const newLanguage = isZh ? "en" : "zh"
         i18n.changeLanguage(newLanguage)
-        localStorage.setItem('i18nextLng', newLanguage)
-    }
+    }, [i18n, isZh])
 
-    const displayText = language === 'zh' ? '中' : 'En'
-
+    const displayText = isZh ? "中" : "En"
     const isMinimal = variant === "minimal"
 
     return (
@@ -44,7 +41,7 @@ export function LanguageSelector({ variant = "default" }: LanguageSelectorProps)
                         onClick={toggleLanguage}
                         className={cn(
                             "h-10 w-16 rounded-md",
-                            isMinimal 
+                            isMinimal
                                 ? "bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 backdrop-blur-sm"
                                 : "bg-primary/10 text-primary hover:bg-primary/20"
                         )}
@@ -56,7 +53,7 @@ export function LanguageSelector({ variant = "default" }: LanguageSelectorProps)
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent side={isMinimal ? "left" : "bottom"}>
-                    {language === 'zh' ? 'Switch to English' : '切换到中文'}
+                    {isZh ? "Switch to English" : "切换到中文"}
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

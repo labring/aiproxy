@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { enterpriseApi } from "@/api/enterprise"
 import { ROUTES } from "@/routes/constants"
-import { type TimeRange, getTimeRange } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
 
 function TrendChart({
     trend,
@@ -18,6 +18,7 @@ function TrendChart({
 }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
+    const isDark = useDarkMode()
 
     useEffect(() => {
         if (!chartRef.current) return
@@ -26,6 +27,7 @@ function TrendChart({
             chartInstance.current = echarts.init(chartRef.current)
         }
 
+        const theme = getEChartsTheme(isDark)
         const xData = trend.map((p) => {
             const d = new Date(p.hour_timestamp * 1000)
             return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:00`
@@ -38,6 +40,7 @@ function TrendChart({
             legend: {
                 data: ["Requests", "Amount ($)", "Tokens"],
                 bottom: 0,
+                textStyle: { color: theme.textColor },
             },
             grid: {
                 left: "3%",
@@ -49,18 +52,24 @@ function TrendChart({
             xAxis: {
                 type: "category",
                 data: xData,
-                axisLabel: { rotate: 30 },
+                axisLabel: { rotate: 30, color: theme.subTextColor },
             },
             yAxis: [
                 {
                     type: "value",
                     name: "Requests",
                     position: "left",
+                    nameTextStyle: { color: theme.subTextColor },
+                    axisLabel: { color: theme.subTextColor },
+                    splitLine: { lineStyle: { color: theme.splitLineColor } },
                 },
                 {
                     type: "value",
                     name: "Amount ($)",
                     position: "right",
+                    nameTextStyle: { color: theme.subTextColor },
+                    axisLabel: { color: theme.subTextColor },
+                    splitLine: { show: false },
                 },
             ],
             series: [
@@ -89,7 +98,7 @@ function TrendChart({
             chartInstance.current?.dispose()
             chartInstance.current = null
         }
-    }, [trend])
+    }, [trend, isDark])
 
     return <div ref={chartRef} className="w-full h-96" />
 }

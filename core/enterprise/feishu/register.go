@@ -5,6 +5,7 @@ package feishu
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -66,19 +67,22 @@ func GetFeishuUsers(c *gin.Context) {
 			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
-	// Department filters — use stored level fields for faster filtering
+	// Department filters — match by descendant department IDs
+	// This works whether or not level1_dept_id is populated on the user record,
+	// because it matches the user's department_id against all descendants of the selected dept.
 	level1Dept := c.Query("level1_department")
 	level2Dept := c.Query("level2_department")
 
 	if level2Dept != "" {
-		// Filter by level 2 department (and all its children)
 		matchingDepts := getDescendantDepartmentIDs(level2Dept)
 		if len(matchingDepts) > 0 {
 			tx = tx.Where("department_id IN ?", matchingDepts)
 		}
 	} else if level1Dept != "" {
-		// Use stored level1_dept_id for indexed lookup
-		tx = tx.Where("level1_dept_id = ?", level1Dept)
+		matchingDepts := getDescendantDepartmentIDs(level1Dept)
+		if len(matchingDepts) > 0 {
+			tx = tx.Where("department_id IN ?", matchingDepts)
+		}
 	}
 
 	if err := tx.Count(&total).Error; err != nil {
@@ -143,18 +147,53 @@ func GetFeishuUsers(c *gin.Context) {
 		return
 	}
 
-	// Build response with department path from stored fields
+	// Build response with department path
+	// When stored level fields are populated, resolve names from department table.
+	// When they are empty, fall back to GetDepartmentPath which traverses the parent chain.
+	deptNameMap := batchResolveDepartmentNames(users)
+
 	usersWithDept := make([]FeishuUserWithDepartment, len(users))
 	for i, user := range users {
+		var deptPath *DepartmentPath
+
+		if user.Level1DeptID != "" {
+			// Use stored level fields with batch-resolved names
+			l1Name := resolveDeptName(deptNameMap, user.Level1DeptID, user.Level1DeptName)
+			l2Name := resolveDeptName(deptNameMap, user.Level2DeptID, user.Level2DeptName)
+
+			fullPath := user.DeptFullPath
+			if l1Name != user.Level1DeptName || l2Name != user.Level2DeptName {
+				var parts []string
+				if l1Name != "" {
+					parts = append(parts, l1Name)
+				}
+
+				if l2Name != "" {
+					parts = append(parts, l2Name)
+				}
+
+				if len(parts) > 0 {
+					fullPath = strings.Join(parts, " > ")
+				}
+			}
+
+			deptPath = &DepartmentPath{
+				Level1ID:   user.Level1DeptID,
+				Level1Name: l1Name,
+				Level2ID:   user.Level2DeptID,
+				Level2Name: l2Name,
+				FullPath:   fullPath,
+			}
+		} else if user.DepartmentID != "" {
+			// Fallback: resolve department path dynamically from department table
+			deptPath = GetDepartmentPath(user.DepartmentID)
+		} else {
+			deptPath = &DepartmentPath{}
+		}
+
 		usersWithDept[i] = FeishuUserWithDepartment{
 			FeishuUser: user,
-			DepartmentPath: &DepartmentPath{
-				Level1ID:   user.Level1DeptID,
-				Level1Name: user.Level1DeptName,
-				Level2ID:   user.Level2DeptID,
-				Level2Name: user.Level2DeptName,
-				FullPath:   user.DeptFullPath,
-			},
+			DepartmentPath: deptPath,
 		}
 	}
 
@@ -164,16 +203,81 @@ func GetFeishuUsers(c *gin.Context) {
 	})
 }
 
-// getDescendantDepartmentIDs returns all department IDs that are descendants of the given department
+// getDescendantDepartmentIDs returns all department IDs (both department_id and open_department_id)
+// that are the given department or its descendants. This ensures matching works regardless of which
+// ID format is stored in the user's department_id field.
 func getDescendantDepartmentIDs(departmentID string) []string {
-	var result []string
-	result = append(result, departmentID)
+	idSet := make(map[string]struct{})
+	visited := make(map[string]bool)
 
-	var children []models.FeishuDepartment
-	model.DB.Where("parent_id = ? AND status = 1", departmentID).Find(&children)
+	var collect func(id string)
+	collect = func(id string) {
+		if visited[id] {
+			return
+		}
 
-	for _, child := range children {
-		result = append(result, getDescendantDepartmentIDs(child.DepartmentID)...)
+		visited[id] = true
+
+		// Find the department record(s) for this ID
+		var depts []models.FeishuDepartment
+		model.DB.Where("(department_id = ? OR open_department_id = ?) AND status = 1", id, id).Find(&depts)
+
+		// Collect all ID forms for this department
+		parentIDs := []string{id}
+		idSet[id] = struct{}{}
+
+		for _, dept := range depts {
+			if dept.DepartmentID != "" {
+				idSet[dept.DepartmentID] = struct{}{}
+				parentIDs = append(parentIDs, dept.DepartmentID)
+			}
+
+			if dept.OpenDepartmentID != "" {
+				idSet[dept.OpenDepartmentID] = struct{}{}
+				parentIDs = append(parentIDs, dept.OpenDepartmentID)
+			}
+		}
+
+		// Find children whose parent_id matches any known ID form of this department
+		var children []models.FeishuDepartment
+		model.DB.Where("parent_id IN ? AND status = 1", parentIDs).Find(&children)
+
+		for _, child := range children {
+			collect(child.DepartmentID)
+		}
+	}
+
+	collect(departmentID)
+
+	result := make([]string, 0, len(idSet))
+	for id := range idSet {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+// getDepartmentAllIDs returns all possible ID forms for a department
+// (both department_id and open_department_id from all matching records).
+// This handles the case where the same logical department has multiple DB records.
+func getDepartmentAllIDs(deptID string) []string {
+	var departments []models.FeishuDepartment
+	model.DB.Where("department_id = ? OR open_department_id = ?", deptID, deptID).Find(&departments)
+
+	idSet := make(map[string]struct{})
+	for _, d := range departments {
+		if d.DepartmentID != "" {
+			idSet[d.DepartmentID] = struct{}{}
+		}
+
+		if d.OpenDepartmentID != "" {
+			idSet[d.OpenDepartmentID] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(idSet))
+	for id := range idSet {
+		result = append(result, id)
 	}
 
 	return result
@@ -336,4 +440,66 @@ func UpdateUserRole(c *gin.Context) {
 	}
 
 	middleware.SuccessResponse(c, user)
+}
+
+// batchResolveDepartmentNames loads department names for all department IDs
+// referenced by the given users. Returns a map from any department ID (both
+// department_id and open_department_id) to the department's display name.
+func batchResolveDepartmentNames(users []models.FeishuUser) map[string]string {
+	// Collect all unique department IDs
+	idSet := make(map[string]struct{})
+	for _, u := range users {
+		if u.Level1DeptID != "" {
+			idSet[u.Level1DeptID] = struct{}{}
+		}
+
+		if u.Level2DeptID != "" {
+			idSet[u.Level2DeptID] = struct{}{}
+		}
+
+		if u.DepartmentID != "" {
+			idSet[u.DepartmentID] = struct{}{}
+		}
+	}
+
+	if len(idSet) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+
+	// Load all matching departments in one query
+	var departments []models.FeishuDepartment
+	model.DB.Where("department_id IN ? OR open_department_id IN ?", ids, ids).Find(&departments)
+
+	// Build lookup: any ID form -> best name (prefer non-empty names)
+	nameMap := make(map[string]string)
+	for _, dept := range departments {
+		if dept.Name == "" {
+			continue
+		}
+
+		if dept.DepartmentID != "" {
+			nameMap[dept.DepartmentID] = dept.Name
+		}
+
+		if dept.OpenDepartmentID != "" {
+			nameMap[dept.OpenDepartmentID] = dept.Name
+		}
+	}
+
+	return nameMap
+}
+
+// resolveDeptName returns the resolved department name:
+// first tries the nameMap lookup, then falls back to the stored name.
+func resolveDeptName(nameMap map[string]string, deptID, storedName string) string {
+	if name, ok := nameMap[deptID]; ok {
+		return name
+	}
+
+	return storedName
 }

@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import useAuthStore from "@/store/auth"
+import { LanguageSelector } from "@/components/common/LanguageSelector"
 
 interface EnterpriseSidebarItem {
     title: string
@@ -244,8 +245,19 @@ export function EnterpriseLayout() {
                     </TooltipProvider>
                 </div>
 
-                {/* Logout button */}
-                <div className="p-4 border-t border-white/20 dark:border-white/10 relative z-10">
+                {/* Language & Logout */}
+                <div className="p-4 border-t border-white/20 dark:border-white/10 relative z-10 space-y-2">
+                    {/* Language Selector */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className={cn("flex", collapsed ? "justify-center" : "justify-start px-1")}>
+                                <LanguageSelector variant="minimal" />
+                            </div>
+                        </TooltipTrigger>
+                        {collapsed && <TooltipContent side="right">{t("sidebar.logout")}</TooltipContent>}
+                    </Tooltip>
+
+                    {/* Logout */}
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button

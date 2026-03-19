@@ -18,7 +18,12 @@ i18n
         },
         backend: {
             loadPath: '/locales/{{lng}}/{{ns}}.json',
-        }
+        },
+        react: {
+            useSuspense: false,
+            bindI18n: 'languageChanged loaded',
+            bindI18nStore: 'added loaded',
+        },
     })
 
 export default i18n 

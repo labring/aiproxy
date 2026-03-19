@@ -12,7 +12,7 @@ import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { DepartmentFilter } from "@/components/common/DepartmentFilter"
 import { enterpriseApi, type DepartmentSummary, type ModelDistributionItem } from "@/api/enterprise"
 import { ROUTES } from "@/routes/constants"
-import { type TimeRange, getTimeRange, formatNumber, formatAmount } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, formatNumber, formatAmount, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
 
 function MetricCard({
     title,
@@ -68,6 +68,7 @@ function MetricCard({
 function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
+    const isDark = useDarkMode()
 
     useEffect(() => {
         if (!chartRef.current) return
@@ -76,6 +77,7 @@ function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] 
             chartInstance.current = echarts.init(chartRef.current)
         }
 
+        const theme = getEChartsTheme(isDark)
         const data = departments
             .filter((d) => d.used_amount > 0)
             .sort((a, b) => b.used_amount - a.used_amount)
@@ -97,12 +99,13 @@ function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] 
                     avoidLabelOverlap: true,
                     itemStyle: {
                         borderRadius: 6,
-                        borderColor: "#fff",
+                        borderColor: theme.borderColor,
                         borderWidth: 2,
                     },
                     label: {
                         show: true,
                         formatter: "{b}",
+                        color: theme.textColor,
                     },
                     data,
                 },
@@ -117,7 +120,7 @@ function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] 
             chartInstance.current?.dispose()
             chartInstance.current = null
         }
-    }, [departments])
+    }, [departments, isDark])
 
     return <div ref={chartRef} className="w-full h-80" />
 }
@@ -125,6 +128,7 @@ function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] 
 function ModelDistributionChart({ models }: { models: ModelDistributionItem[] }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
+    const isDark = useDarkMode()
 
     useEffect(() => {
         if (!chartRef.current || models.length === 0) return
@@ -133,6 +137,7 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
             chartInstance.current = echarts.init(chartRef.current)
         }
 
+        const theme = getEChartsTheme(isDark)
         const top10 = models.slice(0, 10)
         chartInstance.current.setOption({
             tooltip: {
@@ -152,11 +157,14 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
                     const parts = m.model.split("/")
                     return parts[parts.length - 1]
                 }),
-                axisLabel: { rotate: 30, fontSize: 10 },
+                axisLabel: { rotate: 30, fontSize: 10, color: theme.subTextColor },
             },
             yAxis: {
                 type: "value",
                 name: "Amount ($)",
+                nameTextStyle: { color: theme.subTextColor },
+                axisLabel: { color: theme.subTextColor },
+                splitLine: { lineStyle: { color: theme.splitLineColor } },
             },
             series: [
                 {
@@ -183,7 +191,7 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
             chartInstance.current?.dispose()
             chartInstance.current = null
         }
-    }, [models])
+    }, [models, isDark])
 
     return <div ref={chartRef} className="w-full h-80" />
 }

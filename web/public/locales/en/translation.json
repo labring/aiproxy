@@ -476,7 +476,8 @@
       "withName": "With Name",
       "withEmail": "With Email",
       "permissionWarning": "Some users are missing name/email. Please check Feishu app permissions.",
-      "neverSynced": "Never Synced"
+      "neverSynced": "Never Synced",
+      "actions": "Actions"
     },
     "quota": {
       "title": "Quota Policy Management",
