@@ -129,6 +129,7 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
     const isDark = useDarkMode()
+    const { t } = useTranslation()
 
     useEffect(() => {
         if (!chartRef.current || models.length === 0) return
@@ -161,7 +162,7 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
             },
             yAxis: {
                 type: "value",
-                name: "Amount ($)",
+                name: t("enterprise.department.chartAmount"),
                 nameTextStyle: { color: theme.subTextColor },
                 axisLabel: { color: theme.subTextColor },
                 splitLine: { lineStyle: { color: theme.splitLineColor } },
@@ -191,7 +192,7 @@ function ModelDistributionChart({ models }: { models: ModelDistributionItem[] })
             chartInstance.current?.dispose()
             chartInstance.current = null
         }
-    }, [models, isDark])
+    }, [models, isDark, t])
 
     return <div ref={chartRef} className="w-full h-80" />
 }

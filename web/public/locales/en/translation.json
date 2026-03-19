@@ -298,7 +298,10 @@
     "department": {
       "title": "Department Trend",
       "trend": "Usage Trend",
-      "back": "Back to Overview"
+      "back": "Back to Overview",
+      "chartRequests": "Requests",
+      "chartAmount": "Amount ($)",
+      "chartTokens": "Tokens"
     },
     "sidebar": {
       "dashboard": "Overview",

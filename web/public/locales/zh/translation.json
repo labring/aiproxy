@@ -287,7 +287,10 @@
     "department": {
       "title": "部门趋势",
       "trend": "用量趋势",
-      "back": "返回概览"
+      "back": "返回概览",
+      "chartRequests": "请求数",
+      "chartAmount": "金额 ($)",
+      "chartTokens": "Token 数"
     },
     "sidebar": {
       "dashboard": "企业概览",
@@ -308,7 +311,7 @@
       "diagnosticResult": "诊断结果",
       "refreshDiagnostic": "刷新诊断",
       "diagnosing": "诊断中...",
-      "diagnosticHint": "点击"刷新诊断"开始检查模型差异",
+      "diagnosticHint": "点击「刷新诊断」开始检查模型差异",
       "toAdd": "待添加",
       "toUpdate": "待更新",
       "toDelete": "待删除",

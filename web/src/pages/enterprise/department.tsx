@@ -19,6 +19,7 @@ function TrendChart({
     const chartRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<echarts.ECharts | null>(null)
     const isDark = useDarkMode()
+    const { t } = useTranslation()
 
     useEffect(() => {
         if (!chartRef.current) return
@@ -28,6 +29,8 @@ function TrendChart({
         }
 
         const theme = getEChartsTheme(isDark)
+        const labelRequests = t("enterprise.department.chartRequests")
+        const labelAmount = t("enterprise.department.chartAmount")
         const xData = trend.map((p) => {
             const d = new Date(p.hour_timestamp * 1000)
             return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:00`
@@ -38,7 +41,7 @@ function TrendChart({
                 trigger: "axis",
             },
             legend: {
-                data: ["Requests", "Amount ($)", "Tokens"],
+                data: [labelRequests, labelAmount],
                 bottom: 0,
                 textStyle: { color: theme.textColor },
             },
@@ -57,7 +60,7 @@ function TrendChart({
             yAxis: [
                 {
                     type: "value",
-                    name: "Requests",
+                    name: labelRequests,
                     position: "left",
                     nameTextStyle: { color: theme.subTextColor },
                     axisLabel: { color: theme.subTextColor },
@@ -65,7 +68,7 @@ function TrendChart({
                 },
                 {
                     type: "value",
-                    name: "Amount ($)",
+                    name: labelAmount,
                     position: "right",
                     nameTextStyle: { color: theme.subTextColor },
                     axisLabel: { color: theme.subTextColor },
@@ -74,13 +77,13 @@ function TrendChart({
             ],
             series: [
                 {
-                    name: "Requests",
+                    name: labelRequests,
                     type: "bar",
                     data: trend.map((p) => p.request_count),
                     itemStyle: { color: "#6A6DE6" },
                 },
                 {
-                    name: "Amount ($)",
+                    name: labelAmount,
                     type: "line",
                     yAxisIndex: 1,
                     data: trend.map((p) => Math.round(p.used_amount * 100) / 100),
@@ -98,7 +101,7 @@ function TrendChart({
             chartInstance.current?.dispose()
             chartInstance.current = null
         }
-    }, [trend, isDark])
+    }, [trend, isDark, t])
 
     return <div ref={chartRef} className="w-full h-96" />
 }
