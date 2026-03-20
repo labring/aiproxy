@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,9 +10,17 @@ import { DataTable } from "@/components/table/motion-data-table"
 import { ServerPagination } from "@/components/table/server-pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
 import { toast } from "sonner"
-import { ColumnDef, useReactTable, getCoreRowModel } from "@tanstack/react-table"
+import { ColumnDef, useReactTable, getCoreRowModel, VisibilityState } from "@tanstack/react-table"
 import { format } from "date-fns"
 import { Label } from "@/components/ui/label"
 
@@ -21,6 +29,17 @@ const roleColors = {
     analyst: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
     viewer: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
 }
+
+// Column definitions for visibility toggle
+const COLUMN_KEYS = [
+    { key: "name", labelKey: "enterprise.users.name", alwaysVisible: true },
+    { key: "role", labelKey: "enterprise.users.role", defaultVisible: true },
+    { key: "department_id", labelKey: "enterprise.users.department", defaultVisible: true },
+    { key: "group_id", labelKey: "enterprise.users.group", defaultVisible: true },
+    { key: "effective_policy", labelKey: "enterprise.quota.effectivePolicy", defaultVisible: true },
+    { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
+    { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
+] as const
 
 export default function UsersPage() {
     const { t } = useTranslation()
@@ -38,6 +57,16 @@ export default function UsersPage() {
     const [selectedUser, setSelectedUser] = useState<FeishuUser | null>(null)
     const [selectedRole, setSelectedRole] = useState<string>("")
     const [selectedPolicyId, setSelectedPolicyId] = useState<number | null>(null)
+    const [selectedPolicyFilters, setSelectedPolicyFilters] = useState<Set<string>>(new Set())
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+        const vis: VisibilityState = {}
+        for (const col of COLUMN_KEYS) {
+            if (!col.alwaysVisible) {
+                vis[col.key] = col.defaultVisible ?? false
+            }
+        }
+        return vis
+    })
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Debounced search handler
@@ -53,7 +82,7 @@ export default function UsersPage() {
     // Department filter handlers
     const handleLevel1Change = useCallback((value: string) => {
         setLevel1Department(value)
-        setLevel2Department("all") // Reset level2 when level1 changes
+        setLevel2Department("all")
         setPage(1)
     }, [])
 
@@ -67,20 +96,33 @@ export default function UsersPage() {
         setLevel2Department("all")
         setSearchInput("")
         setKeyword("")
+        setSelectedPolicyFilters(new Set())
+        setPage(1)
+    }, [])
+
+    // Policy filter toggle
+    const togglePolicyFilter = useCallback((policyName: string) => {
+        setSelectedPolicyFilters(prev => {
+            const next = new Set(prev)
+            if (next.has(policyName)) {
+                next.delete(policyName)
+            } else {
+                next.add(policyName)
+            }
+            return next
+        })
         setPage(1)
     }, [])
 
     // Sort handler
     const handleSort = useCallback((field: string) => {
         if (sortBy === field) {
-            // Toggle order if same field
             setSortOrder(sortOrder === "asc" ? "desc" : "asc")
         } else {
-            // New field, default to ascending
             setSortBy(field)
             setSortOrder("asc")
         }
-        setPage(1) // Reset to first page when sorting
+        setPage(1)
     }, [sortBy, sortOrder])
 
     // Render sort icon
@@ -105,7 +147,7 @@ export default function UsersPage() {
             level1Department === "all" ? undefined : level1Department,
             level2Department === "all" ? undefined : level2Department
         ),
-        staleTime: 30000, // 30 seconds
+        staleTime: 30000,
         refetchOnWindowFocus: false,
         placeholderData: keepPreviousData,
     })
@@ -116,7 +158,7 @@ export default function UsersPage() {
         queryFn: () => enterpriseApi.getDepartmentLevels(
             level1Department === "all" ? undefined : level1Department
         ),
-        staleTime: 60000, // 1 minute
+        staleTime: 60000,
         refetchOnWindowFocus: false,
     })
 
@@ -124,7 +166,7 @@ export default function UsersPage() {
     const { data: policiesData } = useQuery({
         queryKey: ["quota-policies"],
         queryFn: () => enterpriseApi.listQuotaPolicies(1, 100),
-        staleTime: 60000, // 1 minute
+        staleTime: 60000,
         refetchOnWindowFocus: false,
     })
 
@@ -141,7 +183,6 @@ export default function UsersPage() {
         mutationFn: () => enterpriseApi.triggerFeishuSync(),
         onSuccess: () => {
             toast.success(t("enterprise.users.syncStarted"))
-            // Poll sync status until done
             const pollInterval = setInterval(() => {
                 refetchSyncStatus().then(({ data }) => {
                     if (data && data.status !== "syncing") {
@@ -150,7 +191,6 @@ export default function UsersPage() {
                     }
                 })
             }, 3000)
-            // Safety: stop polling after 5 minutes
             setTimeout(() => clearInterval(pollInterval), 300000)
         },
         onError: (error: Error) => {
@@ -271,7 +311,6 @@ export default function UsersPage() {
                 if (!deptPath || !deptPath.full_path) {
                     return <span className="text-muted-foreground">-</span>
                 }
-                // Only show level2_name if it's a real name (not an od-* ID)
                 const hasLevel2Name = deptPath.level2_name && !deptPath.level2_name.startsWith('od-')
                 return (
                     <div className="text-sm" title={fullPath || deptPath.full_path}>
@@ -299,6 +338,29 @@ export default function UsersPage() {
             cell: ({ row }) => <code className="text-xs">{row.original.group_id}</code>,
         },
         {
+            id: "effective_policy",
+            header: () => (
+                <div className="font-medium">
+                    {t("enterprise.quota.effectivePolicy")}
+                </div>
+            ),
+            cell: ({ row }) => {
+                const policy = row.original.effective_policy
+                const source = row.original.policy_source
+                if (!policy) {
+                    return <span className="text-xs text-muted-foreground">{t("enterprise.quota.noPolicy")}</span>
+                }
+                return (
+                    <Badge variant={source === "user" ? "outline" : "secondary"}>
+                        {policy}
+                        <span className="ml-1 opacity-60">
+                            ({source === "user" ? t("enterprise.quota.personalOverride") : t("enterprise.quota.deptPolicy")})
+                        </span>
+                    </Badge>
+                )
+            },
+        },
+        {
             accessorKey: "created_at",
             header: () => (
                 <div
@@ -314,30 +376,57 @@ export default function UsersPage() {
         {
             id: "actions",
             header: () => <div className="text-right font-medium">{t("enterprise.users.actions")}</div>,
-            cell: ({ row }) => (
-                <div className="flex justify-end gap-2">
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRoleEdit(row.original)}
-                    >
-                        <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleQuotaAssign(row.original)}
-                    >
-                        <Shield className="w-4 h-4" />
-                    </Button>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const policy = row.original.effective_policy
+                return (
+                    <div className="flex items-center justify-end gap-2">
+                        {policy && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                                {policy}
+                            </Badge>
+                        )}
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRoleEdit(row.original)}
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleQuotaAssign(row.original)}
+                        >
+                            <Shield className="w-4 h-4" />
+                        </Button>
+                    </div>
+                )
+            },
         },
     ], [t, handleRoleEdit, handleQuotaAssign, handleSort, renderSortIcon])
 
-    const users = data?.users || []
-    const total = data?.total || 0
+    const allUsers = data?.users || []
     const policies = policiesData?.policies || []
+
+    // Client-side policy filter
+    const users = useMemo(() => {
+        if (selectedPolicyFilters.size === 0) return allUsers
+        return allUsers.filter(u => {
+            const policyName = u.effective_policy || ""
+            return selectedPolicyFilters.has(policyName)
+        })
+    }, [allUsers, selectedPolicyFilters])
+
+    const total = selectedPolicyFilters.size > 0 ? users.length : (data?.total || 0)
+
+    // Collect unique policy names from current data for filter options
+    const policyNamesInData = useMemo(() => {
+        const names = new Set<string>()
+        for (const u of allUsers) {
+            if (u.effective_policy) names.add(u.effective_policy)
+        }
+        return Array.from(names).sort()
+    }, [allUsers])
 
     // Create table instance
     const table = useReactTable({
@@ -345,7 +434,11 @@ export default function UsersPage() {
         columns,
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
+        state: { columnVisibility },
+        onColumnVisibilityChange: setColumnVisibility,
     })
+
+    const hasActiveFilters = level1Department !== "all" || level2Department !== "all" || keyword || selectedPolicyFilters.size > 0
 
     return (
         <div className="p-6 space-y-6">
@@ -478,6 +571,48 @@ export default function UsersPage() {
                                 </Select>
                             )}
 
+                            {/* Policy Filter (multi-select) */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="gap-1.5">
+                                        <Filter className="w-4 h-4" />
+                                        {t("enterprise.users.policyFilter")}
+                                        {selectedPolicyFilters.size > 0 && (
+                                            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                                                {selectedPolicyFilters.size}
+                                            </Badge>
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel>{t("enterprise.users.filterByPolicy")}</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {policies.length === 0 && policyNamesInData.length === 0 && (
+                                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                            {t("enterprise.quota.noPolicies")}
+                                        </div>
+                                    )}
+                                    {/* Show all known policies from the policies list */}
+                                    {policies.map((p) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={p.id}
+                                            checked={selectedPolicyFilters.has(p.name)}
+                                            onCheckedChange={() => togglePolicyFilter(p.name)}
+                                        >
+                                            {p.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                    {/* Also show "no policy" option */}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuCheckboxItem
+                                        checked={selectedPolicyFilters.has("")}
+                                        onCheckedChange={() => togglePolicyFilter("")}
+                                    >
+                                        {t("enterprise.quota.noPolicy")}
+                                    </DropdownMenuCheckboxItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
                             {/* Search Input */}
                             <Input
                                 placeholder={t("enterprise.users.searchPlaceholder")}
@@ -486,8 +621,33 @@ export default function UsersPage() {
                                 className="w-64"
                             />
 
+                            {/* Column Visibility */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="icon">
+                                        <Settings2 className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuLabel>{t("enterprise.users.columns")}</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {COLUMN_KEYS.map((col) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={col.key}
+                                            checked={col.alwaysVisible || (columnVisibility[col.key] !== false)}
+                                            onCheckedChange={(checked) => {
+                                                setColumnVisibility(prev => ({ ...prev, [col.key]: checked }))
+                                            }}
+                                            disabled={col.alwaysVisible}
+                                        >
+                                            {t(col.labelKey as never)}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
                             {/* Clear Filters */}
-                            {(level1Department !== "all" || level2Department !== "all" || keyword) && (
+                            {hasActiveFilters && (
                                 <Button
                                     variant="ghost"
                                     size="sm"

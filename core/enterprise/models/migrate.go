@@ -2,18 +2,22 @@
 
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // PPIOSyncHistory mirrors ppio.SyncHistory for migration purposes.
 // Defined here to avoid circular dependency (ppio → model → models → ppio).
 type PPIOSyncHistory struct {
-	ID          int64  `gorm:"primaryKey"`
-	SyncedAt    int64  `gorm:"index"`
+	ID          int64     `gorm:"primaryKey"`
+	SyncedAt    time.Time `gorm:"autoCreateTime;index"`
 	Operator    string
 	SyncOptions string
 	Result      string
 	Status      string
-	CreatedAt   int64  `gorm:"autoCreateTime"`
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
 }
 
 func (PPIOSyncHistory) TableName() string {
@@ -32,5 +36,6 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&DepartmentQuotaPolicy{},
 		&UserQuotaPolicy{},
 		&PPIOSyncHistory{},
+		&RejectedTenantLogin{},
 	)
 }

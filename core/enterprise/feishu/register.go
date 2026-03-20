@@ -34,7 +34,6 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 
 	if enterpriseAuth != nil {
 		// Enterprise auth routes (AdminKey or Feishu admin user)
-		// //go:build enterprise
 		enterpriseAuth.GET("/feishu/users", GetFeishuUsers)
 		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
 		enterpriseAuth.GET("/feishu/department-levels", GetDepartmentLevels)
@@ -47,7 +46,9 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 // FeishuUserWithDepartment extends FeishuUser with department path information
 type FeishuUserWithDepartment struct {
 	models.FeishuUser
-	DepartmentPath *DepartmentPath `json:"department_path"`
+	DepartmentPath  *DepartmentPath `json:"department_path"`
+	EffectivePolicy *string         `json:"effective_policy,omitempty"`
+	PolicySource    *string         `json:"policy_source,omitempty"` // "user" or "department"
 }
 
 // GetFeishuUsers returns a paginated list of Feishu users with department information.
@@ -74,12 +75,12 @@ func GetFeishuUsers(c *gin.Context) {
 	level2Dept := c.Query("level2_department")
 
 	if level2Dept != "" {
-		matchingDepts := getDescendantDepartmentIDs(level2Dept)
+		matchingDepts := GetDescendantDepartmentIDs(level2Dept)
 		if len(matchingDepts) > 0 {
 			tx = tx.Where("department_id IN ?", matchingDepts)
 		}
 	} else if level1Dept != "" {
-		matchingDepts := getDescendantDepartmentIDs(level1Dept)
+		matchingDepts := GetDescendantDepartmentIDs(level1Dept)
 		if len(matchingDepts) > 0 {
 			tx = tx.Where("department_id IN ?", matchingDepts)
 		}
@@ -152,6 +153,9 @@ func GetFeishuUsers(c *gin.Context) {
 	// When they are empty, fall back to GetDepartmentPath which traverses the parent chain.
 	deptNameMap := batchResolveDepartmentNames(users)
 
+	// Batch resolve effective quota policies
+	userPolicyMap, deptPolicyMap := batchResolveEffectivePolicies(users)
+
 	usersWithDept := make([]FeishuUserWithDepartment, len(users))
 	for i, user := range users {
 		var deptPath *DepartmentPath
@@ -191,10 +195,34 @@ func GetFeishuUsers(c *gin.Context) {
 			deptPath = &DepartmentPath{}
 		}
 
-		usersWithDept[i] = FeishuUserWithDepartment{
-			FeishuUser: user,
+		entry := FeishuUserWithDepartment{
+			FeishuUser:     user,
 			DepartmentPath: deptPath,
 		}
+
+		// Resolve effective policy
+		if up, ok := userPolicyMap[user.OpenID]; ok {
+			entry.EffectivePolicy = &up
+			src := "user"
+			entry.PolicySource = &src
+		} else {
+			// Check department hierarchy: leaf → level2 → level1
+			for _, deptID := range []string{user.DepartmentID, user.Level2DeptID, user.Level1DeptID} {
+				if deptID == "" {
+					continue
+				}
+
+				if dp, ok := deptPolicyMap[deptID]; ok {
+					entry.EffectivePolicy = &dp
+					src := "department"
+					entry.PolicySource = &src
+
+					break
+				}
+			}
+		}
+
+		usersWithDept[i] = entry
 	}
 
 	middleware.SuccessResponse(c, gin.H{
@@ -203,10 +231,66 @@ func GetFeishuUsers(c *gin.Context) {
 	})
 }
 
-// getDescendantDepartmentIDs returns all department IDs (both department_id and open_department_id)
+// batchResolveEffectivePolicies returns two maps:
+// 1. openID → policy name (for users with UserQuotaPolicy)
+// 2. departmentID → policy name (for departments with DepartmentQuotaPolicy, all ID forms)
+func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]string, map[string]string) {
+	userPolicyMap := make(map[string]string)
+	deptPolicyMap := make(map[string]string)
+
+	if len(users) == 0 {
+		return userPolicyMap, deptPolicyMap
+	}
+
+	// Collect all open_ids and department_ids
+	openIDs := make([]string, 0, len(users))
+	deptIDSet := make(map[string]struct{})
+
+	for _, u := range users {
+		openIDs = append(openIDs, u.OpenID)
+		for _, dID := range []string{u.DepartmentID, u.Level2DeptID, u.Level1DeptID} {
+			if dID != "" {
+				deptIDSet[dID] = struct{}{}
+			}
+		}
+	}
+
+	// Batch load user-level policies
+	if len(openIDs) > 0 {
+		var userPolicies []models.UserQuotaPolicy
+		model.DB.Preload("QuotaPolicy").Where("open_id IN ?", openIDs).Find(&userPolicies)
+
+		for _, up := range userPolicies {
+			if up.QuotaPolicy != nil {
+				userPolicyMap[up.OpenID] = up.QuotaPolicy.Name
+			}
+		}
+	}
+
+	// Batch load department-level policies
+	if len(deptIDSet) > 0 {
+		deptIDs := make([]string, 0, len(deptIDSet))
+		for id := range deptIDSet {
+			deptIDs = append(deptIDs, id)
+		}
+
+		var deptPolicies []models.DepartmentQuotaPolicy
+		model.DB.Preload("QuotaPolicy").Where("department_id IN ?", deptIDs).Find(&deptPolicies)
+
+		for _, dp := range deptPolicies {
+			if dp.QuotaPolicy != nil {
+				deptPolicyMap[dp.DepartmentID] = dp.QuotaPolicy.Name
+			}
+		}
+	}
+
+	return userPolicyMap, deptPolicyMap
+}
+
+// GetDescendantDepartmentIDs returns all department IDs (both department_id and open_department_id)
 // that are the given department or its descendants. This ensures matching works regardless of which
 // ID format is stored in the user's department_id field.
-func getDescendantDepartmentIDs(departmentID string) []string {
+func GetDescendantDepartmentIDs(departmentID string) []string {
 	idSet := make(map[string]struct{})
 	visited := make(map[string]bool)
 

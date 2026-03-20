@@ -1,12 +1,22 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Pencil, Trash2, Shield, AlertTriangle } from "lucide-react"
+import { Plus, Pencil, Trash2, Shield, AlertTriangle, Search, X, Building2, User } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     Dialog,
     DialogContent,
@@ -33,8 +43,17 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { enterpriseApi, type QuotaPolicy, type QuotaPolicyInput } from "@/api/enterprise"
+import {
+    enterpriseApi,
+    type QuotaPolicy,
+    type QuotaPolicyInput,
+    type DepartmentQuotaPolicyBinding,
+    type UserQuotaPolicy,
+    type FeishuDepartment,
+    type FeishuUser,
+} from "@/api/enterprise"
 import { toast } from "sonner"
+import { ALL_FILTER } from "@/lib/enterprise"
 
 const defaultPolicy: QuotaPolicyInput = {
     name: "",
@@ -47,10 +66,13 @@ const defaultPolicy: QuotaPolicyInput = {
     tier3_rpm_multiplier: 0.1,
     tier3_tpm_multiplier: 0.1,
     block_at_tier3: false,
+    tier2_blocked_models: "",
+    tier3_blocked_models: "",
+    period_quota: 0,
+    period_type: 3,
 }
 
 function TierIndicator({ ratio, label }: { ratio: number; label: string }) {
-    // Clamp ratio to 0-1 range for display
     const clampedRatio = Math.max(0, Math.min(1, ratio))
     return (
         <div className="flex items-center gap-2">
@@ -88,6 +110,40 @@ function PolicyForm({
                     onChange={(e) => onChange({ ...policy, name: e.target.value })}
                     placeholder={t("enterprise.quota.policyNamePlaceholder")}
                 />
+            </div>
+
+            {/* Period Quota */}
+            <div className="space-y-4">
+                <h4 className="font-medium">{t("enterprise.quota.periodQuota")}</h4>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>{t("enterprise.quota.periodQuota")}</Label>
+                        <Input
+                            type="number"
+                            value={policy.period_quota}
+                            onChange={(e) => onChange({ ...policy, period_quota: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            min={0}
+                            step={10}
+                        />
+                        <p className="text-xs text-muted-foreground">{t("enterprise.quota.periodQuotaHint")}</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>{t("enterprise.quota.periodType")}</Label>
+                        <Select
+                            value={String(policy.period_type)}
+                            onValueChange={(v) => onChange({ ...policy, period_type: parseInt(v) })}
+                        >
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1">{t("enterprise.quota.daily")}</SelectItem>
+                                <SelectItem value="2">{t("enterprise.quota.weekly")}</SelectItem>
+                                <SelectItem value="3">{t("enterprise.quota.monthly")}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
             </div>
 
             {/* Tier Thresholds */}
@@ -214,6 +270,19 @@ function PolicyForm({
                                     className="h-8"
                                 />
                             </div>
+                            <div>
+                                <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
+                                <Textarea
+                                    value={policy.tier2_blocked_models ? (() => { try { return JSON.parse(policy.tier2_blocked_models).join("\n") } catch { return policy.tier2_blocked_models } })() : ""}
+                                    onChange={(e) => {
+                                        const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
+                                        onChange({ ...policy, tier2_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
+                                    }}
+                                    placeholder={t("enterprise.quota.blockedModelsHint")}
+                                    rows={2}
+                                    className="text-xs"
+                                />
+                            </div>
                         </div>
                     </Card>
 
@@ -255,6 +324,19 @@ function PolicyForm({
                                     disabled={policy.block_at_tier3}
                                 />
                             </div>
+                            <div>
+                                <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
+                                <Textarea
+                                    value={policy.tier3_blocked_models ? (() => { try { return JSON.parse(policy.tier3_blocked_models).join("\n") } catch { return policy.tier3_blocked_models } })() : ""}
+                                    onChange={(e) => {
+                                        const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
+                                        onChange({ ...policy, tier3_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
+                                    }}
+                                    placeholder={t("enterprise.quota.blockedModelsHint")}
+                                    rows={2}
+                                    className="text-xs"
+                                />
+                            </div>
                         </div>
                     </Card>
                 </div>
@@ -278,6 +360,567 @@ function PolicyForm({
         </div>
     )
 }
+
+// ─── Department Binding Tab ─────────────────────────────────────────────────
+
+function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
+    const { t } = useTranslation()
+    const queryClient = useQueryClient()
+
+    // ── Filter state ──
+    const [filterLevel1, setFilterLevel1] = useState<string>("")
+    const [filterLevel2, setFilterLevel2] = useState<string>("")
+
+    // ── Query results state ──
+    const [queryDepts, setQueryDepts] = useState<FeishuDepartment[]>([])
+    const [hasQueried, setHasQueried] = useState(false)
+    const [checkedDeptIds, setCheckedDeptIds] = useState<Set<string>>(new Set())
+    const [bindPolicyId, setBindPolicyId] = useState<string>("")
+
+    // Fetch level1 departments (always)
+    const { data: deptLevels } = useQuery({
+        queryKey: ["enterprise", "department-levels"],
+        queryFn: () => enterpriseApi.getDepartmentLevels(),
+    })
+
+    // Fetch level2 for selected level1 filter
+    const { data: level2Data } = useQuery({
+        queryKey: ["enterprise", "department-levels", filterLevel1],
+        queryFn: () => enterpriseApi.getDepartmentLevels(filterLevel1),
+        enabled: !!filterLevel1,
+    })
+
+    const { data: bindings, isLoading: bindingsLoading } = useQuery({
+        queryKey: ["enterprise", "dept-bindings"],
+        queryFn: () => enterpriseApi.listDepartmentPolicyBindings(),
+    })
+
+    const batchBindMutation = useMutation({
+        mutationFn: ({ department_ids, quota_policy_id }: { department_ids: string[]; quota_policy_id: number }) =>
+            enterpriseApi.batchBindPolicyToDepartments(department_ids, quota_policy_id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["enterprise", "dept-bindings"] })
+            setCheckedDeptIds(new Set())
+            setBindPolicyId("")
+            toast.success(t("enterprise.quota.batchBindSuccess"))
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
+    const unbindMutation = useMutation({
+        mutationFn: (department_id: string) => enterpriseApi.unbindPolicyFromDepartment(department_id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["enterprise", "dept-bindings"] })
+            toast.success(t("enterprise.quota.unbindSuccess"))
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
+    const level1Depts = deptLevels?.level1_departments || []
+    const level2Depts = level2Data?.level2_departments || []
+    const bindingList = bindings?.bindings || []
+
+    // Reset level2 filter when level1 changes
+    useEffect(() => { setFilterLevel2("") }, [filterLevel1])
+
+    const handleQuery = () => {
+        let results: FeishuDepartment[] = []
+        if (filterLevel2) {
+            // Show only the selected level2 department
+            const found = level2Depts.find((d) => d.department_id === filterLevel2)
+            results = found ? [found] : []
+        } else if (filterLevel1) {
+            // Show the level1 + all its level2 children
+            const l1 = level1Depts.find((d) => d.department_id === filterLevel1)
+            results = [...(l1 ? [l1] : []), ...level2Depts]
+        } else {
+            // No filter — show all level1 departments
+            results = [...level1Depts]
+        }
+        setQueryDepts(results)
+        setHasQueried(true)
+        setCheckedDeptIds(new Set())
+    }
+
+    const toggleCheck = (id: string) => {
+        setCheckedDeptIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const toggleAllChecked = () => {
+        if (checkedDeptIds.size === queryDepts.length) {
+            setCheckedDeptIds(new Set())
+        } else {
+            setCheckedDeptIds(new Set(queryDepts.map((d) => d.department_id)))
+        }
+    }
+
+    const handleBatchBind = () => {
+        if (checkedDeptIds.size === 0 || !bindPolicyId) return
+        batchBindMutation.mutate({
+            department_ids: Array.from(checkedDeptIds),
+            quota_policy_id: parseInt(bindPolicyId),
+        })
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Step 1: Filter & Query */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Building2 className="w-5 h-5" />
+                        {t("enterprise.quota.selectDepartments")}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-end gap-4">
+                        <div className="space-y-2 min-w-[180px]">
+                            <Label>{t("enterprise.quota.level1Department")}</Label>
+                            <Select value={filterLevel1} onValueChange={setFilterLevel1}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={t("enterprise.quota.allDepartments")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ALL_FILTER}>{t("enterprise.quota.allDepartments")}</SelectItem>
+                                    {level1Depts.map((d) => (
+                                        <SelectItem key={d.department_id} value={d.department_id}>
+                                            {d.name || d.department_id}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2 min-w-[180px]">
+                            <Label>{t("enterprise.quota.level2Department")}</Label>
+                            <Select
+                                value={filterLevel2}
+                                onValueChange={setFilterLevel2}
+                                disabled={!filterLevel1 || filterLevel1 === ALL_FILTER || level2Depts.length === 0}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder={t("enterprise.quota.allDepartments")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ALL_FILTER}>{t("enterprise.quota.allDepartments")}</SelectItem>
+                                    {level2Depts.map((d) => (
+                                        <SelectItem key={d.department_id} value={d.department_id}>
+                                            {d.name || d.department_id}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={handleQuery}>
+                            <Search className="w-4 h-4 mr-1.5" />
+                            {t("enterprise.quota.query")}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Step 2: Query Results with checkboxes */}
+            {hasQueried && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                            <span>{t("enterprise.quota.queryResults")} ({queryDepts.length})</span>
+                            {queryDepts.length > 0 && checkedDeptIds.size > 0 && (
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-normal text-muted-foreground">
+                                        {t("enterprise.quota.selectedCount", { count: checkedDeptIds.size })}
+                                    </span>
+                                    <Select value={bindPolicyId} onValueChange={setBindPolicyId}>
+                                        <SelectTrigger className="w-[180px]">
+                                            <SelectValue placeholder={t("enterprise.quota.selectPolicy")} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {policies.map((p) => (
+                                                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        onClick={handleBatchBind}
+                                        disabled={!bindPolicyId || batchBindMutation.isPending}
+                                        size="sm"
+                                    >
+                                        {t("enterprise.quota.bindSelected")}
+                                    </Button>
+                                </div>
+                            )}
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {queryDepts.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">{t("enterprise.quota.noQueryResults")}</div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-12">
+                                            <input
+                                                type="checkbox"
+                                                checked={checkedDeptIds.size === queryDepts.length && queryDepts.length > 0}
+                                                onChange={toggleAllChecked}
+                                                className="rounded"
+                                            />
+                                        </TableHead>
+                                        <TableHead>{t("enterprise.quota.department")}</TableHead>
+                                        <TableHead>{t("enterprise.quota.memberCount")}</TableHead>
+                                        <TableHead>{t("enterprise.quota.currentPolicy")}</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {queryDepts.map((d) => {
+                                        const existing = bindingList.find((b: DepartmentQuotaPolicyBinding) => b.department_id === d.department_id)
+                                        return (
+                                            <TableRow key={d.department_id}>
+                                                <TableCell>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checkedDeptIds.has(d.department_id)}
+                                                        onChange={() => toggleCheck(d.department_id)}
+                                                        className="rounded"
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{d.name || d.department_id}</TableCell>
+                                                <TableCell>{d.member_count > 0 ? `${d.member_count} ${t("enterprise.quota.membersUnit")}` : "—"}</TableCell>
+                                                <TableCell>
+                                                    {existing?.quota_policy ? (
+                                                        <Badge variant="secondary">{existing.quota_policy.name}</Badge>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">{t("enterprise.quota.noPolicy")}</span>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Step 3: Current Bindings */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>{t("enterprise.quota.departmentBinding")}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {bindingsLoading ? (
+                        <div className="text-center py-8 text-muted-foreground">{t("common.loading")}</div>
+                    ) : bindingList.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">{t("enterprise.quota.noDeptBindings")}</div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>{t("enterprise.quota.level1Department")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.level2Department")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.policy")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.memberCount")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.overrideCount")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.policyUpdatedAt")}</TableHead>
+                                    <TableHead className="w-24">{t("common.edit")}</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {bindingList.map((b: DepartmentQuotaPolicyBinding) => (
+                                    <TableRow key={b.id}>
+                                        <TableCell>{b.level1_name || "—"}</TableCell>
+                                        <TableCell>{b.level2_name || "—"}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">
+                                                {b.quota_policy?.name || `#${b.quota_policy_id}`}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {b.member_count ?? 0}{t("enterprise.quota.membersUnit") ? ` ${t("enterprise.quota.membersUnit")}` : ""}
+                                        </TableCell>
+                                        <TableCell>
+                                            {b.override_count ?? 0}{t("enterprise.quota.membersUnit") ? ` ${t("enterprise.quota.membersUnit")}` : ""}
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                            {new Date(b.updated_at).toLocaleString()}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-500 hover:text-red-600"
+                                                onClick={() => unbindMutation.mutate(b.department_id)}
+                                                disabled={unbindMutation.isPending}
+                                            >
+                                                {t("enterprise.quota.unbind")}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+// ─── User Override Tab ──────────────────────────────────────────────────────
+
+function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
+    const { t } = useTranslation()
+    const queryClient = useQueryClient()
+
+    // Search & query state
+    const [searchKeyword, setSearchKeyword] = useState("")
+    const [queryUsers, setQueryUsers] = useState<FeishuUser[]>([])
+    const [hasQueried, setHasQueried] = useState(false)
+    const [checkedOpenIds, setCheckedOpenIds] = useState<Set<string>>(new Set())
+    const [bindPolicyId, setBindPolicyId] = useState<string>("")
+
+    // Search users query (triggered on demand)
+    const searchQuery = useQuery({
+        queryKey: ["enterprise", "feishu-users-search", searchKeyword],
+        queryFn: () => enterpriseApi.getFeishuUsers(1, 100, searchKeyword || undefined),
+        enabled: false,
+    })
+
+    const { data: userBindings, isLoading: userBindingsLoading } = useQuery({
+        queryKey: ["enterprise", "user-bindings"],
+        queryFn: () => enterpriseApi.listUserPolicyBindings(),
+    })
+
+    const batchBindMutation = useMutation({
+        mutationFn: ({ open_ids, quota_policy_id }: { open_ids: string[]; quota_policy_id: number }) =>
+            enterpriseApi.batchBindPolicyToUsers(open_ids, quota_policy_id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["enterprise", "user-bindings"] })
+            setCheckedOpenIds(new Set())
+            setBindPolicyId("")
+            toast.success(t("enterprise.quota.bindSuccess"))
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
+    const unbindMutation = useMutation({
+        mutationFn: (open_id: string) => enterpriseApi.unbindPolicyFromUser(open_id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["enterprise", "user-bindings"] })
+            toast.success(t("enterprise.quota.unbindSuccess"))
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
+    const bindingList = userBindings?.bindings || []
+
+    const handleQuery = async () => {
+        const result = await searchQuery.refetch()
+        const users = result.data?.users || []
+        setQueryUsers(users)
+        setHasQueried(true)
+        setCheckedOpenIds(new Set())
+    }
+
+    const toggleUser = (openId: string) => {
+        setCheckedOpenIds(prev => {
+            const next = new Set(prev)
+            if (next.has(openId)) next.delete(openId)
+            else next.add(openId)
+            return next
+        })
+    }
+
+    const toggleAllUsers = () => {
+        if (checkedOpenIds.size === queryUsers.length) {
+            setCheckedOpenIds(new Set())
+        } else {
+            setCheckedOpenIds(new Set(queryUsers.map(u => u.open_id)))
+        }
+    }
+
+    const handleBatchBind = () => {
+        if (checkedOpenIds.size === 0 || !bindPolicyId) return
+        batchBindMutation.mutate({
+            open_ids: Array.from(checkedOpenIds),
+            quota_policy_id: parseInt(bindPolicyId),
+        })
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Card 1: Search Filter */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <User className="w-5 h-5" />
+                        {t("enterprise.quota.searchUser")}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-end gap-4">
+                        <div className="flex-1 space-y-2">
+                            <Label>{t("enterprise.quota.searchUser")}</Label>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    value={searchKeyword}
+                                    onChange={(e) => setSearchKeyword(e.target.value)}
+                                    placeholder={t("enterprise.quota.searchUser")}
+                                    className="pl-9"
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleQuery() }}
+                                />
+                            </div>
+                        </div>
+                        <Button onClick={handleQuery} disabled={searchQuery.isFetching}>
+                            <Search className="w-4 h-4 mr-1" />
+                            {t("enterprise.quota.query")}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Card 2: Search Results with Checkboxes */}
+            {hasQueried && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <CardTitle>{t("enterprise.quota.queryResults")}</CardTitle>
+                            {queryUsers.length > 0 && checkedOpenIds.size > 0 && (
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm text-muted-foreground">
+                                        {t("enterprise.quota.selectedCount", { count: checkedOpenIds.size })}
+                                    </span>
+                                    <Select value={bindPolicyId} onValueChange={setBindPolicyId}>
+                                        <SelectTrigger className="w-48">
+                                            <SelectValue placeholder={t("enterprise.quota.selectPolicy")} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {policies.map((p) => (
+                                                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        onClick={handleBatchBind}
+                                        disabled={!bindPolicyId || batchBindMutation.isPending}
+                                        size="sm"
+                                    >
+                                        {t("enterprise.quota.bindSelected")}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {queryUsers.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                {t("enterprise.quota.noUserResults")}
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-12">
+                                            <input
+                                                type="checkbox"
+                                                checked={checkedOpenIds.size === queryUsers.length}
+                                                onChange={toggleAllUsers}
+                                            />
+                                        </TableHead>
+                                        <TableHead>{t("enterprise.quota.user")}</TableHead>
+                                        <TableHead>{t("enterprise.users.email")}</TableHead>
+                                        <TableHead>{t("enterprise.quota.level1Department")}</TableHead>
+                                        <TableHead>{t("enterprise.quota.currentPolicy")}</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {queryUsers.map((u) => (
+                                        <TableRow key={u.open_id}>
+                                            <TableCell>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checkedOpenIds.has(u.open_id)}
+                                                    onChange={() => toggleUser(u.open_id)}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="font-medium">{u.name || u.open_id}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">{u.email || "-"}</TableCell>
+                                            <TableCell className="text-sm">{u.level1_dept_name || "-"}</TableCell>
+                                            <TableCell>
+                                                {u.effective_policy ? (
+                                                    <Badge variant={u.policy_source === "user" ? "default" : "outline"}>
+                                                        {u.effective_policy}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground">-</span>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Card 3: Current User Overrides */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>{t("enterprise.quota.personalOverride")}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {userBindingsLoading ? (
+                        <div className="text-center py-8 text-muted-foreground">{t("common.loading")}</div>
+                    ) : bindingList.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">{t("enterprise.quota.noUserOverrides")}</div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>{t("enterprise.quota.user")}</TableHead>
+                                    <TableHead>{t("enterprise.quota.policy")}</TableHead>
+                                    <TableHead className="w-24">{t("common.edit")}</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {bindingList.map((b: UserQuotaPolicy) => (
+                                    <TableRow key={b.id}>
+                                        <TableCell>{b.user_name || b.open_id}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">
+                                                {b.quota_policy?.name || `#${b.quota_policy_id}`}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-500 hover:text-red-600"
+                                                onClick={() => unbindMutation.mutate(b.open_id)}
+                                                disabled={unbindMutation.isPending}
+                                            >
+                                                {t("enterprise.quota.unbind")}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function QuotaPoliciesPage() {
     const { t } = useTranslation()
@@ -332,6 +975,15 @@ export default function QuotaPoliciesPage() {
 
     const policies = data?.policies || []
 
+    const periodTypeLabel = (pt: number) => {
+        switch (pt) {
+            case 1: return t("enterprise.quota.daily")
+            case 2: return t("enterprise.quota.weekly")
+            case 3: return t("enterprise.quota.monthly")
+            default: return "-"
+        }
+    }
+
     const handleCreate = () => {
         setFormData(defaultPolicy)
         setIsCreating(true)
@@ -350,6 +1002,8 @@ export default function QuotaPoliciesPage() {
             tier3_rpm_multiplier: policy.tier3_rpm_multiplier,
             tier3_tpm_multiplier: policy.tier3_tpm_multiplier,
             block_at_tier3: policy.block_at_tier3,
+            period_quota: policy.period_quota,
+            period_type: policy.period_type,
         })
     }
 
@@ -358,7 +1012,6 @@ export default function QuotaPoliciesPage() {
             toast.error(t("enterprise.quota.nameRequired"))
             return
         }
-        // Validate: 0 < tier1 < tier2 <= 1
         if (formData.tier1_ratio <= 0 || formData.tier1_ratio >= formData.tier2_ratio || formData.tier2_ratio > 1) {
             toast.error(t("enterprise.quota.ratioError"))
             return
@@ -379,91 +1032,133 @@ export default function QuotaPoliciesPage() {
                     <h1 className="text-2xl font-bold">{t("enterprise.quota.title")}</h1>
                     <p className="text-muted-foreground">{t("enterprise.quota.description")}</p>
                 </div>
-                <Button onClick={handleCreate}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t("enterprise.quota.createPolicy")}
-                </Button>
             </div>
 
-            {/* Policies Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Shield className="w-5 h-5" />
-                        {t("enterprise.quota.policyList")} ({policies.length})
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? (
-                        <div className="text-center py-8 text-muted-foreground">{t("common.loading")}</div>
-                    ) : policies.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">{t("enterprise.quota.noPolicies")}</div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t("enterprise.quota.name")}</TableHead>
-                                    <TableHead>{t("enterprise.quota.thresholds")}</TableHead>
-                                    <TableHead>{t("enterprise.quota.tier1")}</TableHead>
-                                    <TableHead>{t("enterprise.quota.tier2")}</TableHead>
-                                    <TableHead>{t("enterprise.quota.tier3")}</TableHead>
-                                    <TableHead className="w-24">{t("common.edit")}</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {policies.map((policy) => (
-                                    <TableRow key={policy.id}>
-                                        <TableCell className="font-medium">{policy.name}</TableCell>
-                                        <TableCell>
-                                            <div className="space-y-1">
-                                                <TierIndicator ratio={policy.tier1_ratio} label="T1" />
-                                                <TierIndicator ratio={policy.tier2_ratio} label="T2" />
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-xs space-y-0.5">
-                                                <div>RPM: {policy.tier1_rpm_multiplier}x</div>
-                                                <div>TPM: {policy.tier1_tpm_multiplier}x</div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-xs space-y-0.5">
-                                                <div>RPM: {policy.tier2_rpm_multiplier}x</div>
-                                                <div>TPM: {policy.tier2_tpm_multiplier}x</div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {policy.block_at_tier3 ? (
-                                                <span className="text-xs text-red-500 font-medium">{t("enterprise.quota.blocked")}</span>
-                                            ) : (
-                                                <div className="text-xs space-y-0.5">
-                                                    <div>RPM: {policy.tier3_rpm_multiplier}x</div>
-                                                    <div>TPM: {policy.tier3_tpm_multiplier}x</div>
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1">
-                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(policy)}>
-                                                    <Pencil className="w-4 h-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-red-500 hover:text-red-600"
-                                                    onClick={() => setDeleteTarget(policy)}
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+            <Tabs defaultValue="policies">
+                <TabsList>
+                    <TabsTrigger value="policies">
+                        <Shield className="w-4 h-4 mr-1.5" />
+                        {t("enterprise.quota.policyListTab")}
+                    </TabsTrigger>
+                    <TabsTrigger value="departments">
+                        <Building2 className="w-4 h-4 mr-1.5" />
+                        {t("enterprise.quota.departmentBinding")}
+                    </TabsTrigger>
+                    <TabsTrigger value="users">
+                        <User className="w-4 h-4 mr-1.5" />
+                        {t("enterprise.quota.userOverride")}
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Tab 1: Policy List */}
+                <TabsContent value="policies">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2">
+                                    <Shield className="w-5 h-5" />
+                                    {t("enterprise.quota.policyList")} ({policies.length})
+                                </CardTitle>
+                                <Button onClick={handleCreate}>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    {t("enterprise.quota.createPolicy")}
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {isLoading ? (
+                                <div className="text-center py-8 text-muted-foreground">{t("common.loading")}</div>
+                            ) : policies.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">{t("enterprise.quota.noPolicies")}</div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t("enterprise.quota.name")}</TableHead>
+                                            <TableHead>{t("enterprise.quota.periodQuota")}</TableHead>
+                                            <TableHead>{t("enterprise.quota.thresholds")}</TableHead>
+                                            <TableHead>{t("enterprise.quota.tier1")}</TableHead>
+                                            <TableHead>{t("enterprise.quota.tier2")}</TableHead>
+                                            <TableHead>{t("enterprise.quota.tier3")}</TableHead>
+                                            <TableHead className="w-24">{t("common.edit")}</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {policies.map((policy) => (
+                                            <TableRow key={policy.id}>
+                                                <TableCell className="font-medium">{policy.name}</TableCell>
+                                                <TableCell>
+                                                    {policy.period_quota > 0 ? (
+                                                        <div className="text-sm">
+                                                            <span className="font-medium">{policy.period_quota}</span>
+                                                            <span className="text-muted-foreground ml-1">/ {periodTypeLabel(policy.period_type)}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">-</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        <TierIndicator ratio={policy.tier1_ratio} label="T1" />
+                                                        <TierIndicator ratio={policy.tier2_ratio} label="T2" />
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="text-xs space-y-0.5">
+                                                        <div>RPM: {policy.tier1_rpm_multiplier}x</div>
+                                                        <div>TPM: {policy.tier1_tpm_multiplier}x</div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="text-xs space-y-0.5">
+                                                        <div>RPM: {policy.tier2_rpm_multiplier}x</div>
+                                                        <div>TPM: {policy.tier2_tpm_multiplier}x</div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {policy.block_at_tier3 ? (
+                                                        <span className="text-xs text-red-500 font-medium">{t("enterprise.quota.blocked")}</span>
+                                                    ) : (
+                                                        <div className="text-xs space-y-0.5">
+                                                            <div>RPM: {policy.tier3_rpm_multiplier}x</div>
+                                                            <div>TPM: {policy.tier3_tpm_multiplier}x</div>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(policy)}>
+                                                            <Pencil className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-red-500 hover:text-red-600"
+                                                            onClick={() => setDeleteTarget(policy)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tab 2: Department Binding */}
+                <TabsContent value="departments">
+                    <DepartmentBindingTab policies={policies} />
+                </TabsContent>
+
+                {/* Tab 3: User Override */}
+                <TabsContent value="users">
+                    <UserOverrideTab policies={policies} />
+                </TabsContent>
+            </Tabs>
 
             {/* Create/Edit Dialog */}
             <Dialog open={isCreating || !!editingPolicy} onOpenChange={(open) => {

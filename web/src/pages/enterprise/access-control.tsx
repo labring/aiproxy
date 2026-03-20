@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Shield, Plus, Trash2, AlertCircle } from "lucide-react"
+import { Shield, Plus, Trash2, AlertCircle, Check, X, Users, UserX } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -26,32 +26,46 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { enterpriseApi } from "@/api/enterprise"
+import { enterpriseApi, type TenantSummaryItem } from "@/api/enterprise"
 import { toast } from "sonner"
+
+const SUMMARY_KEY = "tenant-summary"
+const CONFIG_KEY = "tenant-whitelist"
 
 export default function AccessControlPage() {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null)
+    const [selectedWhitelistId, setSelectedWhitelistId] = useState<number | null>(null)
     const [newTenant, setNewTenant] = useState({ tenant_id: "", name: "" })
 
-    // Fetch whitelist data
-    const { data, isLoading } = useQuery({
-        queryKey: ["tenant-whitelist"],
+    // Fetch config (wildcard mode etc.)
+    const { data: configData, isLoading: configLoading } = useQuery({
+        queryKey: [CONFIG_KEY],
         queryFn: () => enterpriseApi.getTenantWhitelist(),
     })
+    const config = configData?.config ?? { wildcard_mode: false, env_override: false, description: "" }
 
-    const tenants = data?.tenants || []
-    const config = data?.config || { wildcard_mode: true, env_override: false, description: "" }
+    // Fetch unified tenant summary (30s polling)
+    const { data: summaryData, isLoading: summaryLoading } = useQuery({
+        queryKey: [SUMMARY_KEY],
+        queryFn: () => enterpriseApi.getTenantSummary(),
+        refetchInterval: 30000,
+    })
+    const tenants: TenantSummaryItem[] = summaryData?.tenants ?? []
 
-    // Add tenant mutation
+    const invalidateAll = () => {
+        queryClient.invalidateQueries({ queryKey: [SUMMARY_KEY] })
+        queryClient.invalidateQueries({ queryKey: [CONFIG_KEY] })
+    }
+
+    // Add / approve tenant mutation
     const addMutation = useMutation({
         mutationFn: (params: { tenant_id: string; name?: string }) =>
             enterpriseApi.addTenantToWhitelist(params.tenant_id, params.name),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["tenant-whitelist"] })
+            invalidateAll()
             toast.success(t("enterprise.accessControl.addSuccess"))
             setAddDialogOpen(false)
             setNewTenant({ tenant_id: "", name: "" })
@@ -61,26 +75,38 @@ export default function AccessControlPage() {
         },
     })
 
-    // Delete tenant mutation
+    // Remove from whitelist mutation
     const deleteMutation = useMutation({
         mutationFn: (id: number) => enterpriseApi.removeTenantFromWhitelist(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["tenant-whitelist"] })
+            invalidateAll()
             toast.success(t("enterprise.accessControl.deleteSuccess"))
             setDeleteDialogOpen(false)
-            setSelectedTenantId(null)
+            setSelectedWhitelistId(null)
         },
         onError: (error: Error) => {
             toast.error(error.message || t("enterprise.accessControl.deleteFailed"))
         },
     })
 
+    // Dismiss rejected login record
+    const dismissMutation = useMutation({
+        mutationFn: (id: number) => enterpriseApi.dismissRejectedTenantLogin(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [SUMMARY_KEY] })
+            toast.success(t("enterprise.accessControl.dismissSuccess"))
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || t("enterprise.accessControl.dismissFailed"))
+        },
+    })
+
     // Update config mutation
     const updateConfigMutation = useMutation({
-        mutationFn: (config: { wildcard_mode: boolean; env_override: boolean; description?: string }) =>
-            enterpriseApi.updateWhitelistConfig(config),
+        mutationFn: (cfg: { wildcard_mode: boolean; env_override: boolean; description?: string }) =>
+            enterpriseApi.updateWhitelistConfig(cfg),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["tenant-whitelist"] })
+            queryClient.invalidateQueries({ queryKey: [CONFIG_KEY] })
             toast.success(t("enterprise.accessControl.configUpdated"))
         },
         onError: (error: Error) => {
@@ -96,30 +122,13 @@ export default function AccessControlPage() {
         addMutation.mutate(newTenant)
     }
 
-    const handleDeleteTenant = (id: number) => {
-        setSelectedTenantId(id)
-        setDeleteDialogOpen(true)
-    }
-
     const confirmDelete = () => {
-        if (selectedTenantId) {
-            deleteMutation.mutate(selectedTenantId)
+        if (selectedWhitelistId) {
+            deleteMutation.mutate(selectedWhitelistId)
         }
     }
 
-    const handleWildcardToggle = (checked: boolean) => {
-        updateConfigMutation.mutate({
-            ...config,
-            wildcard_mode: checked,
-        })
-    }
-
-    const handleEnvOverrideToggle = (checked: boolean) => {
-        updateConfigMutation.mutate({
-            ...config,
-            env_override: checked,
-        })
-    }
+    const isLoading = configLoading || summaryLoading
 
     return (
         <div className="p-6 space-y-6">
@@ -145,7 +154,6 @@ export default function AccessControlPage() {
                     <CardDescription>{t("enterprise.accessControl.configDescription")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {/* Wildcard Mode */}
                     <div className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="space-y-1">
                             <Label htmlFor="wildcard-mode" className="text-base font-medium">
@@ -158,12 +166,11 @@ export default function AccessControlPage() {
                         <Switch
                             id="wildcard-mode"
                             checked={config.wildcard_mode}
-                            onCheckedChange={handleWildcardToggle}
+                            onCheckedChange={(v) => updateConfigMutation.mutate({ ...config, wildcard_mode: v })}
                             disabled={updateConfigMutation.isPending}
                         />
                     </div>
 
-                    {/* Environment Override */}
                     <div className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="space-y-1">
                             <Label htmlFor="env-override" className="text-base font-medium">
@@ -176,12 +183,11 @@ export default function AccessControlPage() {
                         <Switch
                             id="env-override"
                             checked={config.env_override}
-                            onCheckedChange={handleEnvOverrideToggle}
+                            onCheckedChange={(v) => updateConfigMutation.mutate({ ...config, env_override: v })}
                             disabled={updateConfigMutation.isPending}
                         />
                     </div>
 
-                    {/* Info Banner */}
                     {config.wildcard_mode && (
                         <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                             <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
@@ -198,10 +204,10 @@ export default function AccessControlPage() {
                 </CardContent>
             </Card>
 
-            {/* Tenant List Card */}
+            {/* Unified Tenant Overview */}
             <Card>
                 <CardHeader>
-                    <CardTitle>{t("enterprise.accessControl.allowedTenants")}</CardTitle>
+                    <CardTitle>{t("enterprise.accessControl.tenantOverview")}</CardTitle>
                     <CardDescription>
                         {t("enterprise.accessControl.tenantsCount", { count: tenants.length })}
                     </CardDescription>
@@ -217,54 +223,124 @@ export default function AccessControlPage() {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b text-muted-foreground">
+                                    <tr className="border-b text-muted-foreground text-sm">
                                         <th className="text-left py-3 px-4 font-medium">
                                             {t("enterprise.accessControl.tenantId")}
                                         </th>
                                         <th className="text-left py-3 px-4 font-medium">
                                             {t("enterprise.accessControl.tenantName")}
                                         </th>
+                                        <th className="text-center py-3 px-4 font-medium">
+                                            {t("enterprise.accessControl.successfulMembers")}
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-medium">
+                                            {t("enterprise.accessControl.rejectedAttempts")}
+                                        </th>
                                         <th className="text-left py-3 px-4 font-medium">
                                             {t("enterprise.accessControl.addedBy")}
                                         </th>
-                                        <th className="text-left py-3 px-4 font-medium">
-                                            {t("enterprise.accessControl.createdAt")}
-                                        </th>
                                         <th className="text-right py-3 px-4 font-medium">
-                                            操作
+                                            {t("enterprise.accessControl.actions")}
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {tenants.map((tenant) => (
-                                        <tr key={tenant.id} className="border-b last:border-0 hover:bg-muted/50">
+                                        <tr key={tenant.tenant_id} className="border-b last:border-0 hover:bg-muted/50">
                                             <td className="py-3 px-4">
                                                 <code className="text-sm bg-muted px-2 py-1 rounded">
                                                     {tenant.tenant_id}
                                                 </code>
                                             </td>
                                             <td className="py-3 px-4">
-                                                {tenant.name || (
-                                                    <span className="text-muted-foreground italic">
-                                                        {t("enterprise.accessControl.noName")}
-                                                    </span>
+                                                <div className="flex items-center gap-2">
+                                                    {tenant.name ? (
+                                                        <span>{tenant.name}</span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground italic text-sm">
+                                                            {t("enterprise.accessControl.noName")}
+                                                        </span>
+                                                    )}
+                                                    {tenant.is_whitelisted && (
+                                                        <Badge variant="default" className="text-xs bg-green-600">
+                                                            {t("enterprise.accessControl.whitelisted")}
+                                                        </Badge>
+                                                    )}
+                                                    {!tenant.is_whitelisted && tenant.rejected_attempts > 0 && (
+                                                        <Badge variant="destructive" className="text-xs">
+                                                            {t("enterprise.accessControl.rejected")}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Users className="w-3.5 h-3.5 text-green-600" />
+                                                    <span className="font-medium">{tenant.successful_members}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                {tenant.rejected_attempts > 0 ? (
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <UserX className="w-3.5 h-3.5 text-amber-600" />
+                                                        <span className="font-medium text-amber-700 dark:text-amber-400">
+                                                            {tenant.rejected_attempts}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground">—</span>
                                                 )}
                                             </td>
                                             <td className="py-3 px-4">
-                                                <Badge variant="secondary">{tenant.added_by}</Badge>
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-muted-foreground">
-                                                {new Date(tenant.created_at).toLocaleString()}
+                                                {tenant.added_by ? (
+                                                    <Badge variant="secondary">{tenant.added_by}</Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-sm">—</span>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteTenant(tenant.id)}
-                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {!tenant.is_whitelisted && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => addMutation.mutate({
+                                                                tenant_id: tenant.tenant_id,
+                                                            })}
+                                                            disabled={addMutation.isPending}
+                                                            className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                                                            title={t("enterprise.accessControl.addToWhitelist")}
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                    {tenant.is_whitelisted && tenant.whitelist_id && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                setSelectedWhitelistId(tenant.whitelist_id!)
+                                                                setDeleteDialogOpen(true)
+                                                            }}
+                                                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                                            title={t("enterprise.accessControl.deleteConfirm")}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                    {tenant.rejected_record_id && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => dismissMutation.mutate(tenant.rejected_record_id!)}
+                                                            disabled={dismissMutation.isPending}
+                                                            className="text-muted-foreground hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                                                            title={t("enterprise.accessControl.dismiss")}
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

@@ -1,65 +1,73 @@
 import { useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
-import { Download, Check, ChevronsUpDown, ArrowUpDown, ArrowUp, ArrowDown, Settings2 } from "lucide-react"
+import { Download, ArrowUpDown, ArrowUp, ArrowDown, Settings2 } from "lucide-react"
 import { DateRange } from "react-day-picker"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
-import { enterpriseApi } from "@/api/enterprise"
+import { enterpriseApi, type UserRankingItem } from "@/api/enterprise"
 import { toast } from "sonner"
-import { type TimeRange, getTimeRange, formatNumber, formatAmount } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, formatNumber, formatAmount, ALL_FILTER } from "@/lib/enterprise"
 import { cn } from "@/lib/utils"
 
-type SortField = "rank" | "user_name" | "department_name" | "request_count" | "used_amount" | "total_tokens" | "input_tokens" | "output_tokens" | "unique_models"
+type SortField = "rank" | "user_name" | "department_name" | "request_count" | "used_amount" | "total_tokens" | "input_tokens" | "output_tokens" | "success_rate" | "unique_models"
 type SortDirection = "asc" | "desc"
 
 interface ColumnConfig {
     key: SortField
+    labelKey: string
     align: "left" | "right"
     defaultVisible: boolean
     sortable: boolean
     format?: (value: number) => string
+    renderCell?: (user: UserRankingItem) => React.ReactNode
 }
 
 const COLUMNS: ColumnConfig[] = [
-    { key: "rank", align: "left", defaultVisible: true, sortable: true },
-    { key: "user_name", align: "left", defaultVisible: true, sortable: true },
-    { key: "department_name", align: "left", defaultVisible: true, sortable: true },
-    { key: "request_count", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
-    { key: "used_amount", align: "right", defaultVisible: true, sortable: true, format: formatAmount },
-    { key: "total_tokens", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
-    { key: "input_tokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
-    { key: "output_tokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
-    { key: "unique_models", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
+    { key: "rank", labelKey: "enterprise.ranking.rank", align: "left", defaultVisible: true, sortable: true,
+        renderCell: (user) => {
+            const rank = user.rank
+            return (
+                <span
+                    className={
+                        rank <= 3
+                            ? "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white " +
+                              (rank === 1 ? "bg-yellow-500" : rank === 2 ? "bg-gray-400" : "bg-amber-600")
+                            : "text-muted-foreground"
+                    }
+                >
+                    {rank}
+                </span>
+            )
+        },
+    },
+    { key: "user_name", labelKey: "enterprise.ranking.userName", align: "left", defaultVisible: true, sortable: true },
+    { key: "department_name", labelKey: "enterprise.ranking.department", align: "left", defaultVisible: true, sortable: true },
+    { key: "request_count", labelKey: "enterprise.ranking.requests", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
+    { key: "used_amount", labelKey: "enterprise.ranking.amount", align: "right", defaultVisible: true, sortable: true, format: formatAmount },
+    { key: "total_tokens", labelKey: "enterprise.ranking.tokens", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
+    { key: "input_tokens", labelKey: "enterprise.ranking.inputTokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
+    { key: "output_tokens", labelKey: "enterprise.ranking.outputTokens", align: "right", defaultVisible: false, sortable: true, format: formatNumber },
+    { key: "success_rate", labelKey: "enterprise.ranking.successRate", align: "right", defaultVisible: false, sortable: true,
+        renderCell: (user) => user.success_rate > 0 ? `${user.success_rate.toFixed(1)}%` : "-" },
+    { key: "unique_models", labelKey: "enterprise.ranking.models", align: "right", defaultVisible: true, sortable: true, format: formatNumber },
 ]
-
-// Translation keys for column labels
-const COLUMN_LABELS = {
-    rank: "enterprise.ranking.rank",
-    user_name: "enterprise.ranking.userName",
-    department_name: "enterprise.ranking.department",
-    request_count: "enterprise.ranking.requests",
-    used_amount: "enterprise.ranking.amount",
-    total_tokens: "enterprise.ranking.tokens",
-    input_tokens: "enterprise.ranking.inputTokens",
-    output_tokens: "enterprise.ranking.outputTokens",
-    unique_models: "enterprise.ranking.models",
-} as const
 
 export default function EnterpriseRanking() {
     const { t } = useTranslation()
     const [timeRange, setTimeRange] = useState<TimeRange>("7d")
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
-    const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
     const [limitType, setLimitType] = useState<"preset" | "custom" | "all">("preset")
     const [presetLimit, setPresetLimit] = useState<number>(50)
     const [customLimit, setCustomLimit] = useState<string>("100")
-    const [deptPopoverOpen, setDeptPopoverOpen] = useState(false)
+
+    // Hierarchical department filters
+    const [selectedLevel1, setSelectedLevel1] = useState<string>("")
+    const [selectedLevel2, setSelectedLevel2] = useState<string>("")
 
     // Column visibility state
     const [visibleColumns, setVisibleColumns] = useState<Set<SortField>>(() => {
@@ -72,7 +80,7 @@ export default function EnterpriseRanking() {
 
     // Calculate actual limit
     const limit = useMemo(() => {
-        if (limitType === "all") return 0 // 0 means no limit
+        if (limitType === "all") return 0
         if (limitType === "custom") return parseInt(customLimit) || 50
         return presetLimit
     }, [limitType, presetLimit, customLimit])
@@ -82,39 +90,41 @@ export default function EnterpriseRanking() {
         if (timeRange === "custom" && customDateRange?.from) {
             const startTs = Math.floor(customDateRange.from.getTime() / 1000)
             const endTs = customDateRange.to
-                ? Math.floor(customDateRange.to.getTime() / 1000) + 86399 // End of day
+                ? Math.floor(customDateRange.to.getTime() / 1000) + 86399
                 : Math.floor(Date.now() / 1000)
             return getTimeRange("custom", startTs, endTs)
         }
         return getTimeRange(timeRange)
     }, [timeRange, customDateRange])
 
-    // Fetch department list first
-    const { data: deptData } = useQuery({
-        queryKey: ["enterprise", "departments-for-filter", start, end],
-        queryFn: () => enterpriseApi.getDepartmentSummary(start, end),
+    // Fetch department hierarchy for level1/level2 filters
+    const { data: deptLevels } = useQuery({
+        queryKey: ["enterprise", "department-levels", selectedLevel1],
+        queryFn: () => enterpriseApi.getDepartmentLevels(selectedLevel1 || undefined),
     })
 
-    const departments = deptData?.departments || []
+    const level1Departments = useMemo(() => deptLevels?.level1_departments ?? [], [deptLevels])
+    const level2Departments = useMemo(() => deptLevels?.level2_departments ?? [], [deptLevels])
 
-    // Build department filter string for API (comma-separated)
+    // Build department filter for API
     const departmentFilter = useMemo(() => {
-        if (selectedDepartments.length === 0) return undefined
-        return selectedDepartments.join(",")
-    }, [selectedDepartments])
+        if (selectedLevel2) return selectedLevel2
+        if (selectedLevel1) return selectedLevel1
+        return undefined
+    }, [selectedLevel1, selectedLevel2])
 
     const { data: rankingData, isLoading } = useQuery({
         queryKey: ["enterprise", "ranking", start, end, departmentFilter, limit],
         queryFn: () =>
             enterpriseApi.getUserRanking(
                 departmentFilter,
-                limit || undefined, // 0 means no limit, pass undefined
+                limit || undefined,
                 start,
                 end,
             ),
     })
 
-    const ranking = rankingData?.ranking || []
+    const ranking = useMemo(() => rankingData?.ranking || [], [rankingData])
 
     // Sort data
     const sortedRanking = useMemo(() => {
@@ -124,7 +134,6 @@ export default function EnterpriseRanking() {
             let aVal: string | number
             let bVal: string | number
 
-            // Special handling for department_name: use department_id as fallback (consistent with display)
             if (sortField === "department_name") {
                 aVal = a.department_name || a.department_id || ""
                 bVal = b.department_name || b.department_id || ""
@@ -133,13 +142,11 @@ export default function EnterpriseRanking() {
                 bVal = b[sortField] ?? ""
             }
 
-            // Handle string comparison
             if (typeof aVal === "string" && typeof bVal === "string") {
                 const cmp = aVal.localeCompare(bVal, "zh-CN")
                 return sortDirection === "asc" ? cmp : -cmp
             }
 
-            // Handle number comparison
             const aNum = Number(aVal) || 0
             const bNum = Number(bVal) || 0
             return sortDirection === "asc" ? aNum - bNum : bNum - aNum
@@ -151,7 +158,7 @@ export default function EnterpriseRanking() {
             setSortDirection(prev => prev === "asc" ? "desc" : "asc")
         } else {
             setSortField(field)
-            setSortDirection("asc")
+            setSortDirection(field === "rank" || field === "user_name" || field === "department_name" ? "asc" : "desc")
         }
     }
 
@@ -159,10 +166,8 @@ export default function EnterpriseRanking() {
         setVisibleColumns(prev => {
             const next = new Set(prev)
             if (next.has(key)) {
-                // Don't allow hiding all columns - keep at least rank and user_name
                 if (key !== "rank" && key !== "user_name") {
                     next.delete(key)
-                    // Reset sort if hiding the currently sorted column
                     if (sortField === key) {
                         setSortField("rank")
                         setSortDirection("asc")
@@ -184,38 +189,8 @@ export default function EnterpriseRanking() {
         }
     }
 
-    const toggleDepartment = (deptId: string) => {
-        setSelectedDepartments((prev) =>
-            prev.includes(deptId)
-                ? prev.filter((d) => d !== deptId)
-                : [...prev, deptId]
-        )
-    }
-
-    const selectAllDepartments = () => {
-        if (selectedDepartments.length === departments.length) {
-            setSelectedDepartments([])
-        } else {
-            setSelectedDepartments(departments.map((d) => d.department_id))
-        }
-    }
-
-    // Display text for department filter
-    const departmentDisplayText = useMemo(() => {
-        if (selectedDepartments.length === 0) {
-            return t("enterprise.ranking.allDepartments")
-        }
-        if (selectedDepartments.length === 1) {
-            const dept = departments.find((d) => d.department_id === selectedDepartments[0])
-            return dept?.department_name || selectedDepartments[0]
-        }
-        return t("enterprise.ranking.departmentsSelected", { count: selectedDepartments.length })
-    }, [selectedDepartments, departments, t])
-
-    // Get visible columns config
     const visibleColumnConfigs = COLUMNS.filter(c => visibleColumns.has(c.key))
 
-    // Render sort icon
     const renderSortIcon = (field: SortField) => {
         if (sortField !== field) {
             return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
@@ -225,24 +200,11 @@ export default function EnterpriseRanking() {
             : <ArrowDown className="ml-1 h-3 w-3" />
     }
 
-    // Get cell value
-    const getCellValue = (user: (typeof ranking)[0], col: ColumnConfig) => {
-        const value = user[col.key as keyof typeof user]
-        if (col.key === "rank") {
-            const rank = value as number
-            return (
-                <span
-                    className={
-                        rank <= 3
-                            ? "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white " +
-                              (rank === 1 ? "bg-yellow-500" : rank === 2 ? "bg-gray-400" : "bg-amber-600")
-                            : "text-muted-foreground"
-                    }
-                >
-                    {rank}
-                </span>
-            )
+    const getCellValue = (user: UserRankingItem, col: ColumnConfig) => {
+        if (col.renderCell) {
+            return col.renderCell(user)
         }
+        const value = user[col.key as keyof UserRankingItem]
         if (col.key === "user_name") {
             return <span className="font-medium">{value as string}</span>
         }
@@ -261,9 +223,54 @@ export default function EnterpriseRanking() {
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold">{t("enterprise.ranking.title")}</h1>
                 <div className="flex items-center gap-3 flex-wrap">
+                    {/* Level 1 Department Filter */}
+                    <Select
+                        value={selectedLevel1}
+                        onValueChange={(v) => {
+                            setSelectedLevel1(v === ALL_FILTER ? "" : v)
+                            setSelectedLevel2("")
+                        }}
+                    >
+                        <SelectTrigger className="w-44">
+                            <SelectValue placeholder={t("enterprise.dashboard.level1Dept")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ALL_FILTER}>{t("enterprise.dashboard.allLevel1Depts")}</SelectItem>
+                            {level1Departments.map((dept) => (
+                                <SelectItem key={dept.department_id} value={dept.department_id}>
+                                    {dept.name || dept.department_id}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {/* Level 2 Department Filter */}
+                    <Select
+                        value={selectedLevel2}
+                        onValueChange={(v) => setSelectedLevel2(v === ALL_FILTER ? "" : v)}
+                        disabled={!selectedLevel1}
+                    >
+                        <SelectTrigger className="w-44">
+                            <SelectValue placeholder={t("enterprise.dashboard.level2Dept")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ALL_FILTER}>{t("enterprise.dashboard.allLevel2Depts")}</SelectItem>
+                            {level2Departments.map((dept) => (
+                                <SelectItem key={dept.department_id} value={dept.department_id}>
+                                    {dept.name || dept.department_id}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
                     {/* Time Range Filter */}
                     <div className="flex items-center gap-2">
-                        <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
+                        <Select value={timeRange} onValueChange={(v) => {
+                            setTimeRange(v as TimeRange)
+                            if (v !== "custom") {
+                                setCustomDateRange(undefined)
+                            }
+                        }}>
                             <SelectTrigger className="w-36">
                                 <SelectValue />
                             </SelectTrigger>
@@ -271,6 +278,8 @@ export default function EnterpriseRanking() {
                                 <SelectItem value="7d">{t("enterprise.dashboard.last7Days")}</SelectItem>
                                 <SelectItem value="30d">{t("enterprise.dashboard.last30Days")}</SelectItem>
                                 <SelectItem value="month">{t("enterprise.dashboard.thisMonth")}</SelectItem>
+                                <SelectItem value="last_week">{t("enterprise.dashboard.lastWeek")}</SelectItem>
+                                <SelectItem value="last_month">{t("enterprise.dashboard.lastMonth")}</SelectItem>
                                 <SelectItem value="custom">{t("enterprise.ranking.customRange")}</SelectItem>
                             </SelectContent>
                         </Select>
@@ -282,79 +291,6 @@ export default function EnterpriseRanking() {
                             />
                         )}
                     </div>
-
-                    {/* Department Multi-Select */}
-                    <Popover open={deptPopoverOpen} onOpenChange={setDeptPopoverOpen}>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                role="combobox"
-                                aria-expanded={deptPopoverOpen}
-                                className="w-48 justify-between"
-                            >
-                                <span className="truncate">{departmentDisplayText}</span>
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-56 p-0" align="start">
-                            <div className="p-2 border-b">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="w-full justify-start"
-                                    onClick={selectAllDepartments}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            selectedDepartments.length === departments.length
-                                                ? "opacity-100"
-                                                : "opacity-0"
-                                        )}
-                                    />
-                                    {selectedDepartments.length === departments.length
-                                        ? t("enterprise.ranking.deselectAll")
-                                        : t("enterprise.ranking.selectAll")}
-                                </Button>
-                            </div>
-                            <div className="max-h-60 overflow-y-auto p-1">
-                                {departments.map((dept) => (
-                                    <div
-                                        key={dept.department_id}
-                                        className={cn(
-                                            "flex items-center px-2 py-1.5 cursor-pointer rounded hover:bg-accent",
-                                            selectedDepartments.includes(dept.department_id) && "bg-accent/50"
-                                        )}
-                                        onClick={() => toggleDepartment(dept.department_id)}
-                                    >
-                                        <Check
-                                            className={cn(
-                                                "mr-2 h-4 w-4",
-                                                selectedDepartments.includes(dept.department_id)
-                                                    ? "opacity-100"
-                                                    : "opacity-0"
-                                            )}
-                                        />
-                                        <span className="text-sm truncate">
-                                            {dept.department_name || dept.department_id}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            {selectedDepartments.length > 0 && (
-                                <div className="p-2 border-t">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="w-full text-muted-foreground"
-                                        onClick={() => setSelectedDepartments([])}
-                                    >
-                                        {t("enterprise.ranking.clearSelection")}
-                                    </Button>
-                                </div>
-                            )}
-                        </PopoverContent>
-                    </Popover>
 
                     {/* Limit Filter */}
                     <div className="flex items-center gap-2">
@@ -411,7 +347,7 @@ export default function EnterpriseRanking() {
                                     onCheckedChange={() => toggleColumn(col.key)}
                                     disabled={col.key === "rank" || col.key === "user_name"}
                                 >
-                                    {t(COLUMN_LABELS[col.key])}
+                                    {t(col.labelKey as never)}
                                 </DropdownMenuCheckboxItem>
                             ))}
                         </DropdownMenuContent>
@@ -448,7 +384,7 @@ export default function EnterpriseRanking() {
                                             onClick={() => col.sortable && handleSort(col.key)}
                                         >
                                             <span className="inline-flex items-center">
-                                                {col.key === "rank" ? "#" : t(COLUMN_LABELS[col.key])}
+                                                {col.key === "rank" ? "#" : t(col.labelKey as never)}
                                                 {col.sortable && renderSortIcon(col.key)}
                                             </span>
                                         </th>

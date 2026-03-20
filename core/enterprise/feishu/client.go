@@ -156,6 +156,40 @@ func GetUserInfo(ctx context.Context, userAccessToken string) (*UserInfo, error)
 	return info, nil
 }
 
+// TenantInfo holds the current app's tenant information from the Feishu API.
+type TenantInfo struct {
+	TenantKey string // tenant_key (tenant_id)
+	Name      string // enterprise name
+}
+
+// GetTenantInfo queries the Feishu tenant API to get the current tenant's ID and name.
+func GetTenantInfo(ctx context.Context) (*TenantInfo, error) {
+	c := GetClient()
+
+	resp, err := c.Tenant.Tenant.Query(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !resp.Success() {
+		return nil, resp.CodeError
+	}
+
+	info := &TenantInfo{}
+	if resp.Data != nil && resp.Data.Tenant != nil {
+		t := resp.Data.Tenant
+		if t.TenantKey != nil {
+			info.TenantKey = *t.TenantKey
+		}
+
+		if t.Name != nil {
+			info.Name = *t.Name
+		}
+	}
+
+	return info, nil
+}
+
 // DepartmentInfo holds a Feishu department's core fields.
 type DepartmentInfo struct {
 	DepartmentID     string

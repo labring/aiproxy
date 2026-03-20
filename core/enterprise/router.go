@@ -32,6 +32,7 @@ func RegisterRoutes(router *gin.Engine) {
 
 	analytics.RegisterRoutes(enterpriseAuth)
 	quota.RegisterRoutes(enterpriseAuth)
+	ppio.RegisterRoutes(enterpriseAuth)
 	RegisterTenantWhitelistRoutes(enterpriseAuth)
 	RegisterEnterpriseAuthRoutes(enterpriseAuth)
 }
@@ -45,9 +46,6 @@ func RegisterPublicRoutes(public *gin.RouterGroup) {
 func RegisterAdminRoutes(admin *gin.RouterGroup) {
 	// Note: Feishu sync has been moved to EnterpriseAuth to allow Feishu admin users
 	// feishu.RegisterRoutes(nil, admin, nil)
-
-	// PPIO model sync routes (admin only)
-	ppio.RegisterRoutes(admin)
 }
 
 // RegisterEnterpriseAuthRoutes registers routes that require enterprise authentication.

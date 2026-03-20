@@ -124,7 +124,7 @@ func GetLevel2Departments(level1ID string) ([]*models.FeishuDepartment, error) {
 	}
 
 	// Resolve all ID forms for the parent department so we can match parent_id in any format
-	parentIDs := getAllDepartmentIDForms(level1ID)
+	parentIDs := GetAllDepartmentIDForms(level1ID)
 
 	var departments []*models.FeishuDepartment
 
@@ -137,10 +137,10 @@ func GetLevel2Departments(level1ID string) ([]*models.FeishuDepartment, error) {
 	return deduplicateDepartments(departments), nil
 }
 
-// getAllDepartmentIDForms returns all known ID forms (department_id and open_department_id)
+// GetAllDepartmentIDForms returns all known ID forms (department_id and open_department_id)
 // for a given department identifier. This handles the dual-ID system where the same department
 // can be referenced by its custom ID or its od-* ID.
-func getAllDepartmentIDForms(deptID string) []string {
+func GetAllDepartmentIDForms(deptID string) []string {
 	idSet := map[string]struct{}{deptID: {}}
 
 	var depts []models.FeishuDepartment

@@ -140,9 +140,11 @@ func HandleWebhook(c *gin.Context) {
 	// Process event by type
 	eventType := evt.Header.EventType
 
+	tenantKey := evt.Header.TenantKey
+
 	switch eventType {
 	case "contact.user.created_v3", "contact.user.updated_v3":
-		handleUserEvent(evt.Event)
+		handleUserEvent(evt.Event, tenantKey)
 	case "contact.user.deleted_v3":
 		handleUserDeletedEvent(evt.Event)
 	case "contact.department.created_v3", "contact.department.updated_v3":
@@ -157,7 +159,7 @@ func HandleWebhook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0})
 }
 
-func handleUserEvent(data json.RawMessage) {
+func handleUserEvent(data json.RawMessage, tenantKey string) {
 	var evt feishuUserEvent
 	if err := sonic.Unmarshal(data, &evt); err != nil {
 		log.Errorf("feishu webhook: failed to unmarshal user event: %v", err)
@@ -194,6 +196,7 @@ func handleUserEvent(data json.RawMessage) {
 	assignFields := models.FeishuUser{
 		UnionID:        obj.UnionID,
 		UserID:         obj.UserID,
+		TenantID:       tenantKey,
 		Name:           obj.Name,
 		Email:          obj.Email,
 		Avatar:         avatar,
@@ -212,6 +215,7 @@ func handleUserEvent(data json.RawMessage) {
 		OpenID:         obj.OpenID,
 		UnionID:        obj.UnionID,
 		UserID:         obj.UserID,
+		TenantID:       tenantKey,
 		Name:           obj.Name,
 		Email:          obj.Email,
 		Avatar:         avatar,
@@ -340,6 +344,26 @@ func SyncAll(db *gorm.DB) error {
 
 	log.Info("feishu sync: starting full organization sync")
 
+	// Get the app's tenant info (tenant_id + name) to populate on all users
+	tenantInfo, err := GetTenantInfo(ctx)
+	if err != nil {
+		log.Warnf("feishu sync: GetTenantInfo API failed: %v", err)
+		tenantInfo = &TenantInfo{}
+	}
+
+	if tenantInfo.TenantKey != "" {
+		log.Infof("feishu sync: resolved tenant via API — id=%s, name=%s", tenantInfo.TenantKey, tenantInfo.Name)
+	} else {
+		// Fallback: look up tenant_id from existing users who logged in via OAuth
+		var existing models.FeishuUser
+		if db.Where("tenant_id != '' AND tenant_id IS NOT NULL").First(&existing).Error == nil {
+			tenantInfo.TenantKey = existing.TenantID
+			log.Infof("feishu sync: resolved tenant via DB fallback — id=%s", tenantInfo.TenantKey)
+		} else {
+			log.Warn("feishu sync: could not resolve tenant_id from API or DB, tenant_id will be empty")
+		}
+	}
+
 	// Sync departments recursively starting from root "0"
 	// Returns only the department IDs actually fetched from Feishu API
 	syncedDeptIDs, err := syncDepartmentsRecursive(ctx, db, "0", stats)
@@ -359,7 +383,7 @@ func SyncAll(db *gorm.DB) error {
 
 	// Only iterate departments that came from the Feishu API (not mock data in DB)
 	for _, deptID := range syncedDeptIDs {
-		if err := syncDepartmentUsers(ctx, db, deptID, stats); err != nil {
+		if err := syncDepartmentUsers(ctx, db, deptID, tenantInfo, stats); err != nil {
 			log.Errorf("feishu sync: failed to sync users for department %s: %v", deptID, err)
 
 			continue
@@ -367,7 +391,7 @@ func SyncAll(db *gorm.DB) error {
 	}
 
 	// Also sync root department users
-	if err := syncDepartmentUsers(ctx, db, "0", stats); err != nil {
+	if err := syncDepartmentUsers(ctx, db, "0", tenantInfo, stats); err != nil {
 		log.Errorf("feishu sync: failed to sync root department users: %v", err)
 	}
 
@@ -418,26 +442,40 @@ func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string,
 			log.Warnf("feishu sync: department %s has empty name (parent=%s)", dept.DepartmentID, dept.ParentID)
 		}
 
-		record := models.FeishuDepartment{
-			DepartmentID:     dept.DepartmentID,
-			OpenDepartmentID: dept.OpenDepartmentID,
-			ParentID:         dept.ParentID,
-			Name:             dept.Name,
-			MemberCount:      dept.MemberCount,
-			Order:            dept.Order,
-			Status:           1,
+		// Find ALL matching records (there may be duplicates from previous syncs
+		// that used a different ID format). Merge them into one canonical record.
+		var matches []models.FeishuDepartment
+		db.Where("department_id = ? OR open_department_id = ? OR (department_id = ? AND department_id != '')",
+			dept.DepartmentID, dept.OpenDepartmentID, dept.OpenDepartmentID).
+			Find(&matches)
+
+		if len(matches) > 1 {
+			// Keep the first match, delete the rest to resolve duplicates
+			log.Infof("feishu sync: merging %d duplicate records for department %s (%s)",
+				len(matches), dept.DepartmentID, dept.Name)
+
+			for _, dup := range matches[1:] {
+				db.Unscoped().Delete(&dup)
+			}
+
+			// Re-fetch the kept record
+			matches = matches[:1]
 		}
 
-		// Match by department_id OR open_department_id to avoid duplicates
-		// when the same department was previously synced with a different ID format
-		var existing models.FeishuDepartment
-		found := db.Where("department_id = ? OR (open_department_id = ? AND open_department_id != '')",
-			dept.DepartmentID, dept.OpenDepartmentID).First(&existing).Error == nil
-
-		var result *gorm.DB
-		if found {
-			// Update existing record, including department_id to normalize it
-			result = db.Model(&existing).Updates(models.FeishuDepartment{
+		if len(matches) == 1 {
+			// Update the existing record
+			db.Model(&matches[0]).Updates(map[string]interface{}{
+				"department_id":      dept.DepartmentID,
+				"open_department_id": dept.OpenDepartmentID,
+				"parent_id":          dept.ParentID,
+				"name":               dept.Name,
+				"member_count":       dept.MemberCount,
+				"order":              dept.Order,
+				"status":             1,
+			})
+		} else {
+			// No existing record — create new
+			record := models.FeishuDepartment{
 				DepartmentID:     dept.DepartmentID,
 				OpenDepartmentID: dept.OpenDepartmentID,
 				ParentID:         dept.ParentID,
@@ -445,20 +483,15 @@ func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string,
 				MemberCount:      dept.MemberCount,
 				Order:            dept.Order,
 				Status:           1,
-			})
-		} else {
-			result = db.Create(&record)
-		}
-
-		if result.Error != nil {
-			log.Errorf("feishu sync: failed to upsert department %s: %v", dept.DepartmentID, result.Error)
-
-			continue
+			}
+			if err := db.Create(&record).Error; err != nil {
+				log.Errorf("feishu sync: failed to create department %s: %v", dept.DepartmentID, err)
+			}
 		}
 
 		syncedIDs = append(syncedIDs, dept.DepartmentID)
 
-		// Recurse into child departments
+		// Always recurse into child departments regardless of upsert result
 		childIDs, err := syncDepartmentsRecursive(ctx, db, dept.DepartmentID, stats)
 		if err != nil {
 			log.Errorf("feishu sync: failed to sync children of department %s: %v", dept.DepartmentID, err)
@@ -470,7 +503,7 @@ func syncDepartmentsRecursive(ctx context.Context, db *gorm.DB, parentID string,
 	return syncedIDs, nil
 }
 
-func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, stats *syncStats) error {
+func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, tenantInfo *TenantInfo, stats *syncStats) error {
 	users, err := ListDepartmentUsers(ctx, departmentID)
 	if err != nil {
 		return err
@@ -519,6 +552,7 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 		assignFields := models.FeishuUser{
 			UnionID:        u.UnionID,
 			UserID:         u.UserID,
+			TenantID:       tenantInfo.TenantKey,
 			Name:           u.Name,
 			Email:          u.Email,
 			Avatar:         u.Avatar,
@@ -537,6 +571,7 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 			OpenID:         u.OpenID,
 			UnionID:        u.UnionID,
 			UserID:         u.UserID,
+			TenantID:       tenantInfo.TenantKey,
 			Name:           u.Name,
 			Email:          u.Email,
 			Avatar:         u.Avatar,
@@ -559,6 +594,11 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 			log.Errorf("feishu sync: failed to upsert user %s: %v", u.OpenID, result.Error)
 
 			continue
+		}
+
+		// Force-update tenant_id using map (struct Assign skips zero-value fields for existing records)
+		if tenantInfo.TenantKey != "" && feishuUser.TenantID != tenantInfo.TenantKey {
+			db.Model(&feishuUser).Update("tenant_id", tenantInfo.TenantKey)
 		}
 
 		// Ensure group exists

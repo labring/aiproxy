@@ -411,6 +411,21 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	mc = GetGroupAdjustedModelConfig(group, mc)
 
+	if EnterpriseQuotaCheck != nil {
+		effectiveModel, rpmMul, tpmMul, blocked := EnterpriseQuotaCheck(group, token, findModel)
+		if blocked {
+			AbortLogWithMessage(c, http.StatusTooManyRequests, "quota exceeded")
+			return
+		}
+
+		if effectiveModel != findModel {
+			findModel = effectiveModel
+		}
+
+		mc.RPM = int64(float64(mc.RPM) * rpmMul)
+		mc.TPM = int64(float64(mc.TPM) * tpmMul)
+	}
+
 	c.Set(RequestModel, findModel)
 	c.Set(ModelConfig, mc)
 

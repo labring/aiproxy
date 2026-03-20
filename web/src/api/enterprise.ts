@@ -17,9 +17,41 @@ export interface QuotaPolicy {
     tier3_rpm_multiplier: number
     tier3_tpm_multiplier: number
     block_at_tier3: boolean
+    tier2_blocked_models: string
+    tier3_blocked_models: string
+    period_quota: number
+    period_type: number // 1=daily, 2=weekly, 3=monthly
 }
 
 export type QuotaPolicyInput = Omit<QuotaPolicy, 'id' | 'created_at' | 'updated_at'>
+
+export interface DepartmentQuotaPolicyBinding {
+    id: number
+    department_id: string
+    quota_policy_id: number
+    quota_policy?: QuotaPolicy
+    level1_name?: string
+    level2_name?: string
+    member_count?: number
+    override_count?: number
+    created_at: string
+    updated_at: string
+}
+
+export interface DepartmentPolicyBindingsResponse {
+    bindings: DepartmentQuotaPolicyBinding[]
+    total: number
+}
+
+export interface UserPolicyBindingsResponse {
+    bindings: UserQuotaPolicy[]
+    total: number
+}
+
+export interface BatchBindResponse {
+    bindings: DepartmentQuotaPolicyBinding[]
+    errors: string[]
+}
 
 export interface QuotaPolicyListResponse {
     policies: QuotaPolicy[]
@@ -68,6 +100,8 @@ export interface FeishuUser {
     created_at: string
     updated_at: string
     department_path?: DepartmentPath
+    effective_policy?: string
+    policy_source?: 'user' | 'department'
 }
 
 export interface FeishuUsersResponse {
@@ -100,6 +134,7 @@ export interface UserQuotaPolicy {
     open_id: string
     quota_policy_id: number
     quota_policy?: QuotaPolicy
+    user_name?: string
     created_at: string
     updated_at: string
 }
@@ -265,6 +300,37 @@ export interface SyncStatus {
     users_with_name: number
     users_with_email: number
     error?: string
+}
+
+// Tenant Summary types
+export interface TenantSummaryItem {
+    tenant_id: string
+    name: string
+    is_whitelisted: boolean
+    whitelist_id?: number
+    added_by?: string
+    successful_members: number
+    rejected_attempts: number
+    rejected_record_id?: number
+}
+
+export interface TenantSummaryResponse {
+    tenants: TenantSummaryItem[]
+}
+
+// Rejected Tenant Login types
+export interface RejectedTenantLogin {
+    id: number
+    tenant_id: string
+    user_name: string
+    user_email: string
+    attempt_count: number
+    last_attempt_at: string
+    created_at: string
+}
+
+export interface RejectedTenantLoginsResponse {
+    rejected: RejectedTenantLogin[]
 }
 
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
@@ -511,5 +577,40 @@ export const enterpriseApi = {
 
     unbindPolicyFromUser: (open_id: string): Promise<void> => {
         return del(`/enterprise/quota/bind-user/${open_id}`)
+    },
+
+    // Batch bind / list bindings APIs
+    batchBindPolicyToDepartments: (department_ids: string[], quota_policy_id: number): Promise<BatchBindResponse> => {
+        return post<BatchBindResponse>('/enterprise/quota/batch-bind-departments', { department_ids, quota_policy_id })
+    },
+
+    batchBindPolicyToUsers: (open_ids: string[], quota_policy_id: number): Promise<{ bindings: UserQuotaPolicy[]; errors: string[] }> => {
+        return post('/enterprise/quota/batch-bind-users', { open_ids, quota_policy_id })
+    },
+
+    listDepartmentPolicyBindings: (policy_id?: number): Promise<DepartmentPolicyBindingsResponse> => {
+        const params: Record<string, string> = {}
+        if (policy_id) params.policy_id = String(policy_id)
+        return get<DepartmentPolicyBindingsResponse>('/enterprise/quota/department-bindings', { params })
+    },
+
+    listUserPolicyBindings: (policy_id?: number): Promise<UserPolicyBindingsResponse> => {
+        const params: Record<string, string> = {}
+        if (policy_id) params.policy_id = String(policy_id)
+        return get<UserPolicyBindingsResponse>('/enterprise/quota/user-bindings', { params })
+    },
+
+    // Tenant Summary API
+    getTenantSummary: (): Promise<TenantSummaryResponse> => {
+        return get<TenantSummaryResponse>('/enterprise/tenant-whitelist/summary')
+    },
+
+    // Rejected Tenant Login APIs
+    getRejectedTenantLogins: (): Promise<RejectedTenantLoginsResponse> => {
+        return get<RejectedTenantLoginsResponse>('/enterprise/tenant-whitelist/rejected')
+    },
+
+    dismissRejectedTenantLogin: (id: number): Promise<void> => {
+        return del<void>(`/enterprise/tenant-whitelist/rejected/${id}`)
     },
 }

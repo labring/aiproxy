@@ -3,9 +3,18 @@
 package models
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"time"
 
 	"gorm.io/gorm"
+)
+
+// PeriodType constants for quota policy period configuration.
+const (
+	PeriodTypeDaily   = 1
+	PeriodTypeWeekly  = 2
+	PeriodTypeMonthly = 3
 )
 
 // QuotaPolicy defines a progressive quota tier strategy.
@@ -35,10 +44,65 @@ type QuotaPolicy struct {
 
 	// Whether to completely block requests at tier3
 	BlockAtTier3 bool `json:"block_at_tier3" gorm:"default:false"`
+
+	// Models blocked when entering each tier (JSON array of model name patterns)
+	// e.g. ["claude-opus-4*", "gpt-4o"] — supports glob patterns
+	Tier2BlockedModels string `json:"tier2_blocked_models" gorm:"size:1024;default:''"`
+	Tier3BlockedModels string `json:"tier3_blocked_models" gorm:"size:1024;default:''"`
+
+	// Amount limit fields — synced to Token.PeriodQuota/PeriodType when binding
+	PeriodQuota float64 `json:"period_quota" gorm:"default:0"` // 0 = no limit, unit: currency
+	PeriodType  int     `json:"period_type"  gorm:"default:3"` // 1=daily, 2=weekly, 3=monthly
 }
 
 func (QuotaPolicy) TableName() string {
 	return "enterprise_quota_policies"
+}
+
+func parseBlockedModels(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+
+	var models []string
+	if err := json.Unmarshal([]byte(raw), &models); err != nil {
+		return nil
+	}
+
+	return models
+}
+
+// GetTier2BlockedModels parses the Tier2BlockedModels JSON field.
+func (p *QuotaPolicy) GetTier2BlockedModels() []string {
+	return parseBlockedModels(p.Tier2BlockedModels)
+}
+
+// GetTier3BlockedModels parses the Tier3BlockedModels JSON field.
+func (p *QuotaPolicy) GetTier3BlockedModels() []string {
+	return parseBlockedModels(p.Tier3BlockedModels)
+}
+
+// IsModelBlockedAtTier checks whether a model is blocked at the given tier.
+// Supports glob patterns (e.g. "claude-opus-4*").
+func (p *QuotaPolicy) IsModelBlockedAtTier(tier int, model string) bool {
+	var patterns []string
+
+	switch tier {
+	case 2:
+		patterns = p.GetTier2BlockedModels()
+	case 3:
+		patterns = p.GetTier3BlockedModels()
+	default:
+		return false
+	}
+
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, model); matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GroupQuotaPolicy binds a QuotaPolicy to a Group.

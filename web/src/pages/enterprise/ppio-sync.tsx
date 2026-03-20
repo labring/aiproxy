@@ -1,14 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History } from 'lucide-react'
+import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History, Save, Key } from 'lucide-react'
 import { ppioApi } from '../../api/ppio'
-import type { DiagnosticResult, SyncHistory, SyncOptions, SyncProgressEvent, SyncResult } from '../../types/ppio'
+import type { DiagnosticResult, PPIOChannelItem, PPIOConfig, SyncHistory, SyncOptions, SyncProgressEvent, SyncResult } from '../../types/ppio'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 
 export default function PPIOSyncPage() {
   const { t } = useTranslation()
@@ -21,17 +29,116 @@ export default function PPIOSyncPage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
+  // Config state
+  const [channels, setChannels] = useState<PPIOChannelItem[]>([])
+  const [config, setConfig] = useState<PPIOConfig | null>(null)
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configSaving, setConfigSaving] = useState(false)
+  const [selectedBaseURL, setSelectedBaseURL] = useState<string>('')
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('')
+
+  // Mgmt token state
+  const [mgmtToken, setMgmtToken] = useState<string>('')
+  const [mgmtTokenSaving, setMgmtTokenSaving] = useState(false)
+
   const [syncOpts, setSyncOpts] = useState<SyncOptions>({
-    sync_openai: true,
-    sync_anthropic: true,
     auto_create_channels: true,
     changes_confirmed: false,
     delete_unmatched_model: false
   })
 
+  // Group channels by base_url for the first dropdown
+  const baseURLGroups = useMemo(() => {
+    const groups = new Map<string, PPIOChannelItem[]>()
+    for (const ch of channels) {
+      const existing = groups.get(ch.base_url) || []
+      existing.push(ch)
+      groups.set(ch.base_url, existing)
+    }
+    return groups
+  }, [channels])
+
+  const uniqueBaseURLs = useMemo(() => Array.from(baseURLGroups.keys()), [baseURLGroups])
+
+  // Channels filtered by selected base_url
+  const filteredChannels = useMemo(() => {
+    if (!selectedBaseURL) return []
+    return baseURLGroups.get(selectedBaseURL) || []
+  }, [selectedBaseURL, baseURLGroups])
+
   const toggleSection = (key: string) => {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
+
+  const loadConfig = async () => {
+    setConfigLoading(true)
+    try {
+      const [channelList, currentConfig] = await Promise.all([
+        ppioApi.listChannels(),
+        ppioApi.getConfig()
+      ])
+      setChannels(channelList || [])
+      setConfig(currentConfig)
+
+      // Restore selected state from current config
+      if (currentConfig.channel_id && channelList) {
+        const activeChannel = channelList.find(ch => ch.id === currentConfig.channel_id)
+        if (activeChannel) {
+          setSelectedBaseURL(activeChannel.base_url)
+          setSelectedChannelId(String(activeChannel.id))
+        }
+      }
+    } catch {
+      // Non-critical
+    } finally {
+      setConfigLoading(false)
+    }
+  }
+
+  const saveConfig = async () => {
+    const channelId = Number(selectedChannelId)
+    if (!channelId) {
+      toast.error(t('enterprise.ppio.configSelectChannel'))
+      return
+    }
+    setConfigSaving(true)
+    try {
+      await ppioApi.updateConfig(channelId)
+      toast.success(t('enterprise.ppio.configSaved'))
+      await loadConfig()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
+  const saveMgmtToken = async () => {
+    if (!mgmtToken.trim()) {
+      toast.error(t('enterprise.ppio.mgmtTokenRequired'))
+      return
+    }
+    setMgmtTokenSaving(true)
+    try {
+      await ppioApi.updateMgmtToken(mgmtToken.trim())
+      toast.success(t('enterprise.ppio.mgmtTokenSaved'))
+      setMgmtToken('')
+      await loadConfig()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setMgmtTokenSaving(false)
+    }
+  }
+
+  // When base_url changes, auto-select channel if only one matches
+  useEffect(() => {
+    if (filteredChannels.length === 1) {
+      setSelectedChannelId(String(filteredChannels[0].id))
+    } else if (!filteredChannels.find(ch => String(ch.id) === selectedChannelId)) {
+      setSelectedChannelId('')
+    }
+  }, [selectedBaseURL, filteredChannels, selectedChannelId])
 
   const loadHistory = async () => {
     setHistoryLoading(true)
@@ -46,6 +153,7 @@ export default function PPIOSyncPage() {
   }
 
   useEffect(() => {
+    loadConfig()
     loadHistory()
   }, [])
 
@@ -128,6 +236,122 @@ export default function PPIOSyncPage() {
         <p className="text-sm text-muted-foreground mt-1">{t('enterprise.ppio.description')}</p>
       </div>
 
+      {/* API Config Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('enterprise.ppio.configTitle')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {configLoading ? (
+            <div className="py-4 text-center text-muted-foreground">
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto" />
+            </div>
+          ) : channels.length === 0 ? (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+              <span className="text-yellow-700 dark:text-yellow-400">
+                {t('enterprise.ppio.configNoChannels')}
+              </span>
+            </div>
+          ) : (
+            <>
+              {config?.configured && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
+                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-green-700 dark:text-green-400">
+                    {t('enterprise.ppio.configConfigured')}: {config.api_base} ({config.api_key})
+                  </span>
+                </div>
+              )}
+
+              {/* Step 1: Select Base URL */}
+              <div className="space-y-2">
+                <Label>{t('enterprise.ppio.configApiBase')}</Label>
+                <Select value={selectedBaseURL} onValueChange={(v) => { setSelectedBaseURL(v); setSelectedChannelId('') }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('enterprise.ppio.configSelectBaseURL')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueBaseURLs.map(url => (
+                      <SelectItem key={url} value={url}>
+                        {url}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Step 2: Select Channel (API Key) */}
+              {selectedBaseURL && filteredChannels.length > 0 && (
+                <div className="space-y-2">
+                  <Label>{t('enterprise.ppio.configApiKey')}</Label>
+                  <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('enterprise.ppio.configSelectKey')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredChannels.map(ch => (
+                        <SelectItem key={ch.id} value={String(ch.id)}>
+                          {ch.name} ({ch.key})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <Button
+                onClick={saveConfig}
+                disabled={configSaving || !selectedChannelId}
+                size="sm"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {configSaving ? t('enterprise.ppio.configSaving') : t('enterprise.ppio.configSave')}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Mgmt Token Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="w-4 h-4" />
+            {t('enterprise.ppio.mgmtTokenTitle')}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">{t('enterprise.ppio.mgmtTokenDescription')}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {config?.mgmt_token_configured && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
+              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-green-700 dark:text-green-400">
+                {t('enterprise.ppio.mgmtTokenConfigured')}
+              </span>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>{t('enterprise.ppio.mgmtTokenTitle')}</Label>
+            <Input
+              type="password"
+              value={mgmtToken}
+              onChange={(e) => setMgmtToken(e.target.value)}
+              placeholder={t('enterprise.ppio.mgmtTokenPlaceholder')}
+            />
+            <p className="text-xs text-muted-foreground">{t('enterprise.ppio.mgmtTokenHint')}</p>
+          </div>
+          <Button
+            onClick={saveMgmtToken}
+            disabled={mgmtTokenSaving || !mgmtToken.trim()}
+            size="sm"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {mgmtTokenSaving ? t('common.saving') : t('enterprise.ppio.mgmtTokenSave')}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -201,22 +425,22 @@ export default function PPIOSyncPage() {
               </div>
 
               {/* Change Details - Collapsible */}
-              {(diff.changes.add.length > 0 || diff.changes.update.length > 0 || diff.changes.delete.length > 0) && (
+              {((diff.changes.add?.length ?? 0) > 0 || (diff.changes.update?.length ?? 0) > 0 || (diff.changes.delete?.length ?? 0) > 0) && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-foreground mb-2">{t('enterprise.ppio.changeDetails')}</h3>
 
-                  {diff.changes.add.length > 0 && (
+                  {(diff.changes.add?.length ?? 0) > 0 && (
                     <div className="border rounded-lg">
                       <button
                         onClick={() => toggleSection('add')}
                         className="w-full flex items-center gap-2 p-2 text-sm text-left hover:bg-muted/50 rounded-lg transition-colors"
                       >
                         {expandedSections.add ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        <span className="text-green-600 dark:text-green-400 font-medium">{t('enterprise.ppio.modelsToAdd')} ({diff.changes.add.length})</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">{t('enterprise.ppio.modelsToAdd')} ({diff.changes.add!.length})</span>
                       </button>
                       {expandedSections.add && (
                         <div className="px-4 pb-2 space-y-1">
-                          {diff.changes.add.map(d => (
+                          {diff.changes.add!.map(d => (
                             <div key={d.model_id} className="text-xs text-muted-foreground font-mono">{d.model_id}</div>
                           ))}
                         </div>
@@ -224,18 +448,18 @@ export default function PPIOSyncPage() {
                     </div>
                   )}
 
-                  {diff.changes.update.length > 0 && (
+                  {(diff.changes.update?.length ?? 0) > 0 && (
                     <div className="border rounded-lg">
                       <button
                         onClick={() => toggleSection('update')}
                         className="w-full flex items-center gap-2 p-2 text-sm text-left hover:bg-muted/50 rounded-lg transition-colors"
                       >
                         {expandedSections.update ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        <span className="text-blue-600 dark:text-blue-400 font-medium">{t('enterprise.ppio.modelsToUpdate')} ({diff.changes.update.length})</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-medium">{t('enterprise.ppio.modelsToUpdate')} ({diff.changes.update!.length})</span>
                       </button>
                       {expandedSections.update && (
                         <div className="px-4 pb-2 space-y-1">
-                          {diff.changes.update.map(d => (
+                          {diff.changes.update!.map(d => (
                             <div key={d.model_id} className="text-xs text-muted-foreground">
                               <span className="font-mono">{d.model_id}</span>
                               {d.changes && d.changes.length > 0 && (
@@ -248,18 +472,18 @@ export default function PPIOSyncPage() {
                     </div>
                   )}
 
-                  {diff.changes.delete.length > 0 && (
+                  {(diff.changes.delete?.length ?? 0) > 0 && (
                     <div className="border rounded-lg">
                       <button
                         onClick={() => toggleSection('delete')}
                         className="w-full flex items-center gap-2 p-2 text-sm text-left hover:bg-muted/50 rounded-lg transition-colors"
                       >
                         {expandedSections.delete ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        <span className="text-red-600 dark:text-red-400 font-medium">{t('enterprise.ppio.modelsToDelete')} ({diff.changes.delete.length})</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">{t('enterprise.ppio.modelsToDelete')} ({diff.changes.delete!.length})</span>
                       </button>
                       {expandedSections.delete && (
                         <div className="px-4 pb-2 space-y-1">
-                          {diff.changes.delete.map(d => (
+                          {diff.changes.delete!.map(d => (
                             <div key={d.model_id} className="text-xs text-muted-foreground font-mono">{d.model_id}</div>
                           ))}
                         </div>
@@ -274,31 +498,16 @@ export default function PPIOSyncPage() {
                 <div className="text-sm font-medium mb-2">{t('enterprise.ppio.channelStatus')}</div>
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center gap-2">
-                    {diff.channels.openai.exists ? (
+                    {diff.channels.ppio.exists ? (
                       <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                     ) : (
                       <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                     )}
-                    <span className="text-foreground">OpenAI Channel: </span>
-                    <span className={diff.channels.openai.exists ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
-                      {diff.channels.openai.exists
+                    <span className="text-foreground">PPIO Channel: </span>
+                    <span className={diff.channels.ppio.exists ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
+                      {diff.channels.ppio.exists
                         ? t('enterprise.ppio.channelExists')
-                        : (diff.channels.openai.will_create
-                          ? t('enterprise.ppio.channelWillCreate')
-                          : t('enterprise.ppio.channelNotExists'))}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {diff.channels.anthropic.exists ? (
-                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                    )}
-                    <span className="text-foreground">Anthropic Channel: </span>
-                    <span className={diff.channels.anthropic.exists ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
-                      {diff.channels.anthropic.exists
-                        ? t('enterprise.ppio.channelExists')
-                        : (diff.channels.anthropic.will_create
+                        : (diff.channels.ppio.will_create
                           ? t('enterprise.ppio.channelWillCreate')
                           : t('enterprise.ppio.channelNotExists'))}
                     </span>
@@ -321,22 +530,6 @@ export default function PPIOSyncPage() {
           <CardTitle>{t('enterprise.ppio.syncConfig')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="sync-openai">{t('enterprise.ppio.syncOpenAI')}</Label>
-            <Switch
-              id="sync-openai"
-              checked={syncOpts.sync_openai}
-              onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, sync_openai: checked })}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="sync-anthropic">{t('enterprise.ppio.syncAnthropic')}</Label>
-            <Switch
-              id="sync-anthropic"
-              checked={syncOpts.sync_anthropic}
-              onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, sync_anthropic: checked })}
-            />
-          </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="auto-channels">{t('enterprise.ppio.autoCreateChannels')}</Label>
             <Switch

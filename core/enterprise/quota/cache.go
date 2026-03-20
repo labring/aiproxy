@@ -10,6 +10,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/redis/go-redis/v9"
@@ -129,7 +130,7 @@ func InvalidateGroupQuotaPolicy(ctx context.Context, groupID string) error {
 }
 
 // GetPolicyForUser returns the effective quota policy for a FeishuUser.
-// Priority: UserQuotaPolicy > DepartmentQuotaPolicy > GroupQuotaPolicy
+// Priority: UserQuotaPolicy > DepartmentQuotaPolicy (leaf → level2 → level1) > GroupQuotaPolicy
 func GetPolicyForUser(ctx context.Context, openID string) (*models.QuotaPolicy, error) {
 	var user models.FeishuUser
 	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
@@ -143,11 +144,19 @@ func GetPolicyForUser(ctx context.Context, openID string) (*models.QuotaPolicy, 
 		return userPolicy.QuotaPolicy, nil
 	}
 
-	// 2. Check department-level policy
-	if user.DepartmentID != "" {
+	// 2. Check department-level policy (walk up hierarchy: leaf → level2 → level1)
+	deptIDs := []string{user.DepartmentID, user.Level2DeptID, user.Level1DeptID}
+	for _, deptID := range deptIDs {
+		if deptID == "" {
+			continue
+		}
+
+		allIDs := feishu.GetAllDepartmentIDForms(deptID)
+
 		var deptPolicy models.DepartmentQuotaPolicy
-		err = model.DB.Preload("QuotaPolicy").Where("department_id = ?", user.DepartmentID).First(&deptPolicy).Error
-		if err == nil && deptPolicy.QuotaPolicy != nil {
+		if err := model.DB.Preload("QuotaPolicy").
+			Where("department_id IN ?", allIDs).
+			First(&deptPolicy).Error; err == nil && deptPolicy.QuotaPolicy != nil {
 			return deptPolicy.QuotaPolicy, nil
 		}
 	}

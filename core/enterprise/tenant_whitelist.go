@@ -63,6 +63,9 @@ func AddTenantToWhitelist(c *gin.Context) {
 		return
 	}
 
+	// Auto-clean rejected tenant login record after successful whitelist addition
+	model.DB.Where("tenant_id = ?", req.TenantID).Delete(&models.RejectedTenantLogin{})
+
 	log.Infof("tenant %s added to whitelist by %s", req.TenantID, addedBy)
 	middleware.SuccessResponse(c, tenant)
 }
@@ -126,10 +129,156 @@ func UpdateWhitelistConfig(c *gin.Context) {
 	middleware.SuccessResponse(c, config)
 }
 
+// TenantSummaryItem represents a single tenant row in the summary view.
+type TenantSummaryItem struct {
+	TenantID          string `json:"tenant_id"`
+	Name              string `json:"name"`
+	IsWhitelisted     bool   `json:"is_whitelisted"`
+	WhitelistID       uint   `json:"whitelist_id,omitempty"`
+	AddedBy           string `json:"added_by,omitempty"`
+	SuccessfulMembers int64  `json:"successful_members"`
+	// RejectedAttempts is the total attempt_count from rejected_tenant_logins for this tenant.
+	RejectedAttempts int    `json:"rejected_attempts"`
+	RejectedRecordID *uint  `json:"rejected_record_id,omitempty"`
+}
+
+// GetTenantSummary returns a unified view of all known tenants:
+// those in the whitelist, those with successful feishu logins, and those with rejected attempts.
+func GetTenantSummary(c *gin.Context) {
+	// --- Load whitelist ---
+	var whitelistRows []models.TenantWhitelist
+	if err := model.DB.Find(&whitelistRows).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	whitelistByTenant := make(map[string]*models.TenantWhitelist, len(whitelistRows))
+	for i := range whitelistRows {
+		whitelistByTenant[whitelistRows[i].TenantID] = &whitelistRows[i]
+	}
+
+	// --- Load feishu_users member counts per tenant ---
+	type tenantCount struct {
+		TenantID string
+		Count    int64
+	}
+
+	var memberCounts []tenantCount
+	// GORM automatically applies deleted_at IS NULL for soft-delete models
+	model.DB.Model(&models.FeishuUser{}).
+		Select("tenant_id, COUNT(*) AS count").
+		Group("tenant_id").
+		Scan(&memberCounts)
+
+	memberByTenant := make(map[string]int64, len(memberCounts))
+	for _, mc := range memberCounts {
+		memberByTenant[mc.TenantID] = mc.Count
+	}
+
+	// --- Load rejected_tenant_logins ---
+	var rejectedRows []models.RejectedTenantLogin
+	model.DB.Find(&rejectedRows)
+
+	rejectedByTenant := make(map[string]*models.RejectedTenantLogin, len(rejectedRows))
+	for i := range rejectedRows {
+		rejectedByTenant[rejectedRows[i].TenantID] = &rejectedRows[i]
+	}
+
+	// --- Merge into a unified list, ordered: whitelisted first, then active, then rejected-only ---
+	seen := make(map[string]struct{})
+	var items []TenantSummaryItem
+
+	addItem := func(tenantID string) {
+		if tenantID == "" {
+			return
+		}
+
+		if _, ok := seen[tenantID]; ok {
+			return
+		}
+		seen[tenantID] = struct{}{}
+
+		item := TenantSummaryItem{TenantID: tenantID}
+
+		if wl, ok := whitelistByTenant[tenantID]; ok {
+			item.IsWhitelisted = true
+			item.WhitelistID = wl.ID
+			item.Name = wl.Name
+			item.AddedBy = wl.AddedBy
+		}
+
+		if count, ok := memberByTenant[tenantID]; ok {
+			item.SuccessfulMembers = count
+		}
+
+		if rej, ok := rejectedByTenant[tenantID]; ok {
+			item.RejectedAttempts = rej.AttemptCount
+			item.RejectedRecordID = &rej.ID
+			// Use user info as name hint if whitelist name is empty
+			if item.Name == "" {
+				item.Name = rej.UserName
+			}
+		}
+
+		items = append(items, item)
+	}
+
+	// Priority order: whitelist entries first
+	for _, wl := range whitelistRows {
+		addItem(wl.TenantID)
+	}
+	// Then tenants with successful logins
+	for _, mc := range memberCounts {
+		addItem(mc.TenantID)
+	}
+	// Then rejected-only tenants
+	for _, rej := range rejectedRows {
+		addItem(rej.TenantID)
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"tenants": items,
+	})
+}
+
+// GetRejectedTenantLogins returns all rejected tenant login records.
+func GetRejectedTenantLogins(c *gin.Context) {
+	var rejected []models.RejectedTenantLogin
+	if err := model.DB.Order("last_attempt_at DESC").Find(&rejected).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"rejected": rejected,
+	})
+}
+
+// DismissRejectedTenantLogin deletes a rejected tenant login record.
+func DismissRejectedTenantLogin(c *gin.Context) {
+	id := c.Param("id")
+
+	var record models.RejectedTenantLogin
+	if err := model.DB.First(&record, id).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusNotFound, "record not found")
+		return
+	}
+
+	if err := model.DB.Delete(&record).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{"message": "dismissed"})
+}
+
 // RegisterTenantWhitelistRoutes registers tenant whitelist management routes.
 func RegisterTenantWhitelistRoutes(router *gin.RouterGroup) {
 	router.GET("/tenant-whitelist", GetTenantWhitelist)
+	router.GET("/tenant-whitelist/summary", GetTenantSummary)
+	router.GET("/tenant-whitelist/rejected", GetRejectedTenantLogins)
 	router.POST("/tenant-whitelist", AddTenantToWhitelist)
-	router.DELETE("/tenant-whitelist/:id", RemoveTenantFromWhitelist)
 	router.PUT("/tenant-whitelist/config", UpdateWhitelistConfig)
+	router.DELETE("/tenant-whitelist/:id", RemoveTenantFromWhitelist)
+	router.DELETE("/tenant-whitelist/rejected/:id", DismissRejectedTenantLogin)
 }

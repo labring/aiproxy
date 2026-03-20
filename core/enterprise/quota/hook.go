@@ -72,13 +72,17 @@ func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, reques
 	switch {
 	case usageRatio >= policy.Tier2Ratio:
 		// Tier 3: usage >= Tier2Ratio
-		if policy.BlockAtTier3 {
+		if policy.BlockAtTier3 || policy.IsModelBlockedAtTier(3, requestModel) {
 			return requestModel, 0, 0, true
 		}
 
 		return requestModel, policy.Tier3RPMMultiplier, policy.Tier3TPMMultiplier, false
 	case usageRatio >= policy.Tier1Ratio:
 		// Tier 2: Tier1Ratio <= usage < Tier2Ratio
+		if policy.IsModelBlockedAtTier(2, requestModel) {
+			return requestModel, 0, 0, true
+		}
+
 		return requestModel, policy.Tier2RPMMultiplier, policy.Tier2TPMMultiplier, false
 	default:
 		// Tier 1: usage < Tier1Ratio

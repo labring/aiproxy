@@ -134,22 +134,26 @@ var measureLabels = map[string]string{
 
 // dimensionLabels provides human-readable labels for dimensions.
 var dimensionLabels = map[string]string{
-	"user_name":  "用户名",
-	"department": "部门",
-	"model":      "模型",
-	"time_hour":  "小时",
-	"time_day":   "天",
-	"time_week":  "周",
+	"user_name":          "用户名",
+	"department":         "部门",
+	"level1_department":  "一级部门",
+	"level2_department":  "二级部门",
+	"model":              "模型",
+	"time_hour":          "小时",
+	"time_day":           "天",
+	"time_week":          "周",
 }
 
 // validDimensions lists all allowed dimension names.
 var validDimensions = map[string]bool{
-	"user_name":  true,
-	"department": true,
-	"model":      true,
-	"time_hour":  true,
-	"time_day":   true,
-	"time_week":  true,
+	"user_name":         true,
+	"department":        true,
+	"level1_department": true,
+	"level2_department": true,
+	"model":             true,
+	"time_hour":         true,
+	"time_day":          true,
+	"time_week":         true,
 }
 
 // GenerateCustomReport executes the custom report query and returns results.
@@ -239,7 +243,8 @@ func resolveRequiredBaseMeasures(measures []string) map[string]bool {
 
 func dimensionOrFilterNeedsUsers(req CustomReportRequest) bool {
 	for _, d := range req.Dimensions {
-		if d == "user_name" || d == "department" {
+		switch d {
+		case "user_name", "department", "level1_department", "level2_department":
 			return true
 		}
 	}
@@ -248,8 +253,10 @@ func dimensionOrFilterNeedsUsers(req CustomReportRequest) bool {
 }
 
 type userMapping struct {
-	Name         string
-	DepartmentID string
+	Name           string
+	DepartmentID   string
+	Level1DeptName string
+	Level2DeptName string
 }
 
 func loadMappings(needUsers bool, filters CustomReportFilter) (
@@ -260,7 +267,11 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 	}
 
 	// Load feishu users
-	query := model.DB.Model(&models.FeishuUser{}).Select("group_id", "name", "department_id")
+	query := model.DB.Model(&models.FeishuUser{}).Select(
+		"group_id", "name", "department_id",
+		"level1_dept_id", "level1_dept_name",
+		"level2_dept_id", "level2_dept_name",
+	)
 
 	if len(filters.DepartmentIDs) > 0 {
 		query = query.Where("department_id IN ?", filters.DepartmentIDs)
@@ -271,11 +282,84 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 		return nil, nil, fmt.Errorf("query feishu users: %w", err)
 	}
 
+	// Load all departments (needed for name resolution and hierarchy)
+	var departments []models.FeishuDepartment
+	if err := model.DB.Find(&departments).Error; err != nil {
+		return nil, nil, fmt.Errorf("query departments: %w", err)
+	}
+
+	// Build department lookup maps for hierarchy resolution
+	deptByID := make(map[string]*models.FeishuDepartment, len(departments))
+	for i := range departments {
+		d := &departments[i]
+		deptByID[d.DepartmentID] = d
+		if d.OpenDepartmentID != "" {
+			deptByID[d.OpenDepartmentID] = d
+		}
+	}
+
+	// computeDeptHierarchy resolves level1/level2 names from department parent chain
+	computeDeptHierarchy := func(departmentID string) (l1Name, l2Name string) {
+		var chain []string
+		currentID := departmentID
+		for i := 0; i < 10 && currentID != "" && currentID != "0"; i++ {
+			dept, ok := deptByID[currentID]
+			if !ok {
+				break
+			}
+			name := dept.Name
+			if name == "" {
+				name = dept.DepartmentID
+			}
+			chain = append(chain, name)
+			currentID = dept.ParentID
+		}
+		// chain is leaf-to-root; reverse to get root-to-leaf
+		for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+			chain[i], chain[j] = chain[j], chain[i]
+		}
+		if len(chain) >= 1 {
+			l1Name = chain[0]
+		}
+		if len(chain) >= 2 {
+			l2Name = chain[1]
+		}
+		return
+	}
+
 	groupToUser := make(map[string]userMapping, len(feishuUsers))
 	for _, u := range feishuUsers {
+		l1Name := u.Level1DeptName
+		l2Name := u.Level2DeptName
+
+		// Resolve from already-loaded department map if stored name is empty but ID exists
+		if l1Name == "" && u.Level1DeptID != "" {
+			if d, ok := deptByID[u.Level1DeptID]; ok {
+				l1Name = d.Name
+			}
+		}
+		if l2Name == "" && u.Level2DeptID != "" {
+			if d, ok := deptByID[u.Level2DeptID]; ok {
+				l2Name = d.Name
+			}
+		}
+
+		// If still empty, compute from department hierarchy
+		if l1Name == "" || l2Name == "" {
+			cl1, cl2 := computeDeptHierarchy(u.DepartmentID)
+			if l1Name == "" {
+				l1Name = cl1
+			}
+			if l2Name == "" {
+				l2Name = cl2
+			}
+		}
+
 		groupToUser[u.GroupID] = userMapping{
-			Name:         u.Name,
-			DepartmentID: u.DepartmentID,
+			Name:           u.Name,
+			DepartmentID:   u.DepartmentID,
+			Level1DeptName: l1Name,
+			Level2DeptName: l2Name,
 		}
 	}
 
@@ -293,12 +377,6 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 		}
 	}
 
-	// Load departments
-	var departments []models.FeishuDepartment
-	if err := model.DB.Find(&departments).Error; err != nil {
-		return nil, nil, fmt.Errorf("query departments: %w", err)
-	}
-
 	deptNameMap := make(map[string]string, len(departments))
 	for _, d := range departments {
 		deptNameMap[d.DepartmentID] = d.Name
@@ -306,6 +384,7 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 
 	return groupToUser, deptNameMap, nil
 }
+
 
 func resolveGroupIDs(
 	groupToUser map[string]userMapping,
@@ -409,7 +488,7 @@ func buildSelectParts(dimensions []string, requiredBase map[string]bool) []strin
 
 	for _, d := range dimensions {
 		switch d {
-		case "user_name", "department":
+		case "user_name", "department", "level1_department", "level2_department":
 			hasGroupDim = true
 		case "model":
 			hasModelDim = true
@@ -484,7 +563,7 @@ func buildGroupByParts(dimensions []string) []string {
 
 	for _, d := range dimensions {
 		switch d {
-		case "user_name", "department":
+		case "user_name", "department", "level1_department", "level2_department":
 			if !containsStr(parts, "group_id") {
 				parts = append(parts, "group_id")
 			}
@@ -521,19 +600,24 @@ func postProcess(
 	// Check which dimensions and measures are requested
 	hasDeptDim := false
 	hasUserDim := false
+	hasLevel1Dept := false
+	hasLevel2Dept := false
 
 	for _, d := range req.Dimensions {
 		switch d {
 		case "department":
 			hasDeptDim = true
+		case "level1_department":
+			hasLevel1Dept = true
+		case "level2_department":
+			hasLevel2Dept = true
 		case "user_name":
 			hasUserDim = true
 		}
 	}
 
-	// If department dimension is present, we need to aggregate by department
-	// (multiple group_ids may belong to the same department)
-	if hasDeptDim && !hasUserDim {
+	// If any department-level dimension is present (without user), aggregate by department
+	if (hasDeptDim || hasLevel1Dept || hasLevel2Dept) && !hasUserDim {
 		return aggregateByDepartment(rows, req, groupToUser, deptNameMap)
 	}
 
@@ -556,6 +640,18 @@ func postProcess(
 					row["department"] = deptNameMap[um.DepartmentID]
 				} else {
 					row["department"] = ""
+				}
+			case "level1_department":
+				if um, ok := groupToUser[r.GroupID]; ok {
+					row["level1_department"] = um.Level1DeptName
+				} else {
+					row["level1_department"] = ""
+				}
+			case "level2_department":
+				if um, ok := groupToUser[r.GroupID]; ok {
+					row["level2_department"] = um.Level2DeptName
+				} else {
+					row["level2_department"] = ""
 				}
 			case "model":
 				row["model"] = r.Model
@@ -593,10 +689,19 @@ func aggregateByDepartment(
 
 	hasModel := false
 	hasTime := false
+	hasDept := false
+	hasLevel1 := false
+	hasLevel2 := false
 	timeDim := ""
 
 	for _, d := range req.Dimensions {
 		switch d {
+		case "department":
+			hasDept = true
+		case "level1_department":
+			hasLevel1 = true
+		case "level2_department":
+			hasLevel2 = true
 		case "model":
 			hasModel = true
 		case "time_hour", "time_day", "time_week":
@@ -610,7 +715,14 @@ func aggregateByDepartment(
 		deptName := ""
 
 		if um, ok := groupToUser[r.GroupID]; ok {
-			deptName = deptNameMap[um.DepartmentID]
+			switch {
+			case hasLevel1:
+				deptName = um.Level1DeptName
+			case hasLevel2:
+				deptName = um.Level2DeptName
+			default:
+				deptName = deptNameMap[um.DepartmentID]
+			}
 		}
 
 		key := aggKey{DeptName: deptName}
@@ -632,9 +744,18 @@ func aggregateByDepartment(
 
 	result := make([]map[string]interface{}, 0, len(aggMap))
 
+	// Determine which department dimension key to use in the output row
+	deptDimKey := "department"
+	if hasLevel1 {
+		deptDimKey = "level1_department"
+	} else if hasLevel2 {
+		deptDimKey = "level2_department"
+	}
+	_ = hasDept // default fallback
+
 	for key, r := range aggMap {
 		row := make(map[string]interface{})
-		row["department"] = key.DeptName
+		row[deptDimKey] = key.DeptName
 
 		if hasModel {
 			row["model"] = key.Model

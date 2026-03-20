@@ -2,6 +2,9 @@ import { startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, subMonths }
 import { useState, useEffect, useCallback, useRef } from "react"
 import type * as echarts from "echarts"
 
+/** Sentinel value for "all" / no-filter in Select components. */
+export const ALL_FILTER = "__all__"
+
 export type TimeRange = "7d" | "30d" | "month" | "last_week" | "last_month" | "custom"
 
 export function getTimeRange(range: TimeRange, customStart?: number, customEnd?: number): { start: number; end: number } {

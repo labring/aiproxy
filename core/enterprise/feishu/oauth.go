@@ -7,16 +7,16 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	larkauthen "github.com/larksuite/oapi-sdk-go/v3/service/authen/v1"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
+	enterprisemodels "github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
-
-	// Import for tenant check (will be resolved by enterprise package)
-	enterprisemodels "github.com/labring/aiproxy/core/enterprise/models"
 )
 
 const feishuOAuthAuthorizeURL = "https://open.feishu.cn/open-apis/authen/v1/authorize"
@@ -111,6 +111,9 @@ func HandleCallback(c *gin.Context) {
 	if !isTenantAllowed {
 		log.Warnf("feishu login rejected: tenant %q not in allowed list, user: %s (%s)",
 			userInfo.TenantID, userInfo.Name, userInfo.OpenID)
+
+		// Record the rejected login attempt for admin review
+		recordRejectedTenant(userInfo.TenantID, userInfo.Name, userInfo.Email)
 
 		// Check if this is a browser request or API request
 		accept := c.GetHeader("Accept")
@@ -279,4 +282,36 @@ func checkTenantAccess(tenantKey string) bool {
 
 	// No database records, fallback to environment variable
 	return IsTenantAllowedByEnv(tenantKey)
+}
+
+// recordRejectedTenant upserts a rejected login record for the given tenant.
+// If the tenant already has a record, it increments the attempt count and updates user info.
+// Uses SELECT+UPDATE pattern for SQLite/PostgreSQL compatibility (race is benign here —
+// concurrent rejected logins from the same tenant are rare, and worst case loses a count).
+func recordRejectedTenant(tenantID, userName, userEmail string) {
+	var existing enterprisemodels.RejectedTenantLogin
+	result := model.DB.Where("tenant_id = ?", tenantID).First(&existing)
+
+	if result.Error != nil {
+		if err := model.DB.Create(&enterprisemodels.RejectedTenantLogin{
+			TenantID:      tenantID,
+			UserName:      userName,
+			UserEmail:     userEmail,
+			AttemptCount:  1,
+			LastAttemptAt: time.Now(),
+		}).Error; err != nil {
+			log.Errorf("failed to record rejected tenant login: %v", err)
+		}
+
+		return
+	}
+
+	if err := model.DB.Model(&existing).Updates(map[string]interface{}{
+		"user_name":       userName,
+		"user_email":      userEmail,
+		"attempt_count":   gorm.Expr("attempt_count + 1"),
+		"last_attempt_at": time.Now(),
+	}).Error; err != nil {
+		log.Errorf("failed to update rejected tenant login: %v", err)
+	}
 }

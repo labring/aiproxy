@@ -26,6 +26,10 @@ func RegisterRoutes(admin *gin.RouterGroup) {
 		bind.DELETE("/bind-department/:department_id", UnbindPolicyFromDepartment)
 		bind.POST("/bind-user", BindPolicyToUser)
 		bind.DELETE("/bind-user/:open_id", UnbindPolicyFromUser)
+		bind.POST("/batch-bind-departments", BatchBindPolicyToDepartments)
+		bind.POST("/batch-bind-users", BatchBindPolicyToUsers)
+		bind.GET("/department-bindings", ListDepartmentPolicyBindings)
+		bind.GET("/user-bindings", ListUserPolicyBindings)
 	}
 }
 
