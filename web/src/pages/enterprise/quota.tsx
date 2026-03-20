@@ -467,6 +467,9 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
         })
     }
 
+    // Pre-build lookup for O(1) binding check in render
+    const bindingByDeptId = new Map(bindingList.map((b: DepartmentQuotaPolicyBinding) => [b.department_id, b]))
+
     return (
         <div className="space-y-6">
             {/* Step 1: Filter & Query */}
@@ -577,7 +580,7 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
                                 </TableHeader>
                                 <TableBody>
                                     {queryDepts.map((d) => {
-                                        const existing = bindingList.find((b: DepartmentQuotaPolicyBinding) => b.department_id === d.department_id)
+                                        const existing = bindingByDeptId.get(d.department_id)
                                         return (
                                             <TableRow key={d.department_id}>
                                                 <TableCell>

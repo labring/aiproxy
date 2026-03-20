@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
@@ -30,8 +31,8 @@ func policyPeriodTypeToTokenPeriodType(pt int) string {
 	}
 }
 
-// syncPolicyToToken updates a user's Token PeriodQuota/PeriodType based on the given policy.
-func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
+// withUserToken resolves a FeishuUser's token ID and calls fn with it. Skips silently if user not found or has no token.
+func withUserToken(openID string, fn func(tokenID int)) {
 	var user models.FeishuUser
 	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
 		return
@@ -41,39 +42,39 @@ func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
 		return
 	}
 
-	periodQuota := policy.PeriodQuota
-	periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
+	fn(user.TokenID)
+}
 
-	if _, err := model.UpdateToken(user.TokenID, model.UpdateTokenRequest{
-		PeriodQuota: &periodQuota,
-		PeriodType:  &periodType,
-	}); err != nil {
-		log.Errorf("sync policy to token for user %s (token %d): %v", openID, user.TokenID, err)
-	}
+// syncPolicyToToken updates a user's Token PeriodQuota/PeriodType based on the given policy.
+func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
+	withUserToken(openID, func(tokenID int) {
+		periodQuota := policy.PeriodQuota
+		periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
+
+		if _, err := model.UpdateToken(tokenID, model.UpdateTokenRequest{
+			PeriodQuota: &periodQuota,
+			PeriodType:  &periodType,
+		}); err != nil {
+			log.Errorf("sync policy to token for user %s (token %d): %v", openID, tokenID, err)
+		}
+	})
 }
 
 // clearUserToken resets a user's Token PeriodQuota to 0.
 func clearUserToken(openID string) {
-	var user models.FeishuUser
-	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
-		return
-	}
-
-	if user.TokenID <= 0 {
-		return
-	}
-
-	zero := float64(0)
-	if _, err := model.UpdateToken(user.TokenID, model.UpdateTokenRequest{
-		PeriodQuota: &zero,
-	}); err != nil {
-		log.Errorf("clear token quota for user %s (token %d): %v", openID, user.TokenID, err)
-	}
+	withUserToken(openID, func(tokenID int) {
+		zero := float64(0)
+		if _, err := model.UpdateToken(tokenID, model.UpdateTokenRequest{
+			PeriodQuota: &zero,
+		}); err != nil {
+			log.Errorf("clear token quota for user %s (token %d): %v", openID, tokenID, err)
+		}
+	})
 }
 
-// syncPolicyToDepartmentUsers syncs Token PeriodQuota for all users in a department (and descendants).
-// Users with personal (UserQuotaPolicy) bindings are skipped.
-func syncPolicyToDepartmentUsers(departmentID string, policy *models.QuotaPolicy) {
+// forEachDepartmentUserWithoutOverride loads all users in a department (and descendants),
+// filters out those with personal UserQuotaPolicy bindings, and calls fn for each remaining user's OpenID.
+func forEachDepartmentUserWithoutOverride(departmentID string, fn func(openID string)) {
 	descendantIDs := feishu.GetDescendantDepartmentIDs(departmentID)
 	if len(descendantIDs) == 0 {
 		return
@@ -83,7 +84,6 @@ func syncPolicyToDepartmentUsers(departmentID string, policy *models.QuotaPolicy
 	model.DB.Where("department_id IN ? OR level1_dept_id IN ? OR level2_dept_id IN ?",
 		descendantIDs, descendantIDs, descendantIDs).Find(&users)
 
-	// Batch load user-level overrides
 	openIDs := make([]string, 0, len(users))
 	for _, u := range users {
 		openIDs = append(openIDs, u.OpenID)
@@ -101,16 +101,24 @@ func syncPolicyToDepartmentUsers(departmentID string, policy *models.QuotaPolicy
 
 	for _, u := range users {
 		if userOverrides[u.OpenID] {
-			continue // skip users with personal override
+			continue
 		}
 
-		syncPolicyToToken(u.OpenID, policy)
+		fn(u.OpenID)
 	}
+}
+
+// syncPolicyToDepartmentUsers syncs Token PeriodQuota for all users in a department (and descendants).
+// Users with personal (UserQuotaPolicy) bindings are skipped.
+func syncPolicyToDepartmentUsers(departmentID string, policy *models.QuotaPolicy) {
+	forEachDepartmentUserWithoutOverride(departmentID, func(openID string) {
+		syncPolicyToToken(openID, policy)
+	})
 }
 
 // ListPolicies returns all quota policies with pagination.
 func ListPolicies(c *gin.Context) {
-	page, perPage := parsePageParams(c)
+	page, perPage := utils.ParsePageParams(c)
 
 	var policies []models.QuotaPolicy
 	var total int64
@@ -342,20 +350,7 @@ func invalidatePolicyCaches(policyID int) {
 	}
 }
 
-func parsePageParams(c *gin.Context) (int, int) {
-	pageStr := c.Query("page")
-	if pageStr == "" {
-		pageStr = c.Query("p")
-	}
-
-	page, _ := strconv.Atoi(pageStr)
-	perPage, _ := strconv.Atoi(c.Query("per_page"))
-
-	return page, perPage
-}
-
 // bindDepartmentPolicyCore is the shared logic for binding a policy to a department.
-// //go:build enterprise
 func bindDepartmentPolicyCore(departmentID string, quotaPolicyID int) (*models.DepartmentQuotaPolicy, *models.QuotaPolicy, error) {
 	var policy models.QuotaPolicy
 	if err := model.DB.First(&policy, quotaPolicyID).Error; err != nil {
@@ -418,6 +413,37 @@ func BindPolicyToDepartment(c *gin.Context) {
 	middleware.SuccessResponse(c, binding)
 }
 
+// bindUserPolicyCore is the shared logic for binding a policy to a user (upsert + token sync).
+func bindUserPolicyCore(openID string, policy *models.QuotaPolicy) (*models.UserQuotaPolicy, error) {
+	binding := models.UserQuotaPolicy{
+		OpenID:        openID,
+		QuotaPolicyID: policy.ID,
+	}
+
+	var existing models.UserQuotaPolicy
+	err := model.DB.Where("open_id = ?", openID).First(&existing).Error
+	if err == nil {
+		existing.QuotaPolicyID = policy.ID
+		if err := model.DB.Save(&existing).Error; err != nil {
+			return nil, err
+		}
+
+		binding = existing
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := model.DB.Create(&binding).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, err
+	}
+
+	if policy.PeriodQuota > 0 {
+		go syncPolicyToToken(openID, policy)
+	}
+
+	return &binding, nil
+}
+
 // BindPolicyToUser binds a quota policy to a specific user (overrides department policy).
 func BindPolicyToUser(c *gin.Context) {
 	var req struct {
@@ -441,34 +467,10 @@ func BindPolicyToUser(c *gin.Context) {
 		return
 	}
 
-	binding := models.UserQuotaPolicy{
-		OpenID:        req.OpenID,
-		QuotaPolicyID: req.QuotaPolicyID,
-	}
-
-	var existing models.UserQuotaPolicy
-	err := model.DB.Where("open_id = ?", req.OpenID).First(&existing).Error
-	if err == nil {
-		existing.QuotaPolicyID = req.QuotaPolicyID
-		if err := model.DB.Save(&existing).Error; err != nil {
-			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		binding = existing
-	} else if errors.Is(err, gorm.ErrRecordNotFound) {
-		if err := model.DB.Create(&binding).Error; err != nil {
-			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
-			return
-		}
-	} else {
+	binding, err := bindUserPolicyCore(req.OpenID, &policy)
+	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	// Sync Token PeriodQuota
-	if policy.PeriodQuota > 0 {
-		go syncPolicyToToken(req.OpenID, &policy)
 	}
 
 	middleware.SuccessResponse(c, binding)
@@ -495,39 +497,9 @@ func UnbindPolicyFromDepartment(c *gin.Context) {
 	}
 
 	// Clear Token PeriodQuota for users without personal override
-	go func() {
-		descendantIDs := feishu.GetDescendantDepartmentIDs(deptID)
-		if len(descendantIDs) == 0 {
-			return
-		}
-
-		var users []models.FeishuUser
-		model.DB.Where("department_id IN ? OR level1_dept_id IN ? OR level2_dept_id IN ?",
-			descendantIDs, descendantIDs, descendantIDs).Find(&users)
-
-		openIDs := make([]string, 0, len(users))
-		for _, u := range users {
-			openIDs = append(openIDs, u.OpenID)
-		}
-
-		userOverrides := make(map[string]bool)
-		if len(openIDs) > 0 {
-			var overrides []models.UserQuotaPolicy
-			model.DB.Where("open_id IN ?", openIDs).Find(&overrides)
-
-			for _, o := range overrides {
-				userOverrides[o.OpenID] = true
-			}
-		}
-
-		for _, u := range users {
-			if userOverrides[u.OpenID] {
-				continue
-			}
-
-			clearUserToken(u.OpenID)
-		}
-	}()
+	go forEachDepartmentUserWithoutOverride(deptID, func(openID string) {
+		clearUserToken(openID)
+	})
 
 	middleware.SuccessResponse(c, nil)
 }
@@ -641,39 +613,14 @@ func BatchBindPolicyToUsers(c *gin.Context) {
 	var errs []string
 
 	for _, openID := range req.OpenIDs {
-		binding := models.UserQuotaPolicy{
-			OpenID:        openID,
-			QuotaPolicyID: req.QuotaPolicyID,
-		}
-
-		var existing models.UserQuotaPolicy
-		err := model.DB.Where("open_id = ?", openID).First(&existing).Error
-		if err == nil {
-			existing.QuotaPolicyID = req.QuotaPolicyID
-			if err := model.DB.Save(&existing).Error; err != nil {
-				errs = append(errs, openID+": "+err.Error())
-
-				continue
-			}
-
-			binding = existing
-		} else if errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := model.DB.Create(&binding).Error; err != nil {
-				errs = append(errs, openID+": "+err.Error())
-
-				continue
-			}
-		} else {
+		binding, err := bindUserPolicyCore(openID, &policy)
+		if err != nil {
 			errs = append(errs, openID+": "+err.Error())
 
 			continue
 		}
 
-		if policy.PeriodQuota > 0 {
-			go syncPolicyToToken(openID, &policy)
-		}
-
-		results = append(results, binding)
+		results = append(results, *binding)
 	}
 
 	if len(errs) > 0 && len(results) == 0 {
@@ -730,6 +677,71 @@ func resolveDepartmentLevels(deptID string, deptMap map[string]*models.FeishuDep
 		// root is level1, self (or nearest child) is level2
 		return chain[len(chain)-1].Name, chain[0].Name
 	}
+}
+
+// getDescendantIDsFromMap computes all descendant department IDs (including self and all ID forms)
+// from an in-memory department map, avoiding recursive DB queries.
+func getDescendantIDsFromMap(deptID string, deptMap map[string]*models.FeishuDepartment) map[string]bool {
+	// Deduplicate departments by DB ID
+	seen := make(map[int]bool)
+	var depts []*models.FeishuDepartment
+	for _, d := range deptMap {
+		if !seen[d.ID] {
+			seen[d.ID] = true
+			depts = append(depts, d)
+		}
+	}
+
+	// Build parent_id → children index
+	childrenOf := make(map[string][]*models.FeishuDepartment)
+	for _, d := range depts {
+		if d.ParentID != "" && d.ParentID != "0" {
+			childrenOf[d.ParentID] = append(childrenOf[d.ParentID], d)
+		}
+	}
+
+	result := make(map[string]bool)
+
+	// BFS: queue holds department IDs to process
+	queue := []string{deptID}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+
+		if result[id] {
+			continue
+		}
+
+		result[id] = true
+
+		// Collect all ID forms for this dept
+		d := deptMap[id]
+		if d == nil {
+			continue
+		}
+
+		allForms := []string{d.DepartmentID, d.OpenDepartmentID}
+		for _, form := range allForms {
+			if form != "" {
+				result[form] = true
+			}
+		}
+
+		// Enqueue children keyed by any known ID form
+		for _, form := range allForms {
+			if form == "" {
+				continue
+			}
+
+			for _, child := range childrenOf[form] {
+				if !result[child.DepartmentID] {
+					queue = append(queue, child.DepartmentID)
+				}
+			}
+		}
+	}
+
+	return result
 }
 
 // buildDepartmentLookup loads all active departments into a lookup map keyed by
@@ -795,21 +807,13 @@ func ListDepartmentPolicyBindings(c *gin.Context) {
 
 		detail.Level1Name, detail.Level2Name = resolveDepartmentLevels(b.DepartmentID, deptMap)
 
-		// Compute descendants once per binding (uses DB but GetDescendantDepartmentIDs is recursive)
-		descendantIDs := feishu.GetDescendantDepartmentIDs(b.DepartmentID)
-		if len(descendantIDs) > 0 {
-			descendantSet := make(map[string]bool, len(descendantIDs))
-			for _, id := range descendantIDs {
-				descendantSet[id] = true
-			}
-
-			// Count members and overrides from preloaded data
-			for _, u := range allUsers {
-				if descendantSet[u.DepartmentID] || descendantSet[u.Level1DeptID] || descendantSet[u.Level2DeptID] {
-					detail.MemberCount++
-					if overrideSet[u.OpenID] {
-						detail.OverrideCount++
-					}
+		// Compute descendants from preloaded deptMap (no additional DB queries)
+		descendantSet := getDescendantIDsFromMap(b.DepartmentID, deptMap)
+		for _, u := range allUsers {
+			if descendantSet[u.DepartmentID] || descendantSet[u.Level1DeptID] || descendantSet[u.Level2DeptID] {
+				detail.MemberCount++
+				if overrideSet[u.OpenID] {
+					detail.OverrideCount++
 				}
 			}
 		}
