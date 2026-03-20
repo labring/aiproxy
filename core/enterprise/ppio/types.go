@@ -33,6 +33,9 @@ type PPIOModelsResponse struct {
 	Data []PPIOModel `json:"data"`
 }
 
+func (m PPIOModel) GetID() string        { return m.ID }
+func (m PPIOModel) GetEndpoints() []string { return m.Endpoints }
+
 // IsAnthropicCompatible checks if the model supports Anthropic endpoint
 func (m *PPIOModel) IsAnthropicCompatible() bool {
 	return slices.Contains(m.Endpoints, "anthropic")
@@ -128,6 +131,9 @@ func (m *PPIOModelV2) GetCacheReadPricePerToken() float64 {
 func (m *PPIOModelV2) GetCacheCreationPricePerToken() float64 {
 	return float64(m.CacheCreationInputTokenPricePerM) / 1_000_000_000
 }
+
+func (m PPIOModelV2) GetID() string        { return m.ID }
+func (m PPIOModelV2) GetEndpoints() []string { return m.Endpoints }
 
 // IsAnthropicCompatible checks if the V2 model supports Anthropic endpoint
 func (m *PPIOModelV2) IsAnthropicCompatible() bool {

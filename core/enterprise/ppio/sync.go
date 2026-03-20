@@ -280,41 +280,19 @@ func executeSyncTransaction(
 //   - Channels with base_url containing "anthropic" get only anthropic-endpoint models.
 //   - All other PPIO channels get chat/completions-endpoint models.
 func EnsurePPIOChannels(_ SyncOptions, remoteModels []PPIOModel) (ChannelsInfo, error) {
-	info := ChannelsInfo{}
-
-	likeOp := "ILIKE"
-	if common.UsingSQLite {
-		likeOp = "LIKE"
-	}
-
-	var channels []model.Channel
-
-	err := model.DB.Where("base_url "+likeOp+" ?", "%ppio%").Find(&channels).Error
-	if err != nil || len(channels) == 0 {
-		return info, nil
-	}
-
-	info.PPIO.Exists = true
-	info.PPIO.ID = channels[0].ID
-
-	openaiModels := filterModelIDsByEndpoint(remoteModels, "chat/completions")
-	anthropicModels := filterModelIDsByEndpoint(remoteModels, "anthropic")
-
-	for i := range channels {
-		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
-			channels[i].Models = anthropicModels
-		} else {
-			channels[i].Models = openaiModels
-		}
-
-		model.DB.Save(&channels[i])
-	}
-
-	return info, nil
+	return ensurePPIOChannelsWithFilter(
+		func(endpoint string) []string { return filterModelIDs(remoteModels, endpoint) },
+	)
 }
 
 // EnsurePPIOChannelsV2 is the V2 variant that works with PPIOModelV2 slices.
 func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsInfo, error) {
+	return ensurePPIOChannelsWithFilter(
+		func(endpoint string) []string { return filterModelIDs(remoteModels, endpoint) },
+	)
+}
+
+func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
 	likeOp := "ILIKE"
@@ -332,8 +310,8 @@ func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsIn
 	info.PPIO.Exists = true
 	info.PPIO.ID = channels[0].ID
 
-	openaiModels := filterModelV2IDsByEndpoint(remoteModels, "chat/completions")
-	anthropicModels := filterModelV2IDsByEndpoint(remoteModels, "anthropic")
+	openaiModels := filterByEndpoint("chat/completions")
+	anthropicModels := filterByEndpoint("anthropic")
 
 	for i := range channels {
 		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
@@ -342,7 +320,9 @@ func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsIn
 			channels[i].Models = openaiModels
 		}
 
-		model.DB.Save(&channels[i])
+		if err := model.DB.Model(&channels[i]).Update("models", channels[i].Models).Error; err != nil {
+			return info, fmt.Errorf("failed to update channel %d models: %w", channels[i].ID, err)
+		}
 	}
 
 	return info, nil
@@ -399,12 +379,7 @@ func sendProgress(
 // V1 model config creation (old public API)
 
 func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
-	configMap := buildConfigFromPPIOModel(ppioModel)
-	configJSON, _ := sonic.Marshal(configMap)
-
-	var configData map[model.ModelConfigKey]any
-
-	_ = sonic.Unmarshal(configJSON, &configData)
+	configData := toModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 
 	// Check if model already exists (possibly with a different owner)
 	var existing model.ModelConfig
@@ -447,14 +422,7 @@ func updateModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 		return err
 	}
 
-	configMap := buildConfigFromPPIOModel(ppioModel)
-	configJSON, _ := sonic.Marshal(configMap)
-
-	var configData map[model.ModelConfigKey]any
-
-	_ = sonic.Unmarshal(configJSON, &configData)
-
-	existing.Config = configData
+	existing.Config = toModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 	existing.Price.InputPrice = model.ZeroNullFloat64(ppioModel.GetInputPricePerToken())
 	existing.Price.OutputPrice = model.ZeroNullFloat64(ppioModel.GetOutputPricePerToken())
 	existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
@@ -466,12 +434,7 @@ func updateModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 // V2 model config creation (management API with tiered & cache pricing)
 
 func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
-	configMap := buildConfigFromPPIOModelV2(m)
-	configJSON, _ := sonic.Marshal(configMap)
-
-	var configData map[model.ModelConfigKey]any
-
-	_ = sonic.Unmarshal(configJSON, &configData)
+	configData := toModelConfigKeys(buildConfigFromPPIOModelV2(m))
 
 	rpm := int64(60)
 	if m.RPM > 0 {
@@ -525,14 +488,7 @@ func updateModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 
 	existing.Owner = model.ModelOwnerPPIO
 
-	configMap := buildConfigFromPPIOModelV2(m)
-	configJSON, _ := sonic.Marshal(configMap)
-
-	var configData map[model.ModelConfigKey]any
-
-	_ = sonic.Unmarshal(configJSON, &configData)
-
-	existing.Config = configData
+	existing.Config = toModelConfigKeys(buildConfigFromPPIOModelV2(m))
 
 	if m.RPM > 0 {
 		existing.RPM = int64(m.RPM)
@@ -571,22 +527,9 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 		conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
 
 		for i, tier := range m.TieredBillingConfigs {
-			minTokens := tier.MinTokens
-			// PPIO tiers use inclusive boundaries: [0,128000], [128000,∞].
-			// aiproxy's ValidateConditionalPrices treats [min,max] as inclusive
-			// and rejects overlapping ranges.  Bump MinTokens by 1 for
-			// non-first tiers whose MinTokens == previous tier's MaxTokens.
-			if i > 0 && minTokens > 0 {
-				prevMax := m.TieredBillingConfigs[i-1].MaxTokens
-				if prevMax > 0 && minTokens <= prevMax {
-					minTokens = prevMax + 1
-				}
-			}
-
-			maxTokens := tier.MaxTokens
-			// After boundary adjustment, skip degenerate tiers where min > max
+			minTokens, maxTokens := adjustTierBounds(m.TieredBillingConfigs, i)
 			if maxTokens > 0 && minTokens > maxTokens {
-				continue
+				continue // degenerate tier after boundary adjustment
 			}
 
 			cp := model.ConditionalPrice{
@@ -655,28 +598,64 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 	return cfg
 }
 
-// filterModelIDsByEndpoint returns model IDs that support the given endpoint.
-func filterModelIDsByEndpoint(models []PPIOModel, endpoint string) []string {
+// endpointModel is satisfied by both PPIOModel and PPIOModelV2.
+type endpointModel interface {
+	GetID() string
+	GetEndpoints() []string
+}
+
+// filterModelIDs returns model IDs that support the given endpoint.
+func filterModelIDs[T endpointModel](models []T, endpoint string) []string {
 	ids := make([]string, 0, len(models))
 
 	for _, m := range models {
-		if slices.Contains(m.Endpoints, endpoint) {
-			ids = append(ids, m.ID)
+		if slices.Contains(m.GetEndpoints(), endpoint) {
+			ids = append(ids, m.GetID())
 		}
 	}
 
 	return ids
 }
 
-// filterModelV2IDsByEndpoint returns V2 model IDs that support the given endpoint.
-func filterModelV2IDsByEndpoint(models []PPIOModelV2, endpoint string) []string {
-	ids := make([]string, 0, len(models))
+// toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.
+func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
+	out := make(map[model.ModelConfigKey]any, len(m))
+	for k, v := range m {
+		out[model.ModelConfigKey(k)] = v
+	}
 
-	for _, m := range models {
-		if slices.Contains(m.Endpoints, endpoint) {
-			ids = append(ids, m.ID)
+	return out
+}
+
+// adjustTierBounds returns the effective [min, max] for tier i, bumping min by 1
+// when it overlaps with the previous tier's max (PPIO uses inclusive boundaries
+// like [0,128000],[128000,∞] but aiproxy requires non-overlapping ranges).
+func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens int64) {
+	minTokens = tiers[i].MinTokens
+	maxTokens = tiers[i].MaxTokens
+
+	if i > 0 && minTokens > 0 {
+		prevMax := tiers[i-1].MaxTokens
+		if prevMax > 0 && minTokens <= prevMax {
+			minTokens = prevMax + 1
 		}
 	}
 
-	return ids
+	return minTokens, maxTokens
+}
+
+// countEffectiveTiers returns the number of non-degenerate tiers after boundary adjustment.
+func countEffectiveTiers(tiers []TieredBillingConfig) int {
+	count := 0
+
+	for i := range tiers {
+		minTokens, maxTokens := adjustTierBounds(tiers, i)
+		if maxTokens > 0 && minTokens > maxTokens {
+			continue
+		}
+
+		count++
+	}
+
+	return count
 }

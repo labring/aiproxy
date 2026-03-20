@@ -233,21 +233,7 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *PPIOModelV2) []stri
 	// that are skipped during sync — see setPriceFromV2Model)
 	remoteTieredCount := 0
 	if remote.IsTieredBilling {
-		for i, tier := range remote.TieredBillingConfigs {
-			minTokens := tier.MinTokens
-			if i > 0 && minTokens > 0 {
-				prevMax := remote.TieredBillingConfigs[i-1].MaxTokens
-				if prevMax > 0 && minTokens <= prevMax {
-					minTokens = prevMax + 1
-				}
-			}
-
-			if tier.MaxTokens > 0 && minTokens > tier.MaxTokens {
-				continue // degenerate tier, skipped during sync
-			}
-
-			remoteTieredCount++
-		}
+		remoteTieredCount = countEffectiveTiers(remote.TieredBillingConfigs)
 	}
 
 	localTieredCount := len(local.Price.ConditionalPrices)
