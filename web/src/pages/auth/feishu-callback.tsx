@@ -40,6 +40,7 @@ export default function FeishuCallbackPage() {
                 name: searchParams.get("name") || "",
                 avatar: searchParams.get("avatar") || "",
                 openId: searchParams.get("open_id") || "",
+                role: (searchParams.get("role") || "viewer") as 'viewer' | 'analyst' | 'admin',
             }
             loginWithFeishu(tokenKey, user)
             navigate(ROUTES.ENTERPRISE, { replace: true })

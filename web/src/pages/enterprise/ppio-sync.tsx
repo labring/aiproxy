@@ -17,9 +17,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { useHasPermission } from '@/lib/permissions'
 
 export default function PPIOSyncPage() {
   const { t } = useTranslation()
+  const canManage = useHasPermission('access_control_manage')
   const [diagnostic, setDiagnostic] = useState<DiagnosticResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -300,14 +302,16 @@ export default function PPIOSyncPage() {
                 </div>
               )}
 
-              <Button
-                onClick={saveConfig}
-                disabled={configSaving || !selectedChannelId}
-                size="sm"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {configSaving ? t('enterprise.ppio.configSaving') : t('enterprise.ppio.configSave')}
-              </Button>
+              {canManage && (
+                <Button
+                  onClick={saveConfig}
+                  disabled={configSaving || !selectedChannelId}
+                  size="sm"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {configSaving ? t('enterprise.ppio.configSaving') : t('enterprise.ppio.configSave')}
+                </Button>
+              )}
             </>
           )}
         </CardContent>
@@ -341,14 +345,16 @@ export default function PPIOSyncPage() {
             />
             <p className="text-xs text-muted-foreground">{t('enterprise.ppio.mgmtTokenHint')}</p>
           </div>
-          <Button
-            onClick={saveMgmtToken}
-            disabled={mgmtTokenSaving || !mgmtToken.trim()}
-            size="sm"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {mgmtTokenSaving ? t('common.saving') : t('enterprise.ppio.mgmtTokenSave')}
-          </Button>
+          {canManage && (
+            <Button
+              onClick={saveMgmtToken}
+              disabled={mgmtTokenSaving || !mgmtToken.trim()}
+              size="sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {mgmtTokenSaving ? t('common.saving') : t('enterprise.ppio.mgmtTokenSave')}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -536,6 +542,7 @@ export default function PPIOSyncPage() {
               id="auto-channels"
               checked={syncOpts.auto_create_channels}
               onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, auto_create_channels: checked })}
+              disabled={!canManage}
             />
           </div>
           <div className="flex items-center justify-between">
@@ -547,6 +554,7 @@ export default function PPIOSyncPage() {
               id="delete-unmatched"
               checked={syncOpts.delete_unmatched_model || false}
               onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, delete_unmatched_model: checked })}
+              disabled={!canManage}
             />
           </div>
         </CardContent>
@@ -555,14 +563,16 @@ export default function PPIOSyncPage() {
       {/* Sync Button */}
       <Card>
         <CardContent className="p-4 space-y-4">
-          <Button
-            onClick={handleSync}
-            disabled={syncing || !diff || (diff.summary.to_add + diff.summary.to_update + (syncOpts.delete_unmatched_model ? diff.summary.to_delete : 0) === 0)}
-            className="w-full"
-            size="lg"
-          >
-            {syncing ? `${t('enterprise.ppio.syncing')} (${progress}%)` : t('enterprise.ppio.executeSync')}
-          </Button>
+          {canManage && (
+            <Button
+              onClick={handleSync}
+              disabled={syncing || !diff || (diff.summary.to_add + diff.summary.to_update + (syncOpts.delete_unmatched_model ? diff.summary.to_delete : 0) === 0)}
+              className="w-full"
+              size="lg"
+            >
+              {syncing ? `${t('enterprise.ppio.syncing')} (${progress}%)` : t('enterprise.ppio.executeSync')}
+            </Button>
+          )}
 
           {syncing && (
             <div className="space-y-2">

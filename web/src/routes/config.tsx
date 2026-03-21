@@ -3,6 +3,7 @@ import { Navigate } from "react-router"
 import { Suspense, lazy } from "react"
 import { ROUTES } from "./constants"
 import { ProtectedRoute } from "@/feature/auth/components/ProtectedRoute"
+import { RequirePermission } from "@/components/common/RequirePermission"
 
 //page
 import ModelPage from "@/pages/model/page"
@@ -31,6 +32,7 @@ const EnterpriseCustomReport = lazy(() => import("@/pages/enterprise/custom-repo
 const EnterpriseAccessControl = lazy(() => import("@/pages/enterprise/access-control"))
 const EnterpriseUsers = lazy(() => import("@/pages/enterprise/users"))
 const EnterprisePPIOSync = lazy(() => import("@/pages/enterprise/ppio-sync"))
+const EnterpriseMyAccess = lazy(() => import("@/pages/enterprise/my-access"))
 
 // lazy load component wrapper
 const lazyLoad = (Component: React.ComponentType) => (
@@ -100,31 +102,35 @@ export function useRoutes(): RouteObject[] {
                     },
                     {
                         path: ROUTES.ENTERPRISE_RANKING,
-                        element: lazyLoad(EnterpriseRanking),
+                        element: <RequirePermission permission="ranking_view">{lazyLoad(EnterpriseRanking)}</RequirePermission>,
                     },
                     {
                         path: `${ROUTES.ENTERPRISE_DEPARTMENT}/:id`,
-                        element: lazyLoad(EnterpriseDepartment),
+                        element: <RequirePermission permission="department_detail_view">{lazyLoad(EnterpriseDepartment)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_QUOTA,
-                        element: lazyLoad(EnterpriseQuota),
+                        element: <RequirePermission permission="quota_manage_view">{lazyLoad(EnterpriseQuota)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_CUSTOM_REPORT,
-                        element: lazyLoad(EnterpriseCustomReport),
+                        element: <RequirePermission permission="custom_report_view">{lazyLoad(EnterpriseCustomReport)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_ACCESS_CONTROL,
-                        element: lazyLoad(EnterpriseAccessControl),
+                        element: <RequirePermission permission="access_control_view">{lazyLoad(EnterpriseAccessControl)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_USERS,
-                        element: lazyLoad(EnterpriseUsers),
+                        element: <RequirePermission permission="user_manage_view">{lazyLoad(EnterpriseUsers)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_PPIO_SYNC,
-                        element: lazyLoad(EnterprisePPIOSync),
+                        element: <RequirePermission permission="access_control_view">{lazyLoad(EnterprisePPIOSync)}</RequirePermission>,
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_MY_ACCESS,
+                        element: lazyLoad(EnterpriseMyAccess),
                     },
                 ]
             }

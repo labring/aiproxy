@@ -5,6 +5,7 @@ export interface EnterpriseUser {
     name: string
     avatar: string
     openId: string
+    role: 'viewer' | 'analyst' | 'admin'
 }
 
 export interface AuthState {

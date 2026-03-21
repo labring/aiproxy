@@ -70,6 +70,33 @@ func AddTenantToWhitelist(c *gin.Context) {
 	middleware.SuccessResponse(c, tenant)
 }
 
+// UpdateTenantWhitelist updates a tenant whitelist entry (e.g. name).
+func UpdateTenantWhitelist(c *gin.Context) {
+	id := c.Param("id")
+
+	var tenant models.TenantWhitelist
+	if err := model.DB.First(&tenant, id).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusNotFound, "tenant not found")
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	tenant.Name = req.Name
+	if err := model.DB.Save(&tenant).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, tenant)
+}
+
 // RemoveTenantFromWhitelist removes a tenant from the whitelist.
 func RemoveTenantFromWhitelist(c *gin.Context) {
 	id := c.Param("id")
@@ -273,12 +300,17 @@ func DismissRejectedTenantLogin(c *gin.Context) {
 }
 
 // RegisterTenantWhitelistRoutes registers tenant whitelist management routes.
-func RegisterTenantWhitelistRoutes(router *gin.RouterGroup) {
-	router.GET("/tenant-whitelist", GetTenantWhitelist)
-	router.GET("/tenant-whitelist/summary", GetTenantSummary)
-	router.GET("/tenant-whitelist/rejected", GetRejectedTenantLogins)
-	router.POST("/tenant-whitelist", AddTenantToWhitelist)
-	router.PUT("/tenant-whitelist/config", UpdateWhitelistConfig)
-	router.DELETE("/tenant-whitelist/:id", RemoveTenantFromWhitelist)
-	router.DELETE("/tenant-whitelist/rejected/:id", DismissRejectedTenantLogin)
+// Read endpoints require access_control_view; write endpoints require access_control_manage.
+func RegisterTenantWhitelistRoutes(router *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
+	acView := router.Group("", permMW[models.PermAccessControlView])
+	acView.GET("/tenant-whitelist", GetTenantWhitelist)
+	acView.GET("/tenant-whitelist/summary", GetTenantSummary)
+	acView.GET("/tenant-whitelist/rejected", GetRejectedTenantLogins)
+
+	acManage := router.Group("", permMW[models.PermAccessControlManage])
+	acManage.POST("/tenant-whitelist", AddTenantToWhitelist)
+	acManage.PUT("/tenant-whitelist/config", UpdateWhitelistConfig)
+	acManage.PUT("/tenant-whitelist/:id", UpdateTenantWhitelist)
+	acManage.DELETE("/tenant-whitelist/:id", RemoveTenantFromWhitelist)
+	acManage.DELETE("/tenant-whitelist/rejected/:id", DismissRejectedTenantLogin)
 }

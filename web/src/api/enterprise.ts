@@ -147,6 +147,7 @@ export interface FeishuCallbackResponse {
         name: string
         email: string
         avatar: string
+        role: 'viewer' | 'analyst' | 'admin'
     }
 }
 
@@ -333,6 +334,52 @@ export interface RejectedTenantLoginsResponse {
     rejected: RejectedTenantLogin[]
 }
 
+// Permission types
+export interface PermissionKeyInfo {
+    key: string
+    display_name: string
+}
+
+export interface PermissionModuleInfo {
+    module: string
+    display_name: string
+    view_key: string
+    manage_key: string
+}
+
+// My Access types
+export interface MyTokenInfo {
+    id: number
+    name: string
+    key: string
+    status: number
+    created_at: string
+    used_amount: number
+    request_count: number
+}
+
+export interface ModelAccessInfo {
+    model: string
+    type: number
+    rpm: number
+    tpm: number
+    input_price: number
+    output_price: number
+    price_unit: number
+}
+
+export interface ModelGroupInfo {
+    owner: string
+    models: ModelAccessInfo[]
+}
+
+export interface MyAccessResponse {
+    base_url: string
+    group_id: string
+    tokens: MyTokenInfo[]
+    model_groups: ModelGroupInfo[]
+}
+
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
     const params: Record<string, string> = {}
     if (startTimestamp) params.start_timestamp = String(startTimestamp)
@@ -438,6 +485,7 @@ export const enterpriseApi = {
             name: resp.user.name,
             avatar: resp.user.avatar,
             openId: resp.user.open_id,
+            role: resp.user.role || 'viewer',
         }
     },
 
@@ -505,6 +553,10 @@ export const enterpriseApi = {
 
     addTenantToWhitelist: (tenant_id: string, name?: string): Promise<{ id: number; tenant_id: string; name: string }> => {
         return post('/enterprise/tenant-whitelist', { tenant_id, name })
+    },
+
+    updateTenantWhitelist: (id: number, name: string): Promise<{ id: number; tenant_id: string; name: string }> => {
+        return put(`/enterprise/tenant-whitelist/${id}`, { name })
     },
 
     removeTenantFromWhitelist: (id: number): Promise<void> => {
@@ -612,5 +664,35 @@ export const enterpriseApi = {
 
     dismissRejectedTenantLogin: (id: number): Promise<void> => {
         return del<void>(`/enterprise/tenant-whitelist/rejected/${id}`)
+    },
+
+    // Role Permission APIs
+    getMyPermissions: (): Promise<{ role: string; permissions: string[] }> => {
+        return get<{ role: string; permissions: string[] }>('/enterprise/role-permissions/my')
+    },
+
+    getAllPermissionKeys: (): Promise<{ modules: PermissionModuleInfo[] }> => {
+        return get<{ modules: PermissionModuleInfo[] }>('/enterprise/role-permissions/all-keys')
+    },
+
+    getRolePermissions: (): Promise<{ roles: Record<string, string[]> }> => {
+        return get<{ roles: Record<string, string[]> }>('/enterprise/role-permissions')
+    },
+
+    updateRolePermissions: (role: string, permissions: string[]): Promise<{ role: string; permissions: string[] }> => {
+        return put<{ role: string; permissions: string[] }>(`/enterprise/role-permissions/${role}`, { permissions })
+    },
+
+    // My Access APIs
+    getMyAccess: (): Promise<MyAccessResponse> => {
+        return get<MyAccessResponse>('/enterprise/my-access')
+    },
+
+    createMyToken: (name: string): Promise<MyTokenInfo> => {
+        return post<MyTokenInfo>('/enterprise/my-access/tokens', { name })
+    },
+
+    disableMyToken: (id: number): Promise<void> => {
+        return del<void>(`/enterprise/my-access/tokens/${id}`)
     },
 }

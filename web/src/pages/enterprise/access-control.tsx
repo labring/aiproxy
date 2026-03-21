@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Shield, Plus, Trash2, AlertCircle, Check, X, Users, UserX } from "lucide-react"
+import { Shield, Plus, Pencil, Trash2, AlertCircle, Check, X, Users, UserX } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { enterpriseApi, type TenantSummaryItem } from "@/api/enterprise"
 import { toast } from "sonner"
+import { useHasPermission } from "@/lib/permissions"
 
 const SUMMARY_KEY = "tenant-summary"
 const CONFIG_KEY = "tenant-whitelist"
@@ -36,9 +37,11 @@ export default function AccessControlPage() {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [addDialogOpen, setAddDialogOpen] = useState(false)
+    const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedWhitelistId, setSelectedWhitelistId] = useState<number | null>(null)
     const [newTenant, setNewTenant] = useState({ tenant_id: "", name: "" })
+    const [editTenant, setEditTenant] = useState({ id: 0, name: "" })
 
     // Fetch config (wildcard mode etc.)
     const { data: configData, isLoading: configLoading } = useQuery({
@@ -72,6 +75,20 @@ export default function AccessControlPage() {
         },
         onError: (error: Error) => {
             toast.error(error.message || t("enterprise.accessControl.addFailed"))
+        },
+    })
+
+    // Update tenant name mutation
+    const editMutation = useMutation({
+        mutationFn: ({ id, name }: { id: number; name: string }) =>
+            enterpriseApi.updateTenantWhitelist(id, name),
+        onSuccess: () => {
+            invalidateAll()
+            toast.success(t("enterprise.accessControl.editSuccess"))
+            setEditDialogOpen(false)
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || t("enterprise.accessControl.editFailed"))
         },
     })
 
@@ -128,6 +145,7 @@ export default function AccessControlPage() {
         }
     }
 
+    const canManage = useHasPermission('access_control_manage')
     const isLoading = configLoading || summaryLoading
 
     return (
@@ -141,10 +159,12 @@ export default function AccessControlPage() {
                     </h1>
                     <p className="text-muted-foreground mt-1">{t("enterprise.accessControl.description")}</p>
                 </div>
-                <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    {t("enterprise.accessControl.addTenant")}
-                </Button>
+                {canManage && (
+                    <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
+                        <Plus className="w-4 h-4" />
+                        {t("enterprise.accessControl.addTenant")}
+                    </Button>
+                )}
             </div>
 
             {/* Configuration Card */}
@@ -167,7 +187,7 @@ export default function AccessControlPage() {
                             id="wildcard-mode"
                             checked={config.wildcard_mode}
                             onCheckedChange={(v) => updateConfigMutation.mutate({ ...config, wildcard_mode: v })}
-                            disabled={updateConfigMutation.isPending}
+                            disabled={!canManage || updateConfigMutation.isPending}
                         />
                     </div>
 
@@ -184,7 +204,7 @@ export default function AccessControlPage() {
                             id="env-override"
                             checked={config.env_override}
                             onCheckedChange={(v) => updateConfigMutation.mutate({ ...config, env_override: v })}
-                            disabled={updateConfigMutation.isPending}
+                            disabled={!canManage || updateConfigMutation.isPending}
                         />
                     </div>
 
@@ -300,7 +320,7 @@ export default function AccessControlPage() {
                                             </td>
                                             <td className="py-3 px-4 text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    {!tenant.is_whitelisted && (
+                                                    {canManage && !tenant.is_whitelisted && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -314,21 +334,35 @@ export default function AccessControlPage() {
                                                             <Check className="w-4 h-4" />
                                                         </Button>
                                                     )}
-                                                    {tenant.is_whitelisted && tenant.whitelist_id && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => {
-                                                                setSelectedWhitelistId(tenant.whitelist_id!)
-                                                                setDeleteDialogOpen(true)
-                                                            }}
-                                                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                                                            title={t("enterprise.accessControl.deleteConfirm")}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
+                                                    {canManage && tenant.is_whitelisted && tenant.whitelist_id && (
+                                                        <>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setEditTenant({ id: tenant.whitelist_id!, name: tenant.name || "" })
+                                                                    setEditDialogOpen(true)
+                                                                }}
+                                                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950"
+                                                                title={t("common.edit")}
+                                                            >
+                                                                <Pencil className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setSelectedWhitelistId(tenant.whitelist_id!)
+                                                                    setDeleteDialogOpen(true)
+                                                                }}
+                                                                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                                                title={t("enterprise.accessControl.deleteConfirm")}
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </>
                                                     )}
-                                                    {tenant.rejected_record_id && (
+                                                    {canManage && tenant.rejected_record_id && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -384,6 +418,37 @@ export default function AccessControlPage() {
                         </Button>
                         <Button onClick={handleAddTenant} disabled={addMutation.isPending}>
                             {addMutation.isPending ? t("common.saving") : t("common.save")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Tenant Dialog */}
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{t("enterprise.accessControl.editTenant")}</DialogTitle>
+                        <DialogDescription>{t("enterprise.accessControl.editTenantDescription")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>{t("enterprise.accessControl.tenantName")}</Label>
+                            <Input
+                                value={editTenant.name}
+                                onChange={(e) => setEditTenant({ ...editTenant, name: e.target.value })}
+                                placeholder={t("enterprise.accessControl.tenantNamePlaceholder")}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                            {t("common.cancel")}
+                        </Button>
+                        <Button
+                            onClick={() => editMutation.mutate(editTenant)}
+                            disabled={editMutation.isPending}
+                        >
+                            {editMutation.isPending ? t("common.saving") : t("common.save")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -27,8 +27,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// enterpriseInitializer is set by enterprise build tag.
+// enterpriseInitializer is set by enterprise build tag (pre-DB init).
 var enterpriseInitializer func()
+
+// enterprisePostDBInit is set by enterprise build tag (post-DB init).
+var enterprisePostDBInit func()
 
 func initializeServices(pprofPort int) error {
 	initializePprof(pprofPort)
@@ -51,6 +54,10 @@ func initializeServices(pprofPort int) error {
 
 	if err := model.InitDB(); err != nil {
 		return err
+	}
+
+	if enterprisePostDBInit != nil {
+		enterprisePostDBInit()
 	}
 
 	if err := initializeOptionAndCaches(); err != nil {

@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useRef } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter, KeyRound } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,11 +18,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel, VisibilityState } from "@tanstack/react-table"
 import { format } from "date-fns"
 import { Label } from "@/components/ui/label"
+import { useRole, useHasPermission } from "@/lib/permissions"
 
 const roleColors = {
     admin: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
@@ -40,6 +43,187 @@ const COLUMN_KEYS = [
     { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
     { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
 ] as const
+
+// Permission Configuration Tab (admin only)
+function PermissionConfigTab() {
+    const { t } = useTranslation()
+    const queryClient = useQueryClient()
+
+    const { data: keysData } = useQuery({
+        queryKey: ['enterprise', 'permission-keys'],
+        queryFn: () => enterpriseApi.getAllPermissionKeys(),
+        staleTime: 60000,
+    })
+
+    const { data: rolePermsData, isLoading } = useQuery({
+        queryKey: ['enterprise', 'role-permissions'],
+        queryFn: () => enterpriseApi.getRolePermissions(),
+        staleTime: 30000,
+    })
+
+    const [localPerms, setLocalPerms] = useState<Record<string, Set<string>>>({})
+    const [dirty, setDirty] = useState<Set<string>>(new Set())
+
+    // Initialize local state from server data
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        if (rolePermsData?.roles && Object.keys(localPerms).length === 0) {
+            const init: Record<string, Set<string>> = {}
+            for (const [role, perms] of Object.entries(rolePermsData.roles)) {
+                init[role] = new Set(perms)
+            }
+            setLocalPerms(init)
+        }
+    }, [rolePermsData])
+
+    const saveMutation = useMutation({
+        mutationFn: async (role: string) => {
+            const perms = Array.from(localPerms[role] || [])
+            return enterpriseApi.updateRolePermissions(role, perms)
+        },
+        onSuccess: (_, role) => {
+            queryClient.invalidateQueries({ queryKey: ['enterprise', 'role-permissions'] })
+            queryClient.invalidateQueries({ queryKey: ['enterprise', 'my-permissions'] })
+            setDirty(prev => {
+                const next = new Set(prev)
+                next.delete(role)
+                return next
+            })
+            toast.success(t("enterprise.permissions.saved"))
+        },
+        onError: (error: Error) => {
+            toast.error(error.message)
+        },
+    })
+
+    const togglePerm = (role: string, perm: string, isManage: boolean) => {
+        setLocalPerms(prev => {
+            const current = new Set(prev[role] || [])
+            const module = perm.replace(/_view$|_manage$/, '')
+            const viewKey = `${module}_view`
+            const manageKey = `${module}_manage`
+
+            if (current.has(perm)) {
+                current.delete(perm)
+                // Turning off view also turns off manage
+                if (!isManage) {
+                    current.delete(manageKey)
+                }
+            } else {
+                current.add(perm)
+                // Turning on manage also turns on view
+                if (isManage) {
+                    current.add(viewKey)
+                }
+            }
+            return { ...prev, [role]: current }
+        })
+        setDirty(prev => new Set(prev).add(role))
+    }
+
+    const roles = ['viewer', 'analyst', 'admin'] as const
+    const modules = keysData?.modules || []
+
+    if (isLoading) {
+        return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
+    }
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                    <KeyRound className="w-5 h-5 text-[#6A6DE6]" />
+                    {t("enterprise.permissions.title")}
+                </h2>
+                <p className="text-muted-foreground mt-1">{t("enterprise.permissions.description")}</p>
+            </div>
+
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b">
+                                    <th className="text-left py-3 px-4 font-medium" rowSpan={2}>{t("enterprise.permissions.feature")}</th>
+                                    {roles.map(role => (
+                                        <th key={role} className="text-center py-3 px-2 font-medium" colSpan={2}>
+                                            <Badge className={roleColors[role]}>
+                                                {t(`enterprise.users.roles.${role}` as never)}
+                                            </Badge>
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr className="border-b">
+                                    {roles.map(role => (
+                                        <Fragment key={role}>
+                                            <th className="text-center py-2 px-2 text-xs text-muted-foreground font-normal">
+                                                {t("enterprise.permissions.view")}
+                                            </th>
+                                            <th className="text-center py-2 px-2 text-xs text-muted-foreground font-normal">
+                                                {t("enterprise.permissions.manage")}
+                                            </th>
+                                        </Fragment>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {modules.map(mod => (
+                                    <tr key={mod.module} className="border-b last:border-0 hover:bg-muted/50">
+                                        <td className="py-3 px-4">
+                                            <div>
+                                                <span className="font-medium">{t(`enterprise.permissions.keys.${mod.module}` as never)}</span>
+                                                <span className="ml-2 text-xs text-muted-foreground">({mod.module})</span>
+                                            </div>
+                                        </td>
+                                        {roles.map(role => {
+                                            const isAdmin = role === 'admin'
+                                            const viewChecked = isAdmin || (localPerms[role]?.has(mod.view_key) ?? false)
+                                            const manageChecked = isAdmin || (localPerms[role]?.has(mod.manage_key) ?? false)
+                                            return (
+                                                <Fragment key={role}>
+                                                    <td className="text-center py-3 px-2">
+                                                        <Switch
+                                                            checked={viewChecked}
+                                                            disabled={isAdmin}
+                                                            onCheckedChange={() => togglePerm(role, mod.view_key, false)}
+                                                        />
+                                                    </td>
+                                                    <td className="text-center py-3 px-2">
+                                                        <Switch
+                                                            checked={manageChecked}
+                                                            disabled={isAdmin}
+                                                            onCheckedChange={() => togglePerm(role, mod.manage_key, true)}
+                                                        />
+                                                    </td>
+                                                </Fragment>
+                                            )
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-6">
+                        {roles.filter(r => r !== 'admin').map(role => (
+                            dirty.has(role) && (
+                                <Button
+                                    key={role}
+                                    onClick={() => saveMutation.mutate(role)}
+                                    disabled={saveMutation.isPending}
+                                >
+                                    {saveMutation.isPending
+                                        ? t("common.saving")
+                                        : t("enterprise.permissions.saveRole", { role: t(`enterprise.users.roles.${role}` as never) })}
+                                </Button>
+                            )
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
 
 export default function UsersPage() {
     const { t } = useTranslation()
@@ -135,12 +319,17 @@ export default function UsersPage() {
             : <ArrowDown className="w-4 h-4 ml-1" />
     }, [sortBy, sortOrder])
 
+    // When policy filter is active, fetch all users for correct client-side filtering
+    const isPolicyFilterActive = selectedPolicyFilters.size > 0
+    const effectivePage = isPolicyFilterActive ? 1 : page
+    const effectivePageSize = isPolicyFilterActive ? 99999 : pageSize
+
     // Fetch users
     const { data, isLoading, refetch } = useQuery({
-        queryKey: ["feishu-users", page, pageSize, keyword, sortBy, sortOrder, level1Department, level2Department],
+        queryKey: ["feishu-users", effectivePage, effectivePageSize, keyword, sortBy, sortOrder, level1Department, level2Department],
         queryFn: () => enterpriseApi.getFeishuUsers(
-            page,
-            pageSize,
+            effectivePage,
+            effectivePageSize,
             keyword,
             sortBy,
             sortOrder,
@@ -385,39 +574,50 @@ export default function UsersPage() {
                                 {policy}
                             </Badge>
                         )}
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRoleEdit(row.original)}
-                        >
-                            <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleQuotaAssign(row.original)}
-                        >
-                            <Shield className="w-4 h-4" />
-                        </Button>
+                        {canManageUsers && (
+                            <>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRoleEdit(row.original)}
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleQuotaAssign(row.original)}
+                                >
+                                    <Shield className="w-4 h-4" />
+                                </Button>
+                            </>
+                        )}
                     </div>
                 )
             },
         },
-    ], [t, handleRoleEdit, handleQuotaAssign, handleSort, renderSortIcon])
+    ], [t, handleRoleEdit, handleQuotaAssign, handleSort, renderSortIcon, canManageUsers])
 
     const allUsers = data?.users || []
     const policies = policiesData?.policies || []
 
     // Client-side policy filter
-    const users = useMemo(() => {
-        if (selectedPolicyFilters.size === 0) return allUsers
+    const filteredUsers = useMemo(() => {
+        if (!isPolicyFilterActive) return allUsers
         return allUsers.filter(u => {
             const policyName = u.effective_policy || ""
             return selectedPolicyFilters.has(policyName)
         })
-    }, [allUsers, selectedPolicyFilters])
+    }, [allUsers, isPolicyFilterActive, selectedPolicyFilters])
 
-    const total = selectedPolicyFilters.size > 0 ? users.length : (data?.total || 0)
+    // Client-side pagination when policy filter is active
+    const users = useMemo(() => {
+        if (!isPolicyFilterActive) return filteredUsers
+        const start = (page - 1) * pageSize
+        return filteredUsers.slice(start, start + pageSize)
+    }, [filteredUsers, isPolicyFilterActive, page, pageSize])
+
+    const total = isPolicyFilterActive ? filteredUsers.length : (data?.total || 0)
 
     // Collect unique policy names from current data for filter options
     const policyNamesInData = useMemo(() => {
@@ -439,31 +639,18 @@ export default function UsersPage() {
     })
 
     const hasActiveFilters = level1Department !== "all" || level2Department !== "all" || keyword || selectedPolicyFilters.size > 0
+    const currentRole = useRole()
+    const isAdmin = currentRole === 'admin'
+    const canManageUsers = useHasPermission('user_manage_manage')
 
-    return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Users className="w-6 h-6 text-[#6A6DE6]" />
-                        {t("enterprise.users.title")}
-                    </h1>
-                    <p className="text-muted-foreground mt-1">{t("enterprise.users.description")}</p>
-                </div>
-                <Button onClick={handleSync} disabled={syncMutation.isPending} className="gap-2">
-                    <RefreshCcw className={`w-4 h-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                    {t("enterprise.users.syncNow")}
-                </Button>
-            </div>
-
+    const userListContent = (
+        <>
             {/* Sync Status Card */}
             {syncStatus && (
                 <Card>
                     <CardContent className="pt-4 pb-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-6">
-                                {/* Status badge */}
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm text-muted-foreground">{t("enterprise.users.syncStatus")}:</span>
                                     {syncStatus.status === "syncing" && (
@@ -491,16 +678,12 @@ export default function UsersPage() {
                                         </Badge>
                                     )}
                                 </div>
-
-                                {/* Last sync time */}
                                 {syncStatus.last_sync_at && syncStatus.last_sync_at !== "0001-01-01T00:00:00Z" && (
                                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                         <Clock className="w-3 h-3" />
                                         {t("enterprise.users.lastSyncTime")}: {format(new Date(syncStatus.last_sync_at), "yyyy-MM-dd HH:mm:ss")}
                                     </div>
                                 )}
-
-                                {/* Stats */}
                                 {syncStatus.status === "success" && (
                                     <div className="flex items-center gap-4 text-sm">
                                         <span>{t("enterprise.users.totalDepts")}: <strong>{syncStatus.total_depts}</strong></span>
@@ -510,14 +693,10 @@ export default function UsersPage() {
                                     </div>
                                 )}
                             </div>
-
-                            {/* Error message */}
                             {syncStatus.error && (
                                 <span className="text-sm text-red-600">{syncStatus.error}</span>
                             )}
                         </div>
-
-                        {/* Permission warning */}
                         {syncStatus.status === "success" && syncStatus.total_users > 0 &&
                             (syncStatus.users_with_name < syncStatus.total_users || syncStatus.users_with_email < syncStatus.total_users) && (
                             <div className="mt-2 flex items-center gap-2 text-sm text-amber-600">
@@ -535,7 +714,6 @@ export default function UsersPage() {
                     <div className="flex items-center justify-between gap-4">
                         <CardTitle>{t("enterprise.users.userList")}</CardTitle>
                         <div className="flex items-center gap-2">
-                            {/* Level 1 Department Filter */}
                             <Select value={level1Department} onValueChange={handleLevel1Change}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue placeholder={t("enterprise.users.level1Department")} />
@@ -551,8 +729,6 @@ export default function UsersPage() {
                                         ))}
                                 </SelectContent>
                             </Select>
-
-                            {/* Level 2 Department Filter */}
                             {level1Department && level1Department !== "all" && (
                                 <Select value={level2Department} onValueChange={handleLevel2Change}>
                                     <SelectTrigger className="w-40">
@@ -570,8 +746,6 @@ export default function UsersPage() {
                                     </SelectContent>
                                 </Select>
                             )}
-
-                            {/* Policy Filter (multi-select) */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="gap-1.5">
@@ -592,7 +766,6 @@ export default function UsersPage() {
                                             {t("enterprise.quota.noPolicies")}
                                         </div>
                                     )}
-                                    {/* Show all known policies from the policies list */}
                                     {policies.map((p) => (
                                         <DropdownMenuCheckboxItem
                                             key={p.id}
@@ -602,7 +775,6 @@ export default function UsersPage() {
                                             {p.name}
                                         </DropdownMenuCheckboxItem>
                                     ))}
-                                    {/* Also show "no policy" option */}
                                     <DropdownMenuSeparator />
                                     <DropdownMenuCheckboxItem
                                         checked={selectedPolicyFilters.has("")}
@@ -612,16 +784,12 @@ export default function UsersPage() {
                                     </DropdownMenuCheckboxItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
-
-                            {/* Search Input */}
                             <Input
                                 placeholder={t("enterprise.users.searchPlaceholder")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
                                 className="w-64"
                             />
-
-                            {/* Column Visibility */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" size="icon">
@@ -645,14 +813,8 @@ export default function UsersPage() {
                                     ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
-
-                            {/* Clear Filters */}
                             {hasActiveFilters && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleClearFilters}
-                                >
+                                <Button variant="ghost" size="sm" onClick={handleClearFilters}>
                                     {t("common.clearFilters")}
                                 </Button>
                             )}
@@ -670,6 +832,44 @@ export default function UsersPage() {
                     />
                 </CardContent>
             </Card>
+        </>
+    )
+
+    return (
+        <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold flex items-center gap-2">
+                        <Users className="w-6 h-6 text-[#6A6DE6]" />
+                        {t("enterprise.users.title")}
+                    </h1>
+                    <p className="text-muted-foreground mt-1">{t("enterprise.users.description")}</p>
+                </div>
+                {canManageUsers && (
+                    <Button onClick={handleSync} disabled={syncMutation.isPending} className="gap-2">
+                        <RefreshCcw className={`w-4 h-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                        {t("enterprise.users.syncNow")}
+                    </Button>
+                )}
+            </div>
+
+            {isAdmin && (
+                <Tabs defaultValue="users">
+                    <TabsList>
+                        <TabsTrigger value="users">{t("enterprise.users.userList")}</TabsTrigger>
+                        <TabsTrigger value="permissions">{t("enterprise.permissions.title")}</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="permissions">
+                        <PermissionConfigTab />
+                    </TabsContent>
+                    <TabsContent value="users" className="space-y-6">
+                        {userListContent}
+                    </TabsContent>
+                </Tabs>
+            )}
+
+            {!isAdmin && userListContent}
 
             {/* Role Edit Dialog */}
             <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>

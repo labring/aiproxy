@@ -5,8 +5,11 @@ package enterprise
 import (
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
@@ -106,4 +109,112 @@ func GetEnterpriseUser(c *gin.Context) *models.FeishuUser {
 	}
 
 	return nil
+}
+
+// rolePermCache is an in-memory cache of role→permission set, loaded at startup
+// and refreshed whenever permissions are modified via the API.
+var rolePermCache atomic.Pointer[map[string]map[string]bool]
+
+// LoadRolePermissions loads all role permissions from DB into memory cache.
+func LoadRolePermissions() {
+	var perms []models.RolePermission
+	if err := model.DB.Find(&perms).Error; err != nil {
+		log.Errorf("failed to load role permissions: %v", err)
+		return
+	}
+
+	m := make(map[string]map[string]bool)
+	for _, p := range perms {
+		if m[p.Role] == nil {
+			m[p.Role] = make(map[string]bool)
+		}
+
+		m[p.Role][p.Permission] = true
+	}
+
+	// Admin always has all permissions (enforced in code)
+	adminPerms := make(map[string]bool)
+	for _, p := range models.AllPermissions {
+		adminPerms[p] = true
+	}
+
+	m[models.RoleAdmin] = adminPerms
+
+	rolePermCache.Store(&m)
+	log.Infof("loaded role permissions: %d records", len(perms))
+}
+
+// HasPermission checks if a role has a specific permission.
+// If checking a _view permission, having the corresponding _manage permission also grants access.
+func HasPermission(role, permission string) bool {
+	if role == models.RoleAdmin {
+		return true
+	}
+
+	cache := rolePermCache.Load()
+	if cache == nil {
+		return false
+	}
+
+	if (*cache)[role][permission] {
+		return true
+	}
+
+	// manage implies view: if checking xxx_view, also accept xxx_manage
+	if strings.HasSuffix(permission, "_view") {
+		manageKey := strings.TrimSuffix(permission, "_view") + "_manage"
+		return (*cache)[role][manageKey]
+	}
+
+	return false
+}
+
+// GetRolePermissions returns the list of permissions for a role from the cache.
+func GetRolePermissions(role string) []string {
+	if role == models.RoleAdmin {
+		return models.AllPermissions
+	}
+
+	cache := rolePermCache.Load()
+	if cache == nil {
+		return nil
+	}
+
+	permSet := (*cache)[role]
+	perms := make([]string, 0, len(permSet))
+	for p := range permSet {
+		perms = append(perms, p)
+	}
+
+	return perms
+}
+
+// RequirePermission returns a middleware that checks for a specific permission.
+func RequirePermission(permission string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := GetEnterpriseRole(c)
+		if !HasPermission(role, permission) {
+			middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: insufficient permissions")
+			c.Abort()
+
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RequireRole returns a middleware that checks for a specific role (e.g., admin-only operations).
+func RequireRole(requiredRole string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := GetEnterpriseRole(c)
+		if role != requiredRole {
+			middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: requires "+requiredRole+" role")
+			c.Abort()
+
+			return
+		}
+
+		c.Next()
+	}
 }

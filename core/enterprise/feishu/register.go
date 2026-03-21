@@ -17,9 +17,18 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
+// FeishuMiddleware holds permission middleware functions passed from the enterprise package
+// to avoid circular imports.
+type FeishuMiddleware struct {
+	UserManageView   gin.HandlerFunc
+	UserManageManage gin.HandlerFunc
+	AdminOnly        gin.HandlerFunc
+}
+
 // RegisterRoutes registers all Feishu-related routes on the public, admin, and enterpriseAuth groups.
 // Any parameter may be nil; only non-nil groups get routes registered.
-func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
+// mw provides permission middleware (pass nil when enterpriseAuth is nil).
+func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup, mw *FeishuMiddleware) {
 	if public != nil {
 		// Public routes (no admin auth required)
 		public.GET("/auth/feishu/login", HandleLogin)
@@ -32,14 +41,20 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup) {
 		// Currently empty - moved to enterpriseAuth
 	}
 
-	if enterpriseAuth != nil {
-		// Enterprise auth routes (AdminKey or Feishu admin user)
-		enterpriseAuth.GET("/feishu/users", GetFeishuUsers)
+	if enterpriseAuth != nil && mw != nil {
+		// Read-only department data — all roles
 		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
 		enterpriseAuth.GET("/feishu/department-levels", GetDepartmentLevels)
 		enterpriseAuth.GET("/feishu/sync-status", GetSyncStatusHandler)
-		enterpriseAuth.POST("/feishu/sync", TriggerSync)
-		enterpriseAuth.PUT("/feishu/users/:open_id/role", UpdateUserRole)
+
+		// User management — view requires user_manage_view
+		umView := enterpriseAuth.Group("", mw.UserManageView)
+		umView.GET("/feishu/users", GetFeishuUsers)
+
+		// Sync and role update — requires user_manage_manage + admin role
+		umManage := enterpriseAuth.Group("", mw.UserManageManage)
+		umManage.POST("/feishu/sync", mw.AdminOnly, TriggerSync)
+		umManage.PUT("/feishu/users/:open_id/role", mw.AdminOnly, UpdateUserRole)
 	}
 }
 
@@ -444,27 +459,8 @@ func GetDepartmentLevels(c *gin.Context) {
 }
 
 // TriggerSync triggers a full Feishu organization sync.
-// Only admin role users can trigger sync.
+// Access is controlled by RequirePermission(PermUserManage) + RequireRole(RoleAdmin) middleware.
 func TriggerSync(c *gin.Context) {
-	// Check if user has admin role
-	roleVal, exists := c.Get("enterprise_role")
-	log.Infof("TriggerSync: role exists=%v, roleVal=%v, roleVal type=%T", exists, roleVal, roleVal)
-
-	if !exists {
-		log.Errorf("TriggerSync: role not found in context")
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can trigger sync")
-		return
-	}
-
-	role, ok := roleVal.(string)
-	log.Infof("TriggerSync: role cast ok=%v, role=%s, expected=%s", ok, role, models.RoleAdmin)
-
-	if !ok || role != models.RoleAdmin {
-		log.Errorf("TriggerSync: role check failed - ok=%v, role=%s, expected=%s", ok, role, models.RoleAdmin)
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can trigger sync")
-		return
-	}
-
 	go func() {
 		if err := SyncAll(model.DB); err != nil {
 			log.Errorf("feishu manual sync failed: %v", err)
@@ -477,21 +473,8 @@ func TriggerSync(c *gin.Context) {
 }
 
 // UpdateUserRole updates the role of a Feishu user.
-// Only admin role users can update user roles.
+// Access is controlled by RequirePermission(PermUserManage) + RequireRole(RoleAdmin) middleware.
 func UpdateUserRole(c *gin.Context) {
-	// Check if user has admin role
-	roleVal, exists := c.Get("enterprise_role")
-	if !exists {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can update user roles")
-		return
-	}
-
-	role, ok := roleVal.(string)
-	if !ok || role != models.RoleAdmin {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: only admin users can update user roles")
-		return
-	}
-
 	openID := c.Param("open_id")
 	if openID == "" {
 		middleware.ErrorResponse(c, http.StatusBadRequest, "open_id is required")

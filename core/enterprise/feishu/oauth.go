@@ -222,6 +222,7 @@ func HandleCallback(c *gin.Context) {
 				"name":    userInfo.Name,
 				"email":   userInfo.Email,
 				"avatar":  userInfo.Avatar,
+				"role":    feishuUser.Role,
 			},
 		})
 
@@ -235,6 +236,7 @@ func HandleCallback(c *gin.Context) {
 	params.Set("open_id", userInfo.OpenID)
 	params.Set("name", userInfo.Name)
 	params.Set("avatar", userInfo.Avatar)
+	params.Set("role", feishuUser.Role)
 	if userInfo.Email != "" {
 		params.Set("email", userInfo.Email)
 	}

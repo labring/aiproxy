@@ -7,30 +7,36 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 )
 
-// RegisterRoutes registers all quota management routes under the given admin router group.
-func RegisterRoutes(admin *gin.RouterGroup) {
-	policies := admin.Group("/quota/policies")
-	{
-		policies.GET("", ListPolicies)
-		policies.POST("", CreatePolicy)
-		policies.GET("/:id", GetPolicy)
-		policies.PUT("/:id", UpdatePolicy)
-		policies.DELETE("/:id", DeletePolicy)
-	}
+// RegisterRoutes registers all quota management routes under the given router group.
+// permMW maps permission keys to gin middleware for access control.
+func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
+	quotaViewMw := permMW["quota_manage_view"]
+	quotaManageMw := permMW["quota_manage_manage"]
 
-	bind := admin.Group("/quota")
-	{
-		bind.POST("/bind", BindPolicyToGroup)
-		bind.DELETE("/bind/:group_id", UnbindPolicyFromGroup)
-		bind.POST("/bind-department", BindPolicyToDepartment)
-		bind.DELETE("/bind-department/:department_id", UnbindPolicyFromDepartment)
-		bind.POST("/bind-user", BindPolicyToUser)
-		bind.DELETE("/bind-user/:open_id", UnbindPolicyFromUser)
-		bind.POST("/batch-bind-departments", BatchBindPolicyToDepartments)
-		bind.POST("/batch-bind-users", BatchBindPolicyToUsers)
-		bind.GET("/department-bindings", ListDepartmentPolicyBindings)
-		bind.GET("/user-bindings", ListUserPolicyBindings)
-	}
+	// Read-only endpoints — quota_manage_view permission required
+	policies := group.Group("/quota/policies", quotaViewMw)
+	policies.GET("", ListPolicies)
+	policies.GET("/:id", GetPolicy)
+
+	bind := group.Group("/quota", quotaViewMw)
+	bind.GET("/department-bindings", ListDepartmentPolicyBindings)
+	bind.GET("/user-bindings", ListUserPolicyBindings)
+
+	// Write operations — quota_manage_manage permission required
+	adminPolicies := group.Group("/quota/policies", quotaManageMw)
+	adminPolicies.POST("", CreatePolicy)
+	adminPolicies.PUT("/:id", UpdatePolicy)
+	adminPolicies.DELETE("/:id", DeletePolicy)
+
+	adminBind := group.Group("/quota", quotaManageMw)
+	adminBind.POST("/bind", BindPolicyToGroup)
+	adminBind.DELETE("/bind/:group_id", UnbindPolicyFromGroup)
+	adminBind.POST("/bind-department", BindPolicyToDepartment)
+	adminBind.DELETE("/bind-department/:department_id", UnbindPolicyFromDepartment)
+	adminBind.POST("/bind-user", BindPolicyToUser)
+	adminBind.DELETE("/bind-user/:open_id", UnbindPolicyFromUser)
+	adminBind.POST("/batch-bind-departments", BatchBindPolicyToDepartments)
+	adminBind.POST("/batch-bind-users", BatchBindPolicyToUsers)
 }
 
 // Init sets up the enterprise quota hook so the middleware can call into

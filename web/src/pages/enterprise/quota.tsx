@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Pencil, Trash2, Shield, AlertTriangle, Search, X, Building2, User } from "lucide-react"
@@ -44,6 +44,14 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
     enterpriseApi,
     type QuotaPolicy,
     type QuotaPolicyInput,
@@ -54,6 +62,7 @@ import {
 } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ALL_FILTER } from "@/lib/enterprise"
+import { useHasPermission } from "@/lib/permissions"
 
 const defaultPolicy: QuotaPolicyInput = {
     name: "",
@@ -363,7 +372,7 @@ function PolicyForm({
 
 // ─── Department Binding Tab ─────────────────────────────────────────────────
 
-function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
+function DepartmentBindingTab({ policies, canManage }: { policies: QuotaPolicy[]; canManage: boolean }) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
 
@@ -387,7 +396,7 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
     const { data: level2Data } = useQuery({
         queryKey: ["enterprise", "department-levels", filterLevel1],
         queryFn: () => enterpriseApi.getDepartmentLevels(filterLevel1),
-        enabled: !!filterLevel1,
+        enabled: !!filterLevel1 && filterLevel1 !== ALL_FILTER,
     })
 
     const { data: bindings, isLoading: bindingsLoading } = useQuery({
@@ -425,11 +434,13 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
 
     const handleQuery = () => {
         let results: FeishuDepartment[] = []
-        if (filterLevel2) {
+        const hasLevel1 = filterLevel1 && filterLevel1 !== ALL_FILTER
+        const hasLevel2 = filterLevel2 && filterLevel2 !== ALL_FILTER
+        if (hasLevel2) {
             // Show only the selected level2 department
             const found = level2Depts.find((d) => d.department_id === filterLevel2)
             results = found ? [found] : []
-        } else if (filterLevel1) {
+        } else if (hasLevel1) {
             // Show the level1 + all its level2 children
             const l1 = level1Depts.find((d) => d.department_id === filterLevel1)
             results = [...(l1 ? [l1] : []), ...level2Depts]
@@ -468,7 +479,10 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
     }
 
     // Pre-build lookup for O(1) binding check in render
-    const bindingByDeptId = new Map(bindingList.map((b: DepartmentQuotaPolicyBinding) => [b.department_id, b]))
+    const bindingByDeptId = useMemo(
+        () => new Map(bindingList.map((b: DepartmentQuotaPolicyBinding) => [b.department_id, b])),
+        [bindingList],
+    )
 
     return (
         <div className="space-y-6">
@@ -532,7 +546,7 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
                     <CardHeader>
                         <CardTitle className="flex items-center justify-between">
                             <span>{t("enterprise.quota.queryResults")} ({queryDepts.length})</span>
-                            {queryDepts.length > 0 && checkedDeptIds.size > 0 && (
+                            {canManage && queryDepts.length > 0 && checkedDeptIds.size > 0 && (
                                 <div className="flex items-center gap-3">
                                     <span className="text-sm font-normal text-muted-foreground">
                                         {t("enterprise.quota.selectedCount", { count: checkedDeptIds.size })}
@@ -653,15 +667,17 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
                                             {new Date(b.updated_at).toLocaleString()}
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="text-red-500 hover:text-red-600"
-                                                onClick={() => unbindMutation.mutate(b.department_id)}
-                                                disabled={unbindMutation.isPending}
-                                            >
-                                                {t("enterprise.quota.unbind")}
-                                            </Button>
+                                            {canManage && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-red-500 hover:text-red-600"
+                                                    onClick={() => unbindMutation.mutate(b.department_id)}
+                                                    disabled={unbindMutation.isPending}
+                                                >
+                                                    {t("enterprise.quota.unbind")}
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -676,21 +692,22 @@ function DepartmentBindingTab({ policies }: { policies: QuotaPolicy[] }) {
 
 // ─── User Override Tab ──────────────────────────────────────────────────────
 
-function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
+function UserOverrideTab({ policies, canManage }: { policies: QuotaPolicy[]; canManage: boolean }) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
 
-    // Search & query state
+    // Search & filter state
     const [searchKeyword, setSearchKeyword] = useState("")
+    const [selectedPolicyFilters, setSelectedPolicyFilters] = useState<Set<string>>(new Set())
     const [queryUsers, setQueryUsers] = useState<FeishuUser[]>([])
     const [hasQueried, setHasQueried] = useState(false)
     const [checkedOpenIds, setCheckedOpenIds] = useState<Set<string>>(new Set())
     const [bindPolicyId, setBindPolicyId] = useState<string>("")
 
-    // Search users query (triggered on demand)
+    // Search users query (triggered on demand, fetch larger set for client-side policy filtering)
     const searchQuery = useQuery({
         queryKey: ["enterprise", "feishu-users-search", searchKeyword],
-        queryFn: () => enterpriseApi.getFeishuUsers(1, 100, searchKeyword || undefined),
+        queryFn: () => enterpriseApi.getFeishuUsers(1, 500, searchKeyword || undefined),
         enabled: false,
     })
 
@@ -722,6 +739,15 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
 
     const bindingList = userBindings?.bindings || []
 
+    const togglePolicyFilter = (policyName: string) => {
+        setSelectedPolicyFilters(prev => {
+            const next = new Set(prev)
+            if (next.has(policyName)) next.delete(policyName)
+            else next.add(policyName)
+            return next
+        })
+    }
+
     const handleQuery = async () => {
         const result = await searchQuery.refetch()
         const users = result.data?.users || []
@@ -729,6 +755,13 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
         setHasQueried(true)
         setCheckedOpenIds(new Set())
     }
+
+    // Apply client-side policy filter on query results
+    const filteredUsers = useMemo(() => queryUsers.filter(u => {
+        if (selectedPolicyFilters.size === 0) return true
+        const policyName = u.effective_policy || ""
+        return selectedPolicyFilters.has(policyName)
+    }), [queryUsers, selectedPolicyFilters])
 
     const toggleUser = (openId: string) => {
         setCheckedOpenIds(prev => {
@@ -740,10 +773,10 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
     }
 
     const toggleAllUsers = () => {
-        if (checkedOpenIds.size === queryUsers.length) {
+        if (checkedOpenIds.size === filteredUsers.length) {
             setCheckedOpenIds(new Set())
         } else {
-            setCheckedOpenIds(new Set(queryUsers.map(u => u.open_id)))
+            setCheckedOpenIds(new Set(filteredUsers.map(u => u.open_id)))
         }
     }
 
@@ -757,7 +790,7 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
 
     return (
         <div className="space-y-6">
-            {/* Card 1: Search Filter */}
+            {/* Card 1: Search & Policy Filter */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -780,6 +813,39 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                                 />
                             </div>
                         </div>
+                        <div className="space-y-2 min-w-[200px]">
+                            <Label>{t("enterprise.quota.filterByPolicy")}</Label>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-start gap-1.5">
+                                        <Shield className="w-4 h-4" />
+                                        {selectedPolicyFilters.size === 0
+                                            ? t("enterprise.quota.allPolicies")
+                                            : t("enterprise.quota.selectedCount", { count: selectedPolicyFilters.size })}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-56">
+                                    <DropdownMenuLabel>{t("enterprise.quota.filterByPolicy")}</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {policies.map((p) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={p.id}
+                                            checked={selectedPolicyFilters.has(p.name)}
+                                            onCheckedChange={() => togglePolicyFilter(p.name)}
+                                        >
+                                            {p.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuCheckboxItem
+                                        checked={selectedPolicyFilters.has("")}
+                                        onCheckedChange={() => togglePolicyFilter("")}
+                                    >
+                                        {t("enterprise.quota.noPolicy")}
+                                    </DropdownMenuCheckboxItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                         <Button onClick={handleQuery} disabled={searchQuery.isFetching}>
                             <Search className="w-4 h-4 mr-1" />
                             {t("enterprise.quota.query")}
@@ -793,8 +859,15 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
-                            <CardTitle>{t("enterprise.quota.queryResults")}</CardTitle>
-                            {queryUsers.length > 0 && checkedOpenIds.size > 0 && (
+                            <CardTitle>
+                                {t("enterprise.quota.queryResults")}
+                                {selectedPolicyFilters.size > 0 && queryUsers.length !== filteredUsers.length && (
+                                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                        ({filteredUsers.length}/{queryUsers.length})
+                                    </span>
+                                )}
+                            </CardTitle>
+                            {canManage && filteredUsers.length > 0 && checkedOpenIds.size > 0 && (
                                 <div className="flex items-center gap-3">
                                     <span className="text-sm text-muted-foreground">
                                         {t("enterprise.quota.selectedCount", { count: checkedOpenIds.size })}
@@ -821,7 +894,7 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        {queryUsers.length === 0 ? (
+                        {filteredUsers.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">
                                 {t("enterprise.quota.noUserResults")}
                             </div>
@@ -832,7 +905,7 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                                         <TableHead className="w-12">
                                             <input
                                                 type="checkbox"
-                                                checked={checkedOpenIds.size === queryUsers.length}
+                                                checked={checkedOpenIds.size === filteredUsers.length && filteredUsers.length > 0}
                                                 onChange={toggleAllUsers}
                                             />
                                         </TableHead>
@@ -843,7 +916,7 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {queryUsers.map((u) => (
+                                    {filteredUsers.map((u) => (
                                         <TableRow key={u.open_id}>
                                             <TableCell>
                                                 <input
@@ -902,15 +975,17 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="text-red-500 hover:text-red-600"
-                                                onClick={() => unbindMutation.mutate(b.open_id)}
-                                                disabled={unbindMutation.isPending}
-                                            >
-                                                {t("enterprise.quota.unbind")}
-                                            </Button>
+                                            {canManage && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-red-500 hover:text-red-600"
+                                                    onClick={() => unbindMutation.mutate(b.open_id)}
+                                                    disabled={unbindMutation.isPending}
+                                                >
+                                                    {t("enterprise.quota.unbind")}
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -928,6 +1003,7 @@ function UserOverrideTab({ policies }: { policies: QuotaPolicy[] }) {
 export default function QuotaPoliciesPage() {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
+    const canManage = useHasPermission('quota_manage_manage')
     const [editingPolicy, setEditingPolicy] = useState<QuotaPolicy | null>(null)
     const [isCreating, setIsCreating] = useState(false)
     const [formData, setFormData] = useState<QuotaPolicyInput>(defaultPolicy)
@@ -1005,6 +1081,8 @@ export default function QuotaPoliciesPage() {
             tier3_rpm_multiplier: policy.tier3_rpm_multiplier,
             tier3_tpm_multiplier: policy.tier3_tpm_multiplier,
             block_at_tier3: policy.block_at_tier3,
+            tier2_blocked_models: policy.tier2_blocked_models || "",
+            tier3_blocked_models: policy.tier3_blocked_models || "",
             period_quota: policy.period_quota,
             period_type: policy.period_type,
         })
@@ -1062,10 +1140,12 @@ export default function QuotaPoliciesPage() {
                                     <Shield className="w-5 h-5" />
                                     {t("enterprise.quota.policyList")} ({policies.length})
                                 </CardTitle>
-                                <Button onClick={handleCreate}>
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    {t("enterprise.quota.createPolicy")}
-                                </Button>
+                                {canManage && (
+                                    <Button onClick={handleCreate}>
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        {t("enterprise.quota.createPolicy")}
+                                    </Button>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -1129,19 +1209,21 @@ export default function QuotaPoliciesPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(policy)}>
-                                                            <Pencil className="w-4 h-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="text-red-500 hover:text-red-600"
-                                                            onClick={() => setDeleteTarget(policy)}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
+                                                    {canManage && (
+                                                        <div className="flex items-center gap-1">
+                                                            <Button variant="ghost" size="icon" onClick={() => handleEdit(policy)}>
+                                                                <Pencil className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="text-red-500 hover:text-red-600"
+                                                                onClick={() => setDeleteTarget(policy)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -1154,12 +1236,12 @@ export default function QuotaPoliciesPage() {
 
                 {/* Tab 2: Department Binding */}
                 <TabsContent value="departments">
-                    <DepartmentBindingTab policies={policies} />
+                    <DepartmentBindingTab policies={policies} canManage={canManage} />
                 </TabsContent>
 
                 {/* Tab 3: User Override */}
                 <TabsContent value="users">
-                    <UserOverrideTab policies={policies} />
+                    <UserOverrideTab policies={policies} canManage={canManage} />
                 </TabsContent>
             </Tabs>
 

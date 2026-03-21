@@ -13,6 +13,7 @@ import {
     Lock,
     Users,
     RefreshCw,
+    Key,
 } from "lucide-react"
 import type React from "react"
 import type { TFunction } from "i18next"
@@ -22,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Button } from "@/components/ui/button"
 import useAuthStore from "@/store/auth"
 import { LanguageSelector } from "@/components/common/LanguageSelector"
+import { useMyPermissions, type PermissionKey } from "@/lib/permissions"
 
 interface EnterpriseSidebarItem {
     title: string
@@ -29,44 +31,57 @@ interface EnterpriseSidebarItem {
     href: string
     divider?: boolean
     external?: boolean
+    requiredPermission?: PermissionKey
 }
 
 function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
     return [
         {
+            title: t("enterprise.sidebar.myAccess"),
+            icon: Key,
+            href: ROUTES.ENTERPRISE_MY_ACCESS,
+        },
+        {
             title: t("enterprise.sidebar.dashboard"),
             icon: BarChart2,
             href: ROUTES.ENTERPRISE,
+            requiredPermission: "dashboard_view",
         },
         {
             title: t("enterprise.sidebar.ranking"),
             icon: Trophy,
             href: ROUTES.ENTERPRISE_RANKING,
+            requiredPermission: "ranking_view",
         },
         {
             title: t("enterprise.sidebar.quota"),
             icon: Shield,
             href: ROUTES.ENTERPRISE_QUOTA,
+            requiredPermission: "quota_manage_view",
         },
         {
             title: t("enterprise.sidebar.accessControl"),
             icon: Lock,
             href: ROUTES.ENTERPRISE_ACCESS_CONTROL,
+            requiredPermission: "access_control_view",
         },
         {
             title: t("enterprise.sidebar.users"),
             icon: Users,
             href: ROUTES.ENTERPRISE_USERS,
+            requiredPermission: "user_manage_view",
         },
         {
             title: t("enterprise.sidebar.customReport"),
             icon: FileBarChart,
             href: ROUTES.ENTERPRISE_CUSTOM_REPORT,
+            requiredPermission: "custom_report_view",
         },
         {
             title: t("enterprise.sidebar.ppioSync"),
             icon: RefreshCw,
             href: ROUTES.ENTERPRISE_PPIO_SYNC,
+            requiredPermission: "access_control_view",
         },
         {
             title: "",
@@ -96,7 +111,15 @@ export function EnterpriseLayout() {
         navigate("/login")
     }
 
-    const sidebarItems = createEnterpriseSidebarConfig(t)
+    const allSidebarItems = createEnterpriseSidebarConfig(t)
+    const { data: permData } = useMyPermissions()
+    const myPerms = new Set(permData?.permissions || [])
+
+    const sidebarItems = allSidebarItems.filter(item => {
+        if (item.divider || item.external) return true
+        if (!item.requiredPermission) return true
+        return myPerms.has(item.requiredPermission)
+    })
 
     const particles = useMemo(
         () =>

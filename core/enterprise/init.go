@@ -11,16 +11,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Initialize performs all enterprise module initialization.
+// Initialize performs early enterprise module initialization (before DB).
 // Called from core/startup_enterprise.go via init() hook.
 func Initialize() {
 	enterprisenotify.Init()
 	quota.Init()
 
+	log.Info("enterprise module initialized (pre-DB)")
+}
+
+// PostDBInit performs enterprise initialization that requires the database.
+// Must be called after model.InitDB().
+func PostDBInit() {
+	// Load role permissions into memory cache
+	LoadRolePermissions()
+
 	// Start Feishu organization sync scheduler (every 6 hours)
-	// Initial sync is performed in StartSyncScheduler's goroutine after DB is ready
 	ctx := context.Background()
 	feishu.StartSyncScheduler(ctx)
 
-	log.Info("enterprise module initialized")
+	log.Info("enterprise module post-DB initialized")
 }

@@ -4,23 +4,20 @@ package ppio
 
 import "github.com/gin-gonic/gin"
 
-// RegisterRoutes registers PPIO sync routes under /api/enterprise/ppio
-func RegisterRoutes(group *gin.RouterGroup) {
-	ppioGroup := group.Group("/ppio")
+// RegisterRoutes registers PPIO sync routes under /api/enterprise/ppio.
+// permMW maps permission keys to gin middleware for access control.
+func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
+	// Read-only endpoints — access_control_view
+	ppioView := group.Group("/ppio", permMW["access_control_view"])
+	ppioView.GET("/channels", ListChannelsHandler)
+	ppioView.GET("/config", GetConfigHandler)
+	ppioView.GET("/sync/diagnostic", DiagnosticHandler)
+	ppioView.GET("/sync/history", HistoryHandler)
 
-	// Channel list and config management
-	ppioGroup.GET("/channels", ListChannelsHandler)
-	ppioGroup.GET("/config", GetConfigHandler)
-	ppioGroup.PUT("/config", UpdateConfigHandler)
-	ppioGroup.PUT("/mgmt-token", UpdateMgmtTokenHandler)
-
-	// Diagnostic and preview (read-only operations)
-	ppioGroup.GET("/sync/diagnostic", DiagnosticHandler)
-	ppioGroup.POST("/sync/preview", PreviewHandler)
-
-	// Execute sync (SSE streaming)
-	ppioGroup.POST("/sync/execute", ExecuteHandler)
-
-	// Sync history
-	ppioGroup.GET("/sync/history", HistoryHandler)
+	// Write endpoints — access_control_manage
+	ppioManage := group.Group("/ppio", permMW["access_control_manage"])
+	ppioManage.PUT("/config", UpdateConfigHandler)
+	ppioManage.PUT("/mgmt-token", UpdateMgmtTokenHandler)
+	ppioManage.POST("/sync/preview", PreviewHandler)
+	ppioManage.POST("/sync/execute", ExecuteHandler)
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/controller/utils"
@@ -18,6 +19,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
+
+const maxSyncConcurrency = 10
 
 // policyPeriodTypeToTokenPeriodType converts QuotaPolicy int period type to Token string period type.
 func policyPeriodTypeToTokenPeriodType(pt int) string {
@@ -72,48 +75,76 @@ func clearUserToken(openID string) {
 	})
 }
 
-// forEachDepartmentUserWithoutOverride loads all users in a department (and descendants),
-// filters out those with personal UserQuotaPolicy bindings, and calls fn for each remaining user's OpenID.
-func forEachDepartmentUserWithoutOverride(departmentID string, fn func(openID string)) {
+// runBounded executes fn for each item with bounded concurrency.
+func runBounded(items []string, fn func(string)) {
+	sem := make(chan struct{}, maxSyncConcurrency)
+	var wg sync.WaitGroup
+	for _, item := range items {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fn(id)
+		}(item)
+	}
+	wg.Wait()
+}
+
+// syncPolicyToTokenBatch syncs token quota for multiple users with bounded concurrency.
+func syncPolicyToTokenBatch(openIDs []string, policy *models.QuotaPolicy) {
+	runBounded(openIDs, func(id string) { syncPolicyToToken(id, policy) })
+}
+
+// clearUserTokenBatch clears token quota for multiple users with bounded concurrency.
+func clearUserTokenBatch(openIDs []string) {
+	runBounded(openIDs, clearUserToken)
+}
+
+// getDepartmentUserIDsWithoutOverride returns OpenIDs of all users in a department (and descendants)
+// that do not have personal UserQuotaPolicy bindings.
+func getDepartmentUserIDsWithoutOverride(departmentID string) []string {
 	descendantIDs := feishu.GetDescendantDepartmentIDs(departmentID)
 	if len(descendantIDs) == 0 {
-		return
+		return nil
 	}
 
 	var users []models.FeishuUser
 	model.DB.Where("department_id IN ? OR level1_dept_id IN ? OR level2_dept_id IN ?",
 		descendantIDs, descendantIDs, descendantIDs).Find(&users)
 
-	openIDs := make([]string, 0, len(users))
+	allOpenIDs := make([]string, 0, len(users))
 	for _, u := range users {
-		openIDs = append(openIDs, u.OpenID)
+		allOpenIDs = append(allOpenIDs, u.OpenID)
 	}
 
 	userOverrides := make(map[string]bool)
-	if len(openIDs) > 0 {
+	if len(allOpenIDs) > 0 {
 		var overrides []models.UserQuotaPolicy
-		model.DB.Where("open_id IN ?", openIDs).Find(&overrides)
+		model.DB.Where("open_id IN ?", allOpenIDs).Find(&overrides)
 
 		for _, o := range overrides {
 			userOverrides[o.OpenID] = true
 		}
 	}
 
+	result := make([]string, 0, len(users))
 	for _, u := range users {
-		if userOverrides[u.OpenID] {
-			continue
+		if !userOverrides[u.OpenID] {
+			result = append(result, u.OpenID)
 		}
-
-		fn(u.OpenID)
 	}
+
+	return result
 }
 
 // syncPolicyToDepartmentUsers syncs Token PeriodQuota for all users in a department (and descendants).
 // Users with personal (UserQuotaPolicy) bindings are skipped.
 func syncPolicyToDepartmentUsers(departmentID string, policy *models.QuotaPolicy) {
-	forEachDepartmentUserWithoutOverride(departmentID, func(openID string) {
-		syncPolicyToToken(openID, policy)
-	})
+	openIDs := getDepartmentUserIDsWithoutOverride(departmentID)
+	if len(openIDs) > 0 {
+		syncPolicyToTokenBatch(openIDs, policy)
+	}
 }
 
 // ListPolicies returns all quota policies with pagination.
@@ -413,7 +444,8 @@ func BindPolicyToDepartment(c *gin.Context) {
 	middleware.SuccessResponse(c, binding)
 }
 
-// bindUserPolicyCore is the shared logic for binding a policy to a user (upsert + token sync).
+// bindUserPolicyCore is the shared logic for binding a policy to a user (upsert).
+// It does NOT spawn goroutines for token sync — callers handle that.
 func bindUserPolicyCore(openID string, policy *models.QuotaPolicy) (*models.UserQuotaPolicy, error) {
 	binding := models.UserQuotaPolicy{
 		OpenID:        openID,
@@ -435,10 +467,6 @@ func bindUserPolicyCore(openID string, policy *models.QuotaPolicy) (*models.User
 		}
 	} else {
 		return nil, err
-	}
-
-	if policy.PeriodQuota > 0 {
-		go syncPolicyToToken(openID, policy)
 	}
 
 	return &binding, nil
@@ -473,6 +501,10 @@ func BindPolicyToUser(c *gin.Context) {
 		return
 	}
 
+	if policy.PeriodQuota > 0 {
+		go syncPolicyToToken(req.OpenID, &policy)
+	}
+
 	middleware.SuccessResponse(c, binding)
 }
 
@@ -497,9 +529,12 @@ func UnbindPolicyFromDepartment(c *gin.Context) {
 	}
 
 	// Clear Token PeriodQuota for users without personal override
-	go forEachDepartmentUserWithoutOverride(deptID, func(openID string) {
-		clearUserToken(openID)
-	})
+	go func() {
+		openIDs := getDepartmentUserIDsWithoutOverride(deptID)
+		if len(openIDs) > 0 {
+			clearUserTokenBatch(openIDs)
+		}
+	}()
 
 	middleware.SuccessResponse(c, nil)
 }
@@ -612,6 +647,8 @@ func BatchBindPolicyToUsers(c *gin.Context) {
 
 	var errs []string
 
+	var syncOpenIDs []string
+
 	for _, openID := range req.OpenIDs {
 		binding, err := bindUserPolicyCore(openID, &policy)
 		if err != nil {
@@ -621,6 +658,12 @@ func BatchBindPolicyToUsers(c *gin.Context) {
 		}
 
 		results = append(results, *binding)
+		syncOpenIDs = append(syncOpenIDs, openID)
+	}
+
+	// Batch sync with bounded concurrency
+	if policy.PeriodQuota > 0 && len(syncOpenIDs) > 0 {
+		go syncPolicyToTokenBatch(syncOpenIDs, &policy)
 	}
 
 	if len(errs) > 0 && len(results) == 0 {

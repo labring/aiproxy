@@ -10,7 +10,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/redis/go-redis/v9"
@@ -146,18 +145,73 @@ func GetPolicyForUser(ctx context.Context, openID string) (*models.QuotaPolicy, 
 
 	// 2. Check department-level policy (walk up hierarchy: leaf → level2 → level1)
 	deptIDs := []string{user.DepartmentID, user.Level2DeptID, user.Level1DeptID}
+
+	// Batch-load all ID forms for the department IDs in a single query (N+1 → 1)
+	uniqueDeptIDs := make([]string, 0, 3)
+	for _, id := range deptIDs {
+		if id != "" {
+			uniqueDeptIDs = append(uniqueDeptIDs, id)
+		}
+	}
+
+	deptIDFormsMap := make(map[string][]string, len(uniqueDeptIDs))
+	if len(uniqueDeptIDs) > 0 {
+		var depts []models.FeishuDepartment
+		model.DB.Where("department_id IN ? OR open_department_id IN ?", uniqueDeptIDs, uniqueDeptIDs).Find(&depts)
+
+		for _, inputID := range uniqueDeptIDs {
+			idSet := map[string]struct{}{inputID: {}}
+			for _, d := range depts {
+				if d.DepartmentID == inputID || d.OpenDepartmentID == inputID {
+					if d.DepartmentID != "" {
+						idSet[d.DepartmentID] = struct{}{}
+					}
+					if d.OpenDepartmentID != "" {
+						idSet[d.OpenDepartmentID] = struct{}{}
+					}
+				}
+			}
+			forms := make([]string, 0, len(idSet))
+			for id := range idSet {
+				forms = append(forms, id)
+			}
+			deptIDFormsMap[inputID] = forms
+		}
+	}
+
+	// Collect all ID forms across all dept levels for a single query
+	allDeptIDForms := make([]string, 0, len(uniqueDeptIDs)*2)
+	for _, forms := range deptIDFormsMap {
+		allDeptIDForms = append(allDeptIDForms, forms...)
+	}
+
+	// Single query to load all matching department policies
+	var deptPolicies []models.DepartmentQuotaPolicy
+	if len(allDeptIDForms) > 0 {
+		model.DB.Preload("QuotaPolicy").Where("department_id IN ?", allDeptIDForms).Find(&deptPolicies)
+	}
+
+	// Build lookup: department_id → DepartmentQuotaPolicy
+	deptPolicyMap := make(map[string]*models.DepartmentQuotaPolicy, len(deptPolicies))
+	for i := range deptPolicies {
+		deptPolicyMap[deptPolicies[i].DepartmentID] = &deptPolicies[i]
+	}
+
+	// Walk hierarchy in priority order: leaf → level2 → level1
 	for _, deptID := range deptIDs {
 		if deptID == "" {
 			continue
 		}
 
-		allIDs := feishu.GetAllDepartmentIDForms(deptID)
+		allIDs := deptIDFormsMap[deptID]
+		if len(allIDs) == 0 {
+			allIDs = []string{deptID}
+		}
 
-		var deptPolicy models.DepartmentQuotaPolicy
-		if err := model.DB.Preload("QuotaPolicy").
-			Where("department_id IN ?", allIDs).
-			First(&deptPolicy).Error; err == nil && deptPolicy.QuotaPolicy != nil {
-			return deptPolicy.QuotaPolicy, nil
+		for _, id := range allIDs {
+			if dp, ok := deptPolicyMap[id]; ok && dp.QuotaPolicy != nil {
+				return dp.QuotaPolicy, nil
+			}
 		}
 	}
 

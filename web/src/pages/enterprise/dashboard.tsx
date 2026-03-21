@@ -7,12 +7,13 @@ import * as echarts from "echarts"
 import { type DateRange } from "react-day-picker"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
-import { enterpriseApi, type DepartmentSummary, type ModelDistributionItem } from "@/api/enterprise"
+import { enterpriseApi, type DepartmentSummary, type ModelDistributionItem, type FeishuDepartment } from "@/api/enterprise"
 import { ROUTES } from "@/routes/constants"
-import { type TimeRange, getTimeRange, formatNumber, formatAmount, useDarkMode, getEChartsTheme, ALL_FILTER } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, formatNumber, formatAmount, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
 import { cn } from "@/lib/utils"
 
 // Column configuration for department summary table
@@ -232,9 +233,9 @@ export default function EnterpriseDashboard() {
     const [timeRange, setTimeRange] = useState<TimeRange>("7d")
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
 
-    // Hierarchical department filters
-    const [selectedLevel1, setSelectedLevel1] = useState<string>("")
-    const [selectedLevel2, setSelectedLevel2] = useState<string>("")
+    // Hierarchical department filters (multi-select)
+    const [selectedLevel1s, setSelectedLevel1s] = useState<Set<string>>(new Set())
+    const [selectedLevel2s, setSelectedLevel2s] = useState<Set<string>>(new Set())
 
     // Column visibility
     const [visibleColumns, setVisibleColumns] = useState<Set<DeptSortField>>(() => {
@@ -256,24 +257,46 @@ export default function EnterpriseDashboard() {
         return getTimeRange(timeRange)
     }, [timeRange, customDateRange])
 
-    // Fetch department hierarchy for level1/level2 filters
+    // Fetch all level1 departments
     const { data: deptLevels } = useQuery({
-        queryKey: ["enterprise", "department-levels", selectedLevel1],
-        queryFn: () => enterpriseApi.getDepartmentLevels(selectedLevel1 || undefined),
+        queryKey: ["enterprise", "department-levels"],
+        queryFn: () => enterpriseApi.getDepartmentLevels(),
     })
 
     const level1Departments = useMemo(() => deptLevels?.level1_departments ?? [], [deptLevels])
-    const level2Departments = useMemo(() => deptLevels?.level2_departments ?? [], [deptLevels])
 
-    // Build department filter for API
+    // Fetch level2 departments for all selected level1s
+    const selectedLevel1Array = useMemo(() => [...selectedLevel1s].sort(), [selectedLevel1s])
+    const { data: allLevel2Departments = [] } = useQuery({
+        queryKey: ["enterprise", "department-levels-l2", selectedLevel1Array],
+        queryFn: async () => {
+            const results = await Promise.all(
+                selectedLevel1Array.map(id => enterpriseApi.getDepartmentLevels(id))
+            )
+            const seen = new Set<string>()
+            const merged: FeishuDepartment[] = []
+            for (const r of results) {
+                for (const d of (r.level2_departments || [])) {
+                    if (!seen.has(d.department_id)) {
+                        seen.add(d.department_id)
+                        merged.push(d)
+                    }
+                }
+            }
+            return merged
+        },
+        enabled: selectedLevel1s.size > 0,
+    })
+
+    // Build department filter for API (only pass single dept when exactly one selected)
     const departmentFilter = useMemo(() => {
-        if (selectedLevel2) return selectedLevel2
-        if (selectedLevel1) return selectedLevel1
+        if (selectedLevel2s.size === 1) return [...selectedLevel2s][0]
+        if (selectedLevel1s.size === 1 && selectedLevel2s.size === 0) return [...selectedLevel1s][0]
         return undefined
-    }, [selectedLevel1, selectedLevel2])
+    }, [selectedLevel1s, selectedLevel2s])
 
     const { data, isLoading } = useQuery({
-        queryKey: ["enterprise", "department-summary", start, end, departmentFilter],
+        queryKey: ["enterprise", "department-summary", start, end],
         queryFn: () => enterpriseApi.getDepartmentSummary(start, end),
     })
 
@@ -293,18 +316,17 @@ export default function EnterpriseDashboard() {
     // Filter departments by selected level1/level2
     const departments = useMemo(() => {
         const allDepts = data?.departments || []
-        if (selectedLevel2) {
-            return allDepts.filter(d => d.department_id === selectedLevel2)
+        if (selectedLevel2s.size > 0) {
+            return allDepts.filter(d => selectedLevel2s.has(d.department_id))
         }
-        if (selectedLevel1) {
-            // Filter by level1: include the level1 department and all its level2 children
-            const level2Ids = new Set(level2Departments.map(d => d.department_id))
+        if (selectedLevel1s.size > 0) {
+            const level2Ids = new Set(allLevel2Departments.map(d => d.department_id))
             return allDepts.filter(d =>
-                d.department_id === selectedLevel1 || level2Ids.has(d.department_id)
+                selectedLevel1s.has(d.department_id) || level2Ids.has(d.department_id)
             )
         }
         return allDepts
-    }, [data?.departments, selectedLevel1, selectedLevel2, level2Departments])
+    }, [data?.departments, selectedLevel1s, selectedLevel2s, allLevel2Departments])
 
     const models = modelData?.distribution || []
     const changes = comparisonData?.changes
@@ -364,6 +386,25 @@ export default function EnterpriseDashboard() {
         })
     }
 
+    const toggleLevel1 = (deptId: string) => {
+        setSelectedLevel1s(prev => {
+            const next = new Set(prev)
+            if (next.has(deptId)) next.delete(deptId)
+            else next.add(deptId)
+            return next
+        })
+        setSelectedLevel2s(new Set())
+    }
+
+    const toggleLevel2 = (deptId: string) => {
+        setSelectedLevel2s(prev => {
+            const next = new Set(prev)
+            if (next.has(deptId)) next.delete(deptId)
+            else next.add(deptId)
+            return next
+        })
+    }
+
     const renderSortIcon = (field: DeptSortField) => {
         if (sortField !== field) {
             return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
@@ -396,45 +437,90 @@ export default function EnterpriseDashboard() {
                 <h1 className="text-2xl font-bold">{t("enterprise.dashboard.title")}</h1>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* Level 1 Department Filter */}
-                    <Select
-                        value={selectedLevel1}
-                        onValueChange={(v) => {
-                            setSelectedLevel1(v === ALL_FILTER ? "" : v)
-                            setSelectedLevel2("")
-                        }}
-                    >
-                        <SelectTrigger className="w-44">
-                            <SelectValue placeholder={t("enterprise.dashboard.level1Dept")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ALL_FILTER}>{t("enterprise.dashboard.allLevel1Depts")}</SelectItem>
+                    {/* Level 1 Department Filter (multi-select) */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-44 justify-start gap-1.5">
+                                <Building2 className="w-4 h-4 shrink-0" />
+                                <span className="truncate">
+                                    {selectedLevel1s.size === 0
+                                        ? t("enterprise.dashboard.allLevel1Depts")
+                                        : t("enterprise.dashboard.level1Dept")}
+                                </span>
+                                {selectedLevel1s.size > 0 && (
+                                    <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs">
+                                        {selectedLevel1s.size}
+                                    </Badge>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+                            <DropdownMenuLabel>{t("enterprise.dashboard.level1Dept")}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuCheckboxItem
+                                checked={selectedLevel1s.size === 0}
+                                onCheckedChange={(checked) => {
+                                    if (checked) {
+                                        setSelectedLevel1s(new Set())
+                                        setSelectedLevel2s(new Set())
+                                    }
+                                }}
+                            >
+                                {t("enterprise.dashboard.allLevel1Depts")}
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuSeparator />
                             {level1Departments.map((dept) => (
-                                <SelectItem key={dept.department_id} value={dept.department_id}>
+                                <DropdownMenuCheckboxItem
+                                    key={dept.department_id}
+                                    checked={selectedLevel1s.has(dept.department_id)}
+                                    onCheckedChange={() => toggleLevel1(dept.department_id)}
+                                >
                                     {dept.name || dept.department_id}
-                                </SelectItem>
+                                </DropdownMenuCheckboxItem>
                             ))}
-                        </SelectContent>
-                    </Select>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
-                    {/* Level 2 Department Filter */}
-                    <Select
-                        value={selectedLevel2}
-                        onValueChange={(v) => setSelectedLevel2(v === ALL_FILTER ? "" : v)}
-                        disabled={!selectedLevel1}
-                    >
-                        <SelectTrigger className="w-44">
-                            <SelectValue placeholder={t("enterprise.dashboard.level2Dept")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ALL_FILTER}>{t("enterprise.dashboard.allLevel2Depts")}</SelectItem>
-                            {level2Departments.map((dept) => (
-                                <SelectItem key={dept.department_id} value={dept.department_id}>
+                    {/* Level 2 Department Filter (multi-select) */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-44 justify-start gap-1.5" disabled={selectedLevel1s.size === 0}>
+                                <Building2 className="w-4 h-4 shrink-0" />
+                                <span className="truncate">
+                                    {selectedLevel2s.size === 0
+                                        ? t("enterprise.dashboard.allLevel2Depts")
+                                        : t("enterprise.dashboard.level2Dept")}
+                                </span>
+                                {selectedLevel2s.size > 0 && (
+                                    <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs">
+                                        {selectedLevel2s.size}
+                                    </Badge>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+                            <DropdownMenuLabel>{t("enterprise.dashboard.level2Dept")}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuCheckboxItem
+                                checked={selectedLevel2s.size === 0}
+                                onCheckedChange={(checked) => {
+                                    if (checked) setSelectedLevel2s(new Set())
+                                }}
+                            >
+                                {t("enterprise.dashboard.allLevel2Depts")}
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuSeparator />
+                            {allLevel2Departments.map((dept) => (
+                                <DropdownMenuCheckboxItem
+                                    key={dept.department_id}
+                                    checked={selectedLevel2s.has(dept.department_id)}
+                                    onCheckedChange={() => toggleLevel2(dept.department_id)}
+                                >
                                     {dept.name || dept.department_id}
-                                </SelectItem>
+                                </DropdownMenuCheckboxItem>
                             ))}
-                        </SelectContent>
-                    </Select>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     {/* Time Range Selector */}
                     <div className="flex items-center gap-2">

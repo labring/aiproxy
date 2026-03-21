@@ -4,6 +4,7 @@ package analytics
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/labring/aiproxy/core/enterprise/models"
@@ -49,10 +50,11 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		limit = 50
 	}
 
-	// Get feishu users (optionally filtered by department)
+	// Get feishu users (optionally filtered by department — matches any level)
 	query := model.DB.Model(&models.FeishuUser{}).Select("group_id", "name", "department_id")
 	if departmentID != "" {
-		query = query.Where("department_id = ?", departmentID)
+		query = query.Where("department_id = ? OR level1_dept_id = ? OR level2_dept_id = ?",
+			departmentID, departmentID, departmentID)
 	}
 
 	var feishuUsers []models.FeishuUser
@@ -113,11 +115,15 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		Where("token_name IN ?", tokenNames).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
 		Group("token_name").
-		Order("used_amount DESC").
-		Limit(limit).
 		Find(&results).Error
 	if err != nil {
 		return nil, fmt.Errorf("query user ranking: %w", err)
+	}
+
+	// Build token_name → usage map
+	usageMap := make(map[string]*tokenAgg, len(results))
+	for i := range results {
+		usageMap[results[i].TokenName] = &results[i]
 	}
 
 	// Build department name map
@@ -131,27 +137,48 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		deptNameMap[d.DepartmentID] = d.Name
 	}
 
-	entries := make([]UserRankingEntry, 0, len(results))
-	for i, r := range results {
-		ui := tokenToUser[r.TokenName]
-		var successRate float64
-		if r.RequestCount > 0 {
-			successRate = float64(r.SuccessCount) / float64(r.RequestCount) * 100.0
+	// Build entries for ALL matched users, including those with zero usage
+	entries := make([]UserRankingEntry, 0, len(feishuUsers))
+	for _, u := range feishuUsers {
+		tokenName := "Token-" + u.Name
+		entry := UserRankingEntry{
+			GroupID:        u.GroupID,
+			UserName:       u.Name,
+			DepartmentID:   u.DepartmentID,
+			DepartmentName: deptNameMap[u.DepartmentID],
 		}
-		entries = append(entries, UserRankingEntry{
-			Rank:           i + 1,
-			GroupID:        ui.GroupID,
-			UserName:       ui.Name,
-			DepartmentID:   ui.DepartmentID,
-			DepartmentName: deptNameMap[ui.DepartmentID],
-			UsedAmount:     r.UsedAmount,
-			RequestCount:   r.RequestCount,
-			TotalTokens:    r.TotalTokens,
-			InputTokens:    r.InputTokens,
-			OutputTokens:   r.OutputTokens,
-			SuccessRate:    successRate,
-			UniqueModels:   r.UniqueModels,
-		})
+
+		if agg := usageMap[tokenName]; agg != nil {
+			entry.UsedAmount = agg.UsedAmount
+			entry.RequestCount = agg.RequestCount
+			entry.TotalTokens = agg.TotalTokens
+			entry.InputTokens = agg.InputTokens
+			entry.OutputTokens = agg.OutputTokens
+			entry.UniqueModels = agg.UniqueModels
+			if agg.RequestCount > 0 {
+				entry.SuccessRate = float64(agg.SuccessCount) / float64(agg.RequestCount) * 100.0
+			}
+		}
+
+		entries = append(entries, entry)
+	}
+
+	// Sort: by used_amount DESC, then by user_name ASC for zero-usage users
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].UsedAmount != entries[j].UsedAmount {
+			return entries[i].UsedAmount > entries[j].UsedAmount
+		}
+		return entries[i].UserName < entries[j].UserName
+	})
+
+	// Apply limit
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+
+	// Assign ranks
+	for i := range entries {
+		entries[i].Rank = i + 1
 	}
 
 	return entries, nil
