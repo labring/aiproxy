@@ -625,7 +625,7 @@
       "addTenant": "添加租户",
       "addTenantDescription": "添加新的飞书租户到白名单",
       "tenantId": "租户 ID",
-      "tenantIdPlaceholder": "输入租户 ID（从登录错误中获取）",
+      "tenantIdPlaceholder": "输入飞书企业标识（企业 Key），格式如：t_xxxxxxxx",
       "tenantName": "租户名称",
       "tenantNamePlaceholder": "输入组织名称（可选）",
       "addedBy": "添加人",
@@ -654,7 +654,8 @@
       "addToWhitelist": "加白",
       "dismiss": "忽略",
       "dismissSuccess": "已忽略",
-      "dismissFailed": "忽略失败"
+      "dismissFailed": "忽略失败",
+      "tenantIdHint": "在飞书开发者控制台「我的应用」→「凭证与基础信息」中查看「企业标识」，或从被拒绝的登录记录中获取"
     },
     "users": {
       "title": "用户管理",

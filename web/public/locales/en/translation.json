@@ -530,7 +530,7 @@
       "addTenant": "Add Tenant",
       "addTenantDescription": "Add a new Feishu tenant to the whitelist",
       "tenantId": "Tenant ID",
-      "tenantIdPlaceholder": "Enter tenant ID (from login error)",
+      "tenantIdPlaceholder": "Feishu enterprise key, e.g. t_xxxxxxxx",
       "tenantName": "Tenant Name",
       "tenantNamePlaceholder": "Enter organization name (optional)",
       "addedBy": "Added By",
@@ -559,7 +559,8 @@
       "addToWhitelist": "Allow",
       "dismiss": "Dismiss",
       "dismissSuccess": "Dismissed",
-      "dismissFailed": "Failed to dismiss"
+      "dismissFailed": "Failed to dismiss",
+      "tenantIdHint": "Find the Enterprise Key in Feishu developer console under App Credentials, or copy it from a rejected login record"
     },
     "users": {
       "title": "User Management",

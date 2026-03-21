@@ -104,16 +104,29 @@ func HandleCallback(c *gin.Context) {
 		return
 	}
 
+	// Try to get the enterprise name from Feishu tenant API (best-effort, single-tenant apps only).
+	// For ISV/multi-tenant apps, GetTenantInfo returns the developer's enterprise; we compare
+	// TenantKey to confirm it's the same enterprise before using the name.
+	enterpriseName := ""
+	if tenantInfo, err := GetTenantInfo(ctx); err == nil && tenantInfo.TenantKey == userInfo.TenantID {
+		enterpriseName = tenantInfo.Name
+	}
+
 	// Validate tenant whitelist
 	// Check using database-backed whitelist (imported from parent enterprise package)
 	isTenantAllowed := checkTenantAccess(userInfo.TenantID)
 
 	if !isTenantAllowed {
-		log.Warnf("feishu login rejected: tenant %q not in allowed list, user: %s (%s)",
-			userInfo.TenantID, userInfo.Name, userInfo.OpenID)
+		log.Warnf("feishu login rejected: tenant %q (%s) not in allowed list, user: %s (%s)",
+			userInfo.TenantID, enterpriseName, userInfo.Name, userInfo.OpenID)
 
 		// Record the rejected login attempt for admin review
-		recordRejectedTenant(userInfo.TenantID, userInfo.Name, userInfo.Email)
+		recordRejectedTenant(rejectedTenantInfo{
+			TenantID:       userInfo.TenantID,
+			EnterpriseName: enterpriseName,
+			UserName:       userInfo.Name,
+			UserEmail:      userInfo.Email,
+		})
 
 		// Check if this is a browser request or API request
 		accept := c.GetHeader("Accept")
@@ -132,6 +145,13 @@ func HandleCallback(c *gin.Context) {
 		}
 
 		return
+	}
+
+	// Auto-populate whitelist entry name with enterprise name from Feishu (if still empty).
+	if enterpriseName != "" {
+		model.DB.Model(&enterprisemodels.TenantWhitelist{}).
+			Where("tenant_id = ? AND (name = '' OR name IS NULL)", userInfo.TenantID).
+			Update("name", enterpriseName)
 	}
 
 	// Upsert FeishuUser record
@@ -286,21 +306,30 @@ func checkTenantAccess(tenantKey string) bool {
 	return IsTenantAllowedByEnv(tenantKey)
 }
 
+// rejectedTenantInfo holds context about a rejected login attempt.
+type rejectedTenantInfo struct {
+	TenantID       string
+	EnterpriseName string // Feishu organization name (may be empty if unavailable)
+	UserName       string
+	UserEmail      string
+}
+
 // recordRejectedTenant upserts a rejected login record for the given tenant.
 // If the tenant already has a record, it increments the attempt count and updates user info.
 // Uses SELECT+UPDATE pattern for SQLite/PostgreSQL compatibility (race is benign here —
 // concurrent rejected logins from the same tenant are rare, and worst case loses a count).
-func recordRejectedTenant(tenantID, userName, userEmail string) {
+func recordRejectedTenant(info rejectedTenantInfo) {
 	var existing enterprisemodels.RejectedTenantLogin
-	result := model.DB.Where("tenant_id = ?", tenantID).First(&existing)
+	result := model.DB.Where("tenant_id = ?", info.TenantID).First(&existing)
 
 	if result.Error != nil {
 		if err := model.DB.Create(&enterprisemodels.RejectedTenantLogin{
-			TenantID:      tenantID,
-			UserName:      userName,
-			UserEmail:     userEmail,
-			AttemptCount:  1,
-			LastAttemptAt: time.Now(),
+			TenantID:       info.TenantID,
+			EnterpriseName: info.EnterpriseName,
+			UserName:       info.UserName,
+			UserEmail:      info.UserEmail,
+			AttemptCount:   1,
+			LastAttemptAt:  time.Now(),
 		}).Error; err != nil {
 			log.Errorf("failed to record rejected tenant login: %v", err)
 		}
@@ -308,12 +337,18 @@ func recordRejectedTenant(tenantID, userName, userEmail string) {
 		return
 	}
 
-	if err := model.DB.Model(&existing).Updates(map[string]interface{}{
-		"user_name":       userName,
-		"user_email":      userEmail,
+	updates := map[string]interface{}{
+		"user_name":       info.UserName,
+		"user_email":      info.UserEmail,
 		"attempt_count":   gorm.Expr("attempt_count + 1"),
 		"last_attempt_at": time.Now(),
-	}).Error; err != nil {
+	}
+
+	if info.EnterpriseName != "" {
+		updates["enterprise_name"] = info.EnterpriseName
+	}
+
+	if err := model.DB.Model(&existing).Updates(updates).Error; err != nil {
 		log.Errorf("failed to update rejected tenant login: %v", err)
 	}
 }

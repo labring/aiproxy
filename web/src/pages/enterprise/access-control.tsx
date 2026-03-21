@@ -401,6 +401,9 @@ export default function AccessControlPage() {
                                 value={newTenant.tenant_id}
                                 onChange={(e) => setNewTenant({ ...newTenant, tenant_id: e.target.value })}
                             />
+                            <p className="text-xs text-muted-foreground">
+                                {t("enterprise.accessControl.tenantIdHint")}
+                            </p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="tenant-name">{t("enterprise.accessControl.tenantName")}</Label>

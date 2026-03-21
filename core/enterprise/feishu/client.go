@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -162,8 +163,40 @@ type TenantInfo struct {
 	Name      string // enterprise name
 }
 
-// GetTenantInfo queries the Feishu tenant API to get the current tenant's ID and name.
+var (
+	cachedTenantInfo   *TenantInfo
+	tenantInfoCachedAt time.Time
+	tenantInfoMu       sync.Mutex
+	tenantInfoTTL      = 1 * time.Hour
+)
+
+// GetTenantInfo returns the current app's tenant info, cached in-memory with a 1-hour TTL.
+// Tenant name is near-static; caching avoids a network round-trip to Feishu on every login.
 func GetTenantInfo(ctx context.Context) (*TenantInfo, error) {
+	tenantInfoMu.Lock()
+	if cachedTenantInfo != nil && time.Since(tenantInfoCachedAt) < tenantInfoTTL {
+		info := cachedTenantInfo
+		tenantInfoMu.Unlock()
+
+		return info, nil
+	}
+	tenantInfoMu.Unlock()
+
+	info, err := fetchTenantInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tenantInfoMu.Lock()
+	cachedTenantInfo = info
+	tenantInfoCachedAt = time.Now()
+	tenantInfoMu.Unlock()
+
+	return info, nil
+}
+
+// fetchTenantInfo performs the actual Feishu API call.
+func fetchTenantInfo(ctx context.Context) (*TenantInfo, error) {
 	c := GetClient()
 
 	resp, err := c.Tenant.Tenant.Query(ctx)

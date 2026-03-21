@@ -241,9 +241,13 @@ func GetTenantSummary(c *gin.Context) {
 		if rej, ok := rejectedByTenant[tenantID]; ok {
 			item.RejectedAttempts = rej.AttemptCount
 			item.RejectedRecordID = &rej.ID
-			// Use user info as name hint if whitelist name is empty
+			// Use enterprise name as name hint; fall back to user name if unavailable
 			if item.Name == "" {
-				item.Name = rej.UserName
+				if rej.EnterpriseName != "" {
+					item.Name = rej.EnterpriseName
+				} else {
+					item.Name = rej.UserName
+				}
 			}
 		}
 
