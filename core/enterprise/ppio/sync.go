@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -371,7 +370,7 @@ func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (Chann
 			}
 		}
 	}
-	sort.Strings(openaiModels)
+	slices.Sort(openaiModels)
 
 	for i := range channels {
 		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
@@ -485,6 +484,7 @@ func updateModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 		return err
 	}
 
+	existing.Type = inferModeFromPPIO(ppioModel.ModelType, ppioModel.Endpoints)
 	existing.Config = toModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 	existing.Price.InputPrice = model.ZeroNullFloat64(ppioModel.GetInputPricePerToken())
 	existing.Price.OutputPrice = model.ZeroNullFloat64(ppioModel.GetOutputPricePerToken())
