@@ -38,6 +38,36 @@ const MODEL_TYPES: Record<number, string> = {
     20: "Gemini",
 }
 
+// Semantic color groups for endpoint badges
+const EP_COLORS = {
+    chat: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    anthropic: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+    responses: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    embeddings: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+    image: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
+    misc: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+    video: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+} as const
+
+// Endpoint path → short display label and color class
+const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
+    "POST /v1/chat/completions": { label: "Chat", color: EP_COLORS.chat },
+    "POST /v1/completions": { label: "Completions", color: EP_COLORS.chat },
+    "POST /v1/messages": { label: "Anthropic", color: EP_COLORS.anthropic },
+    "POST /v1/responses": { label: "Responses", color: EP_COLORS.responses },
+    "POST /v1/embeddings": { label: "Embeddings", color: EP_COLORS.embeddings },
+    "POST /v1/moderations": { label: "Moderations", color: EP_COLORS.misc },
+    "POST /v1/images/generations": { label: "Image Gen", color: EP_COLORS.image },
+    "POST /v1/images/edits": { label: "Image Edit", color: EP_COLORS.image },
+    "POST /v1/audio/speech": { label: "TTS", color: EP_COLORS.misc },
+    "POST /v1/audio/transcriptions": { label: "STT", color: EP_COLORS.misc },
+    "POST /v1/audio/translations": { label: "Translate", color: EP_COLORS.misc },
+    "POST /v1/rerank": { label: "Rerank", color: EP_COLORS.misc },
+    "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc },
+    "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video },
+    "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
+}
+
 function maskKey(key: string): string {
     if (key.length <= 8) return key
     return key.slice(0, 6) + "****" + key.slice(-4)
@@ -162,6 +192,24 @@ const response = await client.chat.completions.create({
     messages: [{ role: 'user', content: 'Hello!' }],
 });
 console.log(response.choices[0].message.content);`,
+        },
+        {
+            key: "anthropic",
+            title: "Anthropic Python SDK",
+            code: `import anthropic
+
+client = anthropic.Anthropic(
+    api_key="your-api-key",  # ${t("enterprise.myAccess.copyKey")}
+    base_url="${baseUrl.replace(/\/v1\/?$/, "")}"  # ${t("enterprise.myAccess.anthropicNote")}
+)
+# Endpoint: POST ${baseUrl.replace(/\/v1\/?$/, "/v1")}/messages
+
+message = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+print(message.content[0].text)`,
         },
         {
             key: "cursor",
@@ -302,7 +350,7 @@ function ModelGroupSection({ groups }: { groups: ModelGroupInfo[] }) {
                                         <thead>
                                             <tr className="border-b bg-muted/50">
                                                 <th className="px-3 py-2 text-left font-medium">Model</th>
-                                                <th className="px-3 py-2 text-left font-medium">Type</th>
+                                                <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.endpoints")}</th>
                                                 <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.inputPrice")}</th>
                                                 <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.outputPrice")}</th>
                                                 <th className="px-3 py-2 text-right font-medium">RPM</th>
@@ -314,9 +362,27 @@ function ModelGroupSection({ groups }: { groups: ModelGroupInfo[] }) {
                                                 <tr key={m.model} className="border-b last:border-b-0 hover:bg-muted/30">
                                                     <td className="px-3 py-2 font-mono text-xs">{m.model}</td>
                                                     <td className="px-3 py-2">
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {MODEL_TYPES[m.type] || `Type ${m.type}`}
-                                                        </Badge>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {m.supported_endpoints?.length > 0 ? (
+                                                                m.supported_endpoints.map(ep => {
+                                                                    const info = ENDPOINT_LABELS[ep]
+                                                                    return (
+                                                                        <button
+                                                                            key={ep}
+                                                                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 ${info?.color || EP_COLORS.misc}`}
+                                                                            title={`${t("enterprise.myAccess.copyEndpoint")}: ${ep}`}
+                                                                            onClick={() => copyToClipboard(ep, t("enterprise.myAccess.endpointCopied"))}
+                                                                        >
+                                                                            {info?.label || ep}
+                                                                        </button>
+                                                                    )
+                                                                })
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {MODEL_TYPES[m.type] || `Type ${m.type}`}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums text-xs">
                                                         {formatPrice(m.input_price, m.price_unit)}

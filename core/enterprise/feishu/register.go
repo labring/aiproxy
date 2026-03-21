@@ -83,6 +83,12 @@ func GetFeishuUsers(c *gin.Context) {
 			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
+	// Role filter
+	roleFilter := c.Query("role")
+	if roleFilter != "" {
+		tx = tx.Where("role = ?", roleFilter)
+	}
+
 	// Department filters — match by descendant department IDs
 	// This works whether or not level1_dept_id is populated on the user record,
 	// because it matches the user's department_id against all descendants of the selected dept.

@@ -366,6 +366,7 @@ export interface ModelAccessInfo {
     input_price: number
     output_price: number
     price_unit: number
+    supported_endpoints: string[]
 }
 
 export interface ModelGroupInfo {
@@ -579,10 +580,11 @@ export const enterpriseApi = {
         sort_by?: string,
         order?: 'asc' | 'desc',
         level1_department?: string,
-        level2_department?: string
+        level2_department?: string,
+        role?: string
     ): Promise<FeishuUsersResponse> => {
         return get<FeishuUsersResponse>('/enterprise/feishu/users', {
-            params: { page, per_page, keyword, sort_by, order, level1_department, level2_department }
+            params: { page, per_page, keyword, sort_by, order, level1_department, level2_department, role }
         })
     },
 

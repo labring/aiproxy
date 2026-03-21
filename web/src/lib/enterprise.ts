@@ -62,7 +62,11 @@ export function formatNumber(n: number): string {
 }
 
 export function formatAmount(n: number): string {
-    return `$${n.toFixed(2)}`
+    if (n === 0) return "¥0.00"
+    const abs = Math.abs(n)
+    if (abs < 0.0001) return `¥${n.toExponential(2)}`
+    if (abs < 0.01) return `¥${n.toFixed(4)}`
+    return `¥${n.toFixed(2)}`
 }
 
 /** Detect dark mode and re-render on change. */

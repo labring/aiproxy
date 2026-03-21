@@ -356,7 +356,11 @@
       "copyKey": "Copy Key",
       "newKeyTitle": "New Key Created",
       "tokenName": "Name",
-      "actions": "Actions"
+      "actions": "Actions",
+      "endpoints": "Supported Endpoints",
+      "copyEndpoint": "Copy endpoint path",
+      "endpointCopied": "Endpoint path copied",
+      "anthropicNote": "Note: Anthropic SDK base_url should NOT include /v1 suffix"
     },
     "ppio": {
       "title": "PPIO Model Sync",
@@ -416,7 +420,12 @@
       "mgmtTokenSaved": "Management token saved successfully",
       "mgmtTokenConfigured": "Management token is configured (full model catalog enabled)",
       "mgmtTokenRequired": "Please enter a token",
-      "mgmtTokenHint": "Log in to ppio.com and copy the token from your browser (Network tab → any API request → Authorization header). This enables access to 121 models including closed-source pa/ models."
+      "mgmtTokenHint": "Log in to ppio.com and copy the token from your browser (Network tab → any API request → Authorization header). This enables access to 121 models including closed-source pa/ models.",
+      "endpointLegend": "Endpoint Guide",
+      "endpointChat": "OpenAI compatible (base_url: api.ppio.com/v1)",
+      "endpointAnthropic": "Claude native protocol (base_url: api.ppio.com/anthropic)",
+      "endpointResponses": "OpenAI Responses API (/v1/responses)",
+      "endpointEmbeddings": "Text embeddings (/v1/embeddings)"
     },
     "customReport": {
       "title": "Custom Report",
@@ -540,6 +549,7 @@
       "name": "Name",
       "email": "Email",
       "role": "Role",
+      "allRoles": "All Roles",
       "department": "Department",
       "group": "Group",
       "createdAt": "Created At",

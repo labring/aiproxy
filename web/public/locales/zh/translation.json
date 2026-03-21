@@ -345,7 +345,11 @@
       "copyKey": "复制 Key",
       "newKeyTitle": "新 Key 已创建",
       "tokenName": "名称",
-      "actions": "操作"
+      "actions": "操作",
+      "endpoints": "支持的端点",
+      "copyEndpoint": "复制端点路径",
+      "endpointCopied": "端点路径已复制",
+      "anthropicNote": "注意：Anthropic SDK 的 base_url 不应包含 /v1 后缀"
     },
     "ppio": {
       "title": "PPIO 模型同步",
@@ -405,7 +409,12 @@
       "mgmtTokenSaved": "管理 Token 保存成功",
       "mgmtTokenConfigured": "管理 Token 已配置（已启用全量模型目录）",
       "mgmtTokenRequired": "请输入 Token",
-      "mgmtTokenHint": "登录 ppio.com 后台，在浏览器「网络」面板中找到任意 API 请求的 Authorization 请求头，复制 Bearer 后的 token。配置后可同步全量 121 个模型，含闭源 pa/ 模型。"
+      "mgmtTokenHint": "登录 ppio.com 后台，在浏览器「网络」面板中找到任意 API 请求的 Authorization 请求头，复制 Bearer 后的 token。配置后可同步全量 121 个模型，含闭源 pa/ 模型。",
+      "endpointLegend": "端点说明",
+      "endpointChat": "OpenAI 兼容 (base_url: api.ppio.com/v1)",
+      "endpointAnthropic": "Claude 原生协议 (base_url: api.ppio.com/anthropic)",
+      "endpointResponses": "OpenAI Responses API (/v1/responses)",
+      "endpointEmbeddings": "文本向量 (/v1/embeddings)"
     },
     "quota": {
       "title": "额度策略管理",
@@ -609,6 +618,7 @@
       "name": "姓名",
       "email": "邮箱",
       "role": "角色",
+      "allRoles": "全部角色",
       "department": "部门",
       "group": "分组",
       "createdAt": "创建时间",

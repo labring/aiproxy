@@ -16,8 +16,8 @@ type PPIOModel struct {
 	Description          string         `json:"description"`
 	ContextSize          int64          `json:"context_size"`
 	MaxOutputTokens      int64          `json:"max_output_tokens"`
-	InputTokenPricePerM  float64        `json:"input_token_price_per_m"`  // Price per million tokens (CNY 厘)
-	OutputTokenPricePerM float64        `json:"output_token_price_per_m"` // Price per million tokens (CNY 厘)
+	InputTokenPricePerM  float64        `json:"input_token_price_per_m"`  // Price per million tokens (CNY 元)
+	OutputTokenPricePerM float64        `json:"output_token_price_per_m"` // Price per million tokens (CNY 元)
 	Endpoints            []string       `json:"endpoints"`
 	Features             []string       `json:"features"`
 	InputModalities      []string       `json:"input_modalities"`

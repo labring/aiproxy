@@ -23,7 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Button } from "@/components/ui/button"
 import useAuthStore from "@/store/auth"
 import { LanguageSelector } from "@/components/common/LanguageSelector"
-import { useMyPermissions, type PermissionKey } from "@/lib/permissions"
+import { useMyPermissions, useRole, type PermissionKey } from "@/lib/permissions"
 
 interface EnterpriseSidebarItem {
     title: string
@@ -32,6 +32,7 @@ interface EnterpriseSidebarItem {
     divider?: boolean
     external?: boolean
     requiredPermission?: PermissionKey
+    adminOnly?: boolean
 }
 
 function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
@@ -94,6 +95,7 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             icon: Monitor,
             href: ROUTES.MONITOR,
             external: true,
+            adminOnly: true,
         },
     ]
 }
@@ -114,9 +116,12 @@ export function EnterpriseLayout() {
     const allSidebarItems = createEnterpriseSidebarConfig(t)
     const { data: permData } = useMyPermissions()
     const myPerms = new Set(permData?.permissions || [])
+    const currentRole = useRole()
 
     const sidebarItems = allSidebarItems.filter(item => {
-        if (item.divider || item.external) return true
+        if (item.divider) return true
+        if (item.adminOnly && currentRole !== 'admin') return false
+        if (item.external) return true
         if (!item.requiredPermission) return true
         return myPerms.has(item.requiredPermission)
     })

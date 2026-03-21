@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History, Save, Key } from 'lucide-react'
 import { ppioApi } from '../../api/ppio'
-import type { DiagnosticResult, PPIOChannelItem, PPIOConfig, SyncHistory, SyncOptions, SyncProgressEvent, SyncResult } from '../../types/ppio'
+import type { DiagnosticResult, ModelDiff, PPIOChannelItem, PPIOConfig, SyncHistory, SyncOptions, SyncProgressEvent } from '../../types/ppio'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,53 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { useHasPermission } from '@/lib/permissions'
+
+// Endpoint display name mapping
+const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
+  'chat/completions': { label: 'Chat', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  'anthropic': { label: 'Anthropic', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+  'responses': { label: 'Responses', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  'embeddings': { label: 'Embeddings', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  'completions': { label: 'Completions', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-400' },
+  'gemini': { label: 'Gemini', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  'batch-api': { label: 'Batch', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400' },
+}
+
+function EndpointBadges({ endpoints }: { endpoints?: string[] }) {
+  if (!endpoints || endpoints.length === 0) return null
+  return (
+    <span className="inline-flex flex-wrap gap-1 ml-2">
+      {endpoints.map(ep => {
+        const cfg = ENDPOINT_LABELS[ep] || { label: ep, color: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400' }
+        return (
+          <Badge key={ep} variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 font-normal ${cfg.color}`}>
+            {cfg.label}
+          </Badge>
+        )
+      })}
+    </span>
+  )
+}
+
+function ModelRow({ d }: { d: ModelDiff }) {
+  const config = d.new_config || d.old_config
+  const endpoints = config?.endpoints as string[] | undefined
+  const modelType = config?.model_type as string | undefined
+  return (
+    <div className="flex items-center flex-wrap gap-1 py-0.5">
+      <span className="font-mono text-xs text-muted-foreground">{d.model_id}</span>
+      <EndpointBadges endpoints={endpoints} />
+      {modelType && modelType !== 'chat' && (
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+          {modelType}
+        </Badge>
+      )}
+      {d.changes && d.changes.length > 0 && (
+        <span className="text-[10px] text-muted-foreground/60 ml-1">({d.changes.join(', ')})</span>
+      )}
+    </div>
+  )
+}
 
 export default function PPIOSyncPage() {
   const { t } = useTranslation()
@@ -188,7 +235,7 @@ export default function PPIOSyncPage() {
         setProgress(event.progress || 0)
         setProgressMessage(event.message)
       },
-      (_result: SyncResult) => {
+      () => {
         setSyncing(false)
         setProgress(100)
         toast.success(t('common.success'))
@@ -445,9 +492,9 @@ export default function PPIOSyncPage() {
                         <span className="text-green-600 dark:text-green-400 font-medium">{t('enterprise.ppio.modelsToAdd')} ({diff.changes.add!.length})</span>
                       </button>
                       {expandedSections.add && (
-                        <div className="px-4 pb-2 space-y-1">
+                        <div className="px-4 pb-2 space-y-0.5">
                           {diff.changes.add!.map(d => (
-                            <div key={d.model_id} className="text-xs text-muted-foreground font-mono">{d.model_id}</div>
+                            <ModelRow key={d.model_id} d={d} />
                           ))}
                         </div>
                       )}
@@ -464,14 +511,9 @@ export default function PPIOSyncPage() {
                         <span className="text-blue-600 dark:text-blue-400 font-medium">{t('enterprise.ppio.modelsToUpdate')} ({diff.changes.update!.length})</span>
                       </button>
                       {expandedSections.update && (
-                        <div className="px-4 pb-2 space-y-1">
+                        <div className="px-4 pb-2 space-y-0.5">
                           {diff.changes.update!.map(d => (
-                            <div key={d.model_id} className="text-xs text-muted-foreground">
-                              <span className="font-mono">{d.model_id}</span>
-                              {d.changes && d.changes.length > 0 && (
-                                <span className="ml-2 text-muted-foreground/60">({d.changes.join(', ')})</span>
-                              )}
-                            </div>
+                            <ModelRow key={d.model_id} d={d} />
                           ))}
                         </div>
                       )}
@@ -488,9 +530,9 @@ export default function PPIOSyncPage() {
                         <span className="text-red-600 dark:text-red-400 font-medium">{t('enterprise.ppio.modelsToDelete')} ({diff.changes.delete!.length})</span>
                       </button>
                       {expandedSections.delete && (
-                        <div className="px-4 pb-2 space-y-1">
+                        <div className="px-4 pb-2 space-y-0.5">
                           {diff.changes.delete!.map(d => (
-                            <div key={d.model_id} className="text-xs text-muted-foreground font-mono">{d.model_id}</div>
+                            <ModelRow key={d.model_id} d={d} />
                           ))}
                         </div>
                       )}
@@ -498,6 +540,26 @@ export default function PPIOSyncPage() {
                   )}
                 </div>
               )}
+
+              {/* Endpoint Legend */}
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <div className="text-sm font-medium mb-2">{t('enterprise.ppio.endpointLegend')}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                  {([
+                    ['chat/completions', t('enterprise.ppio.endpointChat')],
+                    ['anthropic',        t('enterprise.ppio.endpointAnthropic')],
+                    ['responses',        t('enterprise.ppio.endpointResponses')],
+                    ['embeddings',       t('enterprise.ppio.endpointEmbeddings')],
+                  ] as [string, string][]).map(([key, desc]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 font-normal ${ENDPOINT_LABELS[key].color}`}>
+                        {ENDPOINT_LABELS[key].label}
+                      </Badge>
+                      <span>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Channel Status */}
               <div className="p-3 bg-muted/50 rounded-lg">

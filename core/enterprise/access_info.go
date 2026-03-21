@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type MyTokenInfo struct {
@@ -26,13 +27,59 @@ type MyTokenInfo struct {
 }
 
 type ModelAccessInfo struct {
-	Model       string  `json:"model"`
-	Type        int     `json:"type"`
-	RPM         int64   `json:"rpm"`
-	TPM         int64   `json:"tpm"`
-	InputPrice  float64 `json:"input_price"`
-	OutputPrice float64 `json:"output_price"`
-	PriceUnit   int64   `json:"price_unit"`
+	Model              string   `json:"model"`
+	Type               int      `json:"type"`
+	RPM                int64    `json:"rpm"`
+	TPM                int64    `json:"tpm"`
+	InputPrice         float64  `json:"input_price"`
+	OutputPrice        float64  `json:"output_price"`
+	PriceUnit          int64    `json:"price_unit"`
+	SupportedEndpoints []string `json:"supported_endpoints"`
+}
+
+var (
+	endpointsChatFamily = []string{
+		"POST /v1/chat/completions",
+		"POST /v1/completions",
+		"POST /v1/messages",
+		"POST /v1/responses",
+	}
+	endpointsEmbeddings    = []string{"POST /v1/embeddings"}
+	endpointsModerations   = []string{"POST /v1/moderations"}
+	endpointsImages        = []string{"POST /v1/images/generations", "POST /v1/images/edits"}
+	endpointsAudioSpeech   = []string{"POST /v1/audio/speech"}
+	endpointsAudioTransc   = []string{"POST /v1/audio/transcriptions"}
+	endpointsAudioTransl   = []string{"POST /v1/audio/translations"}
+	endpointsRerank        = []string{"POST /v1/rerank"}
+	endpointsParsePdf      = []string{"POST /v1/parse/pdf"}
+	endpointsVideo         = []string{"POST /v1/video/generations/jobs", "GET /v1/video/generations/jobs/{id}"}
+)
+
+func getSupportedEndpoints(modelType mode.Mode) []string {
+	switch modelType {
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini, mode.Responses:
+		return endpointsChatFamily
+	case mode.Embeddings:
+		return endpointsEmbeddings
+	case mode.Moderations:
+		return endpointsModerations
+	case mode.ImagesGenerations, mode.ImagesEdits:
+		return endpointsImages
+	case mode.AudioSpeech:
+		return endpointsAudioSpeech
+	case mode.AudioTranscription:
+		return endpointsAudioTransc
+	case mode.AudioTranslation:
+		return endpointsAudioTransl
+	case mode.Rerank:
+		return endpointsRerank
+	case mode.ParsePdf:
+		return endpointsParsePdf
+	case mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent:
+		return endpointsVideo
+	default:
+		return nil
+	}
 }
 
 type ModelGroupInfo struct {
@@ -171,13 +218,14 @@ func GetMyAccess(c *gin.Context) {
 		}
 
 		ownerModels[owner] = append(ownerModels[owner], ModelAccessInfo{
-			Model:       modelName,
-			Type:        int(mc.Type),
-			RPM:         rpm,
-			TPM:         tpm,
-			InputPrice:  inputPrice,
-			OutputPrice: outputPrice,
-			PriceUnit:   priceUnit,
+			Model:              modelName,
+			Type:               int(mc.Type),
+			RPM:                rpm,
+			TPM:                tpm,
+			InputPrice:         inputPrice,
+			OutputPrice:        outputPrice,
+			PriceUnit:          priceUnit,
+			SupportedEndpoints: getSupportedEndpoints(mc.Type),
 		})
 	}
 

@@ -242,6 +242,7 @@ export default function UsersPage() {
     const [selectedRole, setSelectedRole] = useState<string>("")
     const [selectedPolicyId, setSelectedPolicyId] = useState<number | null>(null)
     const [selectedPolicyFilters, setSelectedPolicyFilters] = useState<Set<string>>(new Set())
+    const [roleFilter, setRoleFilter] = useState<string>("all")
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
         const vis: VisibilityState = {}
         for (const col of COLUMN_KEYS) {
@@ -281,6 +282,7 @@ export default function UsersPage() {
         setSearchInput("")
         setKeyword("")
         setSelectedPolicyFilters(new Set())
+        setRoleFilter("all")
         setPage(1)
     }, [])
 
@@ -326,7 +328,7 @@ export default function UsersPage() {
 
     // Fetch users
     const { data, isLoading, refetch } = useQuery({
-        queryKey: ["feishu-users", effectivePage, effectivePageSize, keyword, sortBy, sortOrder, level1Department, level2Department],
+        queryKey: ["feishu-users", effectivePage, effectivePageSize, keyword, sortBy, sortOrder, level1Department, level2Department, roleFilter],
         queryFn: () => enterpriseApi.getFeishuUsers(
             effectivePage,
             effectivePageSize,
@@ -334,7 +336,8 @@ export default function UsersPage() {
             sortBy,
             sortOrder,
             level1Department === "all" ? undefined : level1Department,
-            level2Department === "all" ? undefined : level2Department
+            level2Department === "all" ? undefined : level2Department,
+            roleFilter === "all" ? undefined : roleFilter
         ),
         staleTime: 30000,
         refetchOnWindowFocus: false,
@@ -441,6 +444,10 @@ export default function UsersPage() {
             bindQuotaMutation.mutate({ open_id: selectedUser.open_id, policy_id: selectedPolicyId })
         }
     }, [selectedUser, selectedPolicyId, bindQuotaMutation])
+
+    const currentRole = useRole()
+    const isAdmin = currentRole === 'admin'
+    const canManageUsers = useHasPermission('user_manage_manage')
 
     const columns: ColumnDef<FeishuUser>[] = useMemo(() => [
         {
@@ -638,10 +645,7 @@ export default function UsersPage() {
         onColumnVisibilityChange: setColumnVisibility,
     })
 
-    const hasActiveFilters = level1Department !== "all" || level2Department !== "all" || keyword || selectedPolicyFilters.size > 0
-    const currentRole = useRole()
-    const isAdmin = currentRole === 'admin'
-    const canManageUsers = useHasPermission('user_manage_manage')
+    const hasActiveFilters = level1Department !== "all" || level2Department !== "all" || keyword || selectedPolicyFilters.size > 0 || roleFilter !== "all"
 
     const userListContent = (
         <>
@@ -746,6 +750,17 @@ export default function UsersPage() {
                                     </SelectContent>
                                 </Select>
                             )}
+                            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1) }}>
+                                <SelectTrigger className="w-32">
+                                    <SelectValue placeholder={t("enterprise.users.role")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">{t("enterprise.users.allRoles")}</SelectItem>
+                                    <SelectItem value="viewer">{t("enterprise.users.roles.viewer")}</SelectItem>
+                                    <SelectItem value="analyst">{t("enterprise.users.roles.analyst")}</SelectItem>
+                                    <SelectItem value="admin">{t("enterprise.users.roles.admin")}</SelectItem>
+                                </SelectContent>
+                            </Select>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="gap-1.5">

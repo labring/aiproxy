@@ -3,7 +3,7 @@ import { Navigate } from "react-router"
 import { Suspense, lazy } from "react"
 import { ROUTES } from "./constants"
 import { ProtectedRoute } from "@/feature/auth/components/ProtectedRoute"
-import { RequirePermission } from "@/components/common/RequirePermission"
+import { RequirePermission, RequireAdmin } from "@/components/common/RequirePermission"
 
 //page
 import ModelPage from "@/pages/model/page"
@@ -57,7 +57,7 @@ export function useRoutes(): RouteObject[] {
         element: <ProtectedRoute />,
         children: [
             {
-                element: <RootLayout />,
+                element: <RequireAdmin><RootLayout /></RequireAdmin>,
                 children: [
                     {
                         path: "/",

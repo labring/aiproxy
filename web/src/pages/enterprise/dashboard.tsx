@@ -120,7 +120,7 @@ function DepartmentPieChart({ departments }: { departments: DepartmentSummary[] 
         chartInstance.current.setOption({
             tooltip: {
                 trigger: "item",
-                formatter: "{b}: ${c} ({d}%)",
+                formatter: "{b}: ¥{c} ({d}%)",
             },
             series: [
                 {
