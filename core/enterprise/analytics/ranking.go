@@ -66,29 +66,14 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		return []UserRankingEntry{}, nil
 	}
 
-	// Build token_name → user info mapping
-	type userInfo struct {
-		Name         string
-		GroupID      string
-		DepartmentID string
-	}
-
-	tokenToUser := make(map[string]userInfo, len(feishuUsers))
-	tokenNames := make([]string, 0, len(feishuUsers))
-
+	groupIDs := make([]string, 0, len(feishuUsers))
 	for _, u := range feishuUsers {
-		tokenName := "Token-" + u.Name
-		tokenToUser[tokenName] = userInfo{
-			Name:         u.Name,
-			GroupID:      u.GroupID,
-			DepartmentID: u.DepartmentID,
-		}
-		tokenNames = append(tokenNames, tokenName)
+		groupIDs = append(groupIDs, u.GroupID)
 	}
 
-	// Query aggregated usage from group_summaries
-	type tokenAgg struct {
-		TokenName    string  `gorm:"column:token_name"`
+	// Query aggregated usage from group_summaries by group_id
+	type groupAgg struct {
+		GroupID      string  `gorm:"column:group_id"`
 		UsedAmount   float64 `gorm:"column:used_amount"`
 		RequestCount int64   `gorm:"column:request_count"`
 		TotalTokens  int64   `gorm:"column:total_tokens"`
@@ -98,12 +83,12 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		UniqueModels int     `gorm:"column:unique_models"`
 	}
 
-	var results []tokenAgg
+	var results []groupAgg
 
 	err := model.LogDB.
 		Model(&model.GroupSummary{}).
 		Select(
-			"token_name",
+			"group_id",
 			"SUM(used_amount) as used_amount",
 			"SUM(request_count) as request_count",
 			"SUM(total_tokens) as total_tokens",
@@ -112,18 +97,18 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			"SUM(status2xx_count) as success_count",
 			"COUNT(DISTINCT model) as unique_models",
 		).
-		Where("token_name IN ?", tokenNames).
+		Where("group_id IN ?", groupIDs).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
-		Group("token_name").
+		Group("group_id").
 		Find(&results).Error
 	if err != nil {
 		return nil, fmt.Errorf("query user ranking: %w", err)
 	}
 
-	// Build token_name → usage map
-	usageMap := make(map[string]*tokenAgg, len(results))
+	// Build group_id → usage map
+	usageMap := make(map[string]*groupAgg, len(results))
 	for i := range results {
-		usageMap[results[i].TokenName] = &results[i]
+		usageMap[results[i].GroupID] = &results[i]
 	}
 
 	// Build department name map
@@ -140,7 +125,6 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 	// Build entries for ALL matched users, including those with zero usage
 	entries := make([]UserRankingEntry, 0, len(feishuUsers))
 	for _, u := range feishuUsers {
-		tokenName := "Token-" + u.Name
 		entry := UserRankingEntry{
 			GroupID:        u.GroupID,
 			UserName:       u.Name,
@@ -148,7 +132,7 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			DepartmentName: deptNameMap[u.DepartmentID],
 		}
 
-		if agg := usageMap[tokenName]; agg != nil {
+		if agg := usageMap[u.GroupID]; agg != nil {
 			entry.UsedAmount = agg.UsedAmount
 			entry.RequestCount = agg.RequestCount
 			entry.TotalTokens = agg.TotalTokens

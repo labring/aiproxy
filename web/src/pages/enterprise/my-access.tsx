@@ -38,6 +38,7 @@ const MODEL_TYPES: Record<number, string> = {
     10: "Rerank",
     11: "Parse PDF",
     12: "Anthropic",
+    13: "Video Generation",
     15: "Responses",
     20: "Gemini",
 }

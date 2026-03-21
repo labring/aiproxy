@@ -317,21 +317,54 @@ func executeSyncTransaction(
 // EnsurePPIOChannels finds all PPIO channels (by base_url) and updates each
 // channel's model list filtered by endpoint compatibility.
 //   - Channels with base_url containing "anthropic" get only anthropic-endpoint models.
-//   - All other PPIO channels get chat/completions-endpoint models.
+//   - All other PPIO channels get every model that has at least one non-anthropic endpoint.
 func EnsurePPIOChannels(_ SyncOptions, remoteModels []PPIOModel) (ChannelsInfo, error) {
-	return ensurePPIOChannelsWithFilter(
-		func(endpoint string) []string { return filterModelIDs(remoteModels, endpoint) },
-	)
+	return ensurePPIOChannelsFromModels(collectChannelModels(remoteModels))
 }
 
 // EnsurePPIOChannelsV2 is the V2 variant that works with PPIOModelV2 slices.
 func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsInfo, error) {
-	return ensurePPIOChannelsWithFilter(
-		func(endpoint string) []string { return filterModelIDs(remoteModels, endpoint) },
-	)
+	return ensurePPIOChannelsFromModels(collectChannelModels(remoteModels))
 }
 
-func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (ChannelsInfo, error) {
+// collectChannelModels partitions models into anthropic-only and openai-compatible lists.
+// A model is "openai-compatible" if it has any endpoint other than "anthropic".
+func collectChannelModels[T endpointModel](models []T) (anthropicModels, openaiModels []string) {
+	for _, m := range models {
+		eps := m.GetEndpoints()
+		hasAnthropic := slices.Contains(eps, "anthropic")
+		hasNonAnthropic := false
+
+		for _, ep := range eps {
+			if ep != "anthropic" {
+				hasNonAnthropic = true
+
+				break
+			}
+		}
+
+		if hasAnthropic {
+			anthropicModels = append(anthropicModels, m.GetID())
+		}
+
+		if hasNonAnthropic {
+			openaiModels = append(openaiModels, m.GetID())
+		}
+
+		// Models with no endpoints at all: include in openai channel as fallback
+		// so they remain accessible (they'll use the default chat/completions mode).
+		if len(eps) == 0 {
+			openaiModels = append(openaiModels, m.GetID())
+		}
+	}
+
+	slices.Sort(anthropicModels)
+	slices.Sort(openaiModels)
+
+	return anthropicModels, openaiModels
+}
+
+func ensurePPIOChannelsFromModels(anthropicModels, openaiModels []string) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
 	likeOp := "ILIKE"
@@ -348,29 +381,6 @@ func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (Chann
 
 	info.PPIO.Exists = true
 	info.PPIO.ID = channels[0].ID
-
-	// Anthropic channel: only models that declare native Anthropic endpoint support.
-	anthropicModels := filterByEndpoint("anthropic")
-
-	// OpenAI channel: all models accessible via PPIO's OpenAI-compatible API.
-	// This includes chat, embeddings, rerank, moderations, and responses models —
-	// not just chat/completions. Anthropic-only models (pa/claude-*) are excluded
-	// because they require the Anthropic protocol path.
-	openaiEPs := []string{
-		"chat/completions", "embeddings",
-		"rerank", "moderations", "responses",
-	}
-	seen := make(map[string]struct{})
-	var openaiModels []string
-	for _, ep := range openaiEPs {
-		for _, id := range filterByEndpoint(ep) {
-			if _, ok := seen[id]; !ok {
-				seen[id] = struct{}{}
-				openaiModels = append(openaiModels, id)
-			}
-		}
-	}
-	slices.Sort(openaiModels)
 
 	for i := range channels {
 		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
@@ -665,19 +675,6 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 type endpointModel interface {
 	GetID() string
 	GetEndpoints() []string
-}
-
-// filterModelIDs returns model IDs that support the given endpoint.
-func filterModelIDs[T endpointModel](models []T, endpoint string) []string {
-	ids := make([]string, 0, len(models))
-
-	for _, m := range models {
-		if slices.Contains(m.GetEndpoints(), endpoint) {
-			ids = append(ids, m.GetID())
-		}
-	}
-
-	return ids
 }
 
 // toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.

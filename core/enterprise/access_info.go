@@ -72,13 +72,17 @@ var (
 // ppioSlugToPath maps PPIO endpoint slugs (from ModelConfig.Config["endpoints"])
 // to the corresponding AI Proxy API paths.
 var ppioSlugToPath = map[string]string{
-	"chat/completions": "POST /v1/chat/completions",
-	"completions":      "POST /v1/completions",
-	"anthropic":        "POST /v1/messages",
-	"responses":        "POST /v1/responses",
-	"embeddings":       "POST /v1/embeddings",
-	"moderations":      "POST /v1/moderations",
-	"rerank":           "POST /v1/rerank",
+	"chat/completions":       "POST /v1/chat/completions",
+	"completions":            "POST /v1/completions",
+	"anthropic":              "POST /v1/messages",
+	"responses":              "POST /v1/responses",
+	"embeddings":             "POST /v1/embeddings",
+	"moderations":            "POST /v1/moderations",
+	"rerank":                 "POST /v1/rerank",
+	"audio/speech":           "POST /v1/audio/speech",
+	"audio/transcriptions":   "POST /v1/audio/transcriptions",
+	"images/generations":     "POST /v1/images/generations",
+	"video/generations/jobs": "POST /v1/video/generations/jobs",
 }
 
 // getModelSupportedEndpoints returns the supported endpoint paths for a model.
@@ -437,8 +441,6 @@ func GetMyStats(c *gin.Context) {
 		}
 	}
 
-	tokenName := "Token-" + feishuUser.Name
-
 	// Query aggregated usage per model from group_summaries
 	type modelAgg struct {
 		Model        string  `gorm:"column:model"`
@@ -457,7 +459,7 @@ func GetMyStats(c *gin.Context) {
 			"SUM(request_count) as request_count",
 			"SUM(total_tokens) as total_tokens",
 		).
-		Where("token_name = ?", tokenName).
+		Where("group_id = ?", feishuUser.GroupID).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTs, endTs).
 		Group("model").
 		Find(&aggResults).Error; err != nil {
