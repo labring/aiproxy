@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
@@ -87,7 +88,11 @@ var ppioSlugToPath = map[string]string{
 // (AI Proxy's protocol conversion makes chat/completions, completions, and messages
 // mutually reachable). POST /v1/responses is only included when the model explicitly
 // declares the "responses" slug, because that endpoint requires upstream support.
-// Otherwise it falls back to type-based inference.
+//
+// Fallback chain when Config["endpoints"] is absent or all slugs are unknown:
+//  1. Config["model_type"] string — accurate for PPIO models even if mc.Type is stale
+//     (mc.Type was hardcoded to 1 for all PPIO models before inferModeFromPPIO).
+//  2. mc.Type — authoritative for non-PPIO models.
 func getModelSupportedEndpoints(mc model.ModelConfig) []string {
 	if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok && len(slugs) > 0 {
 		paths := make([]string, 0, len(slugs))
@@ -118,6 +123,14 @@ func getModelSupportedEndpoints(mc model.ModelConfig) []string {
 			return paths
 		}
 	}
+	// Fallback 1: use PPIO model_type string stored in Config — more reliable than
+	// mc.Type for PPIO models that were synced before inferModeFromPPIO was added.
+	if mt, _ := mc.Config[model.ModelConfigKey("model_type")].(string); mt != "" {
+		if m, ok := ppio.ModelTypeToMode[mt]; ok {
+			return getSupportedEndpoints(m)
+		}
+	}
+	// Fallback 2: mc.Type (authoritative for non-PPIO models).
 	return getSupportedEndpoints(mc.Type)
 }
 

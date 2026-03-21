@@ -264,9 +264,10 @@ func TestGetModelSupportedEndpoints_MixedChatAndNonChat(t *testing.T) {
 }
 
 // TestGetModelSupportedEndpoints_UnknownSlugFallback verifies that an unrecognised
-// PPIO slug causes the function to fall back to type-based inference.
+// PPIO slug falls back through model_type → mc.Type inference.
+// makeModelConfig sets no Config["model_type"], so the final fallback is mc.Type.
 func TestGetModelSupportedEndpoints_UnknownSlugFallback(t *testing.T) {
-	// Config has only unknown slug → falls back to type-based (ChatCompletions → 4 paths)
+	// No model_type in Config → falls back to mc.Type = ChatCompletions → 4 paths
 	mc := makeModelConfig(mode.ChatCompletions, []string{"unknown-future-slug"})
 	got := getModelSupportedEndpoints(mc)
 	want := endpointsChatFamily
@@ -467,6 +468,85 @@ func TestGetModelSupportedEndpoints_NoNilOrEmptyInAnyPath(t *testing.T) {
 				t.Errorf("mode %s [%d]: empty endpoint string", m, i)
 			}
 		}
+	}
+}
+
+// TestGetModelSupportedEndpoints_ModelTypeFallback verifies that Config["model_type"]
+// is used as a reliable fallback when Config["endpoints"] is absent or has unknown slugs.
+// This matters for PPIO models synced before inferModeFromPPIO was introduced, where
+// mc.Type may still be stale (= 1 = ChatCompletions for all types).
+func TestGetModelSupportedEndpoints_ModelTypeFallback(t *testing.T) {
+	cases := []struct {
+		name       string
+		modelType  string // Config["model_type"]
+		mcType     mode.Mode
+		wantLen    int
+		wantFirst  string
+	}{
+		{
+			name:      "embedding model with stale mc.Type=1",
+			modelType: "embedding",
+			mcType:    mode.ChatCompletions, // stale
+			wantLen:   1,
+			wantFirst: "POST /v1/embeddings",
+		},
+		{
+			name:      "rerank model with stale mc.Type=1",
+			modelType: "rerank",
+			mcType:    mode.ChatCompletions, // stale
+			wantLen:   1,
+			wantFirst: "POST /v1/rerank",
+		},
+		{
+			name:      "moderation model with stale mc.Type",
+			modelType: "moderation",
+			mcType:    mode.ChatCompletions,
+			wantLen:   1,
+			wantFirst: "POST /v1/moderations",
+		},
+		{
+			name:      "chat model — model_type agrees with mc.Type",
+			modelType: "chat",
+			mcType:    mode.ChatCompletions,
+			wantLen:   len(endpointsChatFamily),
+		},
+	}
+	for _, tc := range cases {
+		mc := model.ModelConfig{
+			Model: "test-" + tc.name,
+			Type:  tc.mcType,
+			Config: map[model.ModelConfigKey]any{
+				"model_type": tc.modelType,
+				// no "endpoints" key — forces fallback path
+			},
+		}
+		got := getModelSupportedEndpoints(mc)
+		if len(got) != tc.wantLen {
+			t.Errorf("%s: got %d endpoints %v, want %d", tc.name, len(got), got, tc.wantLen)
+			continue
+		}
+		if tc.wantFirst != "" && (len(got) == 0 || got[0] != tc.wantFirst) {
+			t.Errorf("%s: got[0]=%q, want %q", tc.name, got[0], tc.wantFirst)
+		}
+	}
+}
+
+// TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug verifies that when
+// Config["endpoints"] has only unknown slugs AND Config["model_type"] is present,
+// the model_type takes precedence over mc.Type for the fallback.
+func TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug(t *testing.T) {
+	// Embedding model with unknown slug + correct model_type + stale mc.Type
+	mc := model.ModelConfig{
+		Model: "bge-m3",
+		Type:  mode.ChatCompletions, // stale pre-fix value
+		Config: map[model.ModelConfigKey]any{
+			"endpoints":  []string{"future-unknown-slug"},
+			"model_type": "embedding",
+		},
+	}
+	got := getModelSupportedEndpoints(mc)
+	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
+		t.Errorf("unknown slug + model_type fallback: got %v, want [POST /v1/embeddings]", got)
 	}
 }
 

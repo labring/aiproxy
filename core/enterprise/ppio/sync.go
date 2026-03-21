@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// ppioModelTypeToMode maps PPIO model_type strings to mode.Mode.
-var ppioModelTypeToMode = map[string]mode.Mode{
+// ModelTypeToMode maps PPIO model_type strings to mode.Mode.
+var ModelTypeToMode = map[string]mode.Mode{
 	"chat":       mode.ChatCompletions,
 	"embedding":  mode.Embeddings,
 	"rerank":     mode.Rerank,
@@ -31,7 +32,7 @@ var ppioModelTypeToMode = map[string]mode.Mode{
 // inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
 // Falls back to endpoint-based inference, then defaults to ChatCompletions.
 func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
-	if m, ok := ppioModelTypeToMode[modelType]; ok {
+	if m, ok := ModelTypeToMode[modelType]; ok {
 		return m
 	}
 
@@ -349,8 +350,28 @@ func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (Chann
 	info.PPIO.Exists = true
 	info.PPIO.ID = channels[0].ID
 
-	openaiModels := filterByEndpoint("chat/completions")
+	// Anthropic channel: only models that declare native Anthropic endpoint support.
 	anthropicModels := filterByEndpoint("anthropic")
+
+	// OpenAI channel: all models accessible via PPIO's OpenAI-compatible API.
+	// This includes chat, embeddings, rerank, moderations, and responses models —
+	// not just chat/completions. Anthropic-only models (pa/claude-*) are excluded
+	// because they require the Anthropic protocol path.
+	openaiEPs := []string{
+		"chat/completions", "embeddings",
+		"rerank", "moderations", "responses",
+	}
+	seen := make(map[string]struct{})
+	var openaiModels []string
+	for _, ep := range openaiEPs {
+		for _, id := range filterByEndpoint(ep) {
+			if _, ok := seen[id]; !ok {
+				seen[id] = struct{}{}
+				openaiModels = append(openaiModels, id)
+			}
+		}
+	}
+	sort.Strings(openaiModels)
 
 	for i := range channels {
 		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
