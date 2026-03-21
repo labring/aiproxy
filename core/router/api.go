@@ -9,6 +9,11 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 )
 
+// adminAuth is the middleware used to protect admin API routes.
+// In non-enterprise builds this is middleware.AdminAuth (AdminKey only).
+// The enterprise build overrides it to also accept Feishu admin-role users.
+var adminAuth gin.HandlerFunc = middleware.AdminAuth
+
 func SetAPIRouter(router *gin.Engine) {
 	api := router.Group("/api")
 	if env.Bool("GZIP_ENABLED", false) {
@@ -19,7 +24,7 @@ func SetAPIRouter(router *gin.Engine) {
 	healthRouter.GET("/status", controller.GetStatus)
 
 	apiRouter := api.Group("")
-	apiRouter.Use(middleware.AdminAuth)
+	apiRouter.Use(adminAuth)
 	{
 		modelsRoute := apiRouter.Group("/models")
 		{

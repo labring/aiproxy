@@ -347,6 +347,40 @@ export interface PermissionModuleInfo {
     manage_key: string
 }
 
+// My Stats types
+export interface ModelUsage {
+    model: string
+    used_amount: number
+    request_count: number
+    total_tokens: number
+}
+
+export interface MyUsageStats {
+    total_amount: number
+    total_tokens: number
+    total_requests: number
+    unique_models: number
+    top_models: ModelUsage[]
+}
+
+export interface MyQuotaStatus {
+    period_quota: number
+    period_used: number
+    period_type: string
+    period_start: number
+    policy_name: string
+    policy_id: number
+    current_tier: number
+    tier1_ratio: number
+    tier2_ratio: number
+    block_at_tier3: boolean
+}
+
+export interface MyStatsResponse {
+    usage: MyUsageStats
+    quota: MyQuotaStatus | null
+}
+
 // My Access types
 export interface MyTokenInfo {
     id: number
@@ -379,6 +413,21 @@ export interface MyAccessResponse {
     group_id: string
     tokens: MyTokenInfo[]
     model_groups: ModelGroupInfo[]
+}
+
+// Quota Notification Config
+export interface QuotaNotifConfig {
+    enabled: boolean
+    tier2_title: string
+    tier2_body: string
+    tier3_title: string
+    tier3_body: string
+    exhaust_title: string
+    exhaust_body: string
+}
+
+export interface QuotaNotifConfigResponse extends QuotaNotifConfig {
+    p2p_available: boolean
 }
 
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
@@ -685,9 +734,24 @@ export const enterpriseApi = {
         return put<{ role: string; permissions: string[] }>(`/enterprise/role-permissions/${role}`, { permissions })
     },
 
+    // Quota Notification Config APIs
+    getNotifConfig: (): Promise<QuotaNotifConfigResponse> => {
+        return get<QuotaNotifConfigResponse>('/enterprise/quota/notif-config')
+    },
+
+    updateNotifConfig: (cfg: QuotaNotifConfig): Promise<QuotaNotifConfig> => {
+        return put<QuotaNotifConfig>('/enterprise/quota/notif-config', cfg)
+    },
+
     // My Access APIs
     getMyAccess: (): Promise<MyAccessResponse> => {
         return get<MyAccessResponse>('/enterprise/my-access')
+    },
+
+    getMyStats: (startTs: number, endTs: number): Promise<MyStatsResponse> => {
+        return get<MyStatsResponse>('/enterprise/my-access/stats', {
+            params: { start_timestamp: String(startTs), end_timestamp: String(endTs) },
+        })
     },
 
     createMyToken: (name: string): Promise<MyTokenInfo> => {

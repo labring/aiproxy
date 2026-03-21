@@ -37,6 +37,10 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 	adminBind.DELETE("/bind-user/:open_id", UnbindPolicyFromUser)
 	adminBind.POST("/batch-bind-departments", BatchBindPolicyToDepartments)
 	adminBind.POST("/batch-bind-users", BatchBindPolicyToUsers)
+
+	notifCfg := group.Group("/quota/notif-config")
+	notifCfg.GET("", quotaViewMw, GetNotifConfigHandler)
+	notifCfg.PUT("", quotaManageMw, UpdateNotifConfigHandler)
 }
 
 // Init sets up the enterprise quota hook so the middleware can call into

@@ -34,7 +34,7 @@ const roleColors = {
 }
 
 // Column definitions for visibility toggle
-const COLUMN_KEYS = [
+const COLUMN_KEYS: Array<{ key: string; labelKey: string; alwaysVisible?: boolean; defaultVisible?: boolean }> = [
     { key: "name", labelKey: "enterprise.users.name", alwaysVisible: true },
     { key: "role", labelKey: "enterprise.users.role", defaultVisible: true },
     { key: "department_id", labelKey: "enterprise.users.department", defaultVisible: true },
@@ -42,7 +42,7 @@ const COLUMN_KEYS = [
     { key: "effective_policy", labelKey: "enterprise.quota.effectivePolicy", defaultVisible: true },
     { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
     { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
-] as const
+]
 
 // Permission Configuration Tab (admin only)
 function PermissionConfigTab() {

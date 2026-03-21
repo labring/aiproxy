@@ -22,6 +22,71 @@ const (
 	CtxEnterpriseUser = "enterprise_user"
 )
 
+// EnterpriseAdminAuth is like AdminAuth but also accepts admin-role Feishu user tokens.
+// Used in enterprise builds to allow Feishu admin users to access the admin panel.
+func EnterpriseAdminAuth(c *gin.Context) {
+	accessToken := c.Request.Header.Get("Authorization")
+	if accessToken == "" {
+		accessToken = c.Query("key")
+	}
+
+	if accessToken == "" {
+		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: no access token provided")
+		c.Abort()
+
+		return
+	}
+
+	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
+	accessToken = strings.TrimPrefix(accessToken, "sk-")
+
+	// Path 1: AdminKey → full access (identical to AdminAuth)
+	if config.AdminKey != "" && accessToken == config.AdminKey {
+		c.Set(middleware.Token, &model.TokenCache{Key: config.AdminKey})
+		c.Set(CtxEnterpriseRole, models.RoleAdmin)
+		c.Next()
+
+		return
+	}
+
+	// Path 2: Feishu admin-role token → also grant admin panel access
+	tokenCache, err := model.GetAndValidateToken(accessToken)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		c.Abort()
+
+		return
+	}
+
+	var feishuUser models.FeishuUser
+
+	if err := model.DB.Where("token_id = ?", tokenCache.ID).First(&feishuUser).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		c.Abort()
+
+		return
+	}
+
+	if feishuUser.Status != 1 {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: enterprise user is disabled")
+		c.Abort()
+
+		return
+	}
+
+	if feishuUser.Role != models.RoleAdmin {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: admin role required for admin panel")
+		c.Abort()
+
+		return
+	}
+
+	c.Set(middleware.Token, &model.TokenCache{Key: tokenCache.Key})
+	c.Set(CtxEnterpriseRole, models.RoleAdmin)
+	c.Set(CtxEnterpriseUser, &feishuUser)
+	c.Next()
+}
+
 // EnterpriseAuth is a middleware that authenticates requests using either
 // the admin key or a Feishu user token. It sets enterprise_role and
 // enterprise_user (for Feishu users) in the gin context.

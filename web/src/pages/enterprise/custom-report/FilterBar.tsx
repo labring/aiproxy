@@ -19,6 +19,7 @@ import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { enterpriseApi } from "@/api/enterprise"
 import { modelApi } from "@/api/model"
 import type { TimeRange } from "@/lib/enterprise"
+import useAuthStore from "@/store/auth"
 
 // ─── AutocompleteTagInput ────────────────────────────────────────────────────
 
@@ -277,12 +278,16 @@ export function FilterBar({
     isPending,
 }: FilterBarProps) {
     const { t } = useTranslation()
+    const enterpriseUser = useAuthStore(s => s.enterpriseUser)
+    // /api/model_configs/all requires AdminAuth — only call it for Admin Key users
+    const isAdminKeyUser = !enterpriseUser
 
-    // Fetch model names for autocomplete
+    // Fetch model names for autocomplete (admin only)
     const { data: modelConfigs } = useQuery({
         queryKey: ["models", "all"],
         queryFn: () => modelApi.getModels(),
         staleTime: 5 * 60 * 1000,
+        enabled: isAdminKeyUser,
     })
     const modelNames = (modelConfigs ?? []).map((m) => m.model)
 

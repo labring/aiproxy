@@ -34,7 +34,23 @@ func CheckQuotaTier(
 		}
 		if policy != nil {
 			// Apply the user/department/group policy
-			return applyPolicyTiers(policy, token, requestModel)
+			effModel, rpmMul, tpmMul, blocked := applyPolicyTiers(policy, token, requestModel)
+			// Trigger async notification if usage entered a higher tier
+			usageRatio := computeUsageRatio(token)
+			tier := computeTier(policy, usageRatio, blocked)
+			if tier >= 2 {
+				go MaybeNotifyUser(
+					feishuUser.OpenID,
+					feishuUser.Name,
+					token.PeriodType,
+					tier,
+					usageRatio,
+					token.PeriodQuota,
+					tierThreshold(policy, tier),
+				)
+			}
+
+			return effModel, rpmMul, tpmMul, blocked
 		}
 		// No policy found for this Feishu user, fall through to default
 		return requestModel, 1.0, 1.0, false
@@ -54,6 +70,51 @@ func CheckQuotaTier(
 	return applyPolicyTiers(policy, token, requestModel)
 }
 
+// computeUsageRatio returns the fraction of the period quota that has been consumed.
+func computeUsageRatio(token model.TokenCache) float64 {
+	if token.PeriodQuota <= 0 {
+		return 0
+	}
+
+	used := token.UsedAmount - token.PeriodLastUpdateAmount
+	if used < 0 {
+		used = 0
+	}
+
+	return used / token.PeriodQuota
+}
+
+// computeTier returns the effective notification tier (1–4) for the given usage state.
+// tier 1 = normal, 2 = tier2 throttle, 3 = tier3 throttle, 4 = exhausted/blocked.
+func computeTier(policy *models.QuotaPolicy, usageRatio float64, blocked bool) int {
+	switch {
+	case blocked || usageRatio >= 1.0:
+		if blocked && policy.BlockAtTier3 {
+			return 4 // exhausted
+		}
+
+		return 3
+	case usageRatio >= policy.Tier2Ratio:
+		return 3
+	case usageRatio >= policy.Tier1Ratio:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// tierThreshold returns the ratio threshold that triggered the given tier notification.
+func tierThreshold(policy *models.QuotaPolicy, tier int) float64 {
+	switch tier {
+	case 2:
+		return policy.Tier1Ratio
+	case 3:
+		return policy.Tier2Ratio
+	default: // 4 (exhaust)
+		return 1.0
+	}
+}
+
 // applyPolicyTiers applies the tiered policy logic based on usage ratio.
 func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, requestModel string) (string, float64, float64, bool) {
 
@@ -62,12 +123,7 @@ func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, reques
 		return requestModel, 1.0, 1.0, false
 	}
 
-	periodUsage := token.UsedAmount - token.PeriodLastUpdateAmount
-	if periodUsage < 0 {
-		periodUsage = 0
-	}
-
-	usageRatio := periodUsage / token.PeriodQuota
+	usageRatio := computeUsageRatio(token)
 
 	switch {
 	case usageRatio >= policy.Tier2Ratio:

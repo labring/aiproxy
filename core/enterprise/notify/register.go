@@ -22,6 +22,15 @@ type EnterpriseNotifier struct {
 
 var _ notify.Notifier = (*EnterpriseNotifier)(nil)
 
+var defaultEnterpriseNotifier *EnterpriseNotifier
+
+// GetEnterpriseNotifier returns the initialized enterprise notifier instance,
+// or nil if Init has not been called or feishu p2p is not configured.
+func GetEnterpriseNotifier() *EnterpriseNotifier { return defaultEnterpriseNotifier }
+
+// IsP2PAvailable reports whether the Feishu P2P client is configured and ready to send messages.
+func (n *EnterpriseNotifier) IsP2PAvailable() bool { return n.p2pClient != nil }
+
 // Notify sends a notification via stdout logging and, if configured, via Feishu webhook.
 func (n *EnterpriseNotifier) Notify(level notify.Level, title, message string) {
 	n.std.Notify(level, title, message)
@@ -55,14 +64,15 @@ func (n *EnterpriseNotifier) NotifyThrottle(
 }
 
 // NotifyUser sends a point-to-point card message to a specific Feishu user.
+// color should be one of notify.FeishuColor* constants (e.g. "green", "orange", "red").
 // This is not part of the Notifier interface but is available for direct use.
-func (n *EnterpriseNotifier) NotifyUser(openID, title, message string) error {
+func (n *EnterpriseNotifier) NotifyUser(openID, title, message, color string) error {
 	if n.p2pClient == nil {
 		log.Warn("feishu p2p client not configured, skipping user notification")
 		return nil
 	}
 
-	return n.p2pClient.SendCardMessage(context.Background(), openID, title, message, notify.FeishuColorGreen)
+	return n.p2pClient.SendCardMessage(context.Background(), openID, title, message, color)
 }
 
 // Init initializes the enterprise notifier by checking environment variables
@@ -93,6 +103,7 @@ func Init() {
 		log.Info("enterprise notifier: feishu webhook configured")
 	}
 
+	defaultEnterpriseNotifier = n
 	notify.SetDefaultNotifier(n)
 	log.Info("enterprise notifier: registered as default notifier")
 }

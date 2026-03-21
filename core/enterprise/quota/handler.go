@@ -14,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
+	enterprisenotify "github.com/labring/aiproxy/core/enterprise/notify"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	log "github.com/sirupsen/logrus"
@@ -868,6 +869,35 @@ func ListDepartmentPolicyBindings(c *gin.Context) {
 		"bindings": details,
 		"total":    len(details),
 	})
+}
+
+// GetNotifConfigHandler returns the current quota notification configuration
+// along with whether the Feishu P2P client is available.
+// GET /enterprise/quota/notif-config
+func GetNotifConfigHandler(c *gin.Context) {
+	n := enterprisenotify.GetEnterpriseNotifier()
+	resp := NotifConfigResponse{
+		NotifConfig:  GetNotifConfig(),
+		P2PAvailable: n != nil && n.IsP2PAvailable(),
+	}
+	middleware.SuccessResponse(c, resp)
+}
+
+// UpdateNotifConfigHandler saves the quota notification configuration.
+// PUT /enterprise/quota/notif-config
+func UpdateNotifConfigHandler(c *gin.Context) {
+	var cfg NotifConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := SetNotifConfig(cfg); err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, cfg)
 }
 
 // UserBindingDetail extends UserQuotaPolicy with display info.

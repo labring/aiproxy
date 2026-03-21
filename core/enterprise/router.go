@@ -50,6 +50,7 @@ func RegisterRoutes(router *gin.Engine) {
 
 	// My Access routes (all enterprise users, no special permission)
 	enterpriseAuth.GET("/my-access", GetMyAccess)
+	enterpriseAuth.GET("/my-access/stats", GetMyStats)
 	enterpriseAuth.POST("/my-access/tokens", CreateMyToken)
 	enterpriseAuth.DELETE("/my-access/tokens/:id", DisableMyToken)
 

@@ -13,12 +13,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DateRangePicker } from "@/components/common/DateRangePicker"
+import type { DateRange } from "react-day-picker"
 import {
     enterpriseApi,
     type MyTokenInfo,
     type MyAccessResponse,
     type ModelGroupInfo,
+    type MyStatsResponse,
 } from "@/api/enterprise"
+import { getTimeRange, formatAmount, formatNumber, type TimeRange } from "@/lib/enterprise"
 
 // Matches core/relay/mode/define.go iota values
 const MODEL_TYPES: Record<number, string> = {
@@ -68,6 +72,14 @@ const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
     "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
 }
 
+// Builds the full endpoint URL from baseUrl and an endpoint string like "POST /v1/chat/completions".
+// baseUrl is expected to end with "/v1"; the path already includes "/v1/...".
+function buildFullEndpointUrl(baseUrl: string, endpoint: string): string {
+    const path = endpoint.split(' ')[1] // e.g. "/v1/chat/completions"
+    const base = baseUrl.replace(/\/v1\/?$/, '') // strip trailing "/v1"
+    return `${base}${path}`
+}
+
 function maskKey(key: string): string {
     if (key.length <= 8) return key
     return key.slice(0, 6) + "****" + key.slice(-4)
@@ -82,6 +94,186 @@ function formatPrice(price: number, unit: number): string {
     if (price === 0) return "Free"
     const perMillion = (price / (unit || 1000)) * 1_000_000
     return `$${perMillion.toFixed(2)}`
+}
+
+// --- Personal Stats Section ---
+function PersonalStatsSection() {
+    const { t } = useTranslation()
+    const [timeRange, setTimeRange] = useState<TimeRange>("7d")
+    const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
+
+    const { start, end } = useMemo(() => {
+        if (timeRange === "custom" && customDateRange?.from) {
+            const s = Math.floor(customDateRange.from.getTime() / 1000)
+            const e = customDateRange.to
+                ? Math.floor(customDateRange.to.getTime() / 1000) + 86399
+                : s + 86399
+            return { start: s, end: e }
+        }
+        return getTimeRange(timeRange)
+    }, [timeRange, customDateRange])
+
+    const { data, isLoading } = useQuery<MyStatsResponse>({
+        queryKey: ["my-stats", start, end],
+        queryFn: () => enterpriseApi.getMyStats(start, end),
+    })
+
+    const tierColor = (tier: number) => {
+        if (tier === 1) return "bg-green-500"
+        if (tier === 2) return "bg-yellow-500"
+        return "bg-red-500"
+    }
+
+    const tierBadgeVariant = (tier: number): "default" | "secondary" | "destructive" => {
+        if (tier === 1) return "default"
+        if (tier === 2) return "secondary"
+        return "destructive"
+    }
+
+    if (isLoading) {
+        return (
+            <div className="space-y-4">
+                <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-24 bg-muted animate-pulse rounded" />
+                    ))}
+                </div>
+                <div className="h-32 bg-muted animate-pulse rounded" />
+            </div>
+        )
+    }
+
+    const usage = data?.usage
+    const quota = data?.quota
+
+    return (
+        <div className="space-y-4">
+            {/* Header + time range selector */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+                <h2 className="text-lg font-semibold">{t("enterprise.myAccess.personalStats" as never)}</h2>
+                <div className="flex items-center gap-2">
+                    <Select value={timeRange} onValueChange={v => setTimeRange(v as TimeRange)}>
+                        <SelectTrigger className="h-9 w-36">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="7d">{t("enterprise.myAccess.last7Days" as never)}</SelectItem>
+                            <SelectItem value="30d">{t("enterprise.myAccess.last30Days" as never)}</SelectItem>
+                            <SelectItem value="month">{t("enterprise.myAccess.thisMonth" as never)}</SelectItem>
+                            <SelectItem value="last_week">{t("enterprise.myAccess.lastWeek" as never)}</SelectItem>
+                            <SelectItem value="last_month">{t("enterprise.myAccess.lastMonth" as never)}</SelectItem>
+                            <SelectItem value="custom">{t("enterprise.myAccess.customRange" as never)}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {timeRange === "custom" && (
+                        <DateRangePicker value={customDateRange} onChange={setCustomDateRange} />
+                    )}
+                </div>
+            </div>
+
+            {/* Usage stat cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                    <CardContent className="pt-4 pb-4">
+                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalConsumption" as never)}</p>
+                        <p className="text-2xl font-bold tabular-nums mt-1">{formatAmount(usage?.total_amount ?? 0)}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4 pb-4">
+                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalTokens" as never)}</p>
+                        <p className="text-2xl font-bold tabular-nums mt-1">{formatNumber(usage?.total_tokens ?? 0)}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4 pb-4">
+                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalRequests" as never)}</p>
+                        <p className="text-2xl font-bold tabular-nums mt-1">{formatNumber(usage?.total_requests ?? 0)}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4 pb-4">
+                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.uniqueModels" as never)}</p>
+                        <p className="text-2xl font-bold tabular-nums mt-1">{usage?.unique_models ?? 0}</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Top models + quota status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Top models */}
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.topModels" as never)}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {!usage?.top_models?.length ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">—</p>
+                        ) : (
+                            <table className="w-full text-sm">
+                                <tbody>
+                                    {usage.top_models.map(m => (
+                                        <tr key={m.model} className="border-b last:border-0">
+                                            <td className="py-2 font-mono text-xs truncate max-w-[160px]">{m.model}</td>
+                                            <td className="py-2 text-right tabular-nums text-xs">{formatAmount(m.used_amount)}</td>
+                                            <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{formatNumber(m.request_count)} req</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Quota status */}
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.quotaStatus" as never)}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {!quota ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                                {t("enterprise.myAccess.noPolicy" as never)}
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {/* Progress bar */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                        <span>{formatAmount(quota.period_used)} / {formatAmount(quota.period_quota)}</span>
+                                        <span>{((quota.period_used / quota.period_quota) * 100).toFixed(1)}%</span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${tierColor(quota.current_tier)}`}
+                                            style={{ width: `${Math.min((quota.period_used / quota.period_quota) * 100, 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Badges */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">{quota.policy_name}</Badge>
+                                    <Badge variant={tierBadgeVariant(quota.current_tier)} className="text-xs">
+                                        {t("enterprise.myAccess.currentTier" as never)} {quota.current_tier}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs capitalize">{quota.period_type}</Badge>
+                                </div>
+
+                                {/* Block warning */}
+                                {quota.block_at_tier3 && quota.current_tier === 3 && (
+                                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                        ⚠ {t("enterprise.myAccess.blocked" as never)}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    )
 }
 
 // --- Token Row ---
@@ -264,7 +456,7 @@ print(message.content[0].text)`,
 }
 
 // --- Model Group Accordion ---
-function ModelGroupSection({ groups }: { groups: ModelGroupInfo[] }) {
+function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; baseUrl: string }) {
     const { t } = useTranslation()
     const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState("all")
@@ -366,12 +558,13 @@ function ModelGroupSection({ groups }: { groups: ModelGroupInfo[] }) {
                                                             {m.supported_endpoints?.length > 0 ? (
                                                                 m.supported_endpoints.map(ep => {
                                                                     const info = ENDPOINT_LABELS[ep]
+                                                                    const fullUrl = buildFullEndpointUrl(baseUrl, ep)
                                                                     return (
                                                                         <button
                                                                             key={ep}
                                                                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 ${info?.color || EP_COLORS.misc}`}
-                                                                            title={`${t("enterprise.myAccess.copyEndpoint")}: ${ep}`}
-                                                                            onClick={() => copyToClipboard(ep, t("enterprise.myAccess.endpointCopied"))}
+                                                                            title={`${t("enterprise.myAccess.copyEndpoint")}: ${fullUrl}`}
+                                                                            onClick={() => copyToClipboard(fullUrl, t("enterprise.myAccess.endpointCopied"))}
                                                                         >
                                                                             {info?.label || ep}
                                                                         </button>
@@ -467,6 +660,9 @@ export default function MyAccessPage() {
         <div className="p-6 space-y-6 max-w-6xl">
             <h1 className="text-2xl font-bold">{t("enterprise.myAccess.title")}</h1>
 
+            {/* Personal Usage Overview */}
+            <PersonalStatsSection />
+
             {/* Base URL */}
             <Card>
                 <CardContent className="pt-6">
@@ -536,7 +732,7 @@ export default function MyAccessPage() {
             <QuickStartSection baseUrl={baseUrl} />
 
             {/* Available Models */}
-            <ModelGroupSection groups={modelGroups} />
+            <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} />
 
             {/* Create Key Dialog */}
             <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

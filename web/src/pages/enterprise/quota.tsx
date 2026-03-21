@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Pencil, Trash2, Shield, AlertTriangle, Search, X, Building2, User } from "lucide-react"
+import { Plus, Pencil, Trash2, Shield, AlertTriangle, Search, Building2, User, Bell } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +59,7 @@ import {
     type UserQuotaPolicy,
     type FeishuDepartment,
     type FeishuUser,
+    type QuotaNotifConfig,
 } from "@/api/enterprise"
 import { toast } from "sonner"
 import { ALL_FILTER } from "@/lib/enterprise"
@@ -998,6 +999,164 @@ function UserOverrideTab({ policies, canManage }: { policies: QuotaPolicy[]; can
     )
 }
 
+// ─── Notification Config Tab ────────────────────────────────────────────────
+
+const DEFAULT_NOTIF_CONFIG = {
+    enabled: false,
+    tier2_title: "AI 用量提醒",
+    tier2_body: "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入二级限速，RPM/TPM 有所降低，请注意控制用量。",
+    tier3_title: "AI 用量紧张提醒",
+    tier3_body: "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入三级限速，请控制用量以避免服务中断。",
+    exhaust_title: "AI 用量已耗尽",
+    exhaust_body: "您好 {name}，您本{period_type}的 AI 用量已耗尽（周期额度 {period_quota}），所有请求将被拒绝，请联系管理员或等待下一周期重置。",
+}
+
+function NotifConfigTab({ canManage }: { canManage: boolean }) {
+    const { t } = useTranslation()
+    const queryClient = useQueryClient()
+    const [draft, setDraft] = useState<QuotaNotifConfig | null>(null)
+
+    const { data: serverCfg, isLoading } = useQuery({
+        queryKey: ["enterprise", "quota-notif-config"],
+        queryFn: () => enterpriseApi.getNotifConfig(),
+    })
+
+    const saveMutation = useMutation({
+        mutationFn: (cfg: QuotaNotifConfig) => enterpriseApi.updateNotifConfig(cfg),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["enterprise", "quota-notif-config"] })
+            toast.success(t("enterprise.quota.notif.saveSuccess" as never))
+        },
+        onError: (err: Error) => toast.error(err.message),
+    })
+
+    const cfg: QuotaNotifConfig = draft ?? serverCfg ?? DEFAULT_NOTIF_CONFIG
+
+    const VARIABLES = [
+        { key: "{name}", label: t("enterprise.quota.notif.varName" as never) },
+        { key: "{usage_pct}", label: t("enterprise.quota.notif.varUsagePct" as never) },
+        { key: "{tier_threshold}", label: t("enterprise.quota.notif.varTierThreshold" as never) },
+        { key: "{period_quota}", label: t("enterprise.quota.notif.varPeriodQuota" as never) },
+        { key: "{period_type}", label: t("enterprise.quota.notif.varPeriodType" as never) },
+    ]
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).catch(() => {})
+        toast.success(`已复制 ${text}`)
+    }
+
+    if (isLoading) {
+        return <div className="text-center py-8 text-muted-foreground">{t("common.loading")}</div>
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* P2P warning — only shown when backend reports P2P is not configured */}
+            {serverCfg && !serverCfg.p2p_available && (
+                <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+                    <CardContent className="pt-4 pb-3">
+                        <div className="flex gap-2 items-start text-sm text-amber-700 dark:text-amber-400">
+                            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                            <span>{t("enterprise.quota.notif.noP2PWarning" as never)}</span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Enable switch */}
+            <Card>
+                <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <Label className="text-base font-medium">{t("enterprise.quota.notif.enable" as never)}</Label>
+                            <p className="text-sm text-muted-foreground mt-0.5">{t("enterprise.quota.notif.enableDesc" as never)}</p>
+                        </div>
+                        <Switch
+                            checked={cfg.enabled}
+                            onCheckedChange={(v) => setDraft({ ...cfg, enabled: v })}
+                            disabled={!canManage}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Template sections */}
+            {[
+                { key: "tier2", titleField: "tier2_title" as const, bodyField: "tier2_body" as const, color: "yellow" },
+                { key: "tier3", titleField: "tier3_title" as const, bodyField: "tier3_body" as const, color: "red" },
+                { key: "exhaust", titleField: "exhaust_title" as const, bodyField: "exhaust_body" as const, color: "red" },
+            ].map(({ key, titleField, bodyField, color }) => (
+                <Card key={key} className={color === "yellow" ? "border-yellow-200" : "border-red-200"}>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">
+                            {t(`enterprise.quota.notif.${key}` as never)}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground">{t(`enterprise.quota.notif.${key}Desc` as never)}</p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <div className="space-y-1">
+                            <Label className="text-xs">{t("enterprise.quota.notif.msgTitle" as never)}</Label>
+                            <Input
+                                value={cfg[titleField]}
+                                onChange={(e) => setDraft({ ...cfg, [titleField]: e.target.value })}
+                                disabled={!canManage}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">{t("enterprise.quota.notif.msgBody" as never)}</Label>
+                            <Textarea
+                                value={cfg[bodyField]}
+                                onChange={(e) => setDraft({ ...cfg, [bodyField]: e.target.value })}
+                                rows={3}
+                                disabled={!canManage}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+
+            {/* Variable hints */}
+            <Card>
+                <CardContent className="pt-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">{t("enterprise.quota.notif.variables" as never)}</p>
+                    <div className="flex flex-wrap gap-2">
+                        {VARIABLES.map(({ key, label }) => (
+                            <button
+                                key={key}
+                                onClick={() => copyToClipboard(key)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono bg-muted hover:bg-muted/80 transition-colors"
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Actions */}
+            {canManage && (
+                <div className="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setDraft(DEFAULT_NOTIF_CONFIG)
+                            toast.success(t("enterprise.quota.notif.resetSuccess" as never))
+                        }}
+                    >
+                        {t("enterprise.quota.notif.resetDefaults" as never)}
+                    </Button>
+                    <Button
+                        onClick={() => draft && saveMutation.mutate(draft)}
+                        disabled={saveMutation.isPending}
+                    >
+                        {saveMutation.isPending ? t("common.saving") : t("enterprise.quota.notif.save" as never)}
+                    </Button>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function QuotaPoliciesPage() {
@@ -1129,6 +1288,10 @@ export default function QuotaPoliciesPage() {
                         <User className="w-4 h-4 mr-1.5" />
                         {t("enterprise.quota.userOverride")}
                     </TabsTrigger>
+                    <TabsTrigger value="notif">
+                        <Bell className="w-4 h-4 mr-1.5" />
+                        {t("enterprise.quota.notif.tab" as never)}
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* Tab 1: Policy List */}
@@ -1242,6 +1405,11 @@ export default function QuotaPoliciesPage() {
                 {/* Tab 3: User Override */}
                 <TabsContent value="users">
                     <UserOverrideTab policies={policies} canManage={canManage} />
+                </TabsContent>
+
+                {/* Tab 4: Notification Settings */}
+                <TabsContent value="notif">
+                    <NotifConfigTab canManage={canManage} />
                 </TabsContent>
             </Tabs>
 
