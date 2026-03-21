@@ -24,6 +24,18 @@ function legendGridTop(itemCount: number, containerWidth = 800): number {
     return Math.max(rows * 22 + 8, 30)
 }
 
+/** Build a wrapping legend config (plain, centered, auto line-break) */
+function wrapLegend(data: string[], textColor: string): echarts.EChartsOption["legend"] {
+    return {
+        data,
+        textStyle: { color: textColor, fontSize: 11 },
+        type: "plain" as const,
+        width: "90%",
+        left: "center",
+        top: 0,
+    }
+}
+
 /** Compute rotation and interval for X-axis labels */
 function xAxisLabelConfig(labels: string[]): { rotate: number; interval: number; fontSize: number } {
     const count = labels.length
@@ -242,14 +254,7 @@ export function ReportChart({
                 const radarLegendTop = legendGridTop(radarRows.length)
                 option = {
                     tooltip: {},
-                    legend: {
-                        data: radarRows.map((_, i) => labels[i]),
-                        textStyle: { color: theme.textColor, fontSize: 11 },
-                        type: "plain",
-                        width: "90%",
-                        left: "center",
-                        top: 0,
-                    },
+                    legend: wrapLegend(radarRows.map((_, i) => labels[i]), theme.textColor),
                     radar: { indicator, shape: "polygon", center: ["50%", `${50 + radarLegendTop / 8}%`] },
                     series: [{
                         type: "radar",
@@ -337,14 +342,7 @@ export function ReportChart({
 
                     option = {
                         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-                        legend: {
-                            data: legendData,
-                            textStyle: { color: theme.textColor, fontSize: 11 },
-                            type: "plain",
-                            width: "90%",
-                            left: "center",
-                            top: 0,
-                        },
+                        legend: wrapLegend(legendData, theme.textColor),
                         grid: { left: "3%", right: "4%", bottom: "3%", top: gridTop, containLabel: true },
                         xAxis: {
                             type: "category",
@@ -367,14 +365,7 @@ export function ReportChart({
 
                     option = {
                         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-                        legend: {
-                            data: numericMeasures.map((m) => getLabel(m, lang)),
-                            textStyle: { color: theme.textColor, fontSize: 11 },
-                            type: "plain",
-                            width: "90%",
-                            left: "center",
-                            top: 0,
-                        },
+                        legend: wrapLegend(numericMeasures.map((m) => getLabel(m, lang)), theme.textColor),
                         grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", top: singleGridTop, containLabel: true },
                         xAxis: {
                             type: "category",

@@ -21,6 +21,7 @@ import {
     type FieldDef,
     type ReportTemplate,
 } from "./types"
+import { useHasPermission } from "@/lib/permissions"
 
 // ─── ChipSelector ───────────────────────────────────────────────────────────
 
@@ -56,10 +57,10 @@ function ChipSelector({
                         variant={active ? "default" : "outline"}
                         className={`cursor-pointer select-none transition-all text-xs px-2.5 py-1 ${
                             active
-                                ? `text-white border-transparent`
-                                : `hover:border-[${colors.ring}]/30`
+                                ? "text-white border-transparent"
+                                : ""
                         }`}
-                        style={active ? { backgroundColor: colors.bg } : undefined}
+                        style={active ? { backgroundColor: colors.bg } : { borderColor: `${colors.ring}30` }}
                         onClick={() => {
                             onChange(
                                 active
@@ -106,6 +107,7 @@ export function ConfigPanel({
 }: ConfigPanelProps) {
     const { t, i18n } = useTranslation()
     const lang = i18n.language
+    const canManage = useHasPermission('custom_report_manage')
 
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["requests", "computed"]))
 
@@ -281,22 +283,24 @@ export function ConfigPanel({
             </div>
 
             {/* Sticky generate button */}
-            <div className="px-4 py-3 border-t">
-                <Button
-                    onClick={onGenerate}
-                    disabled={!canGenerate || isPending}
-                    className="w-full bg-[#6A6DE6] hover:bg-[#5A5DD6] text-white"
-                >
-                    {isPending ? (
-                        <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            {t("enterprise.customReport.generating")}
-                        </>
-                    ) : (
-                        t("enterprise.customReport.generate")
-                    )}
-                </Button>
-            </div>
+            {canManage && (
+                <div className="px-4 py-3 border-t">
+                    <Button
+                        onClick={onGenerate}
+                        disabled={!canGenerate || isPending}
+                        className="w-full bg-[#6A6DE6] hover:bg-[#5A5DD6] text-white"
+                    >
+                        {isPending ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                {t("enterprise.customReport.generating")}
+                            </>
+                        ) : (
+                            t("enterprise.customReport.generate")
+                        )}
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }
