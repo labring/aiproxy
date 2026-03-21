@@ -24,17 +24,28 @@ import {
 
 // ─── ChipSelector ───────────────────────────────────────────────────────────
 
+// Color schemes for dimension vs measure chips
+const CHIP_COLORS = {
+    dimension: { bg: "#4ECDC4", hover: "#3DBDB5", ring: "#4ECDC4" },
+    measure: { bg: "#6A6DE6", hover: "#5A5DD6", ring: "#6A6DE6" },
+} as const
+
+type ChipColorScheme = keyof typeof CHIP_COLORS
+
 function ChipSelector({
     fields,
     selected,
     onChange,
     lang,
+    colorScheme = "measure",
 }: {
     fields: FieldDef[]
     selected: string[]
     onChange: (keys: string[]) => void
     lang: string
+    colorScheme?: ChipColorScheme
 }) {
+    const colors = CHIP_COLORS[colorScheme]
     return (
         <div className="flex flex-wrap gap-1.5">
             {fields.map((f) => {
@@ -45,9 +56,10 @@ function ChipSelector({
                         variant={active ? "default" : "outline"}
                         className={`cursor-pointer select-none transition-all text-xs px-2.5 py-1 ${
                             active
-                                ? "bg-[#6A6DE6] hover:bg-[#5A5DD6] text-white border-transparent"
-                                : "hover:bg-[#6A6DE6]/10 hover:border-[#6A6DE6]/30"
+                                ? `text-white border-transparent`
+                                : `hover:border-[${colors.ring}]/30`
                         }`}
+                        style={active ? { backgroundColor: colors.bg } : undefined}
                         onClick={() => {
                             onChange(
                                 active
@@ -192,13 +204,39 @@ export function ConfigPanel({
                         <CardTitle className="text-sm">{t("enterprise.customReport.dimensions")}</CardTitle>
                         <CardDescription className="text-xs">{t("enterprise.customReport.dimensionsDesc")}</CardDescription>
                     </CardHeader>
-                    <CardContent className="px-3 pb-3">
-                        <ChipSelector
-                            fields={DIMENSION_FIELDS}
-                            selected={selectedDimensions}
-                            onChange={handleDimensionChange}
-                            lang={lang}
-                        />
+                    <CardContent className="px-3 pb-3 space-y-2">
+                        {/* Identity dimensions */}
+                        <div>
+                            <div className="text-xs text-muted-foreground mb-1">
+                                {t("enterprise.customReport.identityDims")}
+                                <span className="text-muted-foreground/50 ml-1">
+                                    ({t("enterprise.customReport.mutuallyExclusive")})
+                                </span>
+                            </div>
+                            <ChipSelector
+                                fields={DIMENSION_FIELDS.filter((f) => f.category === "identity")}
+                                selected={selectedDimensions}
+                                onChange={handleDimensionChange}
+                                lang={lang}
+                                colorScheme="dimension"
+                            />
+                        </div>
+                        {/* Time dimensions */}
+                        <div>
+                            <div className="text-xs text-muted-foreground mb-1">
+                                {t("enterprise.customReport.timeDims")}
+                                <span className="text-muted-foreground/50 ml-1">
+                                    ({t("enterprise.customReport.mutuallyExclusive")})
+                                </span>
+                            </div>
+                            <ChipSelector
+                                fields={DIMENSION_FIELDS.filter((f) => f.category === "time")}
+                                selected={selectedDimensions}
+                                onChange={handleDimensionChange}
+                                lang={lang}
+                                colorScheme="dimension"
+                            />
+                        </div>
                     </CardContent>
                 </Card>
 

@@ -206,8 +206,9 @@ func GenerateCustomReport(req CustomReportRequest) (*CustomReportResponse, error
 	// Post-process: map group_id to user/department, compute derived fields
 	result := postProcess(rows, req, groupToUser, deptNameMap)
 
-	// Sort results
-	sortResults(result, req.SortBy, req.SortOrder)
+	// Sort results — always apply a deterministic fallback sort so that
+	// repeated queries with identical parameters return rows in the same order.
+	sortResults(result, req.SortBy, req.SortOrder, req.Dimensions)
 
 	// Apply limit
 	if req.Limit > 0 && len(result) > req.Limit {
@@ -472,6 +473,7 @@ func executeQuery(
 	err := query.
 		Select(strings.Join(selectParts, ", ")).
 		Group(strings.Join(groupByParts, ", ")).
+		Order(strings.Join(groupByParts, ", ")).
 		Find(&results).Error
 
 	return results, err
@@ -906,23 +908,32 @@ func safeDivide(numerator, denominator float64) float64 {
 	return math.Round(numerator/denominator*100) / 100
 }
 
-func sortResults(rows []map[string]interface{}, sortBy, sortOrder string) {
-	if sortBy == "" {
-		return
-	}
-
+func sortResults(rows []map[string]interface{}, sortBy, sortOrder string, dimensions []string) {
 	desc := strings.EqualFold(sortOrder, "desc")
 
 	sort.SliceStable(rows, func(i, j int) bool {
-		vi, _ := rows[i][sortBy]
-		vj, _ := rows[j][sortBy]
-
-		cmp := compareValues(vi, vj)
-		if desc {
-			return cmp > 0
+		// Primary sort: user-specified sort key
+		if sortBy != "" {
+			vi, _ := rows[i][sortBy]
+			vj, _ := rows[j][sortBy]
+			if cmp := compareValues(vi, vj); cmp != 0 {
+				if desc {
+					return cmp > 0
+				}
+				return cmp < 0
+			}
 		}
 
-		return cmp < 0
+		// Fallback: sort by dimensions in order for deterministic output
+		for _, d := range dimensions {
+			vi, _ := rows[i][d]
+			vj, _ := rows[j][d]
+			if cmp := compareValues(vi, vj); cmp != 0 {
+				return cmp < 0
+			}
+		}
+
+		return false
 	})
 }
 

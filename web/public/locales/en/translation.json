@@ -389,6 +389,9 @@
       "description": "Build flexible analytics reports by selecting dimensions and measures",
       "dimensions": "Dimensions",
       "dimensionsDesc": "Group data by",
+      "identityDims": "Identity",
+      "timeDims": "Time",
+      "mutuallyExclusive": "pick one",
       "measures": "Measures",
       "measuresDesc": "Metrics to calculate",
       "filters": "Filters",
@@ -476,6 +479,10 @@
       "tenantIdRequired": "Tenant ID is required",
       "addSuccess": "Tenant added successfully",
       "addFailed": "Failed to add tenant",
+      "editTenant": "Edit Tenant",
+      "editTenantDescription": "Modify the tenant display name",
+      "editSuccess": "Tenant updated successfully",
+      "editFailed": "Failed to update tenant",
       "deleteSuccess": "Tenant deleted successfully",
       "deleteFailed": "Failed to delete tenant",
       "configUpdated": "Configuration updated successfully",
@@ -590,6 +597,8 @@
       "personalOverride": "Personal Override",
       "deptPolicy": "Dept Policy",
       "noPolicy": "Not Set",
+      "allPolicies": "All Policies",
+      "filterByPolicy": "Filter by Policy",
       "noDeptBindings": "No department bindings configured",
       "noUserOverrides": "No personal overrides configured",
       "unbind": "Unbind",
@@ -620,6 +629,23 @@
       "bindSelected": "Bind Selected",
       "selectPolicyToBind": "Select policy and bind",
       "currentPolicy": "Current Policy"
+    },
+    "permissions": {
+      "title": "Permission Settings",
+      "description": "Configure which features each role can access",
+      "feature": "Feature",
+      "saved": "Permissions saved successfully",
+      "saveRole": "Save {{role}}",
+      "keys": {
+        "dashboard": "Enterprise Overview",
+        "ranking": "Ranking",
+        "department_detail": "Department Detail",
+        "export": "Data Export",
+        "custom_report": "Custom Report",
+        "quota_manage": "Quota Management",
+        "user_manage": "User Management",
+        "access_control": "Access Control"
+      }
     }
   },
   "token": {

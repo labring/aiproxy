@@ -13,6 +13,17 @@ import {
     sortRowsByTime,
 } from "./types"
 
+/** Estimate legend rows and compute grid top offset so legend never overlaps chart */
+function legendGridTop(itemCount: number, containerWidth = 800): number {
+    // Each legend item is roughly 80–120px wide; estimate items per row
+    const usableWidth = containerWidth * 0.9
+    const avgItemWidth = 100
+    const itemsPerRow = Math.max(Math.floor(usableWidth / avgItemWidth), 1)
+    const rows = Math.ceil(itemCount / itemsPerRow)
+    // Each row ~22px, plus 8px padding
+    return Math.max(rows * 22 + 8, 30)
+}
+
 /** Compute rotation and interval for X-axis labels */
 function xAxisLabelConfig(labels: string[]): { rotate: number; interval: number; fontSize: number } {
     const count = labels.length
@@ -228,14 +239,18 @@ export function ReportChart({
                 }))
 
                 const radarRows = rows.slice(0, 8)
+                const radarLegendTop = legendGridTop(radarRows.length)
                 option = {
                     tooltip: {},
                     legend: {
                         data: radarRows.map((_, i) => labels[i]),
-                        textStyle: { color: theme.textColor },
-                        bottom: 0,
+                        textStyle: { color: theme.textColor, fontSize: 11 },
+                        type: "plain",
+                        width: "90%",
+                        left: "center",
+                        top: 0,
                     },
-                    radar: { indicator, shape: "polygon" },
+                    radar: { indicator, shape: "polygon", center: ["50%", `${50 + radarLegendTop / 8}%`] },
                     series: [{
                         type: "radar",
                         data: radarRows.map((row, i) => ({
@@ -318,14 +333,19 @@ export function ReportChart({
                         }
                     }
 
+                    const gridTop = legendGridTop(legendData.length)
+
                     option = {
                         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
                         legend: {
                             data: legendData,
-                            textStyle: { color: theme.textColor },
-                            type: legendData.length > 8 ? "scroll" : "plain",
+                            textStyle: { color: theme.textColor, fontSize: 11 },
+                            type: "plain",
+                            width: "90%",
+                            left: "center",
+                            top: 0,
                         },
-                        grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
+                        grid: { left: "3%", right: "4%", bottom: "3%", top: gridTop, containLabel: true },
                         xAxis: {
                             type: "category",
                             data: primaryValues,
@@ -343,10 +363,19 @@ export function ReportChart({
                     const hasAbsolute = numericMeasures.some((m) => !PERCENTAGE_FIELDS.has(m))
                     const needDualAxis = hasPercentage && hasAbsolute && numericMeasures.length > 1
 
+                    const singleGridTop = legendGridTop(numericMeasures.length)
+
                     option = {
                         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-                        legend: { data: numericMeasures.map((m) => getLabel(m, lang)), textStyle: { color: theme.textColor } },
-                        grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", containLabel: true },
+                        legend: {
+                            data: numericMeasures.map((m) => getLabel(m, lang)),
+                            textStyle: { color: theme.textColor, fontSize: 11 },
+                            type: "plain",
+                            width: "90%",
+                            left: "center",
+                            top: 0,
+                        },
+                        grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", top: singleGridTop, containLabel: true },
                         xAxis: {
                             type: "category",
                             data: xLabels,

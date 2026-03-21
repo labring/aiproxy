@@ -8,17 +8,22 @@ export const ALL_FILTER = "__all__"
 export type TimeRange = "7d" | "30d" | "month" | "last_week" | "last_month" | "custom"
 
 export function getTimeRange(range: TimeRange, customStart?: number, customEnd?: number): { start: number; end: number } {
-    const now = Math.floor(Date.now() / 1000)
+    // Snap to the start of the current hour, then subtract 1 second so that
+    // `hour_timestamp <= stableEnd` excludes the current incomplete hour.
+    // GroupSummary is hourly-granularity; the current hour is still being
+    // written to, so including it causes values to change on every query.
+    const nowHour = Math.floor(Date.now() / 3_600_000) * 3600
+    const stableEnd = nowHour - 1
     switch (range) {
         case "7d":
-            return { start: now - 7 * 86400, end: now }
+            return { start: nowHour - 7 * 86400, end: stableEnd }
         case "30d":
-            return { start: now - 30 * 86400, end: now }
+            return { start: nowHour - 30 * 86400, end: stableEnd }
         case "month": {
             const d = new Date()
             d.setDate(1)
             d.setHours(0, 0, 0, 0)
-            return { start: Math.floor(d.getTime() / 1000), end: now }
+            return { start: Math.floor(d.getTime() / 1000), end: stableEnd }
         }
         case "last_week": {
             const lastWeek = subWeeks(new Date(), 1)
@@ -44,8 +49,8 @@ export function getTimeRange(range: TimeRange, customStart?: number, customEnd?:
         }
         case "custom":
             return {
-                start: customStart || now - 7 * 86400,
-                end: customEnd || now,
+                start: customStart || nowHour - 7 * 86400,
+                end: customEnd || stableEnd,
             }
     }
 }

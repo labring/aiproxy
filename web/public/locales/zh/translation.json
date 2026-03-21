@@ -422,6 +422,8 @@
       "personalOverride": "个人覆盖",
       "deptPolicy": "部门策略",
       "noPolicy": "未设置",
+      "allPolicies": "全部策略",
+      "filterByPolicy": "按策略筛选",
       "noDeptBindings": "暂无部门绑定",
       "noUserOverrides": "暂无个人覆盖",
       "unbind": "解绑",
@@ -456,6 +458,9 @@
       "description": "灵活选择维度和度量，生成按需分析报表",
       "dimensions": "维度",
       "dimensionsDesc": "分组依据",
+      "identityDims": "身份维度",
+      "timeDims": "时间维度",
+      "mutuallyExclusive": "同组互斥",
       "measures": "度量",
       "measuresDesc": "计算指标",
       "filters": "筛选",
@@ -543,6 +548,10 @@
       "tenantIdRequired": "租户 ID 不能为空",
       "addSuccess": "租户添加成功",
       "addFailed": "租户添加失败",
+      "editTenant": "编辑租户",
+      "editTenantDescription": "修改租户显示名称",
+      "editSuccess": "租户更新成功",
+      "editFailed": "租户更新失败",
       "deleteSuccess": "租户删除成功",
       "deleteFailed": "租户删除失败",
       "configUpdated": "配置更新成功",
@@ -609,6 +618,23 @@
       "policyFilter": "策略筛选",
       "filterByPolicy": "按生效策略筛选",
       "columns": "显示列"
+    },
+    "permissions": {
+      "title": "权限配置",
+      "description": "配置每个角色可访问的功能模块",
+      "feature": "功能模块",
+      "saved": "权限保存成功",
+      "saveRole": "保存 {{role}}",
+      "keys": {
+        "dashboard": "企业概览",
+        "ranking": "排行榜",
+        "department_detail": "部门详情",
+        "export": "数据导出",
+        "custom_report": "自定义报表",
+        "quota_manage": "额度策略管理",
+        "user_manage": "用户管理",
+        "access_control": "访问控制"
+      }
     }
   },
   "token": {
