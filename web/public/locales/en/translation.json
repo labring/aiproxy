@@ -714,7 +714,9 @@
         "save": "Save Settings",
         "saveSuccess": "Notification config saved",
         "resetSuccess": "Reset to default config",
-        "noP2PWarning": "Feishu P2P not configured (requires FEISHU_APP_ID and FEISHU_APP_SECRET), notifications will not be sent"
+        "noP2PWarning": "Feishu P2P not configured (requires FEISHU_APP_ID and FEISHU_APP_SECRET), notifications will not be sent",
+        "preview": "Preview",
+        "previewSampleHint": "(sample data)"
       }
     },
     "permissions": {

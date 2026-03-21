@@ -72,6 +72,20 @@ const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
     "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
 }
 
+// Display names for model owners that need special casing (all-caps abbreviations, etc.).
+// Owners not listed here fall back to CSS `capitalize` (first-letter uppercase).
+const OWNER_DISPLAY_NAMES: Record<string, string> = {
+    ppio: "PPIO",
+    baai: "BAAI",
+    xai: "xAI",
+    chatglm: "ChatGLM",
+    funaudiollm: "FunAudioLLM",
+}
+
+function ownerDisplayName(owner: string): string {
+    return OWNER_DISPLAY_NAMES[owner.toLowerCase()] ?? owner
+}
+
 // Builds the full endpoint URL from baseUrl and an endpoint string like "POST /v1/chat/completions".
 // baseUrl is expected to end with "/v1"; the path already includes "/v1/...".
 function buildFullEndpointUrl(baseUrl: string, endpoint: string): string {
@@ -531,7 +545,7 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                         >
                             <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md hover:bg-muted text-sm font-medium">
                                 {openOwners.has(group.owner) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                <span className="capitalize">{group.owner}</span>
+                                <span>{ownerDisplayName(group.owner)}</span>
                                 <Badge variant="secondary" className="ml-1 text-xs">
                                     {t("enterprise.myAccess.modelCount", { count: group.models.length })}
                                 </Badge>

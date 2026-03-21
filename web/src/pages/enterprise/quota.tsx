@@ -60,10 +60,13 @@ import {
     type FeishuDepartment,
     type FeishuUser,
     type QuotaNotifConfig,
+    type MyStatsResponse,
 } from "@/api/enterprise"
 import { toast } from "sonner"
-import { ALL_FILTER } from "@/lib/enterprise"
+import { ALL_FILTER, getTimeRange } from "@/lib/enterprise"
 import { useHasPermission } from "@/lib/permissions"
+import useAuthStore from "@/store/auth"
+import { Separator } from "@/components/ui/separator"
 
 const defaultPolicy: QuotaPolicyInput = {
     name: "",
@@ -1001,6 +1004,20 @@ function UserOverrideTab({ policies, canManage }: { policies: QuotaPolicy[]; can
 
 // ─── Notification Config Tab ────────────────────────────────────────────────
 
+function renderTemplate(tmpl: string, vars: Record<string, string>): string {
+    return Object.entries(vars).reduce((s, [k, v]) => s.split(`{${k}}`).join(v), tmpl)
+}
+
+const TIER_MAP = {
+    tier2:   { titleField: "tier2_title"   as const, bodyField: "tier2_body"   as const, color: "orange" as const },
+    tier3:   { titleField: "tier3_title"   as const, bodyField: "tier3_body"   as const, color: "red"    as const },
+    exhaust: { titleField: "exhaust_title" as const, bodyField: "exhaust_body" as const, color: "red"    as const },
+} as const
+
+function notifPeriodTypeLabel(tp: string): string {
+    return tp === "daily" ? "日" : tp === "weekly" ? "周" : "月"
+}
+
 const DEFAULT_NOTIF_CONFIG = {
     enabled: false,
     tier2_title: "AI 用量提醒",
@@ -1015,11 +1032,21 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [draft, setDraft] = useState<QuotaNotifConfig | null>(null)
+    const [selectedTier, setSelectedTier] = useState<"tier2" | "tier3" | "exhaust">("tier2")
+
+    const adminName = useAuthStore(s => s.enterpriseUser?.name ?? "管理员")
 
     const { data: serverCfg, isLoading } = useQuery({
         queryKey: ["enterprise", "quota-notif-config"],
         queryFn: () => enterpriseApi.getNotifConfig(),
     })
+
+    const { start, end } = useMemo(() => getTimeRange("30d"), [])
+    const { data: statsData } = useQuery<MyStatsResponse>({
+        queryKey: ["my-stats-preview", start, end],
+        queryFn: () => enterpriseApi.getMyStats(start, end),
+    })
+    const quota = statsData?.quota
 
     const saveMutation = useMutation({
         mutationFn: (cfg: QuotaNotifConfig) => enterpriseApi.updateNotifConfig(cfg),
@@ -1039,6 +1066,24 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
         { key: "{period_quota}", label: t("enterprise.quota.notif.varPeriodQuota" as never) },
         { key: "{period_type}", label: t("enterprise.quota.notif.varPeriodType" as never) },
     ]
+
+    const { titleField, bodyField, color } = TIER_MAP[selectedTier]
+
+    const previewVars = useMemo<Record<string, string>>(() => {
+        const tierThresholdStr =
+            selectedTier === "tier2" ? `${((quota?.tier1_ratio ?? 0.7) * 100).toFixed(0)}%`
+            : selectedTier === "tier3" ? `${((quota?.tier2_ratio ?? 0.9) * 100).toFixed(0)}%`
+            : "100%"
+        return {
+            name: adminName,
+            usage_pct: quota && quota.period_quota > 0
+                ? `${((quota.period_used / quota.period_quota) * 100).toFixed(1)}%`
+                : "75.0%",
+            period_quota: quota ? `¥${quota.period_quota.toFixed(2)}` : "¥100.00",
+            period_type: quota ? notifPeriodTypeLabel(quota.period_type) : "月",
+            tier_threshold: tierThresholdStr,
+        }
+    }, [selectedTier, quota, adminName])
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).catch(() => {})
@@ -1080,40 +1125,63 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
                 </CardContent>
             </Card>
 
-            {/* Template sections */}
-            {[
-                { key: "tier2", titleField: "tier2_title" as const, bodyField: "tier2_body" as const, color: "yellow" },
-                { key: "tier3", titleField: "tier3_title" as const, bodyField: "tier3_body" as const, color: "red" },
-                { key: "exhaust", titleField: "exhaust_title" as const, bodyField: "exhaust_body" as const, color: "red" },
-            ].map(({ key, titleField, bodyField, color }) => (
-                <Card key={key} className={color === "yellow" ? "border-yellow-200" : "border-red-200"}>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">
-                            {t(`enterprise.quota.notif.${key}` as never)}
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground">{t(`enterprise.quota.notif.${key}Desc` as never)}</p>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="space-y-1">
-                            <Label className="text-xs">{t("enterprise.quota.notif.msgTitle" as never)}</Label>
-                            <Input
-                                value={cfg[titleField]}
-                                onChange={(e) => setDraft({ ...cfg, [titleField]: e.target.value })}
-                                disabled={!canManage}
-                            />
+            {/* Single template editor with tier selector */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <Select value={selectedTier} onValueChange={(v) => setSelectedTier(v as typeof selectedTier)}>
+                        <SelectTrigger className="w-52">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="tier2">{t("enterprise.quota.notif.tier2" as never)}</SelectItem>
+                            <SelectItem value="tier3">{t("enterprise.quota.notif.tier3" as never)}</SelectItem>
+                            <SelectItem value="exhaust">{t("enterprise.quota.notif.exhaust" as never)}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t(`enterprise.quota.notif.${selectedTier}Desc` as never)}</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="space-y-1">
+                        <Label className="text-xs">{t("enterprise.quota.notif.msgTitle" as never)}</Label>
+                        <Input
+                            value={cfg[titleField]}
+                            onChange={(e) => setDraft({ ...cfg, [titleField]: e.target.value })}
+                            disabled={!canManage}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">{t("enterprise.quota.notif.msgBody" as never)}</Label>
+                        <Textarea
+                            value={cfg[bodyField]}
+                            onChange={(e) => setDraft({ ...cfg, [bodyField]: e.target.value })}
+                            rows={3}
+                            disabled={!canManage}
+                        />
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                        <p className="text-xs text-muted-foreground mb-1.5">
+                            {t("enterprise.quota.notif.preview" as never)}
+                            {!quota && (
+                                <span className="ml-1 opacity-70">{t("enterprise.quota.notif.previewSampleHint" as never)}</span>
+                            )}
+                        </p>
+                        <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 mt-2">
+                            <div className="flex items-center gap-2">
+                                <div className={`w-1 h-5 rounded-full ${color === "orange" ? "bg-orange-400" : "bg-red-400"}`} />
+                                <span className="font-medium text-sm">
+                                    {renderTemplate(cfg[titleField], previewVars)}
+                                </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                                {renderTemplate(cfg[bodyField], previewVars)}
+                            </p>
                         </div>
-                        <div className="space-y-1">
-                            <Label className="text-xs">{t("enterprise.quota.notif.msgBody" as never)}</Label>
-                            <Textarea
-                                value={cfg[bodyField]}
-                                onChange={(e) => setDraft({ ...cfg, [bodyField]: e.target.value })}
-                                rows={3}
-                                disabled={!canManage}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Variable hints */}
             <Card>

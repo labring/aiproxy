@@ -12,8 +12,42 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
 )
+
+// ppioModelTypeToMode maps PPIO model_type strings to mode.Mode.
+var ppioModelTypeToMode = map[string]mode.Mode{
+	"chat":       mode.ChatCompletions,
+	"embedding":  mode.Embeddings,
+	"rerank":     mode.Rerank,
+	"moderation": mode.Moderations,
+	"tts":        mode.AudioSpeech,
+	"stt":        mode.AudioTranscription,
+	"image":      mode.ImagesGenerations,
+	"video":      mode.VideoGenerationsJobs,
+}
+
+// inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
+// Falls back to endpoint-based inference, then defaults to ChatCompletions.
+func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
+	if m, ok := ppioModelTypeToMode[modelType]; ok {
+		return m
+	}
+
+	for _, ep := range endpoints {
+		switch ep {
+		case "embeddings":
+			return mode.Embeddings
+		case "rerank":
+			return mode.Rerank
+		case "moderations":
+			return mode.Moderations
+		}
+	}
+
+	return mode.ChatCompletions
+}
 
 // modelCreator abstracts the create/update operations for V1 and V2 models
 type modelCreator struct {
@@ -163,6 +197,11 @@ func ExecuteSync( //nolint:cyclop
 	// Step 5: Finalize result
 	result.Success = len(result.Errors) == 0
 	result.DurationMS = time.Since(startTime).Milliseconds()
+
+	// Step 5.5: Refresh global model+channel cache so new models are immediately visible
+	if err := model.InitModelConfigAndChannelCache(); err != nil {
+		log.Printf("failed to refresh model cache after sync: %v", err)
+	}
 
 	// Step 6: Record sync history (after result.Success is set)
 	sendProgress(progressCallback, "recording", "记录同步历史...", 95, nil)
@@ -320,7 +359,10 @@ func ensurePPIOChannelsWithFilter(filterByEndpoint func(string) []string) (Chann
 			channels[i].Models = openaiModels
 		}
 
-		if err := model.DB.Model(&channels[i]).Update("models", channels[i].Models).Error; err != nil {
+		// Use Save() so GORM applies the fastjson serializer on the models []string field.
+		// Update("models", []string{...}) bypasses the serializer and causes
+		// "row value misused" on SQLite.
+		if err := model.DB.Save(&channels[i]).Error; err != nil {
 			return info, fmt.Errorf("failed to update channel %d models: %w", channels[i].ID, err)
 		}
 	}
@@ -386,7 +428,7 @@ func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 	if err := tx.Where("model = ?", ppioModel.ID).First(&existing).Error; err == nil {
 		existing.Owner = model.ModelOwnerPPIO
 		existing.Config = configData
-		existing.Type = 1
+		existing.Type = inferModeFromPPIO(ppioModel.ModelType, ppioModel.Endpoints)
 		existing.RPM = 60
 		existing.TPM = 1000000
 		existing.Price.InputPrice = model.ZeroNullFloat64(ppioModel.GetInputPricePerToken())
@@ -400,7 +442,7 @@ func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 	modelConfig := model.ModelConfig{
 		Model:  ppioModel.ID,
 		Owner:  model.ModelOwnerPPIO,
-		Type:   1, // Chat completion
+		Type:   inferModeFromPPIO(ppioModel.ModelType, ppioModel.Endpoints),
 		RPM:    60,
 		TPM:    1000000,
 		Config: configData,
@@ -455,7 +497,7 @@ func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 		// Model exists — update it in place and claim ownership for PPIO
 		existing.Owner = model.ModelOwnerPPIO
 		existing.Config = configData
-		existing.Type = 1
+		existing.Type = inferModeFromPPIO(m.ModelType, m.Endpoints)
 		existing.RPM = rpm
 		existing.TPM = tpm
 		setPriceFromV2Model(&existing.Price, m)
@@ -467,7 +509,7 @@ func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 	modelConfig := model.ModelConfig{
 		Model:  m.ID,
 		Owner:  model.ModelOwnerPPIO,
-		Type:   1, // Chat completion
+		Type:   inferModeFromPPIO(m.ModelType, m.Endpoints),
 		RPM:    rpm,
 		TPM:    tpm,
 		Config: configData,
@@ -487,7 +529,7 @@ func updateModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 	}
 
 	existing.Owner = model.ModelOwnerPPIO
-
+	existing.Type = inferModeFromPPIO(m.ModelType, m.Endpoints)
 	existing.Config = toModelConfigKeys(buildConfigFromPPIOModelV2(m))
 
 	if m.RPM > 0 {

@@ -525,6 +525,7 @@ func GetMyStats(c *gin.Context) {
 }
 
 // DisableMyToken disables (soft-deletes) a token belonging to the current user's group.
+// Ownership is verified atomically in the UPDATE WHERE clause to prevent TOCTOU.
 func DisableMyToken(c *gin.Context) {
 	feishuUser := GetEnterpriseUser(c)
 	if feishuUser == nil {
@@ -540,15 +541,8 @@ func DisableMyToken(c *gin.Context) {
 		return
 	}
 
-	// Verify token belongs to user's group
-	var token model.Token
-	if err := model.DB.Where("id = ? AND group_id = ?", id, feishuUser.GroupID).First(&token).Error; err != nil {
-		middleware.ErrorResponse(c, http.StatusNotFound, "token not found")
-		return
-	}
-
-	if err := model.UpdateTokenStatus(id, model.TokenStatusDisabled); err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to disable token: "+err.Error())
+	if err := model.UpdateGroupTokenStatus(feishuUser.GroupID, id, model.TokenStatusDisabled); err != nil {
+		middleware.ErrorResponse(c, http.StatusNotFound, "token not found or not owned by current user")
 		return
 	}
 

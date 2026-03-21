@@ -536,7 +536,9 @@
         "save": "保存设置",
         "saveSuccess": "通知配置已保存",
         "resetSuccess": "已恢复默认配置",
-        "noP2PWarning": "飞书 P2P 未配置（需设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET），通知将无法发送"
+        "noP2PWarning": "飞书 P2P 未配置（需设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET），通知将无法发送",
+        "preview": "预览",
+        "previewSampleHint": "（使用示例数据）"
       }
     },
     "customReport": {
