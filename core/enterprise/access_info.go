@@ -32,12 +32,15 @@ type MyTokenInfo struct {
 type ModelAccessInfo struct {
 	Model              string   `json:"model"`
 	Type               int      `json:"type"`
+	TypeName           string   `json:"type_name"`
 	RPM                int64    `json:"rpm"`
 	TPM                int64    `json:"tpm"`
 	InputPrice         float64  `json:"input_price"`
 	OutputPrice        float64  `json:"output_price"`
 	PriceUnit          int64    `json:"price_unit"`
 	SupportedEndpoints []string `json:"supported_endpoints"`
+	MaxContext          int64    `json:"max_context,omitempty"`
+	MaxOutput          int64    `json:"max_output,omitempty"`
 }
 
 var (
@@ -136,6 +139,34 @@ func getModelSupportedEndpoints(mc model.ModelConfig) []string {
 	}
 	// Fallback 2: mc.Type (authoritative for non-PPIO models).
 	return getSupportedEndpoints(mc.Type)
+}
+
+// modeToTypeName returns a human-friendly category name for a mode.
+func modeToTypeName(m mode.Mode) string {
+	switch m {
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini, mode.Responses:
+		return "chat"
+	case mode.Embeddings:
+		return "embedding"
+	case mode.ImagesGenerations, mode.ImagesEdits:
+		return "image"
+	case mode.AudioSpeech:
+		return "tts"
+	case mode.AudioTranscription:
+		return "stt"
+	case mode.AudioTranslation:
+		return "audio_translation"
+	case mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent:
+		return "video"
+	case mode.Rerank:
+		return "rerank"
+	case mode.Moderations:
+		return "moderation"
+	case mode.ParsePdf:
+		return "parse_pdf"
+	default:
+		return "other"
+	}
 }
 
 func getSupportedEndpoints(modelType mode.Mode) []string {
@@ -300,15 +331,21 @@ func GetMyAccess(c *gin.Context) {
 			owner = "other"
 		}
 
+		maxCtx, _ := model.GetModelConfigInt(mc.Config, model.ModelConfigMaxContextTokensKey)
+		maxOut, _ := model.GetModelConfigInt(mc.Config, model.ModelConfigMaxOutputTokensKey)
+
 		ownerModels[owner] = append(ownerModels[owner], ModelAccessInfo{
 			Model:              modelName,
 			Type:               int(mc.Type),
+			TypeName:           modeToTypeName(mc.Type),
 			RPM:                rpm,
 			TPM:                tpm,
 			InputPrice:         inputPrice,
 			OutputPrice:        outputPrice,
 			PriceUnit:          priceUnit,
 			SupportedEndpoints: getModelSupportedEndpoints(mc),
+			MaxContext:          int64(maxCtx),
+			MaxOutput:          int64(maxOut),
 		})
 	}
 

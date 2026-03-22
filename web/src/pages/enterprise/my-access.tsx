@@ -24,25 +24,6 @@ import {
 } from "@/api/enterprise"
 import { getTimeRange, formatAmount, formatNumber, type TimeRange } from "@/lib/enterprise"
 
-// Matches core/relay/mode/define.go iota values
-const MODEL_TYPES: Record<number, string> = {
-    1: "Chat Completions",
-    2: "Completions",
-    3: "Embeddings",
-    4: "Moderations",
-    5: "Image Generation",
-    6: "Image Edits",
-    7: "Audio Speech",
-    8: "Audio Transcription",
-    9: "Audio Translation",
-    10: "Rerank",
-    11: "Parse PDF",
-    12: "Anthropic",
-    13: "Video Generation",
-    15: "Responses",
-    20: "Gemini",
-}
-
 // Semantic color groups for endpoint badges
 const EP_COLORS = {
     chat: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -54,23 +35,31 @@ const EP_COLORS = {
     video: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 } as const
 
-// Endpoint path → short display label and color class
-const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
-    "POST /v1/chat/completions": { label: "Chat", color: EP_COLORS.chat },
-    "POST /v1/completions": { label: "Completions", color: EP_COLORS.chat },
-    "POST /v1/messages": { label: "Anthropic", color: EP_COLORS.anthropic },
-    "POST /v1/responses": { label: "Responses", color: EP_COLORS.responses },
-    "POST /v1/embeddings": { label: "Embeddings", color: EP_COLORS.embeddings },
-    "POST /v1/moderations": { label: "Moderations", color: EP_COLORS.misc },
-    "POST /v1/images/generations": { label: "Image Gen", color: EP_COLORS.image },
-    "POST /v1/images/edits": { label: "Image Edit", color: EP_COLORS.image },
-    "POST /v1/audio/speech": { label: "TTS", color: EP_COLORS.misc },
-    "POST /v1/audio/transcriptions": { label: "STT", color: EP_COLORS.misc },
-    "POST /v1/audio/translations": { label: "Translate", color: EP_COLORS.misc },
-    "POST /v1/rerank": { label: "Rerank", color: EP_COLORS.misc },
-    "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc },
-    "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video },
-    "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
+// Endpoint path → short display label, color class, and protocol (for base URL copy)
+const ENDPOINT_LABELS: Record<string, { label: string; color: string; protocol: "openai" | "anthropic" }> = {
+    "POST /v1/chat/completions": { label: "Chat", color: EP_COLORS.chat, protocol: "openai" },
+    "POST /v1/completions": { label: "Completions", color: EP_COLORS.chat, protocol: "openai" },
+    "POST /v1/messages": { label: "Anthropic", color: EP_COLORS.anthropic, protocol: "anthropic" },
+    "POST /v1/responses": { label: "Responses", color: EP_COLORS.responses, protocol: "openai" },
+    "POST /v1/embeddings": { label: "Embeddings", color: EP_COLORS.embeddings, protocol: "openai" },
+    "POST /v1/moderations": { label: "Moderations", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/images/generations": { label: "Image Gen", color: EP_COLORS.image, protocol: "openai" },
+    "POST /v1/images/edits": { label: "Image Edit", color: EP_COLORS.image, protocol: "openai" },
+    "POST /v1/audio/speech": { label: "TTS", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/audio/transcriptions": { label: "STT", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/audio/translations": { label: "Translate", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/rerank": { label: "Rerank", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc, protocol: "openai" },
+    "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video, protocol: "openai" },
+    "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video, protocol: "openai" },
+}
+
+// Translate a server-side type_name (e.g. "chat") via i18n keys "enterprise.myAccess.typeName_chat".
+function typeNameLabel(t: (k: never) => string, name: string): string {
+    const key = `enterprise.myAccess.typeName_${name}` as never
+    const translated = t(key)
+    // Fallback to raw name if no translation found (key returned as-is)
+    return translated === key ? name : translated
 }
 
 // Display names for model owners that need special casing (all-caps abbreviations, etc.).
@@ -87,12 +76,12 @@ function ownerDisplayName(owner: string): string {
     return OWNER_DISPLAY_NAMES[owner.toLowerCase()] ?? owner
 }
 
-// Builds the full endpoint URL from baseUrl and an endpoint string like "POST /v1/chat/completions".
-// baseUrl is expected to end with "/v1"; the path already includes "/v1/...".
-function buildFullEndpointUrl(baseUrl: string, endpoint: string): string {
-    const path = endpoint.split(' ')[1] // e.g. "/v1/chat/completions"
-    const base = baseUrl.replace(/\/v1\/?$/, '') // strip trailing "/v1"
-    return `${base}${path}`
+// Returns the appropriate Base URL for SDK configuration based on protocol.
+// OpenAI-compatible endpoints use baseUrl as-is (ending with /v1).
+// Anthropic SDK expects baseUrl without /v1 (it appends /v1/messages itself).
+function getBaseUrlForProtocol(baseUrl: string, protocol: "openai" | "anthropic"): string {
+    if (protocol === "anthropic") return baseUrl.replace(/\/v1\/?$/, '')
+    return baseUrl
 }
 
 function maskKey(key: string): string {
@@ -105,8 +94,8 @@ function copyToClipboard(text: string, successMsg: string) {
     toast.success(successMsg)
 }
 
-function formatPrice(price: number, unit: number): string {
-    if (price === 0) return "Free"
+function formatPrice(price: number, unit: number, freeLabel: string): string {
+    if (price === 0) return freeLabel
     const perMillion = (price / (unit || 1000)) * 1_000_000
     return `$${perMillion.toFixed(2)}`
 }
@@ -477,10 +466,10 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
     const [typeFilter, setTypeFilter] = useState("all")
     const [openOwners, setOpenOwners] = useState<Set<string>>(() => new Set(groups.map(g => g.owner)))
 
-    const allTypes = useMemo(() => {
-        const types = new Set<number>()
-        groups.forEach(g => g.models.forEach(m => types.add(m.type)))
-        return Array.from(types).sort()
+    const allTypeNames = useMemo(() => {
+        const names = new Set<string>()
+        groups.forEach(g => g.models.forEach(m => { if (m.type_name) names.add(m.type_name) }))
+        return Array.from(names).sort()
     }, [groups])
 
     const filteredGroups = useMemo(() => {
@@ -488,7 +477,7 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
             ...g,
             models: g.models.filter(m => {
                 const matchSearch = !search || m.model.toLowerCase().includes(search.toLowerCase())
-                const matchType = typeFilter === "all" || m.type === Number(typeFilter)
+                const matchType = typeFilter === "all" || m.type_name === typeFilter
                 return matchSearch && matchType
             }),
         })).filter(g => g.models.length > 0)
@@ -519,14 +508,14 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                             />
                         </div>
                         <Select value={typeFilter} onValueChange={setTypeFilter}>
-                            <SelectTrigger className="h-9 w-36">
+                            <SelectTrigger className="h-9 w-40">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">{t("enterprise.myAccess.allTypes")}</SelectItem>
-                                {allTypes.map(type => (
-                                    <SelectItem key={type} value={String(type)}>
-                                        {MODEL_TYPES[type] || `Type ${type}`}
+                                {allTypeNames.map(name => (
+                                    <SelectItem key={name} value={name}>
+                                        {typeNameLabel(t, name)}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -552,34 +541,45 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                 </Badge>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
-                                <div className="ml-6 mt-1 border rounded-md overflow-hidden">
+                                <div className="ml-6 mt-1 border rounded-md overflow-x-auto">
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="border-b bg-muted/50">
                                                 <th className="px-3 py-2 text-left font-medium">Model</th>
                                                 <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.endpoints")}</th>
+                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.context" as never)}</th>
+                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.maxOutput" as never)}</th>
                                                 <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.inputPrice")}</th>
                                                 <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.outputPrice")}</th>
-                                                <th className="px-3 py-2 text-right font-medium">RPM</th>
-                                                <th className="px-3 py-2 text-right font-medium">TPM</th>
+                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.limits" as never)}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {group.models.map(m => (
                                                 <tr key={m.model} className="border-b last:border-b-0 hover:bg-muted/30">
-                                                    <td className="px-3 py-2 font-mono text-xs">{m.model}</td>
+                                                    <td className="px-3 py-2">
+                                                        <button
+                                                            className="font-mono text-xs hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors"
+                                                            onClick={() => copyToClipboard(m.model, t("enterprise.myAccess.copied"))}
+                                                            title={t("enterprise.myAccess.copyModelId" as never)}
+                                                        >
+                                                            {m.model}
+                                                        </button>
+                                                    </td>
                                                     <td className="px-3 py-2">
                                                         <div className="flex flex-wrap gap-1">
                                                             {m.supported_endpoints?.length > 0 ? (
                                                                 m.supported_endpoints.map(ep => {
                                                                     const info = ENDPOINT_LABELS[ep]
-                                                                    const fullUrl = buildFullEndpointUrl(baseUrl, ep)
+                                                                    const protocol = info?.protocol || "openai"
+                                                                    const copyUrl = getBaseUrlForProtocol(baseUrl, protocol)
+                                                                    const protocolLabel = protocol === "anthropic" ? "Anthropic" : "OpenAI"
                                                                     return (
                                                                         <button
                                                                             key={ep}
                                                                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 ${info?.color || EP_COLORS.misc}`}
-                                                                            title={`${t("enterprise.myAccess.copyEndpoint")}: ${fullUrl}`}
-                                                                            onClick={() => copyToClipboard(fullUrl, t("enterprise.myAccess.endpointCopied"))}
+                                                                            title={`${protocolLabel} Base URL: ${copyUrl}`}
+                                                                            onClick={() => copyToClipboard(copyUrl, `${protocolLabel} Base URL ${t("enterprise.myAccess.endpointCopied")}`)}
                                                                         >
                                                                             {info?.label || ep}
                                                                         </button>
@@ -587,22 +587,26 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                                                 })
                                                             ) : (
                                                                 <Badge variant="outline" className="text-xs">
-                                                                    {MODEL_TYPES[m.type] || `Type ${m.type}`}
+                                                                    {typeNameLabel(t, m.type_name)}
                                                                 </Badge>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-3 py-2 text-right tabular-nums text-xs">
-                                                        {formatPrice(m.input_price, m.price_unit)}
+                                                    <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+                                                        {m.max_context ? formatNumber(m.max_context) : "-"}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+                                                        {m.max_output ? formatNumber(m.max_output) : "-"}
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums text-xs">
-                                                        {formatPrice(m.output_price, m.price_unit)}
+                                                        {formatPrice(m.input_price, m.price_unit, t("enterprise.myAccess.free" as never))}
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums text-xs">
-                                                        {m.rpm || "-"}
+                                                        {formatPrice(m.output_price, m.price_unit, t("enterprise.myAccess.free" as never))}
                                                     </td>
-                                                    <td className="px-3 py-2 text-right tabular-nums text-xs">
-                                                        {m.tpm ? m.tpm.toLocaleString() : "-"}
+                                                    <td className="px-3 py-2 text-right text-xs">
+                                                        <div className="tabular-nums">{m.rpm || "-"} <span className="text-muted-foreground">RPM</span></div>
+                                                        <div className="tabular-nums text-muted-foreground">{m.tpm ? m.tpm.toLocaleString() : "-"} TPM</div>
                                                     </td>
                                                 </tr>
                                             ))}

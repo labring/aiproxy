@@ -383,40 +383,38 @@ func invalidatePolicyCaches(policyID int) {
 }
 
 // bindDepartmentPolicyCore is the shared logic for binding a policy to a department.
+// Uses Unscoped to find soft-deleted records and restore them, avoiding unique index conflicts.
 func bindDepartmentPolicyCore(departmentID string, quotaPolicyID int) (*models.DepartmentQuotaPolicy, *models.QuotaPolicy, error) {
 	var policy models.QuotaPolicy
 	if err := model.DB.First(&policy, quotaPolicyID).Error; err != nil {
 		return nil, nil, err
 	}
 
-	binding := models.DepartmentQuotaPolicy{
-		DepartmentID:  departmentID,
-		QuotaPolicyID: quotaPolicyID,
-	}
-
 	var existing models.DepartmentQuotaPolicy
-	err := model.DB.Where("department_id = ?", departmentID).First(&existing).Error
+	err := model.DB.Unscoped().Where("department_id = ?", departmentID).First(&existing).Error
 	if err == nil {
 		existing.QuotaPolicyID = quotaPolicyID
-		if err := model.DB.Save(&existing).Error; err != nil {
+		existing.DeletedAt = gorm.DeletedAt{}
+		if err := model.DB.Unscoped().Save(&existing).Error; err != nil {
 			return nil, nil, err
 		}
-
-		binding = existing
-	} else if errors.Is(err, gorm.ErrRecordNotFound) {
-		if err := model.DB.Create(&binding).Error; err != nil {
-			return nil, nil, err
-		}
-	} else {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil, err
+	} else {
+		existing = models.DepartmentQuotaPolicy{
+			DepartmentID:  departmentID,
+			QuotaPolicyID: quotaPolicyID,
+		}
+		if err := model.DB.Create(&existing).Error; err != nil {
+			return nil, nil, err
+		}
 	}
 
-	// Sync Token PeriodQuota for department users
 	if policy.PeriodQuota > 0 {
 		go syncPolicyToDepartmentUsers(departmentID, &policy)
 	}
 
-	return &binding, &policy, nil
+	return &existing, &policy, nil
 }
 
 // BindPolicyToDepartment binds a quota policy to a department.
@@ -447,26 +445,29 @@ func BindPolicyToDepartment(c *gin.Context) {
 
 // bindUserPolicyCore is the shared logic for binding a policy to a user (upsert).
 // It does NOT spawn goroutines for token sync — callers handle that.
+// Uses Unscoped to find soft-deleted records and restore them, avoiding unique index conflicts.
 func bindUserPolicyCore(openID string, policy *models.QuotaPolicy) (*models.UserQuotaPolicy, error) {
+	var existing models.UserQuotaPolicy
+	err := model.DB.Unscoped().Where("open_id = ?", openID).First(&existing).Error
+	if err == nil {
+		existing.QuotaPolicyID = policy.ID
+		existing.DeletedAt = gorm.DeletedAt{}
+		if err := model.DB.Unscoped().Save(&existing).Error; err != nil {
+			return nil, err
+		}
+
+		return &existing, nil
+	}
+
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	binding := models.UserQuotaPolicy{
 		OpenID:        openID,
 		QuotaPolicyID: policy.ID,
 	}
-
-	var existing models.UserQuotaPolicy
-	err := model.DB.Where("open_id = ?", openID).First(&existing).Error
-	if err == nil {
-		existing.QuotaPolicyID = policy.ID
-		if err := model.DB.Save(&existing).Error; err != nil {
-			return nil, err
-		}
-
-		binding = existing
-	} else if errors.Is(err, gorm.ErrRecordNotFound) {
-		if err := model.DB.Create(&binding).Error; err != nil {
-			return nil, err
-		}
-	} else {
+	if err := model.DB.Create(&binding).Error; err != nil {
 		return nil, err
 	}
 

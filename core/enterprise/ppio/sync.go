@@ -332,29 +332,18 @@ func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsIn
 func collectChannelModels[T endpointModel](models []T) (anthropicModels, openaiModels []string) {
 	for _, m := range models {
 		eps := m.GetEndpoints()
-		hasAnthropic := slices.Contains(eps, "anthropic")
-		hasNonAnthropic := false
+		id := m.GetID()
 
-		for _, ep := range eps {
-			if ep != "anthropic" {
-				hasNonAnthropic = true
-
-				break
-			}
+		if slices.Contains(eps, "anthropic") {
+			anthropicModels = append(anthropicModels, id)
 		}
 
-		if hasAnthropic {
-			anthropicModels = append(anthropicModels, m.GetID())
-		}
-
-		if hasNonAnthropic {
-			openaiModels = append(openaiModels, m.GetID())
-		}
-
-		// Models with no endpoints at all: include in openai channel as fallback
-		// so they remain accessible (they'll use the default chat/completions mode).
-		if len(eps) == 0 {
-			openaiModels = append(openaiModels, m.GetID())
+		if slices.ContainsFunc(eps, func(ep string) bool { return ep != "anthropic" }) {
+			openaiModels = append(openaiModels, id)
+		} else if len(eps) == 0 {
+			// Models with no endpoints at all: include in openai channel as fallback
+			// so they remain accessible (they'll use the default chat/completions mode).
+			openaiModels = append(openaiModels, id)
 		}
 	}
 

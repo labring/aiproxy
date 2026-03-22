@@ -395,12 +395,15 @@ export interface MyTokenInfo {
 export interface ModelAccessInfo {
     model: string
     type: number
+    type_name: string
     rpm: number
     tpm: number
     input_price: number
     output_price: number
     price_unit: number
     supported_endpoints: string[]
+    max_context?: number
+    max_output?: number
 }
 
 export interface ModelGroupInfo {
