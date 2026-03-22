@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
@@ -28,6 +27,22 @@ var ModelTypeToMode = map[string]mode.Mode{
 	"video":      mode.VideoGenerationsJobs,
 }
 
+// endpointSlugToMode maps PPIO endpoint slugs to mode.Mode.
+// Used as a fallback when ModelTypeToMode has no match for model_type.
+var endpointSlugToMode = map[string]mode.Mode{
+	"chat/completions":       mode.ChatCompletions,
+	"completions":            mode.ChatCompletions,
+	"responses":              mode.ChatCompletions,
+	"anthropic":              mode.ChatCompletions,
+	"embeddings":             mode.Embeddings,
+	"rerank":                 mode.Rerank,
+	"moderations":            mode.Moderations,
+	"audio/speech":           mode.AudioSpeech,
+	"audio/transcriptions":   mode.AudioTranscription,
+	"images/generations":     mode.ImagesGenerations,
+	"video/generations/jobs": mode.VideoGenerationsJobs,
+}
+
 // inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
 // Falls back to endpoint-based inference, then defaults to ChatCompletions.
 func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
@@ -36,13 +51,8 @@ func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
 	}
 
 	for _, ep := range endpoints {
-		switch ep {
-		case "embeddings":
-			return mode.Embeddings
-		case "rerank":
-			return mode.Rerank
-		case "moderations":
-			return mode.Moderations
+		if m, ok := endpointSlugToMode[ep]; ok {
+			return m
 		}
 	}
 
@@ -78,9 +88,8 @@ func ExecuteSync( //nolint:cyclop
 	useV2 := cfg.MgmtToken != ""
 
 	var (
-		diff        *SyncDiff
-		creator     modelCreator
-		channelSync func() (ChannelsInfo, error)
+		diff    *SyncDiff
+		creator modelCreator
 	)
 
 	if useV2 {
@@ -120,10 +129,6 @@ func ExecuteSync( //nolint:cyclop
 				return updateModelConfigV2(tx, m)
 			},
 		}
-
-		channelSync = func() (ChannelsInfo, error) {
-			return EnsurePPIOChannelsV2(opts, v2Models)
-		}
 	} else {
 		remoteModels, fetchErr := client.FetchModels()
 		if fetchErr != nil {
@@ -158,10 +163,6 @@ func ExecuteSync( //nolint:cyclop
 				return updateModelConfig(tx, m)
 			},
 		}
-
-		channelSync = func() (ChannelsInfo, error) {
-			return EnsurePPIOChannels(opts, remoteModels)
-		}
 	}
 
 	result.Summary = diff.Summary
@@ -184,10 +185,10 @@ func ExecuteSync( //nolint:cyclop
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	// Step 4: Ensure channels exist
-	sendProgress(progressCallback, "channels", "检查并创建 Channel...", 85, nil)
+	// Step 4: Ensure channels exist (reads from local DB, not remote list)
+	sendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := channelSync()
+	channelsInfo, err := EnsurePPIOChannels()
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -314,55 +315,44 @@ func executeSyncTransaction(
 	return nil
 }
 
-// EnsurePPIOChannels finds all PPIO channels (by base_url) and updates each
-// channel's model list filtered by endpoint compatibility.
-//   - Channels with base_url containing "anthropic" get only anthropic-endpoint models.
-//   - All other PPIO channels get every model that has at least one non-anthropic endpoint.
-func EnsurePPIOChannels(_ SyncOptions, remoteModels []PPIOModel) (ChannelsInfo, error) {
-	return ensurePPIOChannelsFromModels(collectChannelModels(remoteModels))
-}
+// EnsurePPIOChannels queries all local ModelConfig entries owned by PPIO,
+// partitions them by endpoint compatibility, and writes the lists into the
+// corresponding PPIO channels. By building from the local DB (not the remote
+// model list), the channel always reflects models that actually exist in the
+// database — even if they were added in a previous sync cycle.
+func EnsurePPIOChannels() (ChannelsInfo, error) {
+	var localModels []model.ModelConfig
 
-// EnsurePPIOChannelsV2 is the V2 variant that works with PPIOModelV2 slices.
-func EnsurePPIOChannelsV2(_ SyncOptions, remoteModels []PPIOModelV2) (ChannelsInfo, error) {
-	return ensurePPIOChannelsFromModels(collectChannelModels(remoteModels))
-}
+	if err := model.DB.Select("model", "config").
+		Where("owner = ?", string(model.ModelOwnerPPIO)).
+		Find(&localModels).Error; err != nil {
+		return ChannelsInfo{}, fmt.Errorf("failed to query local PPIO models: %w", err)
+	}
 
-// collectChannelModels partitions models into anthropic-only and openai-compatible lists.
-// A model is "openai-compatible" if it has any endpoint other than "anthropic".
-func collectChannelModels[T endpointModel](models []T) (anthropicModels, openaiModels []string) {
-	for _, m := range models {
-		eps := m.GetEndpoints()
-		id := m.GetID()
+	var anthropicModels, openaiModels []string
 
-		if slices.Contains(eps, "anthropic") {
-			anthropicModels = append(anthropicModels, id)
+	for _, mc := range localModels {
+		openaiModels = append(openaiModels, mc.Model)
+
+		if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
+			if slices.Contains(slugs, "anthropic") {
+				anthropicModels = append(anthropicModels, mc.Model)
+			}
 		}
-
-		// All models go to the openai channel, including anthropic-only ones (e.g. pa/claude-*).
-		// AI Proxy's protocol conversion handles chat/completions ↔ messages transparently,
-		// so anthropic-only models remain accessible via the standard OpenAI-compatible endpoint.
-		// Models with an explicit anthropic endpoint are additionally routed via the dedicated
-		// anthropic channel when one exists.
-		openaiModels = append(openaiModels, id)
 	}
 
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return anthropicModels, openaiModels
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels)
 }
 
 func ensurePPIOChannelsFromModels(anthropicModels, openaiModels []string) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
-	likeOp := "ILIKE"
-	if common.UsingSQLite {
-		likeOp = "LIKE"
-	}
-
 	var channels []model.Channel
 
-	err := model.DB.Where("base_url "+likeOp+" ?", "%ppio%").Find(&channels).Error
+	err := model.DB.Where("base_url "+likeOp()+" ?", "%ppio%").Find(&channels).Error
 	if err != nil || len(channels) == 0 {
 		return info, nil
 	}
@@ -659,11 +649,6 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 	return cfg
 }
 
-// endpointModel is satisfied by both PPIOModel and PPIOModelV2.
-type endpointModel interface {
-	GetID() string
-	GetEndpoints() []string
-}
 
 // toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.
 func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {

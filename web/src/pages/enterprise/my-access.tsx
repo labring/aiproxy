@@ -35,23 +35,23 @@ const EP_COLORS = {
     video: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 } as const
 
-// Endpoint path → short display label, color class, and protocol (for base URL copy)
-const ENDPOINT_LABELS: Record<string, { label: string; color: string; protocol: "openai" | "anthropic" }> = {
-    "POST /v1/chat/completions": { label: "Chat", color: EP_COLORS.chat, protocol: "openai" },
-    "POST /v1/completions": { label: "Completions", color: EP_COLORS.chat, protocol: "openai" },
-    "POST /v1/messages": { label: "Anthropic", color: EP_COLORS.anthropic, protocol: "anthropic" },
-    "POST /v1/responses": { label: "Responses", color: EP_COLORS.responses, protocol: "openai" },
-    "POST /v1/embeddings": { label: "Embeddings", color: EP_COLORS.embeddings, protocol: "openai" },
-    "POST /v1/moderations": { label: "Moderations", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/images/generations": { label: "Image Gen", color: EP_COLORS.image, protocol: "openai" },
-    "POST /v1/images/edits": { label: "Image Edit", color: EP_COLORS.image, protocol: "openai" },
-    "POST /v1/audio/speech": { label: "TTS", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/audio/transcriptions": { label: "STT", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/audio/translations": { label: "Translate", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/rerank": { label: "Rerank", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc, protocol: "openai" },
-    "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video, protocol: "openai" },
-    "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video, protocol: "openai" },
+// Endpoint path → short display label and color class
+const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
+    "POST /v1/chat/completions": { label: "Chat", color: EP_COLORS.chat },
+    "POST /v1/completions": { label: "Completions", color: EP_COLORS.chat },
+    "POST /v1/messages": { label: "Anthropic", color: EP_COLORS.anthropic },
+    "POST /v1/responses": { label: "Responses", color: EP_COLORS.responses },
+    "POST /v1/embeddings": { label: "Embeddings", color: EP_COLORS.embeddings },
+    "POST /v1/moderations": { label: "Moderations", color: EP_COLORS.misc },
+    "POST /v1/images/generations": { label: "Image Gen", color: EP_COLORS.image },
+    "POST /v1/images/edits": { label: "Image Edit", color: EP_COLORS.image },
+    "POST /v1/audio/speech": { label: "TTS", color: EP_COLORS.misc },
+    "POST /v1/audio/transcriptions": { label: "STT", color: EP_COLORS.misc },
+    "POST /v1/audio/translations": { label: "Translate", color: EP_COLORS.misc },
+    "POST /v1/rerank": { label: "Rerank", color: EP_COLORS.misc },
+    "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc },
+    "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video },
+    "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
 }
 
 // Translate a server-side type_name (e.g. "chat") via i18n keys "enterprise.myAccess.typeName_chat".
@@ -76,12 +76,17 @@ function ownerDisplayName(owner: string): string {
     return OWNER_DISPLAY_NAMES[owner.toLowerCase()] ?? owner
 }
 
-// Returns the appropriate Base URL for SDK configuration based on protocol.
-// OpenAI-compatible endpoints use baseUrl as-is (ending with /v1).
-// Anthropic SDK expects baseUrl without /v1 (it appends /v1/messages itself).
-function getBaseUrlForProtocol(baseUrl: string, protocol: "openai" | "anthropic"): string {
-    if (protocol === "anthropic") return baseUrl.replace(/\/v1\/?$/, '')
-    return baseUrl
+// Build the full endpoint URL from base URL and endpoint descriptor.
+// e.g. baseUrl="https://api.example.com/v1", ep="POST /v1/chat/completions"
+//   → "https://api.example.com/v1/chat/completions"
+function getEndpointUrl(baseUrl: string, ep: string): string {
+    // Extract path from "METHOD /v1/..." → "/v1/..."
+    const path = ep.replace(/^\S+\s+/, "")
+    // Strip the /v1 prefix since baseUrl already ends with /v1
+    const suffix = path.replace(/^\/v1\/?/, "/")
+    // Ensure no double slashes when joining
+    const base = baseUrl.replace(/\/+$/, "")
+    return base + suffix
 }
 
 function maskKey(key: string): string {
@@ -97,7 +102,7 @@ function copyToClipboard(text: string, successMsg: string) {
 function formatPrice(price: number, unit: number, freeLabel: string): string {
     if (price === 0) return freeLabel
     const perMillion = (price / (unit || 1000)) * 1_000_000
-    return `$${perMillion.toFixed(2)}`
+    return `¥${perMillion.toFixed(2)}`
 }
 
 // --- Personal Stats Section ---
@@ -578,15 +583,13 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                                             {m.supported_endpoints?.length > 0 ? (
                                                                 m.supported_endpoints.map(ep => {
                                                                     const info = ENDPOINT_LABELS[ep]
-                                                                    const protocol = info?.protocol || "openai"
-                                                                    const copyUrl = getBaseUrlForProtocol(baseUrl, protocol)
-                                                                    const protocolLabel = protocol === "anthropic" ? "Anthropic" : "OpenAI"
+                                                                    const fullUrl = getEndpointUrl(baseUrl, ep)
                                                                     return (
                                                                         <button
                                                                             key={ep}
                                                                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 ${info?.color || EP_COLORS.misc}`}
-                                                                            title={`${protocolLabel} Base URL: ${copyUrl}`}
-                                                                            onClick={() => copyToClipboard(copyUrl, `${protocolLabel} Base URL ${t("enterprise.myAccess.endpointCopied")}`)}
+                                                                            title={fullUrl}
+                                                                            onClick={() => copyToClipboard(fullUrl, `${info?.label || ep} ${t("enterprise.myAccess.endpointCopied")}`)}
                                                                         >
                                                                             {info?.label || ep}
                                                                         </button>

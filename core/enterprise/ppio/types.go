@@ -3,7 +3,6 @@
 package ppio
 
 import (
-	"slices"
 	"time"
 )
 
@@ -31,19 +30,6 @@ type PPIOModel struct {
 // PPIOModelsResponse represents the response from PPIO /v1/models API
 type PPIOModelsResponse struct {
 	Data []PPIOModel `json:"data"`
-}
-
-func (m PPIOModel) GetID() string        { return m.ID }
-func (m PPIOModel) GetEndpoints() []string { return m.Endpoints }
-
-// IsAnthropicCompatible checks if the model supports Anthropic endpoint
-func (m *PPIOModel) IsAnthropicCompatible() bool {
-	return slices.Contains(m.Endpoints, "anthropic")
-}
-
-// IsOpenAICompatible checks if the model supports OpenAI chat/completions endpoint
-func (m *PPIOModel) IsOpenAICompatible() bool {
-	return slices.Contains(m.Endpoints, "chat/completions")
 }
 
 // GetInputPricePerToken returns input price per token (not per million)
@@ -130,19 +116,6 @@ func (m *PPIOModelV2) GetCacheReadPricePerToken() float64 {
 // GetCacheCreationPricePerToken converts 厘/百万token → 元/token
 func (m *PPIOModelV2) GetCacheCreationPricePerToken() float64 {
 	return float64(m.CacheCreationInputTokenPricePerM) / 1_000_000_000
-}
-
-func (m PPIOModelV2) GetID() string        { return m.ID }
-func (m PPIOModelV2) GetEndpoints() []string { return m.Endpoints }
-
-// IsAnthropicCompatible checks if the V2 model supports Anthropic endpoint
-func (m *PPIOModelV2) IsAnthropicCompatible() bool {
-	return slices.Contains(m.Endpoints, "anthropic")
-}
-
-// IsOpenAICompatible checks if the V2 model supports OpenAI chat/completions endpoint
-func (m *PPIOModelV2) IsOpenAICompatible() bool {
-	return slices.Contains(m.Endpoints, "chat/completions")
 }
 
 // ToV1 converts a PPIOModelV2 to PPIOModel for backward compatibility

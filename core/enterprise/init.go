@@ -7,6 +7,7 @@ import (
 
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	enterprisenotify "github.com/labring/aiproxy/core/enterprise/notify"
+	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,6 +26,12 @@ func Initialize() {
 func PostDBInit() {
 	// Load role permissions into memory cache
 	LoadRolePermissions()
+
+	// Ensure PPIO channel model lists match local ModelConfig.
+	// This fixes gaps where models were synced but Channel.Models wasn't updated.
+	if _, err := ppio.EnsurePPIOChannels(); err != nil {
+		log.Warnf("PPIO channel refresh on startup: %v", err)
+	}
 
 	// Start Feishu organization sync scheduler (every 6 hours)
 	ctx := context.Background()

@@ -154,7 +154,7 @@ export function formatCellValue(key: string, value: unknown): string {
 
     // cost fields
     if (key.includes("amount") || key.includes("cost") || key === "avg_cost_per_req" || key === "cost_per_1k_tokens") {
-        return `$${n.toFixed(4)}`
+        return `¥${n.toFixed(4)}`
     }
 
     // latency
