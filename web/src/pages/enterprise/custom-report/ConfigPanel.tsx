@@ -9,7 +9,6 @@ import {
     PanelLeftOpen,
     Loader2,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -21,56 +20,43 @@ import {
     type FieldDef,
     type ReportTemplate,
 } from "./types"
-import { useHasPermission } from "@/lib/permissions"
 
 // ─── ChipSelector ───────────────────────────────────────────────────────────
-
-// Color schemes for dimension vs measure chips
-const CHIP_COLORS = {
-    dimension: { bg: "#4ECDC4", hover: "#3DBDB5", ring: "#4ECDC4" },
-    measure: { bg: "#6A6DE6", hover: "#5A5DD6", ring: "#6A6DE6" },
-} as const
-
-type ChipColorScheme = keyof typeof CHIP_COLORS
 
 function ChipSelector({
     fields,
     selected,
     onChange,
     lang,
-    colorScheme = "measure",
+    active: activeColor = "bg-[#6A6DE6] text-white",
 }: {
     fields: FieldDef[]
     selected: string[]
     onChange: (keys: string[]) => void
     lang: string
-    colorScheme?: ChipColorScheme
+    active?: string
 }) {
-    const colors = CHIP_COLORS[colorScheme]
     return (
         <div className="flex flex-wrap gap-1.5">
             {fields.map((f) => {
-                const active = selected.includes(f.key)
+                const isActive = selected.includes(f.key)
                 return (
                     <Badge
                         key={f.key}
-                        variant={active ? "default" : "outline"}
+                        variant={isActive ? "default" : "outline"}
                         className={`cursor-pointer select-none transition-all text-xs px-2.5 py-1 ${
-                            active
-                                ? "text-white border-transparent"
-                                : ""
+                            isActive ? `border-transparent ${activeColor}` : "hover:bg-muted/50"
                         }`}
-                        style={active ? { backgroundColor: colors.bg } : { borderColor: `${colors.ring}30` }}
                         onClick={() => {
                             onChange(
-                                active
+                                isActive
                                     ? selected.filter((k) => k !== f.key)
                                     : [...selected, f.key],
                             )
                         }}
                     >
                         {getLabel(f.key, lang)}
-                        {active && <X className="w-3 h-3 ml-1" />}
+                        {isActive && <X className="w-3 h-3 ml-1" />}
                     </Badge>
                 )
             })}
@@ -87,9 +73,7 @@ export interface ConfigPanelProps {
     onDimensionsChange: (dims: string[]) => void
     selectedMeasures: string[]
     onMeasuresChange: (measures: string[]) => void
-    onGenerate: () => void
     onApplyTemplate: (template: ReportTemplate) => void
-    canGenerate: boolean
     isPending: boolean
 }
 
@@ -100,25 +84,13 @@ export function ConfigPanel({
     onDimensionsChange,
     selectedMeasures,
     onMeasuresChange,
-    onGenerate,
     onApplyTemplate,
-    canGenerate,
     isPending,
 }: ConfigPanelProps) {
     const { t, i18n } = useTranslation()
     const lang = i18n.language
-    const canManage = useHasPermission('custom_report_manage')
 
-    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["requests", "computed"]))
-
-    const toggleCategory = (cat: string) => {
-        setExpandedCategories((prev) => {
-            const next = new Set(prev)
-            if (next.has(cat)) next.delete(cat)
-            else next.add(cat)
-            return next
-        })
-    }
+    const [templatesOpen, setTemplatesOpen] = useState(false)
 
     const measuresByCategory = CATEGORIES.map((cat) => ({
         category: cat,
@@ -131,12 +103,10 @@ export function ConfigPanel({
 
     const handleDimensionChange = (next: string[]) => {
         let result = next
-        // Find which department dim was just added
         const addedDept = next.find((d) => DEPT_DIMS.has(d) && !selectedDimensions.includes(d))
         if (addedDept) {
             result = result.filter((d) => !DEPT_DIMS.has(d) || d === addedDept)
         }
-        // Find which time dim was just added
         const addedTime = result.find((d) => TIME_DIMS.has(d) && !selectedDimensions.includes(d))
         if (addedTime) {
             result = result.filter((d) => !TIME_DIMS.has(d) || d === addedTime)
@@ -165,142 +135,102 @@ export function ConfigPanel({
             {/* Header with collapse button */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
                 <h2 className="text-sm font-semibold">{t("enterprise.customReport.configPanel")}</h2>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onToggleCollapse}
-                    className="h-7 w-7"
-                    title={t("enterprise.customReport.collapsePanel")}
-                >
-                    <PanelLeftClose className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                    {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6A6DE6]" />}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onToggleCollapse}
+                        className="h-7 w-7"
+                        title={t("enterprise.customReport.collapsePanel")}
+                    >
+                        <PanelLeftClose className="w-4 h-4" />
+                    </Button>
+                </div>
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-                {/* Templates */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                {/* Templates — collapsed by default */}
                 <div>
-                    <div className="flex items-center gap-1.5 text-sm font-medium mb-2">
+                    <button
+                        type="button"
+                        className="flex items-center gap-1.5 text-sm font-medium w-full text-left hover:text-[#6A6DE6] transition-colors"
+                        onClick={() => setTemplatesOpen(!templatesOpen)}
+                    >
+                        {templatesOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         <Zap className="w-3.5 h-3.5 text-amber-500" />
                         {t("enterprise.customReport.templates.title")}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {REPORT_TEMPLATES.map((tpl) => (
-                            <Button
-                                key={tpl.id}
-                                variant="outline"
-                                size="sm"
-                                className="text-xs h-7"
-                                onClick={() => onApplyTemplate(tpl)}
-                                disabled={isPending}
-                            >
-                                {t(tpl.labelKey as never)}
-                            </Button>
-                        ))}
-                    </div>
+                    </button>
+                    {templatesOpen && (
+                        <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
+                            {REPORT_TEMPLATES.map((tpl) => (
+                                <Button
+                                    key={tpl.id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-7"
+                                    onClick={() => {
+                                        onApplyTemplate(tpl)
+                                        setTemplatesOpen(false)
+                                    }}
+                                    disabled={isPending}
+                                >
+                                    {t(tpl.labelKey as never)}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Dimensions */}
-                <Card className="border-dashed">
-                    <CardHeader className="pb-2 pt-3 px-3">
-                        <CardTitle className="text-sm">{t("enterprise.customReport.dimensions")}</CardTitle>
-                        <CardDescription className="text-xs">{t("enterprise.customReport.dimensionsDesc")}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-3 pb-3 space-y-2">
-                        {/* Identity dimensions */}
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">
-                                {t("enterprise.customReport.identityDims")}
-                                <span className="text-muted-foreground/50 ml-1">
-                                    ({t("enterprise.customReport.mutuallyExclusive")})
-                                </span>
-                            </div>
-                            <ChipSelector
-                                fields={DIMENSION_FIELDS.filter((f) => f.category === "identity")}
-                                selected={selectedDimensions}
-                                onChange={handleDimensionChange}
-                                lang={lang}
-                                colorScheme="dimension"
-                            />
-                        </div>
-                        {/* Time dimensions */}
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">
-                                {t("enterprise.customReport.timeDims")}
-                                <span className="text-muted-foreground/50 ml-1">
-                                    ({t("enterprise.customReport.mutuallyExclusive")})
-                                </span>
-                            </div>
-                            <ChipSelector
-                                fields={DIMENSION_FIELDS.filter((f) => f.category === "time")}
-                                selected={selectedDimensions}
-                                onChange={handleDimensionChange}
-                                lang={lang}
-                                colorScheme="dimension"
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Measures */}
-                <Card className="border-dashed">
-                    <CardHeader className="pb-2 pt-3 px-3">
-                        <CardTitle className="text-sm">{t("enterprise.customReport.measures")}</CardTitle>
-                        <CardDescription className="text-xs">{t("enterprise.customReport.measuresDesc")}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-3 pb-3 space-y-1.5">
-                        {measuresByCategory.map(({ category, fields }) => (
-                            <div key={category}>
-                                <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-full text-left py-0.5"
-                                    onClick={() => toggleCategory(category)}
-                                >
-                                    {expandedCategories.has(category) ? (
-                                        <ChevronDown className="w-3 h-3" />
-                                    ) : (
-                                        <ChevronRight className="w-3 h-3" />
-                                    )}
-                                    {t(`enterprise.customReport.categories.${category}`)}
-                                    <span className="text-xs text-muted-foreground/60 ml-1">
-                                        ({fields.filter((f) => selectedMeasures.includes(f.key)).length}/{fields.length})
-                                    </span>
-                                </button>
-                                {expandedCategories.has(category) && (
-                                    <div className="ml-4 mt-1">
-                                        <ChipSelector
-                                            fields={fields}
-                                            selected={selectedMeasures}
-                                            onChange={onMeasuresChange}
-                                            lang={lang}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Sticky generate button */}
-            {canManage && (
-                <div className="px-4 py-3 border-t">
-                    <Button
-                        onClick={onGenerate}
-                        disabled={!canGenerate || isPending}
-                        className="w-full bg-[#6A6DE6] hover:bg-[#5A5DD6] text-white"
-                    >
-                        {isPending ? (
-                            <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                {t("enterprise.customReport.generating")}
-                            </>
-                        ) : (
-                            t("enterprise.customReport.generate")
-                        )}
-                    </Button>
+                <div className="rounded-lg bg-muted/30 p-3 space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {t("enterprise.customReport.dimensions")}
+                    </h3>
+                    <ChipSelector
+                        fields={DIMENSION_FIELDS.filter((f) => f.category === "identity")}
+                        selected={selectedDimensions}
+                        onChange={handleDimensionChange}
+                        lang={lang}
+                        active="bg-[#6A6DE6]/15 text-[#6A6DE6] border-[#6A6DE6]/30"
+                    />
+                    <div className="border-t border-border/50" />
+                    <ChipSelector
+                        fields={DIMENSION_FIELDS.filter((f) => f.category === "time")}
+                        selected={selectedDimensions}
+                        onChange={handleDimensionChange}
+                        lang={lang}
+                        active="bg-[#6A6DE6]/15 text-[#6A6DE6] border-[#6A6DE6]/30"
+                    />
                 </div>
-            )}
+
+                {/* Measures — all flat with category headers */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {t("enterprise.customReport.measures")}
+                    </h3>
+                    {measuresByCategory.map(({ category, fields }) => {
+                        const selectedCount = fields.filter((f) => selectedMeasures.includes(f.key)).length
+                        return (
+                            <div key={category}>
+                                <div className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-1">
+                                    {t(`enterprise.customReport.categories.${category}`)}
+                                    {selectedCount > 0 && (
+                                        <span className="text-[#6A6DE6] ml-1">({selectedCount})</span>
+                                    )}
+                                </div>
+                                <ChipSelector
+                                    fields={fields}
+                                    selected={selectedMeasures}
+                                    onChange={onMeasuresChange}
+                                    lang={lang}
+                                />
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
         </div>
     )
 }

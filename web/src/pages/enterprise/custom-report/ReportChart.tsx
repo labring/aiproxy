@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import * as echarts from "echarts"
 import type { CustomReportResponse } from "@/api/enterprise"
 import { useDarkMode, getEChartsTheme } from "@/lib/enterprise"
@@ -24,16 +24,28 @@ function legendGridTop(itemCount: number, containerWidth = 800): number {
     return Math.max(rows * 22 + 8, 30)
 }
 
-/** Build a wrapping legend config (plain, centered, auto line-break) */
+/** Build a wrapping legend config with auto scroll for many items */
 function wrapLegend(data: string[], textColor: string): echarts.EChartsOption["legend"] {
+    const useScroll = data.length > 15
     return {
         data,
         textStyle: { color: textColor, fontSize: 11 },
-        type: "plain" as const,
+        type: useScroll ? "scroll" : ("plain" as const),
         width: "90%",
         left: "center",
         top: 0,
+        ...(useScroll ? { pageTextStyle: { color: textColor } } : {}),
     }
+}
+
+/** Compute chart container height based on legend count */
+function computeChartHeight(legendCount: number, fullscreen: boolean): number {
+    if (fullscreen) return 0 // CSS-controlled
+    const legendRows = Math.ceil(Math.min(legendCount, 15) / 5)
+    const legendHeight = legendRows * 22 + 8
+    const minChartArea = 300
+    const maxHeight = 600
+    return Math.min(legendHeight + minChartArea, maxHeight)
 }
 
 /** Compute rotation and interval for X-axis labels */
@@ -71,12 +83,14 @@ export function ReportChart({
     measures,
     chartType,
     lang,
+    fullscreen = false,
 }: {
     data: CustomReportResponse
     dimensions: string[]
     measures: string[]
     chartType: ChartType
     lang: string
+    fullscreen?: boolean
 }) {
     const chartRef = useRef<HTMLDivElement>(null)
     const instance = useRef<echarts.ECharts | null>(null)
@@ -403,6 +417,28 @@ export function ReportChart({
         }
     }, [data, dimensions, measures, chartType, lang, isDark])
 
+    // Estimate legend count for dynamic height
+    const legendCount = useMemo(() => {
+        const resolvedType = chartType === "auto" ? recommendChartType(dimensions, measures) : chartType
+        if (resolvedType === "pie" || resolvedType === "treemap") return 0 // no legend-driven height
+        if (resolvedType === "heatmap") return 0
+
+        const { secondary } = splitDimensions(dimensions)
+        if (secondary) {
+            const secondaryValues = new Set(data.rows.map((r) => formatDimValue(secondary, r[secondary])))
+            return measures.length === 1 ? secondaryValues.size : secondaryValues.size * measures.length
+        }
+        return measures.length
+    }, [data, dimensions, measures, chartType])
+
+    const dynamicHeight = computeChartHeight(legendCount, fullscreen)
+
+    // Resize when fullscreen or dynamic height changes
+    useEffect(() => {
+        const timer = setTimeout(() => instance.current?.resize(), 50)
+        return () => clearTimeout(timer)
+    }, [fullscreen, dynamicHeight])
+
     // Clean up on unmount
     useEffect(() => {
         return () => {
@@ -411,5 +447,11 @@ export function ReportChart({
         }
     }, [])
 
-    return <div ref={chartRef} className="w-full h-[400px]" />
+    return (
+        <div
+            ref={chartRef}
+            className="w-full"
+            style={{ height: fullscreen ? "calc(100vh - 120px)" : `${dynamicHeight}px` }}
+        />
+    )
 }

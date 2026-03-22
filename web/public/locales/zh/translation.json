@@ -576,6 +576,8 @@
       "selectDimension": "请选择至少一个维度",
       "selectMeasure": "请选择至少一个度量",
       "exportCsv": "导出 CSV",
+      "fullscreen": "全屏查看",
+      "pressEscToExit": "按 Esc 退出全屏",
       "chartView": "图表",
       "tableView": "表格",
       "barChart": "柱状图",

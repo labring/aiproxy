@@ -8,7 +8,6 @@ import {
     Filter,
     Check,
     ChevronsUpDown,
-    Play,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -259,8 +258,6 @@ export interface FilterBarProps {
     onFilterModelsChange: (models: string[]) => void
     filterUsers: string[]
     onFilterUsersChange: (users: string[]) => void
-    onApply: () => void
-    isPending: boolean
 }
 
 export function FilterBar({
@@ -274,8 +271,6 @@ export function FilterBar({
     onFilterModelsChange,
     filterUsers,
     onFilterUsersChange,
-    onApply,
-    isPending,
 }: FilterBarProps) {
     const { t } = useTranslation()
     const enterpriseUser = useAuthStore(s => s.enterpriseUser)
@@ -396,16 +391,6 @@ export function FilterBar({
                 </Popover>
             </div>
 
-            {/* Apply button */}
-            <Button
-                size="sm"
-                className="h-8 bg-[#6A6DE6] hover:bg-[#5A5DD6] text-white gap-1.5"
-                onClick={onApply}
-                disabled={isPending}
-            >
-                <Play className="w-3.5 h-3.5" />
-                {t("enterprise.customReport.apply")}
-            </Button>
         </div>
     )
 }

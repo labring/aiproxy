@@ -9,6 +9,8 @@ import {
     Grid3X3,
     Download,
     Columns2,
+    Maximize2,
+    X,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -57,9 +59,8 @@ export default function EnterpriseCustomReport() {
     // Layout state
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
-
-    // Ref to track pending template apply
-    const pendingGenerate = useRef(false)
+    const [chartFullscreen, setChartFullscreen] = useState(false)
+    const dialogRef = useRef<HTMLDialogElement>(null)
 
     // Generate report mutation
     const mutation = useMutation({
@@ -103,24 +104,24 @@ export default function EnterpriseCustomReport() {
         setSelectedDimensions(template.dimensions)
         setSelectedMeasures(template.measures)
         setPivotMeasure("")
-        pendingGenerate.current = true
     }, [])
 
-    // Auto-generate after template apply
+    // Auto-generate on any config change (debounced 600ms)
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>()
     useEffect(() => {
-        if (pendingGenerate.current) {
-            pendingGenerate.current = false
-            handleGenerate(selectedDimensions, selectedMeasures)
-        }
-    }, [selectedDimensions, selectedMeasures, handleGenerate])
+        if (selectedDimensions.length === 0 || selectedMeasures.length === 0) return
+        clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => {
+            handleGenerate()
+        }, 600)
+        return () => clearTimeout(debounceRef.current)
+    }, [selectedDimensions, selectedMeasures, timeRange, customDateRange, filterDepts, filterModels, filterUsers, handleGenerate])
 
     // Reset viewMode if pivot not available
     const canPivot = selectedDimensions.length === 2
     useEffect(() => {
         if (!canPivot && viewMode === "pivot") setViewMode("table")
     }, [canPivot, viewMode])
-
-    const canGenerate = selectedDimensions.length > 0 && selectedMeasures.length > 0
 
     const activePivotMeasure = pivotMeasure && selectedMeasures.includes(pivotMeasure)
         ? pivotMeasure
@@ -173,6 +174,16 @@ export default function EnterpriseCustomReport() {
         URL.revokeObjectURL(url)
     }
 
+    const openFullscreen = useCallback(() => {
+        setChartFullscreen(true)
+        dialogRef.current?.showModal()
+    }, [])
+
+    const closeFullscreen = useCallback(() => {
+        dialogRef.current?.close()
+        setChartFullscreen(false)
+    }, [])
+
     const hasResults = reportData && reportData.rows.length > 0
 
     // ConfigPanel content (shared between desktop sidebar and mobile sheet)
@@ -184,15 +195,10 @@ export default function EnterpriseCustomReport() {
             onDimensionsChange={setSelectedDimensions}
             selectedMeasures={selectedMeasures}
             onMeasuresChange={setSelectedMeasures}
-            onGenerate={() => {
-                handleGenerate()
-                setMobileSheetOpen(false)
-            }}
             onApplyTemplate={(tpl) => {
                 applyTemplate(tpl)
                 setMobileSheetOpen(false)
             }}
-            canGenerate={canGenerate}
             isPending={mutation.isPending}
         />
     )
@@ -224,9 +230,7 @@ export default function EnterpriseCustomReport() {
                             onDimensionsChange={setSelectedDimensions}
                             selectedMeasures={selectedMeasures}
                             onMeasuresChange={setSelectedMeasures}
-                            onGenerate={() => handleGenerate()}
                             onApplyTemplate={applyTemplate}
-                            canGenerate={canGenerate}
                             isPending={mutation.isPending}
                         />
                     ) : (
@@ -270,13 +274,18 @@ export default function EnterpriseCustomReport() {
                         onFilterModelsChange={setFilterModels}
                         filterUsers={filterUsers}
                         onFilterUsersChange={setFilterUsers}
-                        onApply={() => handleGenerate()}
-                        isPending={mutation.isPending}
                     />
+
+                    {/* Loading progress bar */}
+                    {mutation.isPending && (
+                        <div className="h-0.5 w-full bg-[#6A6DE6]/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#6A6DE6] rounded-full animate-pulse w-2/3" />
+                        </div>
+                    )}
 
                     {/* Error state */}
                     {mutation.isError && (
-                        <Card className="border-destructive">
+                        <Card className="border-destructive shadow-sm">
                             <CardContent className="py-4 text-center text-destructive">
                                 {mutation.error instanceof Error ? mutation.error.message : String(mutation.error)}
                             </CardContent>
@@ -290,65 +299,26 @@ export default function EnterpriseCustomReport() {
                             <KpiSummaryRow data={reportData} measures={selectedMeasures} />
 
                             {/* Toolbar */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                {/* View mode switcher */}
-                                <div className="flex items-center border rounded-md overflow-hidden">
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button
-                                                    variant={viewMode === "table" ? "default" : "ghost"}
-                                                    size="sm"
-                                                    onClick={() => setViewMode("table")}
-                                                    className={viewMode === "table" ? "bg-[#6A6DE6] text-white rounded-none" : "rounded-none"}
-                                                >
-                                                    <Table2 className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{t("enterprise.customReport.tableView")}</TooltipContent>
-                                        </Tooltip>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button
-                                                    variant={viewMode === "chart" ? "default" : "ghost"}
-                                                    size="sm"
-                                                    onClick={() => setViewMode("chart")}
-                                                    className={viewMode === "chart" ? "bg-[#6A6DE6] text-white rounded-none" : "rounded-none"}
-                                                >
-                                                    <BarChart3 className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{t("enterprise.customReport.chartView")}</TooltipContent>
-                                        </Tooltip>
-                                        {canPivot && (
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button
-                                                        variant={viewMode === "pivot" ? "default" : "ghost"}
-                                                        size="sm"
-                                                        onClick={() => setViewMode("pivot")}
-                                                        className={viewMode === "pivot" ? "bg-[#6A6DE6] text-white rounded-none" : "rounded-none"}
-                                                    >
-                                                        <Grid3X3 className="w-4 h-4" />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>{t("enterprise.customReport.pivotView")}</TooltipContent>
-                                            </Tooltip>
-                                        )}
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button
-                                                    variant={viewMode === "split" ? "default" : "ghost"}
-                                                    size="sm"
-                                                    onClick={() => setViewMode("split")}
-                                                    className={viewMode === "split" ? "bg-[#6A6DE6] text-white rounded-none" : "rounded-none"}
-                                                >
-                                                    <Columns2 className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{t("enterprise.customReport.splitView")}</TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm flex flex-wrap items-center gap-2 py-1">
+                                {/* View mode switcher — with text labels */}
+                                <div className="flex items-center border rounded-lg overflow-hidden">
+                                    {([
+                                        { mode: "table" as ViewMode, icon: Table2, labelKey: "enterprise.customReport.tableView" },
+                                        { mode: "chart" as ViewMode, icon: BarChart3, labelKey: "enterprise.customReport.chartView" },
+                                        ...(canPivot ? [{ mode: "pivot" as ViewMode, icon: Grid3X3, labelKey: "enterprise.customReport.pivotView" }] : []),
+                                        { mode: "split" as ViewMode, icon: Columns2, labelKey: "enterprise.customReport.splitView" },
+                                    ]).map(({ mode, icon: Icon, labelKey }) => (
+                                        <Button
+                                            key={mode}
+                                            variant={viewMode === mode ? "default" : "ghost"}
+                                            size="sm"
+                                            onClick={() => setViewMode(mode)}
+                                            className={`gap-1.5 rounded-none text-xs ${viewMode === mode ? "bg-[#6A6DE6] text-white" : ""}`}
+                                        >
+                                            <Icon className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">{t(labelKey as never)}</span>
+                                        </Button>
+                                    ))}
                                 </div>
 
                                 {/* Chart type picker (visible in chart and split modes) */}
@@ -356,15 +326,31 @@ export default function EnterpriseCustomReport() {
                                     <ChartTypePicker value={chartType} onChange={setChartType} />
                                 )}
 
-                                {/* Export */}
-                                <Button variant="outline" size="sm" onClick={handleExportCsv} className="ml-auto">
-                                    <Download className="w-4 h-4 mr-1.5" />
-                                    {t("enterprise.customReport.exportCsv")}
-                                </Button>
+                                <div className="ml-auto flex items-center gap-2">
+                                    {/* Fullscreen (chart/split modes only) */}
+                                    {(viewMode === "chart" || viewMode === "split") && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="outline" size="sm" onClick={openFullscreen}>
+                                                        <Maximize2 className="w-4 h-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>{t("enterprise.customReport.fullscreen")}</TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
+
+                                    {/* Export */}
+                                    <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                                        <Download className="w-4 h-4 mr-1.5" />
+                                        {t("enterprise.customReport.exportCsv")}
+                                    </Button>
+                                </div>
                             </div>
 
                             {/* Content card */}
-                            <Card>
+                            <Card className="shadow-sm border-0">
                                 <CardContent className="p-0">
                                     {viewMode === "table" && (
                                         <ReportTable
@@ -417,7 +403,7 @@ export default function EnterpriseCustomReport() {
 
                     {/* Empty result state */}
                     {reportData && reportData.rows.length === 0 && (
-                        <Card>
+                        <Card className="shadow-sm border-0">
                             <CardContent className="py-12 text-center text-muted-foreground">
                                 {t("enterprise.customReport.noData")}
                             </CardContent>
@@ -426,10 +412,10 @@ export default function EnterpriseCustomReport() {
 
                     {/* Initial state */}
                     {!reportData && !mutation.isPending && (
-                        <Card className="border-dashed">
+                        <Card className="shadow-sm border-0">
                             <CardContent className="py-12 text-center text-muted-foreground">
-                                <FileBarChart className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                                <p>
+                                <FileBarChart className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                <p className="text-sm">
                                     {selectedDimensions.length === 0
                                         ? t("enterprise.customReport.selectDimension")
                                         : selectedMeasures.length === 0
@@ -441,6 +427,42 @@ export default function EnterpriseCustomReport() {
                     )}
                 </div>
             </div>
+
+            {/* Fullscreen chart dialog */}
+            <dialog
+                ref={dialogRef}
+                className="fixed inset-0 w-[95vw] h-[90vh] max-w-none max-h-none bg-background rounded-xl shadow-2xl p-0 backdrop:bg-black/50"
+                onClose={() => setChartFullscreen(false)}
+            >
+                {chartFullscreen && hasResults && (
+                    <div className="flex flex-col h-full">
+                        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+                            <div className="flex items-center gap-2">
+                                <ChartTypePicker value={chartType} onChange={setChartType} />
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground">
+                                    {t("enterprise.customReport.pressEscToExit")}
+                                    <kbd className="ml-1.5 px-1.5 py-0.5 rounded border bg-muted text-[10px] font-mono">esc</kbd>
+                                </span>
+                                <Button variant="ghost" size="icon" onClick={closeFullscreen} className="h-8 w-8">
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="flex-1 p-4 overflow-hidden">
+                            <ReportChart
+                                data={reportData}
+                                dimensions={selectedDimensions}
+                                measures={selectedMeasures}
+                                chartType={chartType}
+                                lang={lang}
+                                fullscreen={true}
+                            />
+                        </div>
+                    </div>
+                )}
+            </dialog>
         </div>
     )
 }

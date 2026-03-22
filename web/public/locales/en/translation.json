@@ -481,6 +481,8 @@
       "selectDimension": "Select at least one dimension",
       "selectMeasure": "Select at least one measure",
       "exportCsv": "Export CSV",
+      "fullscreen": "Fullscreen",
+      "pressEscToExit": "Press Esc to exit fullscreen",
       "chartView": "Chart",
       "tableView": "Table",
       "barChart": "Bar Chart",

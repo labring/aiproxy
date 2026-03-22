@@ -30,7 +30,7 @@ export function KpiSummaryRow({
     return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Row count card */}
-            <Card className="border border-gray-100 dark:border-gray-800">
+            <Card className="shadow-sm border-0">
                 <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                         <div>
@@ -48,7 +48,7 @@ export function KpiSummaryRow({
             {kpis.map((kpi) => {
                 const Icon = ICON_MAP[kpi.key] ?? BarChart2
                 return (
-                    <Card key={kpi.key} className="border border-gray-100 dark:border-gray-800">
+                    <Card key={kpi.key} className="shadow-sm border-0">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
