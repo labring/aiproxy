@@ -54,7 +54,12 @@ func HandleDepartmentTrend(c *gin.Context) {
 func HandleUserRanking(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
 	departmentID := c.Query("department_id")
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	limit := 50 // default
+	if ls := c.Query("limit"); ls != "" {
+		if v, err := strconv.Atoi(ls); err == nil {
+			limit = v
+		}
+	}
 
 	ranking, err := GetUserRanking(startTime, endTime, departmentID, limit)
 	if err != nil {

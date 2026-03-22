@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -46,15 +47,19 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
-	if limit <= 0 {
+	if limit < 0 {
 		limit = 50
 	}
 
-	// Get feishu users (optionally filtered by department — matches any level)
+	// Get feishu users (optionally filtered by department).
+	// Use GetDescendantDepartmentIDs to handle dual-ID formats (department_id vs open_department_id)
+	// and to match all descendants, exactly as the user management page does.
 	query := model.DB.Model(&models.FeishuUser{}).Select("group_id", "name", "department_id")
 	if departmentID != "" {
-		query = query.Where("department_id = ? OR level1_dept_id = ? OR level2_dept_id = ?",
-			departmentID, departmentID, departmentID)
+		matchingDepts := feishu.GetDescendantDepartmentIDs(departmentID)
+		if len(matchingDepts) > 0 {
+			query = query.Where("department_id IN ?", matchingDepts)
+		}
 	}
 
 	var feishuUsers []models.FeishuUser

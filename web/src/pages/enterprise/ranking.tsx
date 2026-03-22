@@ -118,7 +118,7 @@ export default function EnterpriseRanking() {
         queryFn: () =>
             enterpriseApi.getUserRanking(
                 departmentFilter,
-                limit || undefined,
+                limit,
                 start,
                 end,
             ),

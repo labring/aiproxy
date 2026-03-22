@@ -338,13 +338,12 @@ func collectChannelModels[T endpointModel](models []T) (anthropicModels, openaiM
 			anthropicModels = append(anthropicModels, id)
 		}
 
-		if slices.ContainsFunc(eps, func(ep string) bool { return ep != "anthropic" }) {
-			openaiModels = append(openaiModels, id)
-		} else if len(eps) == 0 {
-			// Models with no endpoints at all: include in openai channel as fallback
-			// so they remain accessible (they'll use the default chat/completions mode).
-			openaiModels = append(openaiModels, id)
-		}
+		// All models go to the openai channel, including anthropic-only ones (e.g. pa/claude-*).
+		// AI Proxy's protocol conversion handles chat/completions ↔ messages transparently,
+		// so anthropic-only models remain accessible via the standard OpenAI-compatible endpoint.
+		// Models with an explicit anthropic endpoint are additionally routed via the dedicated
+		// anthropic channel when one exists.
+		openaiModels = append(openaiModels, id)
 	}
 
 	slices.Sort(anthropicModels)

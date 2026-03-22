@@ -489,7 +489,7 @@ export const enterpriseApi = {
     ): Promise<UserRankingResponse> => {
         const params: Record<string, string> = buildTimeParams(startTimestamp, endTimestamp)
         if (departmentId) params.department_id = departmentId
-        if (limit) params.limit = String(limit)
+        if (limit !== undefined) params.limit = String(limit)
         return get<UserRankingResponse>('/enterprise/analytics/user/ranking', { params })
     },
 
