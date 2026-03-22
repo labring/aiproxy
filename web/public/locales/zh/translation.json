@@ -445,6 +445,8 @@
       "mgmtTokenConfigured": "管理 Token 已配置（已启用全量模型目录）",
       "mgmtTokenRequired": "请输入 Token",
       "mgmtTokenHint": "登录 ppio.com 后台，在浏览器「网络」面板中找到任意 API 请求的 Authorization 请求头，复制 Bearer 后的 token。配置后可同步全量 121 个模型，含闭源 pa/ 模型。",
+      "modelCoverage": "模型 Channel 覆盖率",
+      "uncoveredHint": "以下模型已同步但未分配到任何 Channel，将不会出现在「我的接入」中。重新执行同步后应自动修复。",
       "endpointLegend": "端点说明",
       "endpointChat": "OpenAI 兼容 (base_url: api.ppio.com/v1)",
       "endpointAnthropic": "Claude 原生协议 (base_url: api.ppio.com/anthropic)",

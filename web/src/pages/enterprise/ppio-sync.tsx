@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History, Save, Key } from 'lucide-react'
 import { ppioApi } from '../../api/ppio'
-import type { DiagnosticResult, ModelDiff, PPIOChannelItem, PPIOConfig, SyncHistory, SyncOptions, SyncProgressEvent } from '../../types/ppio'
+import type { DiagnosticResult, ModelCoverageResult, ModelDiff, PPIOChannelItem, PPIOConfig, SyncHistory, SyncOptions, SyncProgressEvent } from '../../types/ppio'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -70,6 +70,7 @@ export default function PPIOSyncPage() {
   const { t } = useTranslation()
   const canManage = useHasPermission('access_control_manage')
   const [diagnostic, setDiagnostic] = useState<DiagnosticResult | null>(null)
+  const [coverage, setCoverage] = useState<ModelCoverageResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -206,11 +207,20 @@ export default function PPIOSyncPage() {
     loadHistory()
   }, [])
 
+  const loadCoverage = async () => {
+    try {
+      const result = await ppioApi.modelCoverage()
+      setCoverage(result)
+    } catch {
+      // Non-critical — silently ignore
+    }
+  }
+
   const loadDiagnostic = async () => {
     setLoading(true)
     try {
-      const result = await ppioApi.diagnostic()
-      setDiagnostic(result)
+      const [diagResult] = await Promise.all([ppioApi.diagnostic(), loadCoverage()])
+      setDiagnostic(diagResult)
       toast.success(t('common.success'))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -439,6 +449,44 @@ export default function PPIOSyncPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Model Coverage Card */}
+      {coverage && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">{t('enterprise.ppio.modelCoverage')}</CardTitle>
+              <Badge
+                className={
+                  coverage.uncovered.length === 0
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                }
+              >
+                {coverage.covered} / {coverage.total}
+              </Badge>
+            </div>
+          </CardHeader>
+          {coverage.uncovered.length > 0 && (
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-2">{t('enterprise.ppio.uncoveredHint')}</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {coverage.uncovered.map(item => (
+                  <div key={item.model} className="flex items-center flex-wrap gap-1 text-xs py-0.5">
+                    <span className="font-mono text-muted-foreground">{item.model}</span>
+                    <EndpointBadges endpoints={item.endpoints} />
+                    {item.model_type && item.model_type !== 'chat' && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                        {item.model_type}
+                      </Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Diagnostic Section */}
       <Card>

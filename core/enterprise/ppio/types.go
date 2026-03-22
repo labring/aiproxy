@@ -261,3 +261,17 @@ type SyncHistory struct {
 func (SyncHistory) TableName() string {
 	return "ppio_sync_history"
 }
+
+// ModelCoverageItem is a model that has a ModelConfig but is not in any enabled PPIO channel.
+type ModelCoverageItem struct {
+	Model     string   `json:"model"`
+	Endpoints []string `json:"endpoints,omitempty"`
+	ModelType string   `json:"model_type,omitempty"`
+}
+
+// ModelCoverageResult is returned by ModelCoverageHandler.
+type ModelCoverageResult struct {
+	Total     int                 `json:"total"`
+	Covered   int                 `json:"covered"`
+	Uncovered []ModelCoverageItem `json:"uncovered"`
+}

@@ -463,13 +463,20 @@ print(message.content[0].text)`,
 function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; baseUrl: string }) {
     const { t } = useTranslation()
     const [search, setSearch] = useState("")
-    const [typeFilter, setTypeFilter] = useState("all")
+    const [endpointFilter, setEndpointFilter] = useState("all")
     const [openOwners, setOpenOwners] = useState<Set<string>>(() => new Set(groups.map(g => g.owner)))
 
-    const allTypeNames = useMemo(() => {
-        const names = new Set<string>()
-        groups.forEach(g => g.models.forEach(m => { if (m.type_name) names.add(m.type_name) }))
-        return Array.from(names).sort()
+    // Collect unique endpoints across all models, ordered by ENDPOINT_LABELS definition order
+    const allEndpoints = useMemo(() => {
+        const seen = new Set<string>()
+        groups.forEach(g => g.models.forEach(m => m.supported_endpoints?.forEach(ep => seen.add(ep))))
+        const orderMap = new Map(Object.keys(ENDPOINT_LABELS).map((ep, i) => [ep, i]))
+        return Array.from(seen).sort((a, b) => {
+            const ia = orderMap.get(a) ?? Infinity
+            const ib = orderMap.get(b) ?? Infinity
+            if (ia === ib) return a.localeCompare(b)
+            return ia - ib
+        })
     }, [groups])
 
     const filteredGroups = useMemo(() => {
@@ -477,11 +484,11 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
             ...g,
             models: g.models.filter(m => {
                 const matchSearch = !search || m.model.toLowerCase().includes(search.toLowerCase())
-                const matchType = typeFilter === "all" || m.type_name === typeFilter
-                return matchSearch && matchType
+                const matchEndpoint = endpointFilter === "all" || m.supported_endpoints?.includes(endpointFilter)
+                return matchSearch && matchEndpoint
             }),
         })).filter(g => g.models.length > 0)
-    }, [groups, search, typeFilter])
+    }, [groups, search, endpointFilter])
 
     const toggleOwner = (owner: string) => {
         setOpenOwners(prev => {
@@ -507,15 +514,15 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                 onChange={e => setSearch(e.target.value)}
                             />
                         </div>
-                        <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <Select value={endpointFilter} onValueChange={setEndpointFilter}>
                             <SelectTrigger className="h-9 w-40">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">{t("enterprise.myAccess.allTypes")}</SelectItem>
-                                {allTypeNames.map(name => (
-                                    <SelectItem key={name} value={name}>
-                                        {typeNameLabel(t, name)}
+                                {allEndpoints.map(ep => (
+                                    <SelectItem key={ep} value={ep}>
+                                        {ENDPOINT_LABELS[ep]?.label ?? ep}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

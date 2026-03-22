@@ -111,3 +111,15 @@ export interface PPIOChannelItem {
   base_url: string
   key: string
 }
+
+export interface ModelCoverageItem {
+  model: string
+  endpoints?: string[]
+  model_type?: string
+}
+
+export interface ModelCoverageResult {
+  total: number
+  covered: number
+  uncovered: ModelCoverageItem[]
+}

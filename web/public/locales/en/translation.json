@@ -456,6 +456,8 @@
       "mgmtTokenConfigured": "Management token is configured (full model catalog enabled)",
       "mgmtTokenRequired": "Please enter a token",
       "mgmtTokenHint": "Log in to ppio.com and copy the token from your browser (Network tab → any API request → Authorization header). This enables access to 121 models including closed-source pa/ models.",
+      "modelCoverage": "Model Channel Coverage",
+      "uncoveredHint": "The following models are synced but not assigned to any Channel, so they won't appear in My Access. Re-running sync should fix this automatically.",
       "endpointLegend": "Endpoint Guide",
       "endpointChat": "OpenAI compatible (base_url: api.ppio.com/v1)",
       "endpointAnthropic": "Claude native protocol (base_url: api.ppio.com/anthropic)",

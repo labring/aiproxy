@@ -13,6 +13,16 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
+// likeOp returns the appropriate SQL LIKE operator for the current database.
+// PostgreSQL supports case-insensitive ILIKE; SQLite only has LIKE.
+func likeOp() string {
+	if common.UsingSQLite {
+		return "LIKE"
+	}
+
+	return "ILIKE"
+}
+
 type apiResponse struct {
 	Data    any    `json:"data,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -55,12 +65,7 @@ type channelItem struct {
 func ListChannelsHandler(c *gin.Context) {
 	var channels []model.Channel
 
-	likeOp := "ILIKE"
-	if common.UsingSQLite {
-		likeOp = "LIKE"
-	}
-
-	err := model.DB.Where("base_url "+likeOp+" ?", "%ppio%").
+	err := model.DB.Where("base_url "+likeOp()+" ?", "%ppio%").
 		Order("id ASC").
 		Find(&channels).Error
 	if err != nil {
@@ -272,6 +277,65 @@ func ExecuteHandler(c *gin.Context) {
 		case <-c.Request.Context().Done():
 			return false
 		}
+	})
+}
+
+// ModelCoverageHandler handles GET /api/enterprise/ppio/model-coverage.
+// Returns the list of PPIO models that have a ModelConfig entry but are NOT
+// assigned to any enabled channel.
+func ModelCoverageHandler(c *gin.Context) {
+	var localModels []model.ModelConfig
+
+	if err := model.DB.Select("model", "config").
+		Where("owner = ?", string(model.ModelOwnerPPIO)).Find(&localModels).Error; err != nil {
+		errorResponse(c, http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	var channels []model.Channel
+
+	if err := model.DB.Select("models").
+		Where("base_url "+likeOp()+" ? AND status = ?", "%ppio%", model.ChannelStatusEnabled).
+		Find(&channels).Error; err != nil {
+		errorResponse(c, http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	// Build a set of all model names that appear in at least one enabled PPIO channel.
+	inChannel := make(map[string]struct{})
+
+	for _, ch := range channels {
+		for _, m := range ch.Models {
+			inChannel[m] = struct{}{}
+		}
+	}
+
+	uncovered := make([]ModelCoverageItem, 0)
+
+	for _, mc := range localModels {
+		if _, ok := inChannel[mc.Model]; ok {
+			continue
+		}
+
+		item := ModelCoverageItem{Model: mc.Model}
+
+		if eps, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
+			item.Endpoints = eps
+		}
+
+		if mt, ok := mc.Config[model.ModelConfigKey("model_type")].(string); ok {
+			item.ModelType = mt
+		}
+
+		uncovered = append(uncovered, item)
+	}
+
+	successResponse(c, ModelCoverageResult{
+		Total:     len(localModels),
+		Covered:   len(localModels) - len(uncovered),
+		Uncovered: uncovered,
 	})
 }
 

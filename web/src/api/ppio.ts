@@ -2,6 +2,7 @@ import { get, post, put } from './index'
 import { useAuthStore } from '@/store/auth'
 import type {
   DiagnosticResult,
+  ModelCoverageResult,
   PPIOChannelItem,
   PPIOConfig,
   SyncDiff,
@@ -133,5 +134,12 @@ export const ppioApi = {
    */
   history: async (): Promise<SyncHistory[]> => {
     return get<SyncHistory[]>('/enterprise/ppio/sync/history')
+  },
+
+  /**
+   * 检查模型 Channel 覆盖率（有 ModelConfig 但未分配到任何 Channel 的模型）
+   */
+  modelCoverage: async (): Promise<ModelCoverageResult> => {
+    return get<ModelCoverageResult>('/enterprise/ppio/model-coverage')
   }
 }

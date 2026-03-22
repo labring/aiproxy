@@ -13,6 +13,7 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 	ppioView.GET("/config", GetConfigHandler)
 	ppioView.GET("/sync/diagnostic", DiagnosticHandler)
 	ppioView.GET("/sync/history", HistoryHandler)
+	ppioView.GET("/model-coverage", ModelCoverageHandler)
 
 	// Write endpoints — access_control_manage
 	ppioManage := group.Group("/ppio", permMW["access_control_manage"])
