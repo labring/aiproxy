@@ -288,10 +288,10 @@ export default function EnterpriseDashboard() {
         enabled: selectedLevel1s.size > 0,
     })
 
-    // Build department filter for API (only pass single dept when exactly one selected)
-    const departmentFilter = useMemo(() => {
-        if (selectedLevel2s.size === 1) return [...selectedLevel2s][0]
-        if (selectedLevel1s.size === 1 && selectedLevel2s.size === 0) return [...selectedLevel1s][0]
+    // Build department filter for API — pass all selected IDs for consistent filtering.
+    const departmentFilters = useMemo(() => {
+        if (selectedLevel2s.size > 0) return [...selectedLevel2s]
+        if (selectedLevel1s.size > 0) return [...selectedLevel1s]
         return undefined
     }, [selectedLevel1s, selectedLevel2s])
 
@@ -301,16 +301,13 @@ export default function EnterpriseDashboard() {
     })
 
     const { data: comparisonData } = useQuery({
-        queryKey: ["enterprise", "comparison", timeRange, departmentFilter],
-        queryFn: () => {
-            const period = timeRange === "7d" || timeRange === "last_week" ? "weekly" : "monthly"
-            return enterpriseApi.getComparison(period, departmentFilter)
-        },
+        queryKey: ["enterprise", "comparison", start, end, departmentFilters],
+        queryFn: () => enterpriseApi.getComparison(departmentFilters, start, end),
     })
 
     const { data: modelData } = useQuery({
-        queryKey: ["enterprise", "model-distribution", start, end, departmentFilter],
-        queryFn: () => enterpriseApi.getModelDistribution(departmentFilter, start, end),
+        queryKey: ["enterprise", "model-distribution", start, end, departmentFilters],
+        queryFn: () => enterpriseApi.getModelDistribution(departmentFilters, start, end),
     })
 
     // Filter departments by selected level1/level2

@@ -34,41 +34,24 @@ type ComparisonData struct {
 }
 
 // GetPeriodComparison calculates period-over-period comparison.
-// periodType can be "daily", "weekly", or "monthly".
-func GetPeriodComparison(periodType string, departmentID string) (*ComparisonData, error) {
-	now := time.Now()
-	var currentStart, currentEnd, prevStart, prevEnd time.Time
+// The previous period is computed by shifting startTime back by the same duration.
+func GetPeriodComparison(startTime, endTime time.Time, departmentIDs []string) (*ComparisonData, error) {
+	duration := endTime.Sub(startTime)
+	prevStart := startTime.Add(-duration)
+	prevEnd := startTime
+	periodType := inferPeriodType(duration)
 
-	switch periodType {
-	case "daily":
-		currentStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		currentEnd = now
-		prevStart = currentStart.Add(-24 * time.Hour)
-		prevEnd = currentStart
-	case "weekly":
-		weekday := int(now.Weekday())
-		if weekday == 0 {
-			weekday = 7
-		}
-		currentStart = time.Date(now.Year(), now.Month(), now.Day()-weekday+1, 0, 0, 0, 0, now.Location())
-		currentEnd = now
-		prevStart = currentStart.Add(-7 * 24 * time.Hour)
-		prevEnd = currentStart
-	default: // monthly
-		periodType = "monthly"
-		currentStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		currentEnd = now
-		prevStart = currentStart.AddDate(0, -1, 0)
-		prevEnd = currentStart
-	}
-
-	// Get group IDs for department filter
-	groupIDs, err := getGroupIDsForDepartment(departmentID)
+	groupIDs, err := getGroupIDsForDepartments(departmentIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	current, err := queryPeriodStats(currentStart, currentEnd, groupIDs)
+	// Department filter requested but no matching users → return zero stats.
+	if len(departmentIDs) > 0 && len(groupIDs) == 0 {
+		return &ComparisonData{PeriodType: periodType}, nil
+	}
+
+	current, err := queryPeriodStats(startTime, endTime, groupIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query current period: %w", err)
 	}
@@ -91,6 +74,19 @@ func GetPeriodComparison(periodType string, departmentID string) (*ComparisonDat
 	}
 
 	return result, nil
+}
+
+// inferPeriodType returns a human-readable period label based on the duration.
+func inferPeriodType(d time.Duration) string {
+	hours := d.Hours()
+	switch {
+	case hours <= 25:
+		return "daily"
+	case hours <= 24*8:
+		return "weekly"
+	default:
+		return "monthly"
+	}
 }
 
 func queryPeriodStats(startTime, endTime time.Time, groupIDs []string) (*PeriodStats, error) {

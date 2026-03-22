@@ -82,14 +82,13 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 
 	// Query group_summaries for these groups in the time range
 	type groupAgg struct {
-		GroupID        string  `gorm:"column:group_id"`
-		RequestCount   int64   `gorm:"column:request_count"`
-		UsedAmount     float64 `gorm:"column:used_amount"`
-		TotalTokens    int64   `gorm:"column:total_tokens"`
-		InputTokens    int64   `gorm:"column:input_tokens"`
-		OutputTokens   int64   `gorm:"column:output_tokens"`
-		SuccessCount   int64   `gorm:"column:success_count"`
-		UniqueModels   int     `gorm:"column:unique_models"`
+		GroupID      string  `gorm:"column:group_id"`
+		RequestCount int64   `gorm:"column:request_count"`
+		UsedAmount   float64 `gorm:"column:used_amount"`
+		TotalTokens  int64   `gorm:"column:total_tokens"`
+		InputTokens  int64   `gorm:"column:input_tokens"`
+		OutputTokens int64   `gorm:"column:output_tokens"`
+		SuccessCount int64   `gorm:"column:success_count"`
 	}
 
 	var results []groupAgg
@@ -104,7 +103,6 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 			"SUM(input_tokens) as input_tokens",
 			"SUM(output_tokens) as output_tokens",
 			"SUM(status2xx_count) as success_count",
-			"COUNT(DISTINCT model) as unique_models",
 		).
 		Where("group_id IN ?", groupIDs).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
@@ -112,6 +110,37 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		Find(&results).Error
 	if err != nil {
 		return nil, fmt.Errorf("query group summaries: %w", err)
+	}
+
+	// Separate query for accurate per-department unique model counts (can't be derived from
+	// per-group COUNT(DISTINCT model) without double-counting shared models across users).
+	type groupModel struct {
+		GroupID string `gorm:"column:group_id"`
+		Model   string `gorm:"column:model"`
+	}
+
+	var gmPairs []groupModel
+	if err := model.LogDB.
+		Model(&model.GroupSummary{}).
+		Select("DISTINCT group_id, model").
+		Where("group_id IN ?", groupIDs).
+		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
+		Find(&gmPairs).Error; err != nil {
+		return nil, fmt.Errorf("query group models: %w", err)
+	}
+
+	deptModelSets := make(map[string]map[string]struct{})
+	for _, gm := range gmPairs {
+		deptID := groupToDept[gm.GroupID]
+		if deptID == "" {
+			continue
+		}
+
+		if deptModelSets[deptID] == nil {
+			deptModelSets[deptID] = make(map[string]struct{})
+		}
+
+		deptModelSets[deptID][gm.Model] = struct{}{}
 	}
 
 	// Track active users (unique group_ids) per department
@@ -152,7 +181,6 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		agg.TotalTokens += r.TotalTokens
 		agg.InputTokens += r.InputTokens
 		agg.OutputTokens += r.OutputTokens
-		agg.UniqueModels += r.UniqueModels
 		deptSuccessCount[deptID] += r.SuccessCount
 		deptActiveUsers[deptID][r.GroupID] = true
 	}
@@ -160,10 +188,13 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 	summaries := make([]DepartmentSummary, 0, len(deptAgg))
 	for deptID, v := range deptAgg {
 		v.ActiveUsers = len(deptActiveUsers[deptID])
+		v.UniqueModels = len(deptModelSets[deptID])
+
 		if v.RequestCount > 0 {
 			v.SuccessRate = float64(deptSuccessCount[deptID]) / float64(v.RequestCount) * 100.0
 			v.AvgCost = v.UsedAmount / float64(v.RequestCount)
 		}
+
 		summaries = append(summaries, *v)
 	}
 
@@ -175,27 +206,18 @@ func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]De
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
-	// Get all feishu users in this department
-	var feishuUsers []models.FeishuUser
-	if err := model.DB.
-		Select("group_id").
-		Where("department_id = ?", departmentID).
-		Find(&feishuUsers).Error; err != nil {
-		return nil, fmt.Errorf("query feishu users: %w", err)
+	groupIDs, err := getGroupIDsForDepartments([]string{departmentID})
+	if err != nil {
+		return nil, err
 	}
 
-	if len(feishuUsers) == 0 {
+	if len(groupIDs) == 0 {
 		return []DepartmentTrendPoint{}, nil
-	}
-
-	groupIDs := make([]string, 0, len(feishuUsers))
-	for _, u := range feishuUsers {
-		groupIDs = append(groupIDs, u.GroupID)
 	}
 
 	var results []DepartmentTrendPoint
 
-	err := model.LogDB.
+	err = model.LogDB.
 		Model(&model.GroupSummary{}).
 		Select(
 			"hour_timestamp",

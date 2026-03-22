@@ -494,27 +494,42 @@ export const enterpriseApi = {
     },
 
     getModelDistribution: (
-        departmentId?: string,
+        departmentIds?: string[],
         startTimestamp?: number,
         endTimestamp?: number,
     ): Promise<ModelDistributionResponse> => {
-        const params: Record<string, string> = buildTimeParams(startTimestamp, endTimestamp)
-        if (departmentId) params.department_id = departmentId
+        const params = new URLSearchParams()
+        const tp = buildTimeParams(startTimestamp, endTimestamp)
+        for (const [k, v] of Object.entries(tp)) params.append(k, v)
+        if (departmentIds) {
+            for (const id of departmentIds) params.append('department_id', id)
+        }
         return get<ModelDistributionResponse>('/enterprise/analytics/model/distribution', { params })
     },
 
     getComparison: (
-        period?: string,
-        departmentId?: string,
+        departmentIds?: string[],
+        startTimestamp?: number,
+        endTimestamp?: number,
     ): Promise<ComparisonData> => {
-        const params: Record<string, string> = {}
-        if (period) params.period = period
-        if (departmentId) params.department_id = departmentId
+        const params = new URLSearchParams()
+        const tp = buildTimeParams(startTimestamp, endTimestamp)
+        for (const [k, v] of Object.entries(tp)) params.append(k, v)
+        if (departmentIds) {
+            for (const id of departmentIds) params.append('department_id', id)
+        }
         return get<ComparisonData>('/enterprise/analytics/comparison', { params })
     },
 
-    exportReport: async (startTimestamp?: number, endTimestamp?: number): Promise<void> => {
-        const params = buildTimeParams(startTimestamp, endTimestamp)
+    exportReport: async (
+        startTimestamp?: number,
+        endTimestamp?: number,
+        departmentId?: string,
+        limit?: number,
+    ): Promise<void> => {
+        const params: Record<string, string> = buildTimeParams(startTimestamp, endTimestamp)
+        if (departmentId) params.department_id = departmentId
+        if (limit !== undefined) params.limit = String(limit)
         const response = await apiClient.get('/enterprise/analytics/export', {
             params,
             responseType: 'blob',

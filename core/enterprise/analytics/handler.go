@@ -76,9 +76,9 @@ func HandleUserRanking(c *gin.Context) {
 // HandleModelDistribution returns model usage distribution.
 func HandleModelDistribution(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
-	departmentID := c.Query("department_id")
+	departmentIDs := c.QueryArray("department_id")
 
-	distribution, err := GetModelDistribution(startTime, endTime, departmentID)
+	distribution, err := GetModelDistribution(startTime, endTime, departmentIDs)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -92,10 +92,10 @@ func HandleModelDistribution(c *gin.Context) {
 
 // HandlePeriodComparison returns period-over-period comparison data.
 func HandlePeriodComparison(c *gin.Context) {
-	periodType := c.DefaultQuery("period", "monthly")
-	departmentID := c.Query("department_id")
+	startTime, endTime := parseTimeRange(c)
+	departmentIDs := c.QueryArray("department_id")
 
-	comparison, err := GetPeriodComparison(periodType, departmentID)
+	comparison, err := GetPeriodComparison(startTime, endTime, departmentIDs)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -154,6 +154,8 @@ func HandleCustomReportFields(c *gin.Context) {
 // HandleExport generates and returns an Excel report of department analytics.
 func HandleExport(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
+	departmentID := c.Query("department_id")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "500"))
 
 	summaries, err := GetDepartmentSummaries(startTime, endTime)
 	if err != nil {
@@ -161,13 +163,18 @@ func HandleExport(c *gin.Context) {
 		return
 	}
 
-	ranking, err := GetUserRanking(startTime, endTime, "", 500)
+	ranking, err := GetUserRanking(startTime, endTime, departmentID, limit)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	modelDist, err := GetModelDistribution(startTime, endTime, "")
+	var departmentIDs []string
+	if departmentID != "" {
+		departmentIDs = []string{departmentID}
+	}
+
+	modelDist, err := GetModelDistribution(startTime, endTime, departmentIDs)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

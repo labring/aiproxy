@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -23,14 +24,19 @@ type ModelDistributionEntry struct {
 }
 
 // GetModelDistribution returns model usage distribution within the given time range.
-// Optionally filters by department.
-func GetModelDistribution(startTime, endTime time.Time, departmentID string) ([]ModelDistributionEntry, error) {
+// Optionally filters by departments (supports multiple IDs with descendant expansion).
+func GetModelDistribution(startTime, endTime time.Time, departmentIDs []string) ([]ModelDistributionEntry, error) {
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
-	groupIDs, err := getGroupIDsForDepartment(departmentID)
+	groupIDs, err := getGroupIDsForDepartments(departmentIDs)
 	if err != nil {
 		return nil, err
+	}
+
+	// Department filter requested but no matching users → empty result (not full scan).
+	if len(departmentIDs) > 0 && len(groupIDs) == 0 {
+		return []ModelDistributionEntry{}, nil
 	}
 
 	type modelAgg struct {
@@ -93,24 +99,44 @@ func GetModelDistribution(startTime, endTime time.Time, departmentID string) ([]
 	return entries, nil
 }
 
-// getGroupIDsForDepartment returns group IDs for a department filter.
-// If departmentID is empty, returns nil (meaning no filter).
-func getGroupIDsForDepartment(departmentID string) ([]string, error) {
-	if departmentID == "" {
+// expandDepartmentIDs expands department IDs to include all descendants and
+// dual-ID forms (department_id / open_department_id) via GetDescendantDepartmentIDs.
+func expandDepartmentIDs(departmentIDs []string) []string {
+	seen := make(map[string]struct{})
+	for _, id := range departmentIDs {
+		for _, expanded := range feishu.GetDescendantDepartmentIDs(id) {
+			seen[expanded] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+// getGroupIDsForDepartments returns group IDs for a set of department filters.
+// Returns nil when departmentIDs is empty (no filter).
+// Returns empty slice when departments are specified but no users match.
+func getGroupIDsForDepartments(departmentIDs []string) ([]string, error) {
+	if len(departmentIDs) == 0 {
 		return nil, nil
 	}
 
-	var feishuUsers []models.FeishuUser
-	if err := model.DB.
-		Select("group_id").
-		Where("department_id = ?", departmentID).
-		Find(&feishuUsers).Error; err != nil {
-		return nil, fmt.Errorf("query feishu users: %w", err)
+	expanded := expandDepartmentIDs(departmentIDs)
+	if len(expanded) == 0 {
+		return []string{}, nil
 	}
 
-	groupIDs := make([]string, 0, len(feishuUsers))
-	for _, u := range feishuUsers {
-		groupIDs = append(groupIDs, u.GroupID)
+	var groupIDs []string
+	if err := model.DB.
+		Model(&models.FeishuUser{}).
+		Distinct("group_id").
+		Where("department_id IN ?", expanded).
+		Pluck("group_id", &groupIDs).Error; err != nil {
+		return nil, fmt.Errorf("query feishu users: %w", err)
 	}
 
 	return groupIDs, nil

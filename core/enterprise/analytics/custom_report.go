@@ -195,7 +195,16 @@ func GenerateCustomReport(req CustomReportRequest) (*CustomReportResponse, error
 	}
 
 	// Determine which group_ids to query
-	groupIDs := resolveGroupIDs(groupToUser, req.Filters, needUserMapping)
+	groupIDs, hasGroupFilter := resolveGroupIDs(groupToUser, req.Filters, needUserMapping)
+
+	// Filter was active but no matching users → return empty result (not full scan).
+	if hasGroupFilter && len(groupIDs) == 0 {
+		return &CustomReportResponse{
+			Columns: buildColumns(req),
+			Rows:    []map[string]interface{}{},
+			Total:   0,
+		}, nil
+	}
 
 	// Build and execute the SQL query
 	rows, err := executeQuery(req, requiredBase, groupIDs)
@@ -275,7 +284,10 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 	)
 
 	if len(filters.DepartmentIDs) > 0 {
-		query = query.Where("department_id IN ?", filters.DepartmentIDs)
+		expanded := expandDepartmentIDs(filters.DepartmentIDs)
+		if len(expanded) > 0 {
+			query = query.Where("department_id IN ?", expanded)
+		}
 	}
 
 	var feishuUsers []models.FeishuUser
@@ -387,13 +399,16 @@ func loadMappings(needUsers bool, filters CustomReportFilter) (
 }
 
 
+// resolveGroupIDs returns (groupIDs, hasFilter).
+// hasFilter=true means a department or user filter was active, so empty groupIDs means "no results".
+// hasFilter=false means no restriction — groupIDs is nil.
 func resolveGroupIDs(
 	groupToUser map[string]userMapping,
 	filters CustomReportFilter,
 	needUserMapping bool,
-) []string {
+) ([]string, bool) {
 	if !needUserMapping {
-		return nil // no restriction on group_ids
+		return nil, false
 	}
 
 	ids := make([]string, 0, len(groupToUser))
@@ -401,7 +416,8 @@ func resolveGroupIDs(
 		ids = append(ids, gid)
 	}
 
-	return ids
+	hasFilter := len(filters.DepartmentIDs) > 0 || len(filters.UserNames) > 0
+	return ids, hasFilter
 }
 
 // rawRow holds a single row from the SQL aggregation query.
@@ -797,11 +813,14 @@ func mergeRawRows(dst, src *rawRow) {
 	dst.CachedAmount += src.CachedAmount
 	dst.TotalTimeMs += src.TotalTimeMs
 	dst.TotalTtfbMs += src.TotalTtfbMs
-	// Note: unique_models and active_users are COUNT(DISTINCT) at per-group level.
-	// SUM here is an upper-bound approximation (may double-count across groups in same dept).
-	// For exact counts, a separate SQL query would be needed.
-	dst.UniqueModels += src.UniqueModels
+	// active_users: SQL GROUP BY group_id ensures each rawRow has exactly one group_id,
+	// so COUNT(DISTINCT group_id) = 1 per row. Summing gives the exact active user count
+	// per department bucket.
 	dst.ActiveUsers += src.ActiveUsers
+	// unique_models: when "model" is not a dimension, this is COUNT(DISTINCT model) per group.
+	// Summing across groups is an upper-bound approximation (models shared between groups are
+	// double-counted). Exact counts would require a separate SQL query.
+	dst.UniqueModels += src.UniqueModels
 	dst.ImgOutTokens += src.ImgOutTokens
 	dst.CacheCrTokens += src.CacheCrTokens
 }

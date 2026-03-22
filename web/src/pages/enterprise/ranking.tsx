@@ -182,7 +182,7 @@ export default function EnterpriseRanking() {
 
     const handleExport = async () => {
         try {
-            await enterpriseApi.exportReport(start, end)
+            await enterpriseApi.exportReport(start, end, departmentFilter, limit)
             toast.success(t("common.success"))
         } catch {
             toast.error(t("error.unknown"))
