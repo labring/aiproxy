@@ -310,20 +310,21 @@ export default function EnterpriseDashboard() {
         queryFn: () => enterpriseApi.getModelDistribution(departmentFilters, start, end),
     })
 
-    // Filter departments by selected level1/level2
+    // Filter departments by selected level1/level2 using hierarchy fields
     const departments = useMemo(() => {
         const allDepts = data?.departments || []
         if (selectedLevel2s.size > 0) {
-            return allDepts.filter(d => selectedLevel2s.has(d.department_id))
+            return allDepts.filter(d =>
+                selectedLevel2s.has(d.department_id) || selectedLevel2s.has(d.level2_dept_id)
+            )
         }
         if (selectedLevel1s.size > 0) {
-            const level2Ids = new Set(allLevel2Departments.map(d => d.department_id))
             return allDepts.filter(d =>
-                selectedLevel1s.has(d.department_id) || level2Ids.has(d.department_id)
+                selectedLevel1s.has(d.department_id) || selectedLevel1s.has(d.level1_dept_id)
             )
         }
         return allDepts
-    }, [data?.departments, selectedLevel1s, selectedLevel2s, allLevel2Departments])
+    }, [data?.departments, selectedLevel1s, selectedLevel2s])
 
     const models = modelData?.distribution || []
     const changes = comparisonData?.changes

@@ -51,15 +51,14 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		limit = 50
 	}
 
-	// Get feishu users (optionally filtered by department).
-	// Use GetDescendantDepartmentIDs to handle dual-ID formats (department_id vs open_department_id)
-	// and to match all descendants, exactly as the user management page does.
+	// Get feishu users (optionally filtered by department with descendant expansion).
 	query := model.DB.Model(&models.FeishuUser{}).Select("group_id", "name", "department_id")
 	if departmentID != "" {
 		matchingDepts := feishu.GetDescendantDepartmentIDs(departmentID)
-		if len(matchingDepts) > 0 {
-			query = query.Where("department_id IN ?", matchingDepts)
+		if len(matchingDepts) == 0 {
+			return []UserRankingEntry{}, nil
 		}
+		query = query.Where("department_id IN ?", matchingDepts)
 	}
 
 	var feishuUsers []models.FeishuUser
@@ -71,9 +70,18 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		return []UserRankingEntry{}, nil
 	}
 
+	// Deduplicate by group_id — multiple feishu users may share a group.
+	type userInfo struct {
+		Name         string
+		DepartmentID string
+	}
+	groupUserMap := make(map[string]userInfo, len(feishuUsers))
 	groupIDs := make([]string, 0, len(feishuUsers))
 	for _, u := range feishuUsers {
-		groupIDs = append(groupIDs, u.GroupID)
+		if _, exists := groupUserMap[u.GroupID]; !exists {
+			groupUserMap[u.GroupID] = userInfo{Name: u.Name, DepartmentID: u.DepartmentID}
+			groupIDs = append(groupIDs, u.GroupID)
+		}
 	}
 
 	// Query aggregated usage from group_summaries by group_id
@@ -127,17 +135,17 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		deptNameMap[d.DepartmentID] = d.Name
 	}
 
-	// Build entries for ALL matched users, including those with zero usage
-	entries := make([]UserRankingEntry, 0, len(feishuUsers))
-	for _, u := range feishuUsers {
+	// Build entries per unique group_id, including those with zero usage
+	entries := make([]UserRankingEntry, 0, len(groupUserMap))
+	for gid, info := range groupUserMap {
 		entry := UserRankingEntry{
-			GroupID:        u.GroupID,
-			UserName:       u.Name,
-			DepartmentID:   u.DepartmentID,
-			DepartmentName: deptNameMap[u.DepartmentID],
+			GroupID:        gid,
+			UserName:       info.Name,
+			DepartmentID:   info.DepartmentID,
+			DepartmentName: deptNameMap[info.DepartmentID],
 		}
 
-		if agg := usageMap[u.GroupID]; agg != nil {
+		if agg := usageMap[gid]; agg != nil {
 			entry.UsedAmount = agg.UsedAmount
 			entry.RequestCount = agg.RequestCount
 			entry.TotalTokens = agg.TotalTokens

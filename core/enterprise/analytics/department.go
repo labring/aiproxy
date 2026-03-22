@@ -14,6 +14,8 @@ import (
 type DepartmentSummary struct {
 	DepartmentID   string  `json:"department_id"`
 	DepartmentName string  `json:"department_name"`
+	Level1DeptID   string  `json:"level1_dept_id"`
+	Level2DeptID   string  `json:"level2_dept_id"`
 	MemberCount    int     `json:"member_count"`
 	ActiveUsers    int     `json:"active_users"`
 	RequestCount   int64   `json:"request_count"`
@@ -56,27 +58,52 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		deptMap[departments[i].DepartmentID] = &departments[i]
 	}
 
-	// Get all feishu users to map group_id → department_id
+	// Get all feishu users to map group_id → department hierarchy
 	var feishuUsers []models.FeishuUser
-	if err := model.DB.Select("group_id", "department_id").Find(&feishuUsers).Error; err != nil {
+	if err := model.DB.Select("group_id", "department_id", "level1_dept_id", "level2_dept_id").Find(&feishuUsers).Error; err != nil {
 		return nil, fmt.Errorf("query feishu users: %w", err)
 	}
 
-	// Build group → department mapping
-	groupToDept := make(map[string]string, len(feishuUsers))
-	for _, u := range feishuUsers {
-		if u.DepartmentID != "" {
-			groupToDept[u.GroupID] = u.DepartmentID
-		}
+	type deptHierarchy struct {
+		DepartmentID string
+		Level1DeptID string
+		Level2DeptID string
 	}
 
-	if len(groupToDept) == 0 {
+	// Cache resolved hierarchy per department_id to avoid repeated parent-chain walks
+	resolvedHierarchy := make(map[string]deptHierarchy)
+
+	// Build group → department hierarchy mapping
+	groupToHierarchy := make(map[string]deptHierarchy, len(feishuUsers))
+	for _, u := range feishuUsers {
+		if u.DepartmentID == "" {
+			continue
+		}
+
+		if cached, ok := resolvedHierarchy[u.DepartmentID]; ok {
+			groupToHierarchy[u.GroupID] = cached
+			continue
+		}
+
+		h := deptHierarchy{
+			DepartmentID: u.DepartmentID,
+			Level1DeptID: u.Level1DeptID,
+			Level2DeptID: u.Level2DeptID,
+		}
+		if h.Level1DeptID == "" {
+			h.Level1DeptID, h.Level2DeptID = resolveHierarchyFromDeptMap(u.DepartmentID, deptMap)
+		}
+		resolvedHierarchy[u.DepartmentID] = h
+		groupToHierarchy[u.GroupID] = h
+	}
+
+	if len(groupToHierarchy) == 0 {
 		return []DepartmentSummary{}, nil
 	}
 
 	// Collect group IDs
-	groupIDs := make([]string, 0, len(groupToDept))
-	for gid := range groupToDept {
+	groupIDs := make([]string, 0, len(groupToHierarchy))
+	for gid := range groupToHierarchy {
 		groupIDs = append(groupIDs, gid)
 	}
 
@@ -131,7 +158,7 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 
 	deptModelSets := make(map[string]map[string]struct{})
 	for _, gm := range gmPairs {
-		deptID := groupToDept[gm.GroupID]
+		deptID := groupToHierarchy[gm.GroupID].DepartmentID
 		if deptID == "" {
 			continue
 		}
@@ -151,7 +178,7 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 	deptSuccessCount := make(map[string]int64)
 
 	for _, r := range results {
-		deptID := groupToDept[r.GroupID]
+		deptID := groupToHierarchy[r.GroupID].DepartmentID
 		if deptID == "" {
 			continue
 		}
@@ -167,9 +194,12 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 				memberCount = dept.MemberCount
 			}
 
+			hier := groupToHierarchy[r.GroupID]
 			agg = &DepartmentSummary{
 				DepartmentID:   deptID,
 				DepartmentName: name,
+				Level1DeptID:   hier.Level1DeptID,
+				Level2DeptID:   hier.Level2DeptID,
 				MemberCount:    memberCount,
 			}
 			deptAgg[deptID] = agg
@@ -235,4 +265,41 @@ func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]De
 	}
 
 	return results, nil
+}
+
+// resolveHierarchyFromDeptMap walks the parent chain in deptMap to find level-1 and level-2
+// department IDs. Level-1 is a direct child of root (parent_id = "0" or ""),
+// level-2 is a child of level-1.
+func resolveHierarchyFromDeptMap(deptID string, deptMap map[string]*models.FeishuDepartment) (level1, level2 string) {
+	// Collect ancestor chain: [self, parent, grandparent, ...]
+	const maxDepth = 10
+	chain := make([]string, 0, maxDepth)
+	cur := deptID
+
+	for i := 0; i < maxDepth; i++ {
+		dept, ok := deptMap[cur]
+		if !ok {
+			break
+		}
+
+		chain = append(chain, cur)
+		if dept.ParentID == "" || dept.ParentID == "0" {
+			break // reached root
+		}
+
+		cur = dept.ParentID
+	}
+
+	// chain is [leaf, ..., level2, level1] where last element's parent is root
+	if len(chain) == 0 {
+		return "", ""
+	}
+
+	// Last element in chain is level-1 (its parent is root)
+	level1 = chain[len(chain)-1]
+	if len(chain) >= 2 {
+		level2 = chain[len(chain)-2]
+	}
+
+	return level1, level2
 }

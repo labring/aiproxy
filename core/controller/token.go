@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -81,6 +82,64 @@ func validateToken(token AddTokenRequest) error {
 	return nil
 }
 
+type tokenModelWarnings struct {
+	GloballyInvalid []string
+	OutsideGroupSet []string
+}
+
+func (w tokenModelWarnings) Message() string {
+	parts := make([]string, 0, 2)
+	if len(w.GloballyInvalid) > 0 {
+		parts = append(parts, fmt.Sprintf("invalid models: %s", strings.Join(w.GloballyInvalid, ", ")))
+	}
+
+	if len(w.OutsideGroupSet) > 0 {
+		parts = append(parts, fmt.Sprintf("models outside group available_sets: %s", strings.Join(w.OutsideGroupSet, ", ")))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return "warning: " + strings.Join(parts, "; ")
+}
+
+func validateTokenModels(models []string, groupID string) tokenModelWarnings {
+	if len(models) == 0 {
+		return tokenModelWarnings{}
+	}
+
+	modelCaches := model.LoadModelCaches()
+	enabledModels := modelCaches.EnabledModelConfigsMap
+
+	groupEnabledSet := make(map[string]struct{})
+	if groupID != "" {
+		if groupCache, err := model.CacheGetGroup(groupID); err == nil {
+			for _, set := range groupCache.GetAvailableSets() {
+				for _, m := range modelCaches.EnabledModelsBySet[set] {
+					groupEnabledSet[strings.ToLower(m)] = struct{}{}
+				}
+			}
+		}
+	}
+
+	warnings := tokenModelWarnings{}
+	for _, modelName := range models {
+		if _, ok := enabledModels[modelName]; !ok {
+			warnings.GloballyInvalid = append(warnings.GloballyInvalid, modelName)
+			continue
+		}
+
+		if len(groupEnabledSet) > 0 {
+			if _, ok := groupEnabledSet[strings.ToLower(modelName)]; !ok {
+				warnings.OutsideGroupSet = append(warnings.OutsideGroupSet, modelName)
+			}
+		}
+	}
+
+	return warnings
+}
+
 func validateSubnets(subnets []string) error {
 	if err := network.IsValidSubnets(subnets); err != nil {
 		return fmt.Errorf("invalid subnet: %w", err)
@@ -104,6 +163,26 @@ func buildTokenResponses(tokens []*model.Token) []*TokenResponse {
 	}
 
 	return responses
+}
+
+func respondTokenSuccess(c *gin.Context, token *model.Token, warnings tokenModelWarnings) {
+	resp := &middleware.APIResponse{
+		Success: true,
+		Data:    buildTokenResponse(token),
+	}
+
+	if message := warnings.Message(); message != "" {
+		resp.Message = message
+		if len(warnings.GloballyInvalid) > 0 {
+			c.Header("X-Aiproxy-Invalid-Models", strings.Join(warnings.GloballyInvalid, ","))
+		}
+
+		if len(warnings.OutsideGroupSet) > 0 {
+			c.Header("X-Aiproxy-Models-Outside-Group-Sets", strings.Join(warnings.OutsideGroupSet, ","))
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetTokens godoc
@@ -361,6 +440,7 @@ func AddGroupToken(c *gin.Context) {
 		return
 	}
 
+	warnings := validateTokenModels(req.Models, group)
 	token := req.ToToken()
 	token.GroupID = group
 
@@ -373,7 +453,7 @@ func AddGroupToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	respondTokenSuccess(c, token, warnings)
 }
 
 // DeleteToken godoc
@@ -515,13 +595,24 @@ func UpdateToken(c *gin.Context) {
 		}
 	}
 
+	var warnings tokenModelWarnings
+	if req.Models != nil {
+		currentToken, err := model.GetTokenByID(id)
+		if err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		warnings = validateTokenModels(*req.Models, currentToken.GroupID)
+	}
+
 	token, err := model.UpdateToken(id, req)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	respondTokenSuccess(c, token, warnings)
 }
 
 // UpdateGroupToken godoc
@@ -559,13 +650,18 @@ func UpdateGroupToken(c *gin.Context) {
 		}
 	}
 
+	var warnings tokenModelWarnings
+	if req.Models != nil {
+		warnings = validateTokenModels(*req.Models, group)
+	}
+
 	token, err := model.UpdateGroupToken(id, group, req)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	respondTokenSuccess(c, token, warnings)
 }
 
 // UpdateTokenStatus godoc

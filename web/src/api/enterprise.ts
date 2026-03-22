@@ -154,6 +154,8 @@ export interface FeishuCallbackResponse {
 export interface DepartmentSummary {
     department_id: string
     department_name: string
+    level1_dept_id: string
+    level2_dept_id: string
     member_count: number
     active_users: number
     request_count: number
