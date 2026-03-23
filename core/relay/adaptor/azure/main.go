@@ -46,6 +46,7 @@ func ConvertRequest(
 	replaceDot bool,
 ) (adaptor.ConvertResult, error) {
 	model := meta.ActualModel
+
 	newmodel := model
 	if replaceDot {
 		newmodel = strings.ReplaceAll(model, ".", "")

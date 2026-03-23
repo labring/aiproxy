@@ -1,7 +1,9 @@
+//nolint:testpackage
 package openai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -19,7 +21,8 @@ import (
 func TestConvertImagesRequest_DefaultIncludesModel(t *testing.T) {
 	meta := meta.NewMeta(nil, mode.ImagesGenerations, "gpt-image-1", model.ModelConfig{})
 
-	req, err := http.NewRequest(
+	req, err := http.NewRequestWithContext(
+		context.Background(),
 		http.MethodPost,
 		"http://example.com/v1/images/generations",
 		strings.NewReader(`{"prompt":"test","response_format":"b64_json"}`),
@@ -34,6 +37,7 @@ func TestConvertImagesRequest_DefaultIncludesModel(t *testing.T) {
 	require.NoError(t, err)
 
 	var payload map[string]any
+
 	err = json.Unmarshal(body, &payload)
 	require.NoError(t, err)
 
@@ -44,7 +48,8 @@ func TestConvertImagesRequest_DefaultIncludesModel(t *testing.T) {
 func TestConvertImagesRequest_CanRemoveModelDynamically(t *testing.T) {
 	meta := meta.NewMeta(nil, mode.ImagesGenerations, "gpt-image-1", model.ModelConfig{})
 
-	req, err := http.NewRequest(
+	req, err := http.NewRequestWithContext(
+		context.Background(),
 		http.MethodPost,
 		"http://example.com/v1/images/generations",
 		strings.NewReader(`{"model":"ignored","prompt":"test","response_format":"b64_json"}`),
@@ -59,6 +64,7 @@ func TestConvertImagesRequest_CanRemoveModelDynamically(t *testing.T) {
 	require.NoError(t, err)
 
 	var payload map[string]any
+
 	err = json.Unmarshal(body, &payload)
 	require.NoError(t, err)
 
@@ -71,6 +77,7 @@ func TestConvertImagesEditsRequest_DefaultIncludesModel(t *testing.T) {
 	meta := meta.NewMeta(nil, mode.ImagesEdits, "gpt-image-1", model.ModelConfig{})
 
 	var body bytes.Buffer
+
 	writer := multipart.NewWriter(&body)
 	require.NoError(t, writer.WriteField("model", "ignored"))
 	require.NoError(t, writer.WriteField("prompt", "edit prompt"))
@@ -80,7 +87,12 @@ func TestConvertImagesEditsRequest_DefaultIncludesModel(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	req, err := http.NewRequest(http.MethodPost, "http://example.com/v1/images/edits", bytes.NewReader(body.Bytes()))
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com/v1/images/edits",
+		bytes.NewReader(body.Bytes()),
+	)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ContentLength = int64(body.Len())
@@ -91,7 +103,12 @@ func TestConvertImagesEditsRequest_DefaultIncludesModel(t *testing.T) {
 	convertedBody, err := io.ReadAll(result.Body)
 	require.NoError(t, err)
 
-	convertedReq, err := http.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader(convertedBody))
+	convertedReq, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com",
+		bytes.NewReader(convertedBody),
+	)
 	require.NoError(t, err)
 	convertedReq.Header.Set("Content-Type", result.Header.Get("Content-Type"))
 	convertedReq.ContentLength = int64(len(convertedBody))
@@ -107,6 +124,7 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 	meta := meta.NewMeta(nil, mode.ImagesEdits, "gpt-image-1", model.ModelConfig{})
 
 	var body bytes.Buffer
+
 	writer := multipart.NewWriter(&body)
 	require.NoError(t, writer.WriteField("model", "ignored"))
 	require.NoError(t, writer.WriteField("prompt", "edit prompt"))
@@ -117,7 +135,12 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	req, err := http.NewRequest(http.MethodPost, "http://example.com/v1/images/edits", bytes.NewReader(body.Bytes()))
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com/v1/images/edits",
+		bytes.NewReader(body.Bytes()),
+	)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ContentLength = int64(body.Len())
@@ -128,7 +151,12 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 	convertedBody, err := io.ReadAll(result.Body)
 	require.NoError(t, err)
 
-	convertedReq, err := http.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader(convertedBody))
+	convertedReq, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com",
+		bytes.NewReader(convertedBody),
+	)
 	require.NoError(t, err)
 	convertedReq.Header.Set("Content-Type", result.Header.Get("Content-Type"))
 	convertedReq.ContentLength = int64(len(convertedBody))

@@ -2,8 +2,8 @@ package openai
 
 import (
 	"bytes"
-	"fmt"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
