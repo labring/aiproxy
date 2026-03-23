@@ -96,6 +96,11 @@ func ConvertImagesEditsRequest(
 			continue
 		}
 
+		if key == "response_format" {
+			meta.Set(MetaResponseFormat, value)
+			continue
+		}
+
 		err = multipartWriter.WriteField(key, value)
 		if err != nil {
 			return adaptor.ConvertResult{}, err
