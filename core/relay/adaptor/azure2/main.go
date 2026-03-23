@@ -28,7 +28,7 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	return a.Adaptor.Adaptor.ConvertRequest(meta, store, req)
+	return azure.ConvertRequest(meta, store, req, false)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {

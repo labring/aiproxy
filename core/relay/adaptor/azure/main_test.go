@@ -1,8 +1,16 @@
 package azure_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor/azure"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -270,4 +278,132 @@ func TestGetRequestURL_ResponsesModeDirect(t *testing.T) {
 	// Should use preview API version for Responses mode
 	assert.Contains(t, result.URL, "api-version=preview")
 	assert.Equal(t, "POST", result.Method)
+}
+
+func TestConvertRequest_ImagesGenerationsRemovesModel(t *testing.T) {
+	adaptor := &azure.Adaptor{}
+	meta := meta.NewMeta(nil, mode.ImagesGenerations, "dall-e-3", model.ModelConfig{})
+
+	body := `{"model":"dall-e-3","prompt":"test prompt","size":"1024x1024","response_format":"b64_json"}`
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com/v1/images/generations",
+		strings.NewReader(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	result, err := adaptor.ConvertRequest(meta, nil, req)
+	require.NoError(t, err)
+
+	convertedBody, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+
+	var payload map[string]any
+
+	err = json.Unmarshal(convertedBody, &payload)
+	require.NoError(t, err)
+
+	_, ok := payload["model"]
+	assert.False(t, ok)
+	assert.Equal(t, "test prompt", payload["prompt"])
+	assert.Equal(t, "application/json", result.Header.Get("Content-Type"))
+	assert.Equal(t, "b64_json", meta.GetString(openai.MetaResponseFormat))
+}
+
+func TestConvertRequest_ImagesEditsRemovesModel(t *testing.T) {
+	adaptor := &azure.Adaptor{}
+	meta := meta.NewMeta(nil, mode.ImagesEdits, "gpt-image-1", model.ModelConfig{})
+
+	var body bytes.Buffer
+
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "gpt-image-1"))
+	require.NoError(t, writer.WriteField("prompt", "edit prompt"))
+	require.NoError(t, writer.WriteField("response_format", "b64_json"))
+
+	part, err := writer.CreateFormFile("image", "test.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("png-bytes"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com/v1/images/edits",
+		bytes.NewReader(body.Bytes()),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.ContentLength = int64(body.Len())
+
+	result, err := adaptor.ConvertRequest(meta, nil, req)
+	require.NoError(t, err)
+
+	convertedBody, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+
+	contentType := result.Header.Get("Content-Type")
+	assert.NotEmpty(t, contentType)
+
+	convertedReq, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com",
+		bytes.NewReader(convertedBody),
+	)
+	require.NoError(t, err)
+	convertedReq.Header.Set("Content-Type", contentType)
+	convertedReq.ContentLength = int64(len(convertedBody))
+
+	err = convertedReq.ParseMultipartForm(1024 * 1024 * 4)
+	require.NoError(t, err)
+
+	assert.Equal(t, "edit prompt", convertedReq.MultipartForm.Value["prompt"][0])
+	assert.Nil(t, convertedReq.MultipartForm.Value["model"])
+	assert.Equal(t, "b64_json", convertedReq.MultipartForm.Value["response_format"][0])
+
+	files := convertedReq.MultipartForm.File["image"]
+	require.Len(t, files, 1)
+	file, err := files[0].Open()
+	require.NoError(t, err)
+
+	defer file.Close()
+
+	fileContent, err := io.ReadAll(file)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("png-bytes"), fileContent)
+}
+
+func TestConvertRequest_ImagesGenerationsDotReplacementUsesAzureDeploymentWithoutModelField(
+	t *testing.T,
+) {
+	adaptor := &azure.Adaptor{}
+	meta := meta.NewMeta(nil, mode.ImagesGenerations, "gpt-image-1.0", model.ModelConfig{})
+
+	body := `{"model":"ignored","prompt":"test"}`
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com/v1/images/generations",
+		strings.NewReader(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	result, err := adaptor.ConvertRequest(meta, nil, req)
+	require.NoError(t, err)
+
+	convertedBody, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+
+	var payload map[string]any
+
+	err = json.Unmarshal(convertedBody, &payload)
+	require.NoError(t, err)
+
+	_, ok := payload["model"]
+	assert.False(t, ok)
 }

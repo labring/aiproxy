@@ -22,6 +22,7 @@ import (
 func ConvertImagesRequest(
 	meta *meta.Meta,
 	req *http.Request,
+	callbacks ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
 	node, err := common.UnmarshalRequest2NodeReusable(req)
 	if err != nil {
@@ -38,6 +39,17 @@ func ConvertImagesRequest(
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	for _, callback := range callbacks {
+		if callback == nil {
+			continue
+		}
+
+		err = callback(&node)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
 	}
 
 	jsonData, err := node.MarshalJSON()
@@ -57,6 +69,7 @@ func ConvertImagesRequest(
 func ConvertImagesEditsRequest(
 	meta *meta.Meta,
 	request *http.Request,
+	includeModel bool,
 ) (adaptor.ConvertResult, error) {
 	err := request.ParseMultipartForm(1024 * 1024 * 4)
 	if err != nil {
@@ -74,11 +87,12 @@ func ConvertImagesEditsRequest(
 		value := values[0]
 
 		if key == "model" {
-			err = multipartWriter.WriteField(key, meta.ActualModel)
-			if err != nil {
-				return adaptor.ConvertResult{}, err
+			if includeModel {
+				err = multipartWriter.WriteField(key, meta.ActualModel)
+				if err != nil {
+					return adaptor.ConvertResult{}, err
+				}
 			}
-
 			continue
 		}
 
@@ -129,6 +143,15 @@ func ConvertImagesEditsRequest(
 		},
 		Body: multipartBody,
 	}, nil
+}
+
+func ImagesRequestRemoveModel(node *ast.Node) error {
+	_, err := node.Unset("model")
+	if err != nil && !errors.Is(err, ast.ErrNotExist) {
+		return err
+	}
+
+	return nil
 }
 
 func ImagesHandler(
