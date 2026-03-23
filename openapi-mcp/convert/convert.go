@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -470,7 +469,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 				continue
 			}
 
-			property := c.processSchemaProperty(&schema, make(map[string]bool))
+			property := c.processSchemaProperty(&schema, newSchemaContext())
 
 			str, err := sonic.Marshal(property)
 			if err != nil {
@@ -485,7 +484,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 				if mediaType.Schema != nil && mediaType.Schema.Value != nil {
 					property := c.processSchemaProperty(
 						mediaType.Schema.Value,
-						make(map[string]bool),
+						newSchemaContext(),
 					)
 
 					str, err := sonic.Marshal(property)
@@ -600,10 +599,10 @@ func (c *Converter) convertRequestBody(requestBody *openapi3.RequestBody) []mcp.
 			switch {
 			case schema.Type.Is("array") && schema.Items != nil && schema.Items.Value != nil:
 				t = PropertyTypeArray
-				item := c.processSchemaItems(schema.Items.Value, make(map[string]bool))
+				item := c.processSchemaItems(schema.Items.Value, newSchemaContext())
 				propertyOptions = append(propertyOptions, mcp.Items(item))
 			case schema.Type.Is("object") || len(schema.Properties) > 0:
-				obj := c.processSchemaProperties(schema, make(map[string]bool))
+				obj := c.processSchemaProperties(schema, newSchemaContext())
 				propertyOptions = append(propertyOptions, mcp.Properties(obj))
 			case schema.Type.Is("string"):
 				t = PropertyTypeString
@@ -660,11 +659,11 @@ func (c *Converter) convertParameters(parameters openapi3.Parameters) []mcp.Tool
 			switch {
 			case schema.Type.Is("array") && schema.Items != nil && schema.Items.Value != nil:
 				t = PropertyTypeArray
-				item := c.processSchemaItems(schema.Items.Value, make(map[string]bool))
+				item := c.processSchemaItems(schema.Items.Value, newSchemaContext())
 				propertyOptions = append(propertyOptions, mcp.Items(item))
 			case schema.Type.Is("object") && len(schema.Properties) > 0:
 				t = PropertyTypeObject
-				obj := c.processSchemaProperties(schema, make(map[string]bool))
+				obj := c.processSchemaProperties(schema, newSchemaContext())
 				propertyOptions = append(propertyOptions, mcp.Properties(obj))
 			case schema.Type.Is("integer"):
 				t = PropertyTypeInteger
@@ -711,11 +710,63 @@ func (c *Converter) convertParameters(parameters openapi3.Parameters) []mcp.Tool
 	return args
 }
 
+// maxSchemaDepth is the maximum recursion depth for schema processing.
+// This prevents stack overflow from deeply nested or circular schemas.
+const maxSchemaDepth = 20
+
+// schemaContext tracks recursion state: visited schemas (by pointer) and current depth.
+type schemaContext struct {
+	visited map[*openapi3.Schema]bool
+	depth   int
+}
+
+// newSchemaContext creates a fresh schema context.
+func newSchemaContext() schemaContext {
+	return schemaContext{visited: make(map[*openapi3.Schema]bool)}
+}
+
+// enter returns a new context one level deeper with the given schema marked as visited.
+// Returns the new context and false if the schema was already visited or depth exceeded.
+func (sc schemaContext) enter(schema *openapi3.Schema) (schemaContext, bool) {
+	if sc.depth >= maxSchemaDepth || sc.visited[schema] {
+		return sc, false
+	}
+
+	cp := make(map[*openapi3.Schema]bool, len(sc.visited)+1)
+	for k, v := range sc.visited {
+		cp[k] = v
+	}
+
+	cp[schema] = true
+
+	return schemaContext{visited: cp, depth: sc.depth + 1}, true
+}
+
+// circularRef returns a placeholder for a circular or too-deep reference.
+func circularRef(schema *openapi3.Schema) map[string]any {
+	ref := map[string]any{
+		"type":        "object",
+		"description": "Circular or deeply nested reference",
+	}
+
+	if schema.Title != "" {
+		ref["title"] = schema.Title
+		ref["description"] = "Circular or deeply nested reference to " + schema.Title
+	}
+
+	return ref
+}
+
 // processSchemaItems processes schema items for array types
 func (c *Converter) processSchemaItems(
 	schema *openapi3.Schema,
-	visited map[string]bool,
+	sc schemaContext,
 ) map[string]any {
+	next, ok := sc.enter(schema)
+	if !ok {
+		return circularRef(schema)
+	}
+
 	item := make(map[string]any)
 
 	if schema.Type != nil {
@@ -731,7 +782,7 @@ func (c *Converter) processSchemaItems(
 		properties := make(map[string]any)
 		for propName, propRef := range schema.Properties {
 			if propRef.Value != nil {
-				properties[propName] = c.processSchemaProperty(propRef.Value, visited)
+				properties[propName] = c.processSchemaProperty(propRef.Value, next)
 			}
 		}
 
@@ -740,7 +791,7 @@ func (c *Converter) processSchemaItems(
 
 	// Handle reference if this is a reference to another schema
 	if schema.Items != nil && schema.Items.Value != nil {
-		item["items"] = c.processSchemaItems(schema.Items.Value, visited)
+		item["items"] = c.processSchemaItems(schema.Items.Value, next)
 	}
 
 	return item
@@ -749,13 +800,13 @@ func (c *Converter) processSchemaItems(
 // processSchemaProperties processes schema properties for object types
 func (c *Converter) processSchemaProperties(
 	schema *openapi3.Schema,
-	visited map[string]bool,
+	sc schemaContext,
 ) map[string]any {
 	obj := make(map[string]any)
 
 	for propName, propRef := range schema.Properties {
 		if propRef.Value != nil {
-			obj[propName] = c.processSchemaProperty(propRef.Value, visited)
+			obj[propName] = c.processSchemaProperty(propRef.Value, sc)
 		}
 	}
 
@@ -765,36 +816,21 @@ func (c *Converter) processSchemaProperties(
 // processSchemaProperty processes a single schema property
 func (c *Converter) processSchemaProperty(
 	schema *openapi3.Schema,
-	visited map[string]bool,
+	sc schemaContext,
 ) map[string]any {
-	// Check for circular references
-	if schema.Title != "" {
-		refKey := schema.Title
-		if visited[refKey] {
-			// We've seen this schema before, return a simplified reference to avoid circular
-			// references
-			return map[string]any{
-				"type":        "reference",
-				"description": "Circular reference to " + refKey,
-				"title":       refKey,
-			}
-		}
-
-		visited[refKey] = true
-		// Create a copy of the visited map to avoid cross-contamination between different branches
-		visitedCopy := maps.Clone(visited)
-
-		visited = visitedCopy
+	next, ok := sc.enter(schema)
+	if !ok {
+		return circularRef(schema)
 	}
 
-	return c.buildPropertyMap(schema, visited)
+	return c.buildPropertyMap(schema, next)
 }
 
 // buildPropertyMap builds the property map for a schema
 // This function was extracted to reduce cyclomatic complexity
 func (c *Converter) buildPropertyMap(
 	schema *openapi3.Schema,
-	visited map[string]bool,
+	sc schemaContext,
 ) map[string]any {
 	property := make(map[string]any)
 
@@ -805,13 +841,13 @@ func (c *Converter) buildPropertyMap(
 	c.addSchemaValidations(schema, property)
 
 	// Add schema composition
-	c.addSchemaComposition(schema, property, visited)
+	c.addSchemaComposition(schema, property, sc)
 
 	// Add object properties
-	c.addObjectProperties(schema, property, visited)
+	c.addObjectProperties(schema, property, sc)
 
 	// Add array items
-	c.addArrayItems(schema, property, visited)
+	c.addArrayItems(schema, property, sc)
 
 	// Add additional schema metadata
 	c.addAdditionalMetadata(schema, property)
@@ -939,14 +975,14 @@ func (c *Converter) addSchemaValidations(schema *openapi3.Schema, property map[s
 func (c *Converter) addSchemaComposition(
 	schema *openapi3.Schema,
 	property map[string]any,
-	visited map[string]bool,
+	sc schemaContext,
 ) {
 	// Schema composition
 	if len(schema.OneOf) > 0 {
 		oneOf := make([]any, 0, len(schema.OneOf))
 		for _, schemaRef := range schema.OneOf {
 			if schemaRef.Value != nil {
-				oneOf = append(oneOf, c.processSchemaProperty(schemaRef.Value, visited))
+				oneOf = append(oneOf, c.processSchemaProperty(schemaRef.Value, sc))
 			}
 		}
 
@@ -959,7 +995,7 @@ func (c *Converter) addSchemaComposition(
 		anyOf := make([]any, 0, len(schema.AnyOf))
 		for _, schemaRef := range schema.AnyOf {
 			if schemaRef.Value != nil {
-				anyOf = append(anyOf, c.processSchemaProperty(schemaRef.Value, visited))
+				anyOf = append(anyOf, c.processSchemaProperty(schemaRef.Value, sc))
 			}
 		}
 
@@ -972,7 +1008,7 @@ func (c *Converter) addSchemaComposition(
 		allOf := make([]any, 0, len(schema.AllOf))
 		for _, schemaRef := range schema.AllOf {
 			if schemaRef.Value != nil {
-				allOf = append(allOf, c.processSchemaProperty(schemaRef.Value, visited))
+				allOf = append(allOf, c.processSchemaProperty(schemaRef.Value, sc))
 			}
 		}
 
@@ -982,7 +1018,7 @@ func (c *Converter) addSchemaComposition(
 	}
 
 	if schema.Not != nil && schema.Not.Value != nil {
-		property["not"] = c.processSchemaProperty(schema.Not.Value, visited)
+		property["not"] = c.processSchemaProperty(schema.Not.Value, sc)
 	}
 }
 
@@ -990,7 +1026,7 @@ func (c *Converter) addSchemaComposition(
 func (c *Converter) addObjectProperties(
 	schema *openapi3.Schema,
 	property map[string]any,
-	visited map[string]bool,
+	sc schemaContext,
 ) {
 	// Handle AdditionalProperties
 	if schema.AdditionalProperties.Has != nil {
@@ -998,7 +1034,7 @@ func (c *Converter) addObjectProperties(
 	} else if schema.AdditionalProperties.Schema != nil && schema.AdditionalProperties.Schema.Value != nil {
 		property["additionalProperties"] = c.processSchemaProperty(
 			schema.AdditionalProperties.Schema.Value,
-			visited,
+			sc,
 		)
 	}
 
@@ -1019,7 +1055,7 @@ func (c *Converter) addObjectProperties(
 		nestedProps := make(map[string]any)
 		for propName, propRef := range schema.Properties {
 			if propRef.Value != nil {
-				nestedProps[propName] = c.processSchemaProperty(propRef.Value, visited)
+				nestedProps[propName] = c.processSchemaProperty(propRef.Value, sc)
 			}
 		}
 
@@ -1030,12 +1066,12 @@ func (c *Converter) addObjectProperties(
 func (c *Converter) addArrayItems(
 	schema *openapi3.Schema,
 	property map[string]any,
-	visited map[string]bool,
+	sc schemaContext,
 ) {
 	// Recursively process array items
 	if schema.Type != nil && schema.Type.Is("array") && schema.Items != nil &&
 		schema.Items.Value != nil {
-		property["items"] = c.processSchemaItems(schema.Items.Value, visited)
+		property["items"] = c.processSchemaItems(schema.Items.Value, sc)
 	}
 }
 

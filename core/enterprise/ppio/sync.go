@@ -100,6 +100,20 @@ func ExecuteSync( //nolint:cyclop
 			return nil, fmt.Errorf("failed to fetch PPIO models (mgmt API): %w", fetchErr)
 		}
 
+		// Log unavailable models that will be filtered out
+		unavailCount := 0
+		for _, m := range v2Models {
+			if !m.IsAvailable() {
+				unavailCount++
+				log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
+			}
+		}
+
+		if unavailCount > 0 {
+			sendProgress(progressCallback, "filtering",
+				fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
+		}
+
 		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
 
 		diff, err = ComparePPIOModelsV2(v2Models, opts)
@@ -133,6 +147,20 @@ func ExecuteSync( //nolint:cyclop
 		remoteModels, fetchErr := client.FetchModels()
 		if fetchErr != nil {
 			return nil, fmt.Errorf("failed to fetch PPIO models: %w", fetchErr)
+		}
+
+		// Log unavailable models that will be filtered out
+		unavailCount := 0
+		for _, m := range remoteModels {
+			if !m.IsAvailable() {
+				unavailCount++
+				log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
+			}
+		}
+
+		if unavailCount > 0 {
+			sendProgress(progressCallback, "filtering",
+				fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
 		}
 
 		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
@@ -332,6 +360,13 @@ func EnsurePPIOChannels() (ChannelsInfo, error) {
 	var anthropicModels, openaiModels []string
 
 	for _, mc := range localModels {
+		// Skip models whose stored status indicates they are not available.
+		// This acts as a safety net for models synced before the status filter
+		// was added in ComparePPIOModels/V2.
+		if status, ok := model.GetModelConfigInt(mc.Config, "status"); ok && status != PPIOModelStatusAvailable {
+			continue
+		}
+
 		openaiModels = append(openaiModels, mc.Model)
 
 		if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {

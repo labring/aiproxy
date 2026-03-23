@@ -38,7 +38,7 @@ const MCPList = () => {
       // 只保留状态为1（已启用）的MCP
       const enabledMCPs = data.filter((mcp) => mcp.status === 1);
       setMcps(enabledMCPs);
-    } catch (err) {
+    } catch {
       toast({
         title: t("error.loading"),
         description: t("mcp.list.noResults"),

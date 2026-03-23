@@ -495,7 +495,7 @@ export function ModelForm({
         const priceData = cleanPrice(data.price as ModelPrice | undefined)
 
         const baseConfig = baseModelConfig
-            ? (({ created_at, updated_at, model, ...rest }) => rest)(baseModelConfig)
+            ? (({ created_at: _c, updated_at: _u, model: _m, ...rest }) => rest)(baseModelConfig)
             : null
 
         const preservedTopLevelFields = Object.fromEntries(

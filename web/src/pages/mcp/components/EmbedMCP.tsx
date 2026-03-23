@@ -39,7 +39,7 @@ const EmbedMCPComponent = () => {
         });
       });
       setConfigValues(initialConfigValues);
-    } catch (err) {
+    } catch {
       toast({
         title: t("error.loading"),
         description: t("mcp.embed.noEmbeddedServers"),
@@ -84,7 +84,7 @@ const EmbedMCPComponent = () => {
         title: t("common.success"),
         description: `${mcp.name} ${t("mcp.embed.configSaved")}`,
       });
-    } catch (err) {
+    } catch {
       toast({
         title: t("error.server"),
         description: t("mcp.embed.saveError"),

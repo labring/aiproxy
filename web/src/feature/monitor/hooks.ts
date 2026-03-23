@@ -277,7 +277,7 @@ function computeDashboardResult(
 
     // Transform time series based on data source
     let timeSeries = originalTimeSeries
-    let isTransformedDataSource = dataSource && dataSource !== 'total'
+    const isTransformedDataSource = dataSource && dataSource !== 'total'
 
     if (isTransformedDataSource) {
         timeSeries = originalTimeSeries.map(ts => {

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { EChartsOption } from 'echarts'
+import type { EChartsOption, TooltipComponentFormatterCallbackParams } from 'echarts'
 
 import { EChart } from '@/components/ui/echarts'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,6 +13,8 @@ import { useChannelTypeMetas } from '@/feature/channel/hooks'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
 import type { Channel } from '@/types/channel'
+
+type FormatterParams = TooltipComponentFormatterCallbackParams
 
 interface MonitorChartsProps {
     chartData: ChartDataPoint[]
@@ -159,11 +161,11 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                 borderWidth: 1,
                 borderRadius: 8,
                 textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                formatter: (params: any) => {
+                formatter: (params: FormatterParams) => {
                     const p = Array.isArray(params) ? params[0] : params
                     const idx = p.dataIndex
                     const point = chartData[idx]
-                    const val = opts?.formatter ? opts.formatter(p.value) : Number(p.value).toLocaleString()
+                    const val = opts?.formatter ? opts.formatter(Number(p.value)) : Number(p.value).toLocaleString()
                     return `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div><div>${val}</div></div>`
                 }
             },
@@ -360,7 +362,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     borderWidth: 1,
                                     borderRadius: 8,
                                     textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                                    formatter: (params: any) => {
+                                    formatter: (params: FormatterParams) => {
                                         const ps = Array.isArray(params) ? params : [params]
                                         const idx = ps[0]?.dataIndex
                                         const point = chartData[idx]
@@ -451,13 +453,13 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     borderWidth: 1,
                                     borderRadius: 8,
                                     textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                                    formatter: (params: any) => {
+                                    formatter: (params: FormatterParams) => {
                                         const ps = Array.isArray(params) ? params : [params]
                                         const idx = ps[0]?.dataIndex
                                         const point = chartData[idx]
                                         let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
                                         for (const p of ps) {
-                                            if (p.value > 0) {
+                                            if (Number(p.value) > 0) {
                                                 html += `<div>${p.marker} ${p.seriesName}: ${Number(p.value).toLocaleString()}</div>`
                                             }
                                         }
@@ -545,13 +547,13 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     borderWidth: 1,
                                     borderRadius: 8,
                                     textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                                    formatter: (params: any) => {
+                                    formatter: (params: FormatterParams) => {
                                         const ps = Array.isArray(params) ? params : [params]
                                         const idx = ps[0]?.dataIndex
                                         const point = chartData[idx]
                                         let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
                                         for (const p of ps) {
-                                            if (p.value > 0) {
+                                            if (Number(p.value) > 0) {
                                                 html += `<div>${p.marker} ${p.seriesName}: ${Number(p.value).toLocaleString()}</div>`
                                             }
                                         }
@@ -643,13 +645,13 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 borderWidth: 1,
                                 borderRadius: 8,
                                 textStyle: { color: themeColors.tooltipTextColor, fontSize: 12 },
-                                formatter: (params: any) => {
+                                formatter: (params: FormatterParams) => {
                                     const ps = Array.isArray(params) ? params : [params]
                                     const idx = ps[0]?.dataIndex
                                     const point = chartData[idx]
                                     let html = `<div style="font-size:12px"><div style="margin-bottom:4px">${point?.xLabel || point?.x}</div>`
                                     for (const p of ps) {
-                                        if (p.value > 0) {
+                                        if (Number(p.value) > 0) {
                                             html += `<div>${p.marker} ${p.seriesName}: $${Number(p.value).toFixed(4)}</div>`
                                         }
                                     }

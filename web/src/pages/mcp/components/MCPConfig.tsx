@@ -89,7 +89,7 @@ const MCPConfig = () => {
       setLoading(true);
       const data = await getAllMCPs();
       setMCPs(data);
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to fetch MCPs",
@@ -208,7 +208,7 @@ const MCPConfig = () => {
       setIsEditing(false);
       setShowCreateForm(false);
       fetchMCPs();
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to save MCP configuration",
@@ -255,7 +255,7 @@ const MCPConfig = () => {
           newStatus === 1 ? "enabled" : "disabled"
         } successfully`,
       });
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update MCP status",
@@ -276,7 +276,7 @@ const MCPConfig = () => {
       });
       setDeleteConfirmOpen(false);
       setMcpToDelete(null);
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete MCP",
@@ -353,7 +353,7 @@ const MCPConfig = () => {
       setEditMCP((prev) => ({ ...prev, type }));
     } else {
       // 当创建新MCP时，根据类型初始化相应配置
-      let updatedMCP = { ...newMCP, type };
+      const updatedMCP = { ...newMCP, type };
 
       if (type === "mcp_proxy_sse" || type === "mcp_proxy_streamable") {
         if (!updatedMCP.proxy_config) {

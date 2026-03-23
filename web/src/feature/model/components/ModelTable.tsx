@@ -152,7 +152,7 @@ export function ModelTable() {
   };
 
   const toModelSaveRequest = (model: ModelConfig): ModelSaveRequest => {
-    const { created_at, updated_at, ...rest } = model;
+    const { created_at: _c, updated_at: _u, ...rest } = model;
     return rest;
   };
 

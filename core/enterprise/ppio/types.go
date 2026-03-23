@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// PPIO model status constants.
+// Status 1 means the model is available for inference; other values indicate
+// the model is visible in the catalog but not operational (e.g. coming soon,
+// maintenance, deprecated). Unavailable models are filtered during sync to
+// avoid "MODEL_NOT_AVAILABLE" 500 errors at request time.
+const PPIOModelStatusAvailable = 1
+
 // PPIOModel represents a model from PPIO API
 type PPIOModel struct {
 	ID                   string         `json:"id"`
@@ -30,6 +37,11 @@ type PPIOModel struct {
 // PPIOModelsResponse represents the response from PPIO /v1/models API
 type PPIOModelsResponse struct {
 	Data []PPIOModel `json:"data"`
+}
+
+// IsAvailable reports whether the model is operational.
+func (m *PPIOModel) IsAvailable() bool {
+	return m.Status == PPIOModelStatusAvailable
 }
 
 // GetInputPricePerToken returns input price per token (not per million)
@@ -89,6 +101,11 @@ type PPIOModelV2 struct {
 	RPM                                   int                 `json:"rpm"`
 	TPM                                   int                 `json:"tpm"`
 	Labels                                []map[string]string `json:"labels"`
+}
+
+// IsAvailable reports whether the model is operational.
+func (m *PPIOModelV2) IsAvailable() bool {
+	return m.Status == PPIOModelStatusAvailable
 }
 
 // PPIOMgmtModelsResponse represents the response from the PPIO management model list API

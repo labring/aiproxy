@@ -313,7 +313,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             return
         }
 
-        const exportData = data.map(({ group_id, ...config }) => config)
+        const exportData = data.map(({ group_id: _group_id, ...config }) => config)
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {
             type: 'application/json',

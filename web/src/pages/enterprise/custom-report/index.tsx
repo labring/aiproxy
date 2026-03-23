@@ -107,7 +107,7 @@ export default function EnterpriseCustomReport() {
     }, [])
 
     // Auto-generate on any config change (debounced 600ms)
-    const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
     useEffect(() => {
         if (selectedDimensions.length === 0 || selectedMeasures.length === 0) return
         clearTimeout(debounceRef.current)

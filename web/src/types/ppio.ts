@@ -11,15 +11,15 @@ export interface PPIOModel {
   input_modalities: string[]
   output_modalities: string[]
   model_type: string
-  tags: any[] // Can be array of strings or numbers
+  tags: (string | number)[]
   status: number // Changed from string to number
 }
 
 export interface ModelDiff {
   model_id: string
   action: 'add' | 'update' | 'delete'
-  old_config?: Record<string, any>
-  new_config?: Record<string, any>
+  old_config?: Record<string, unknown>
+  new_config?: Record<string, unknown>
   changes?: string[]
 }
 
@@ -75,7 +75,7 @@ export interface SyncProgressEvent {
   step: string
   message: string
   progress?: number
-  data?: any
+  data?: unknown
 }
 
 export interface DiagnosticResult {

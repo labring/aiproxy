@@ -27,20 +27,30 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 		localModelMap[localModels[i].Model] = &localModels[i]
 	}
 
-	// Build remote model map
-	remoteModelMap := make(map[string]*PPIOModel)
-	for i := range remoteModels {
-		remoteModelMap[remoteModels[i].ID] = &remoteModels[i]
+	// Filter: only keep available models (Status == 1).
+	// Unavailable models (coming-soon, maintenance, deprecated) would cause
+	// MODEL_NOT_AVAILABLE errors at inference time.
+	available := make([]PPIOModel, 0, len(remoteModels))
+	for _, m := range remoteModels {
+		if m.IsAvailable() {
+			available = append(available, m)
+		}
+	}
+
+	// Build remote model map from available models only
+	remoteModelMap := make(map[string]*PPIOModel, len(available))
+	for i := range available {
+		remoteModelMap[available[i].ID] = &available[i]
 	}
 
 	diff := &SyncDiff{
 		Summary: SyncSummary{
-			TotalModels: len(remoteModels),
+			TotalModels: len(available),
 		},
 	}
 
 	// Find models to add and update
-	for _, remoteModel := range remoteModels {
+	for _, remoteModel := range available {
 		localModel, exists := localModelMap[remoteModel.ID]
 		if !exists {
 			// Model doesn't exist locally - needs to be added
@@ -102,20 +112,28 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 		localModelMap[localModels[i].Model] = &localModels[i]
 	}
 
-	// Build remote model map
-	remoteModelMap := make(map[string]*PPIOModelV2)
-	for i := range remoteModels {
-		remoteModelMap[remoteModels[i].ID] = &remoteModels[i]
+	// Filter: only keep available models (Status == 1).
+	available := make([]PPIOModelV2, 0, len(remoteModels))
+	for _, m := range remoteModels {
+		if m.IsAvailable() {
+			available = append(available, m)
+		}
+	}
+
+	// Build remote model map from available models only
+	remoteModelMap := make(map[string]*PPIOModelV2, len(available))
+	for i := range available {
+		remoteModelMap[available[i].ID] = &available[i]
 	}
 
 	diff := &SyncDiff{
 		Summary: SyncSummary{
-			TotalModels: len(remoteModels),
+			TotalModels: len(available),
 		},
 	}
 
 	// Find models to add and update
-	for _, remoteModel := range remoteModels {
+	for _, remoteModel := range available {
 		localModel, exists := localModelMap[remoteModel.ID]
 		if !exists {
 			diff.Changes.Add = append(diff.Changes.Add, ModelDiff{
@@ -396,12 +414,13 @@ func Diagnostic() (*DiagnosticResult, error) {
 			return nil, fmt.Errorf("failed to fetch remote models (mgmt API): %w", fetchErr)
 		}
 
-		remoteCount = len(v2Models)
-
 		diff, err = ComparePPIOModelsV2(v2Models, SyncOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to compare models: %w", err)
 		}
+
+		// Use TotalModels from diff (which already excludes unavailable models)
+		remoteCount = diff.Summary.TotalModels
 	} else {
 		// Fall back to public API
 		remoteModels, fetchErr := client.FetchModels()
@@ -409,12 +428,12 @@ func Diagnostic() (*DiagnosticResult, error) {
 			return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 		}
 
-		remoteCount = len(remoteModels)
-
 		diff, err = ComparePPIOModels(remoteModels, SyncOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to compare models: %w", err)
 		}
+
+		remoteCount = diff.Summary.TotalModels
 	}
 
 	// Count local models
