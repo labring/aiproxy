@@ -363,7 +363,7 @@ func TestConvertRequest_ImagesEditsRemovesModel(t *testing.T) {
 
 	assert.Equal(t, "edit prompt", convertedReq.MultipartForm.Value["prompt"][0])
 	assert.Nil(t, convertedReq.MultipartForm.Value["model"])
-	assert.Equal(t, "b64_json", meta.GetString(openai.MetaResponseFormat))
+	assert.Equal(t, "b64_json", convertedReq.MultipartForm.Value["response_format"][0])
 
 	files := convertedReq.MultipartForm.File["image"]
 	require.Len(t, files, 1)

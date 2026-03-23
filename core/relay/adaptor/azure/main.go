@@ -65,11 +65,7 @@ func ConvertRequest(
 			openai.ImagesRequestRemoveModel,
 		)
 	case mode.ImagesEdits:
-		return openai.ConvertImagesEditsRequest(
-			meta,
-			req,
-			openai.ImagesRequestRemoveModel,
-		)
+		return openai.ConvertImagesEditsRequest(meta, req, false)
 	}
 
 	return openai.ConvertRequest(meta, store, req)

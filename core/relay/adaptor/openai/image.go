@@ -3,7 +3,6 @@ package openai
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -70,47 +69,9 @@ func ConvertImagesRequest(
 func ConvertImagesEditsRequest(
 	meta *meta.Meta,
 	request *http.Request,
-	callbacks ...func(node *ast.Node) error,
+	includeModel bool,
 ) (adaptor.ConvertResult, error) {
 	err := request.ParseMultipartForm(1024 * 1024 * 4)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	formNode := ast.NewObject([]ast.Pair{})
-	for key, values := range request.MultipartForm.Value {
-		if len(values) == 0 {
-			continue
-		}
-
-		value := values[0]
-
-		if key == "response_format" {
-			meta.Set(MetaResponseFormat, value)
-		}
-
-		if key == "model" {
-			value = meta.ActualModel
-		}
-
-		_, err = formNode.Set(key, ast.NewString(value))
-		if err != nil {
-			return adaptor.ConvertResult{}, err
-		}
-	}
-
-	for _, callback := range callbacks {
-		if callback == nil {
-			continue
-		}
-
-		err = callback(&formNode)
-		if err != nil {
-			return adaptor.ConvertResult{}, err
-		}
-	}
-
-	formValues, err := formNode.Map()
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
@@ -118,12 +79,24 @@ func ConvertImagesEditsRequest(
 	multipartBody := &bytes.Buffer{}
 	multipartWriter := multipart.NewWriter(multipartBody)
 
-	for key, value := range formValues {
-		if key == "response_format" {
+	for key, values := range request.MultipartForm.Value {
+		if len(values) == 0 {
 			continue
 		}
 
-		err = multipartWriter.WriteField(key, fmt.Sprint(value))
+		value := values[0]
+
+		if key == "model" {
+			if includeModel {
+				err = multipartWriter.WriteField(key, meta.ActualModel)
+				if err != nil {
+					return adaptor.ConvertResult{}, err
+				}
+			}
+			continue
+		}
+
+		err = multipartWriter.WriteField(key, value)
 		if err != nil {
 			return adaptor.ConvertResult{}, err
 		}

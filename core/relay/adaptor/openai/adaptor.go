@@ -309,7 +309,7 @@ func ConvertRequest(
 	case mode.ImagesGenerations:
 		return ConvertImagesRequest(meta, req)
 	case mode.ImagesEdits:
-		return ConvertImagesEditsRequest(meta, req)
+		return ConvertImagesEditsRequest(meta, req, true)
 	case mode.AudioTranscription, mode.AudioTranslation:
 		return ConvertSTTRequest(meta, req)
 	case mode.AudioSpeech:

@@ -97,7 +97,7 @@ func TestConvertImagesEditsRequest_DefaultIncludesModel(t *testing.T) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ContentLength = int64(body.Len())
 
-	result, err := ConvertImagesEditsRequest(meta, req)
+	result, err := ConvertImagesEditsRequest(meta, req, true)
 	require.NoError(t, err)
 
 	convertedBody, err := io.ReadAll(result.Body)
@@ -120,7 +120,7 @@ func TestConvertImagesEditsRequest_DefaultIncludesModel(t *testing.T) {
 	assert.Equal(t, "edit prompt", convertedReq.MultipartForm.Value["prompt"][0])
 }
 
-func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
+func TestConvertImagesEditsRequest_CanExcludeModel(t *testing.T) {
 	meta := meta.NewMeta(nil, mode.ImagesEdits, "gpt-image-1", model.ModelConfig{})
 
 	var body bytes.Buffer
@@ -128,7 +128,6 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 	writer := multipart.NewWriter(&body)
 	require.NoError(t, writer.WriteField("model", "ignored"))
 	require.NoError(t, writer.WriteField("prompt", "edit prompt"))
-	require.NoError(t, writer.WriteField("response_format", "b64_json"))
 	part, err := writer.CreateFormFile("image", "test.png")
 	require.NoError(t, err)
 	_, err = part.Write([]byte("png-bytes"))
@@ -145,7 +144,7 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ContentLength = int64(body.Len())
 
-	result, err := ConvertImagesEditsRequest(meta, req, ImagesRequestRemoveModel)
+	result, err := ConvertImagesEditsRequest(meta, req, false)
 	require.NoError(t, err)
 
 	convertedBody, err := io.ReadAll(result.Body)
@@ -166,5 +165,4 @@ func TestConvertImagesEditsRequest_CanRemoveModelDynamically(t *testing.T) {
 
 	assert.Nil(t, convertedReq.MultipartForm.Value["model"])
 	assert.Equal(t, "edit prompt", convertedReq.MultipartForm.Value["prompt"][0])
-	assert.Equal(t, "b64_json", meta.GetString(MetaResponseFormat))
 }
