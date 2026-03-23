@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"strings"
+
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -234,13 +236,15 @@ var ModelList = []model.ModelConfig{
 	},
 }
 
+// no dot
 var responsesOnlyModels = map[string]struct{}{
-	"gpt-53-codex":  {},
-	"gpt-5.3-codex": {},
-	"gpt-52-codex":  {},
-	"gpt-5.2-codex": {},
-	"gpt-5-codex":   {},
-	"gpt-5-pro":     {},
+	"gpt-54-pro":        {},
+	"gpt-53-codex":      {},
+	"gpt-52-codex":      {},
+	"gpt-51-codex":      {},
+	"gpt-51-codex-mini": {},
+	"gpt-5-codex":       {},
+	"gpt-5-pro":         {},
 }
 
 // IsResponsesOnlyModel checks if a model only supports the Responses API
@@ -249,6 +253,11 @@ var responsesOnlyModels = map[string]struct{}{
 func IsResponsesOnlyModel(modelConfig *model.ModelConfig, modelName string) bool {
 	// First, check model name for quick lookup
 	if _, ok := responsesOnlyModels[modelName]; ok {
+		return true
+	}
+
+	noDotModelName := strings.ReplaceAll(modelName, ".", "")
+	if _, ok := responsesOnlyModels[noDotModelName]; ok {
 		return true
 	}
 
