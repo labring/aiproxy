@@ -4,11 +4,12 @@ package novita
 
 import "time"
 
-// novitaPricePerMDivisor converts Novita's raw price field to USD/token.
-// Raw field stores "integer cost per million tokens" in an undocumented sub-unit.
-// VERIFY: check actual API response for a known model (e.g., meta-llama/llama-3.3-70b-instruct ~$0.12/M)
-// and adjust: divisor = raw_value / (known_price_usd_per_M / 1_000_000)
-const novitaPricePerMDivisor = 1_000_000_000
+// novitaPricePerMDivisor converts Novita's raw price field (万分之一美元/百万token)
+// to USD/token.  raw / novitaPricePerMDivisor = USD/token.
+//
+// Derivation: raw / 10_000 = USD/百万token, then / 1_000_000 for per-token.
+// Cross-verified: llama-3.3-70b raw=1350 → 1350/10000=$0.135/M (matches novita.ai/pricing).
+const novitaPricePerMDivisor = 10_000_000_000
 
 // NovitaModelStatusAvailable is the status value for available models.
 const NovitaModelStatusAvailable = 1
