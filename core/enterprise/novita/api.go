@@ -15,15 +15,6 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
-// likeOp returns the appropriate SQL LIKE operator for the current database.
-func likeOp() string {
-	if common.UsingSQLite {
-		return "LIKE"
-	}
-
-	return "ILIKE"
-}
-
 type apiResponse struct {
 	Data    any    `json:"data,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -64,7 +55,7 @@ type channelItem struct {
 // novitaChannelWhere is the shared WHERE clause for finding Novita channels
 // (by channel type OR base_url containing "novita").
 func novitaChannelWhere() string {
-	return "type = ? OR base_url " + likeOp() + " ?"
+	return "type = ? OR base_url " + common.LikeOp() + " ?"
 }
 
 // novitaChannelArgs returns the args for novitaChannelWhere.

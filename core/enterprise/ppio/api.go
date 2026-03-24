@@ -15,16 +15,6 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
-// likeOp returns the appropriate SQL LIKE operator for the current database.
-// PostgreSQL supports case-insensitive ILIKE; SQLite only has LIKE.
-func likeOp() string {
-	if common.UsingSQLite {
-		return "LIKE"
-	}
-
-	return "ILIKE"
-}
-
 type apiResponse struct {
 	Data    any    `json:"data,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -67,7 +57,7 @@ type channelItem struct {
 func ListChannelsHandler(c *gin.Context) {
 	var channels []model.Channel
 
-	err := model.DB.Where("base_url "+likeOp()+" ?", "%ppio%").
+	err := model.DB.Where("base_url "+common.LikeOp()+" ?", "%ppio%").
 		Order("id ASC").
 		Find(&channels).Error
 	if err != nil {
@@ -328,7 +318,7 @@ func ModelCoverageHandler(c *gin.Context) {
 	var channels []model.Channel
 
 	if err := model.DB.Select("models").
-		Where("base_url "+likeOp()+" ? AND status = ?", "%ppio%", model.ChannelStatusEnabled).
+		Where("base_url "+common.LikeOp()+" ? AND status = ?", "%ppio%", model.ChannelStatusEnabled).
 		Find(&channels).Error; err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 
