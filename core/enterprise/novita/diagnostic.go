@@ -355,13 +355,13 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 	}
 }
 
-// checkChannelStatus checks if a Novita channel exists (by base_url containing "novita").
+// checkChannelStatus checks if a Novita channel exists.
 func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 	info := ChannelsInfo{}
 
 	var novitaChannel model.Channel
 
-	err := model.DB.Where("base_url "+likeOp()+" ?", "%novita%").First(&novitaChannel).Error
+	err := model.DB.Where(novitaChannelWhere(), novitaChannelArgs()...).First(&novitaChannel).Error
 	if err == nil {
 		info.Novita.Exists = true
 		info.Novita.ID = novitaChannel.ID

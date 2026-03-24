@@ -402,7 +402,7 @@ func ensureNovitaChannelsFromModels(anthropicModels, openaiModels []string) (Cha
 
 	var channels []model.Channel
 
-	err := model.DB.Where("base_url "+likeOp()+" ?", "%novita%").Find(&channels).Error
+	err := model.DB.Where(novitaChannelWhere(), novitaChannelArgs()...).Find(&channels).Error
 	if err != nil || len(channels) == 0 {
 		return info, nil
 	}
@@ -417,7 +417,7 @@ func ensureNovitaChannelsFromModels(anthropicModels, openaiModels []string) (Cha
 			channels[i].Models = openaiModels
 		}
 
-		if err := model.DB.Model(&channels[i]).Update("models", channels[i].Models).Error; err != nil {
+		if err := model.DB.Save(&channels[i]).Error; err != nil {
 			return info, fmt.Errorf("failed to update channel %d models: %w", channels[i].ID, err)
 		}
 	}

@@ -59,13 +59,23 @@ type channelItem struct {
 	Key     string `json:"key"`
 }
 
+// novitaChannelWhere is the shared WHERE clause for finding Novita channels
+// (by channel type OR base_url containing "novita").
+func novitaChannelWhere() string {
+	return "type = ? OR base_url " + likeOp() + " ?"
+}
+
+// novitaChannelArgs returns the args for novitaChannelWhere.
+func novitaChannelArgs() []any {
+	return []any{model.ChannelTypeNovita, "%novita%"}
+}
+
 // ListChannelsHandler handles GET /api/enterprise/novita/channels.
-// Returns channels whose base_url contains "novita".
 func ListChannelsHandler(c *gin.Context) {
 	var channels []model.Channel
 
 	err := model.DB.Select("id, name, base_url, key").
-		Where("base_url "+likeOp()+" ?", "%novita%").
+		Where(novitaChannelWhere(), novitaChannelArgs()...).
 		Order("id ASC").
 		Find(&channels).Error
 	if err != nil {
@@ -319,7 +329,7 @@ func ModelCoverageHandler(c *gin.Context) {
 	var channels []model.Channel
 
 	if err := model.DB.Select("models").
-		Where("base_url "+likeOp()+" ? AND status = ?", "%novita%", model.ChannelStatusEnabled).
+		Where("("+novitaChannelWhere()+") AND status = ?", append(novitaChannelArgs(), model.ChannelStatusEnabled)...).
 		Find(&channels).Error; err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 
