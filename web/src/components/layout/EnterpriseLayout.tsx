@@ -124,7 +124,7 @@ export function EnterpriseLayout() {
     const myPerms = new Set(permData?.permissions || [])
     const currentRole = useRole()
 
-    // Admin Key login (no enterpriseUser) → show all menu items
+    // Admin Key login (no enterpriseUser) → show all sidebar items
     const isAdminKeyLogin = !enterpriseUser
     const sidebarItems = allSidebarItems.filter(item => {
         if (item.divider) return true

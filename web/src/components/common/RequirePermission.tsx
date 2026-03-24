@@ -10,6 +10,9 @@ export function RequirePermission({
     permission: PermissionKey
     children: React.ReactNode
 }) {
+    const enterpriseUser = useAuthStore(s => s.enterpriseUser)
+    // Admin Key login (no enterpriseUser) → full access, same as RequireAdmin
+    if (!enterpriseUser) return <>{children}</>
     const { data, isLoading } = useMyPermissions()
     // Wait for permissions to load before deciding — prevents false redirect on first render
     if (isLoading) return null

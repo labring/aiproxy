@@ -17,6 +17,8 @@ import (
 const (
 	// DefaultNovitaAPIBase is the OpenAI-compatible endpoint used for the channel.
 	DefaultNovitaAPIBase = "https://api.novita.ai/v3/openai"
+	// DefaultNovitaAnthropicBase is the Anthropic-compatible endpoint.
+	DefaultNovitaAnthropicBase = "https://api.novita.ai/v3/anthropic"
 	// novitaModelsEndpoint is the standard model listing endpoint (under the v3/openai base).
 	novitaModelsEndpoint = "https://api.novita.ai/v3/openai/models"
 	// novitaMgmtEndpoint is the management API endpoint providing full model catalog

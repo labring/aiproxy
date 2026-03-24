@@ -163,9 +163,7 @@ func (c *PPIOClient) FetchAllModelsMerged(mgmtToken string) ([]PPIOModelV2, erro
 			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
 		}
 
-		// V1 failure is non-fatal when we have V2 results
 		if v1Err != nil {
-			// Log but continue with V2 only
 			log.Printf("PPIO sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
 			return v2Models, nil
 		}

@@ -471,38 +471,45 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 		openaiBase = DefaultNovitaAPIBase
 	}
 
-	openaiCh := model.Channel{
-		Name:    "Novita (OpenAI)",
-		Type:    model.ChannelTypeNovita,
-		BaseURL: openaiBase,
-		Key:     cfg.APIKey,
-		Models:  openaiModels,
-		Status:  model.ChannelStatusEnabled,
-	}
+	var created []model.Channel
 
-	if err := model.DB.Create(&openaiCh).Error; err != nil {
-		return nil, fmt.Errorf("failed to create Novita OpenAI channel: %w", err)
-	}
-
-	created := []model.Channel{openaiCh}
-
-	if len(anthropicModels) > 0 {
-		anthropicBase := strings.Replace(openaiBase, "/openai", "/anthropic", 1)
-
-		anthropicCh := model.Channel{
-			Name:    "Novita (Anthropic)",
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		openaiCh := model.Channel{
+			Name:    "Novita (OpenAI)",
 			Type:    model.ChannelTypeNovita,
-			BaseURL: anthropicBase,
+			BaseURL: openaiBase,
 			Key:     cfg.APIKey,
-			Models:  anthropicModels,
+			Models:  openaiModels,
 			Status:  model.ChannelStatusEnabled,
 		}
 
-		if err := model.DB.Create(&anthropicCh).Error; err != nil {
-			return created, fmt.Errorf("failed to create Novita Anthropic channel: %w", err)
+		if err := tx.Create(&openaiCh).Error; err != nil {
+			return fmt.Errorf("failed to create Novita OpenAI channel: %w", err)
 		}
 
-		created = append(created, anthropicCh)
+		created = append(created, openaiCh)
+
+		if len(anthropicModels) > 0 {
+			anthropicCh := model.Channel{
+				Name:    "Novita (Anthropic)",
+				Type:    model.ChannelTypeNovita,
+				BaseURL: DefaultNovitaAnthropicBase,
+				Key:     cfg.APIKey,
+				Models:  anthropicModels,
+				Status:  model.ChannelStatusEnabled,
+			}
+
+			if err := tx.Create(&anthropicCh).Error; err != nil {
+				return fmt.Errorf("failed to create Novita Anthropic channel: %w", err)
+			}
+
+			created = append(created, anthropicCh)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	log.Printf("auto-created %d Novita channel(s)", len(created))
