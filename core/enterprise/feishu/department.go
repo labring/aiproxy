@@ -79,7 +79,7 @@ func GetDepartmentTree() ([]*models.FeishuDepartment, error) {
 	var departments []models.FeishuDepartment
 
 	if err := model.DB.Where("status = 1").
-		Order("parent_id, `order`").
+		Order(`parent_id, "order"`).
 		Find(&departments).Error; err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func GetLevel1Departments() ([]*models.FeishuDepartment, error) {
 	var departments []*models.FeishuDepartment
 
 	if err := model.DB.Where("status = 1 AND (parent_id = '0' OR parent_id = '')").
-		Order("CASE WHEN name != '' THEN 0 ELSE 1 END, `order`, name").
+		Order(`CASE WHEN name != '' THEN 0 ELSE 1 END, "order", name`).
 		Find(&departments).Error; err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func GetLevel2Departments(level1ID string) ([]*models.FeishuDepartment, error) {
 	var departments []*models.FeishuDepartment
 
 	if err := model.DB.Where("status = 1 AND parent_id IN ?", parentIDs).
-		Order("CASE WHEN name != '' THEN 0 ELSE 1 END, `order`, name").
+		Order(`CASE WHEN name != '' THEN 0 ELSE 1 END, "order", name`).
 		Find(&departments).Error; err != nil {
 		return nil, err
 	}
