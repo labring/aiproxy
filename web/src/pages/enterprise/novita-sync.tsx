@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History, Save, Key } from 'lucide-react'
+import { RefreshCw, CheckCircle, AlertCircle, Info, ChevronDown, ChevronRight, Clock, History, Save, Key, DollarSign } from 'lucide-react'
 import { novitaApi } from '../../api/novita'
 import type { DiagnosticResult, ModelCoverageResult, ModelDiff, NovitaChannelItem, NovitaConfig, SyncHistory, SyncOptions, SyncProgressEvent } from '../../types/novita'
 import { toast } from 'sonner'
@@ -88,6 +88,8 @@ export default function NovitaSyncPage() {
 
   const [mgmtToken, setMgmtToken] = useState<string>('')
   const [mgmtTokenSaving, setMgmtTokenSaving] = useState(false)
+  const [exchangeRate, setExchangeRate] = useState<string>('')
+  const [exchangeRateSaving, setExchangeRateSaving] = useState(false)
 
   const [syncOpts, setSyncOpts] = useState<SyncOptions>({
     auto_create_channels: true,
@@ -173,6 +175,25 @@ export default function NovitaSyncPage() {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setMgmtTokenSaving(false)
+    }
+  }
+
+  const saveExchangeRate = async () => {
+    const rate = parseFloat(exchangeRate)
+    if (!rate || rate <= 0) {
+      toast.error(t('enterprise.novita.exchangeRateInvalid'))
+      return
+    }
+    setExchangeRateSaving(true)
+    try {
+      await novitaApi.updateExchangeRate(rate)
+      toast.success(t('enterprise.novita.exchangeRateSaved'))
+      setExchangeRate('')
+      await loadConfig()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExchangeRateSaving(false)
     }
   }
 
@@ -405,6 +426,48 @@ export default function NovitaSyncPage() {
             >
               <Save className="w-4 h-4 mr-2" />
               {mgmtTokenSaving ? t('common.saving') : t('enterprise.novita.mgmtTokenSave')}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Exchange Rate Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            {t('enterprise.novita.exchangeRateTitle')}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">{t('enterprise.novita.exchangeRateDescription')}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {config && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-blue-700 dark:text-blue-400">
+                {t('enterprise.novita.exchangeRateConfigured')}: {config.exchange_rate} USD/CNY
+              </span>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>{t('enterprise.novita.exchangeRateLabel')}</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              placeholder={t('enterprise.novita.exchangeRatePlaceholder')}
+            />
+          </div>
+          {canManage && (
+            <Button
+              onClick={saveExchangeRate}
+              disabled={exchangeRateSaving || !exchangeRate.trim()}
+              size="sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {exchangeRateSaving ? t('common.saving') : t('enterprise.novita.exchangeRateSave')}
             </Button>
           )}
         </CardContent>

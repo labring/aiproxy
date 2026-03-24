@@ -118,6 +118,7 @@ func GetConfigHandler(c *gin.Context) {
 		"api_base":              cfg.APIBase,
 		"configured":            configured,
 		"mgmt_token_configured": cfg.MgmtToken != "",
+		"exchange_rate":         cfg.ExchangeRate,
 	})
 }
 
@@ -159,6 +160,25 @@ func UpdateMgmtTokenHandler(c *gin.Context) {
 	successResponse(c, gin.H{"message": "mgmt token saved"})
 }
 
+// UpdateExchangeRateHandler handles PUT /api/enterprise/novita/exchange-rate.
+func UpdateExchangeRateHandler(c *gin.Context) {
+	var req struct {
+		Rate float64 `json:"rate" binding:"required,gt=0"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := SetNovitaExchangeRate(req.Rate); err != nil {
+		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save exchange rate: %v", err))
+		return
+	}
+
+	successResponse(c, gin.H{"message": "exchange rate saved"})
+}
+
 // DiagnosticHandler handles GET /api/enterprise/novita/sync/diagnostic.
 func DiagnosticHandler(c *gin.Context) {
 	result, err := Diagnostic()
@@ -192,7 +212,7 @@ func PreviewHandler(c *gin.Context) {
 		return
 	}
 
-	diff, err := CompareNovitaModelsV2(allModels, opts)
+	diff, err := CompareNovitaModelsV2(allModels, opts, cfg.ExchangeRate)
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return

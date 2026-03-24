@@ -62,9 +62,11 @@ func ExecuteSync(
 			fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
 	}
 
+	exchangeRate := cfg.ExchangeRate
+
 	sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
 
-	diff, err := CompareNovitaModelsV2(allModels, opts)
+	diff, err := CompareNovitaModelsV2(allModels, opts, exchangeRate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare models: %w", err)
 	}
@@ -87,7 +89,7 @@ func ExecuteSync(
 	sendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
 
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
-		return executeSyncTransaction(tx, diff, opts, modelMap, result, progressCallback)
+		return executeSyncTransaction(tx, diff, opts, modelMap, result, progressCallback, exchangeRate)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("transaction failed: %w", err)
@@ -127,6 +129,7 @@ func executeSyncTransaction(
 	modelMap map[string]*NovitaModelV2,
 	result *SyncResult,
 	progressCallback func(event SyncProgressEvent),
+	exchangeRate float64,
 ) error {
 	totalAdd := max(len(diff.Changes.Add), 1)
 
@@ -144,7 +147,7 @@ func executeSyncTransaction(
 			continue
 		}
 
-		if err := createModelConfigV2(tx, m); err != nil {
+		if err := createModelConfigV2(tx, m, exchangeRate); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("failed to add %s: %v", modelDiff.ModelID, err))
 			continue
 		}
@@ -168,7 +171,7 @@ func executeSyncTransaction(
 			continue
 		}
 
-		if err := updateModelConfigV2(tx, m); err != nil {
+		if err := updateModelConfigV2(tx, m, exchangeRate); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("failed to update %s: %v", modelDiff.ModelID, err))
 			continue
 		}
@@ -201,7 +204,8 @@ func executeSyncTransaction(
 }
 
 // createModelConfigV2 creates a ModelConfig from a V2 Novita model.
-func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
+// exchangeRate converts USD prices to CNY before storing.
+func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) error {
 	configData := toModelConfigKeys(buildConfigFromV2Model(m))
 
 	rpm := int64(60)
@@ -221,7 +225,7 @@ func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 		existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
 		existing.RPM = rpm
 		existing.TPM = tpm
-		setPriceFromV2Model(&existing.Price, m)
+		setPriceFromV2Model(&existing.Price, m, exchangeRate)
 
 		return tx.Save(&existing).Error
 	}
@@ -235,13 +239,13 @@ func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 		Config: configData,
 	}
 
-	setPriceFromV2Model(&mc.Price, m)
+	setPriceFromV2Model(&mc.Price, m, exchangeRate)
 
 	return tx.Create(&mc).Error
 }
 
 // updateModelConfigV2 updates an existing ModelConfig from a V2 Novita model.
-func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
+func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) error {
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).
 		First(&existing).Error; err != nil {
@@ -260,25 +264,26 @@ func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 		existing.TPM = int64(m.TPM)
 	}
 
-	setPriceFromV2Model(&existing.Price, m)
+	setPriceFromV2Model(&existing.Price, m, exchangeRate)
 
 	return tx.Save(&existing).Error
 }
 
 // setPriceFromV2Model populates Price fields from a V2 model, including cache pricing.
-func setPriceFromV2Model(price *model.Price, m *NovitaModelV2) {
-	price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
+// exchangeRate converts USD per-token prices to CNY before storing.
+func setPriceFromV2Model(price *model.Price, m *NovitaModelV2, exchangeRate float64) {
+	price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken() * exchangeRate)
 	price.InputPriceUnit = model.ZeroNullInt64(1)
-	price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
+	price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken() * exchangeRate)
 	price.OutputPriceUnit = model.ZeroNullInt64(1)
 
 	if m.SupportPromptCache && m.CacheReadInputTokenPricePerM > 0 {
-		price.CachedPrice = model.ZeroNullFloat64(m.GetCacheReadPricePerToken())
+		price.CachedPrice = model.ZeroNullFloat64(m.GetCacheReadPricePerToken() * exchangeRate)
 		price.CachedPriceUnit = model.ZeroNullInt64(1)
 	}
 
 	if m.SupportPromptCache && m.CacheCreationInputTokenPricePerM > 0 {
-		price.CacheCreationPrice = model.ZeroNullFloat64(m.GetCacheCreationPricePerToken())
+		price.CacheCreationPrice = model.ZeroNullFloat64(m.GetCacheCreationPricePerToken() * exchangeRate)
 		price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 	}
 
@@ -297,20 +302,20 @@ func setPriceFromV2Model(price *model.Price, m *NovitaModelV2) {
 					InputTokenMax: maxTokens,
 				},
 				Price: model.Price{
-					InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
+					InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken() * exchangeRate),
 					InputPriceUnit:  model.ZeroNullInt64(1),
-					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
+					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken() * exchangeRate),
 					OutputPriceUnit: model.ZeroNullInt64(1),
 				},
 			}
 
 			if tier.CacheReadInputPricing.PricePerM > 0 {
-				cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken())
+				cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken() * exchangeRate)
 				cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
 			}
 
 			if tier.CacheCreationInputPricing.PricePerM > 0 {
-				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
+				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken() * exchangeRate)
 				cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 			}
 

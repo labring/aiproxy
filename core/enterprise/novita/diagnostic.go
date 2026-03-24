@@ -52,7 +52,7 @@ func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 }
 
 // CompareNovitaModelsV2 compares remote V2 models with local database models.
-func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions) (*SyncDiff, error) {
+func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, exchangeRate float64) (*SyncDiff, error) {
 	var localModels []model.ModelConfig
 
 	err := model.DB.Where("owner = ?", string(model.ModelOwnerNovita)).Find(&localModels).Error
@@ -89,17 +89,17 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions) (*Syn
 			diff.Changes.Add = append(diff.Changes.Add, ModelDiff{
 				ModelID:   remoteModel.ID,
 				Action:    "add",
-				NewConfig: buildModelConfigMapV2(&remoteModel),
+				NewConfig: buildModelConfigMapV2(&remoteModel, exchangeRate),
 			})
 			diff.Summary.ToAdd++
 		} else {
-			changes := compareModelConfigsV2(localModel, &remoteModel)
+			changes := compareModelConfigsV2(localModel, &remoteModel, exchangeRate)
 			if len(changes) > 0 {
 				diff.Changes.Update = append(diff.Changes.Update, ModelDiff{
 					ModelID:   remoteModel.ID,
 					Action:    "update",
 					OldConfig: buildLocalModelConfigMap(localModel),
-					NewConfig: buildModelConfigMapV2(&remoteModel),
+					NewConfig: buildModelConfigMapV2(&remoteModel, exchangeRate),
 					Changes:   changes,
 				})
 				diff.Summary.ToUpdate++
@@ -126,22 +126,25 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions) (*Syn
 }
 
 // compareModelConfigsV2 compares a local model config with a remote V2 model.
-func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2) []string {
+// Prices are compared after applying the exchange rate (USD→CNY).
+func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exchangeRate float64) []string {
 	var changes []string
 
-	if !floatEquals(float64(local.Price.InputPrice), remote.GetInputPricePerToken()) {
+	newInputPrice := remote.GetInputPricePerToken() * exchangeRate
+	if !floatEquals(float64(local.Price.InputPrice), newInputPrice) {
 		changes = append(changes, fmt.Sprintf(
 			"input_price: %.8f → %.8f",
 			float64(local.Price.InputPrice),
-			remote.GetInputPricePerToken(),
+			newInputPrice,
 		))
 	}
 
-	if !floatEquals(float64(local.Price.OutputPrice), remote.GetOutputPricePerToken()) {
+	newOutputPrice := remote.GetOutputPricePerToken() * exchangeRate
+	if !floatEquals(float64(local.Price.OutputPrice), newOutputPrice) {
 		changes = append(changes, fmt.Sprintf(
 			"output_price: %.8f → %.8f",
 			float64(local.Price.OutputPrice),
-			remote.GetOutputPricePerToken(),
+			newOutputPrice,
 		))
 	}
 
@@ -179,13 +182,14 @@ func floatEquals(a, b float64) bool {
 }
 
 // buildModelConfigMapV2 builds a diff-display map for a V2 model.
-func buildModelConfigMapV2(m *NovitaModelV2) map[string]any {
+// Prices shown are after exchange rate conversion (USD→CNY).
+func buildModelConfigMapV2(m *NovitaModelV2, exchangeRate float64) map[string]any {
 	return map[string]any{
 		"model":        m.ID,
 		"title":        m.Title,
 		"description":  m.Description,
-		"input_price":  m.GetInputPricePerToken(),
-		"output_price": m.GetOutputPricePerToken(),
+		"input_price":  m.GetInputPricePerToken() * exchangeRate,
+		"output_price": m.GetOutputPricePerToken() * exchangeRate,
 		"context_size": m.ContextSize,
 		"endpoints":    m.Endpoints,
 		"model_type":   m.ModelType,
@@ -237,7 +241,7 @@ func Diagnostic() (*DiagnosticResult, error) {
 		return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 	}
 
-	diff, err := CompareNovitaModelsV2(allModels, SyncOptions{})
+	diff, err := CompareNovitaModelsV2(allModels, SyncOptions{}, cfg.ExchangeRate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare models: %w", err)
 	}

@@ -107,6 +107,10 @@ export const novitaApi = {
     return put('/enterprise/novita/mgmt-token', { token })
   },
 
+  updateExchangeRate: async (rate: number): Promise<void> => {
+    return put('/enterprise/novita/exchange-rate', { rate })
+  },
+
   history: async (): Promise<SyncHistory[]> => {
     return get<SyncHistory[]>('/enterprise/novita/sync/history')
   },

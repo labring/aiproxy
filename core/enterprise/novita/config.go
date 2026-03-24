@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	optionKeyNovitaChannelID = "NovitaChannelID"
-	optionKeyNovitaAPIKey    = "NovitaAPIKey"
-	optionKeyNovitaAPIBase   = "NovitaAPIBase"
-	optionKeyNovitaMgmtToken = "NovitaMgmtToken"
+	optionKeyNovitaChannelID     = "NovitaChannelID"
+	optionKeyNovitaAPIKey        = "NovitaAPIKey"
+	optionKeyNovitaAPIBase       = "NovitaAPIBase"
+	optionKeyNovitaMgmtToken     = "NovitaMgmtToken"
+	optionKeyNovitaExchangeRate  = "NovitaExchangeRate"
+	defaultNovitaExchangeRate    = 7.2
 )
 
 var novitaOptionKeys = []string{
@@ -23,14 +25,16 @@ var novitaOptionKeys = []string{
 	optionKeyNovitaAPIKey,
 	optionKeyNovitaAPIBase,
 	optionKeyNovitaMgmtToken,
+	optionKeyNovitaExchangeRate,
 }
 
 // NovitaConfigResult holds the current Novita configuration.
 type NovitaConfigResult struct {
-	ChannelID int    `json:"channel_id"`
-	APIKey    string `json:"api_key"`
-	APIBase   string `json:"api_base"`
-	MgmtToken string `json:"mgmt_token,omitempty"`
+	ChannelID    int     `json:"channel_id"`
+	APIKey       string  `json:"api_key"`
+	APIBase      string  `json:"api_base"`
+	MgmtToken    string  `json:"mgmt_token,omitempty"`
+	ExchangeRate float64 `json:"exchange_rate"` // USD→CNY exchange rate for price conversion
 }
 
 // GetNovitaConfig reads Novita configuration from the option table.
@@ -49,7 +53,13 @@ func GetNovitaConfig() (cfg NovitaConfigResult) {
 			cfg.APIBase = opt.Value
 		case optionKeyNovitaMgmtToken:
 			cfg.MgmtToken = opt.Value
+		case optionKeyNovitaExchangeRate:
+			cfg.ExchangeRate, _ = strconv.ParseFloat(opt.Value, 64)
 		}
+	}
+
+	if cfg.ExchangeRate <= 0 {
+		cfg.ExchangeRate = defaultNovitaExchangeRate
 	}
 
 	return cfg
@@ -60,6 +70,13 @@ func SetNovitaMgmtToken(token string) error {
 	return model.DB.Where("key = ?", optionKeyNovitaMgmtToken).
 		Assign(model.Option{Value: token}).
 		FirstOrCreate(&model.Option{Key: optionKeyNovitaMgmtToken}).Error
+}
+
+// SetNovitaExchangeRate persists the USD→CNY exchange rate to the Option table.
+func SetNovitaExchangeRate(rate float64) error {
+	return model.DB.Where("key = ?", optionKeyNovitaExchangeRate).
+		Assign(model.Option{Value: strconv.FormatFloat(rate, 'f', -1, 64)}).
+		FirstOrCreate(&model.Option{Key: optionKeyNovitaExchangeRate}).Error
 }
 
 // SetNovitaConfigFromChannel reads key/base_url from the given channel and persists them.

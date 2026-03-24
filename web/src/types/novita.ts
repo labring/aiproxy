@@ -103,6 +103,7 @@ export interface NovitaConfig {
   api_base: string
   configured: boolean
   mgmt_token_configured: boolean
+  exchange_rate: number
 }
 
 export interface NovitaChannelItem {

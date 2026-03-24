@@ -519,7 +519,15 @@
       "endpointChat": "OpenAI 兼容 (base_url: api.novita.ai/v3/openai)",
       "endpointAnthropic": "Claude 原生协议 (base_url: api.novita.ai/v3/anthropic)",
       "endpointResponses": "OpenAI Responses API (/v1/responses)",
-      "endpointEmbeddings": "文本向量 (/v1/embeddings)"
+      "endpointEmbeddings": "文本向量 (/v1/embeddings)",
+      "exchangeRateTitle": "汇率配置",
+      "exchangeRateDescription": "Novita 价格以 USD 计价，同步时按此汇率转换为人民币 (CNY) 写入本地",
+      "exchangeRateLabel": "汇率 (USD → CNY)",
+      "exchangeRatePlaceholder": "例如 7.2",
+      "exchangeRateSave": "保存汇率",
+      "exchangeRateSaved": "汇率保存成功",
+      "exchangeRateConfigured": "当前汇率",
+      "exchangeRateInvalid": "请输入有效的汇率（大于 0）"
     },
     "quota": {
       "title": "额度策略管理",

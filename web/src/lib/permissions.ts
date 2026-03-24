@@ -33,6 +33,11 @@ export function useMyPermissions() {
 }
 
 export function useHasPermission(key: PermissionKey): boolean {
+    const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+    if (!isAuthenticated) return false
+    const user = useAuthStore(s => s.enterpriseUser)
+    // Admin Key login (no enterpriseUser) has all permissions
+    if (!user) return true
     const { data } = useMyPermissions()
     if (!data) return false
     return data.permissions.includes(key)
@@ -43,6 +48,10 @@ export function useCanManage(module: string): boolean {
 }
 
 export function useRole(): string {
+    const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+    if (!isAuthenticated) return 'viewer'
     const user = useAuthStore(s => s.enterpriseUser)
-    return user?.role || 'viewer'
+    // Admin Key login (no enterpriseUser) has full admin privileges
+    if (!user) return 'admin'
+    return user.role || 'viewer'
 }

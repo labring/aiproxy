@@ -530,7 +530,15 @@
       "endpointChat": "OpenAI compatible (base_url: api.novita.ai/v3/openai)",
       "endpointAnthropic": "Claude native protocol (base_url: api.novita.ai/v3/anthropic)",
       "endpointResponses": "OpenAI Responses API (/v1/responses)",
-      "endpointEmbeddings": "Text embeddings (/v1/embeddings)"
+      "endpointEmbeddings": "Text embeddings (/v1/embeddings)",
+      "exchangeRateTitle": "Exchange Rate",
+      "exchangeRateDescription": "Novita prices are in USD. Set the exchange rate to convert to CNY during sync.",
+      "exchangeRateLabel": "Exchange Rate (USD → CNY)",
+      "exchangeRatePlaceholder": "e.g. 7.2",
+      "exchangeRateSave": "Save Rate",
+      "exchangeRateSaved": "Exchange rate saved successfully",
+      "exchangeRateConfigured": "Current rate",
+      "exchangeRateInvalid": "Please enter a valid exchange rate (greater than 0)"
     },
     "customReport": {
       "title": "Custom Report",
