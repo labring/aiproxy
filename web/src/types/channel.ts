@@ -5,6 +5,7 @@ export interface Channel {
     name: string
     key: string
     base_url?: string
+    proxy_url?: string
     models: string[]
     model_mapping: Record<string, string> | null
     request_count: number
@@ -51,6 +52,7 @@ export interface ChannelCreateRequest {
     name: string
     key: string
     base_url?: string
+    proxy_url?: string
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]
@@ -63,6 +65,7 @@ export interface ChannelUpdateRequest {
     name: string
     key: string
     base_url?: string
+    proxy_url?: string
     models: string[]
     model_mapping?: Record<string, string>
     sets?: string[]

@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
 )
 
 var tokenCache = cache.New(time.Hour*23, time.Minute)
 
-func GetBearerToken(ctx context.Context, apiKey string) (string, error) {
+func GetBearerToken(ctx context.Context, apiKey, proxyURL string) (string, error) {
 	parts := strings.Split(apiKey, "|")
 	if len(parts) != 2 {
 		return "", errors.New("invalid baidu apikey")
@@ -33,7 +34,7 @@ func GetBearerToken(ctx context.Context, apiKey string) (string, error) {
 		return token, nil
 	}
 
-	tokenResponse, err := getBaiduAccessTokenHelper(ctx, apiKey)
+	tokenResponse, err := getBaiduAccessTokenHelper(ctx, apiKey, proxyURL)
 	if err != nil {
 		log.Errorf("get baiduv2 access token failed: %v", err)
 		return "", errors.New("get baiduv2 access token failed")
@@ -53,7 +54,7 @@ type TokenResponse struct {
 	Token      string    `json:"token"`
 }
 
-func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*TokenResponse, error) {
+func getBaiduAccessTokenHelper(ctx context.Context, apiKey, proxyURL string) (*TokenResponse, error) {
 	ak, sk, err := getAKAndSK(apiKey)
 	if err != nil {
 		return nil, err
@@ -76,7 +77,12 @@ func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*TokenRespon
 	req.URL.RawQuery = query.Encode()
 	req.Header.Set("Authorization", authorization)
 
-	res, err := http.DefaultClient.Do(req)
+	client, err := relayutils.LoadHTTPClientE(0, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

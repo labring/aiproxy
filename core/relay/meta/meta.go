@@ -11,6 +11,7 @@ import (
 type ChannelMeta struct {
 	Name         string
 	BaseURL      string
+	ProxyURL     string
 	Key          string
 	ID           int
 	Type         model.ChannelType
@@ -138,6 +139,7 @@ func NewMeta(
 func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.Name = channel.Name
 	m.Channel.BaseURL = channel.BaseURL
+	m.Channel.ProxyURL = channel.ProxyURL
 	m.Channel.Key = channel.Key
 	m.Channel.ID = channel.ID
 	m.Channel.Type = channel.Type

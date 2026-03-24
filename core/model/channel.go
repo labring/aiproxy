@@ -40,6 +40,7 @@ type Channel struct {
 	Key                     string            `gorm:"type:text;index:,length:191"        json:"key"                        yaml:"key,omitempty"`
 	Name                    string            `gorm:"size:64;index"                      json:"name"                       yaml:"name,omitempty"`
 	BaseURL                 string            `gorm:"size:128;index"                     json:"base_url"                   yaml:"base_url,omitempty"`
+	ProxyURL                string            `gorm:"size:255"                           json:"proxy_url"                  yaml:"proxy_url,omitempty"`
 	Models                  []string          `gorm:"serializer:fastjson;type:text"      json:"models"                     yaml:"models,omitempty"`
 	Balance                 float64           `                                          json:"balance"                    yaml:"balance,omitempty"`
 	ID                      int               `gorm:"primaryKey"                         json:"id"                         yaml:"id,omitempty"`
@@ -408,6 +409,7 @@ func UpdateChannel(channel *Channel) (err error) {
 		"model_mapping",
 		"key",
 		"base_url",
+		"proxy_url",
 		"models",
 		"priority",
 		"configs",

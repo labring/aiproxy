@@ -632,6 +632,7 @@ type TestChannelRequest struct {
 	Type         int               `json:"type"          binding:"required"`
 	Key          string            `json:"key"           binding:"required"`
 	BaseURL      string            `json:"base_url"`
+	ProxyURL     string            `json:"proxy_url"`
 	Name         string            `json:"name"`
 	Models       []string          `json:"models"`
 	ModelMapping map[string]string `json:"model_mapping"`
@@ -643,6 +644,7 @@ type TestSingleModelRequest struct {
 	Type         int               `json:"type"          binding:"required"`
 	Key          string            `json:"key"           binding:"required"`
 	BaseURL      string            `json:"base_url"`
+	ProxyURL     string            `json:"proxy_url"`
 	Name         string            `json:"name"`
 	Model        string            `json:"model"         binding:"required"`
 	ModelMapping map[string]string `json:"model_mapping"`
@@ -655,6 +657,7 @@ func createTempChannel(req *TestChannelRequest) *model.Channel {
 		Type:         model.ChannelType(req.Type),
 		Key:          req.Key,
 		BaseURL:      req.BaseURL,
+		ProxyURL:     req.ProxyURL,
 		Name:         req.Name,
 		Models:       req.Models,
 		ModelMapping: req.ModelMapping,
@@ -689,6 +692,7 @@ func TestChannelPreview(c *gin.Context) {
 		Type:         model.ChannelType(req.Type),
 		Key:          req.Key,
 		BaseURL:      req.BaseURL,
+		ProxyURL:     req.ProxyURL,
 		Name:         req.Name,
 		Models:       []string{req.Model},
 		ModelMapping: req.ModelMapping,

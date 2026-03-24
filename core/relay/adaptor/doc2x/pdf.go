@@ -20,6 +20,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -219,7 +220,7 @@ func HTMLImage2Md(content string) string {
 	return htmlImageRegex.ReplaceAllString(content, "![img]($1)")
 }
 
-func InlineMdImage(ctx context.Context, text string) string {
+func InlineMdImage(ctx context.Context, m *meta.Meta, text string) string {
 	text = HTMLImage2Md(text)
 
 	matches := imageRegex.FindAllStringSubmatchIndex(text, -1)
@@ -263,7 +264,7 @@ func InlineMdImage(ctx context.Context, text string) string {
 
 			info := &imageInfos[index]
 
-			replacement, err := imageURL2MdBase64(ctx, info.url, info.altText)
+			replacement, err := imageURL2MdBase64(ctx, m, info.url, info.altText)
 			if err != nil {
 				log.Printf("failed to process image %s: %v", info.url, err)
 				// when the image is not found, keep the original link
@@ -298,7 +299,7 @@ func InlineMdImage(ctx context.Context, text string) string {
 	return resultText.String()
 }
 
-func imageURL2MdBase64(ctx context.Context, url, altText string) (string, error) {
+func imageURL2MdBase64(ctx context.Context, m *meta.Meta, url, altText string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -311,9 +312,13 @@ func imageURL2MdBase64(ctx context.Context, url, altText string) (string, error)
 
 	retries := 0
 	maxRetries := 3
+	client, err := utils.LoadHTTPClientE(m.RequestTimeout, m.Channel.ProxyURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to create http client: %w", err)
+	}
 
 	for retries <= maxRetries {
-		resp, downloadErr = http.DefaultClient.Do(req)
+		resp, downloadErr = client.Do(req)
 		if downloadErr != nil {
 			return "", fmt.Errorf("failed to download image: %w", downloadErr)
 		}
@@ -382,8 +387,8 @@ func inferMimeType(u string) string {
 	}
 }
 
-func handleConvertPdfToMd(ctx context.Context, str string) string {
-	result := InlineMdImage(ctx, str)
+func handleConvertPdfToMd(ctx context.Context, m *meta.Meta, str string) string {
+	result := InlineMdImage(ctx, m, str)
 	result = HTMLTable2Md(result)
 
 	result = mediaCommentRegex.ReplaceAllString(result, "")
@@ -410,7 +415,7 @@ func handleParsePdfResponse(
 	switch meta.GetString("response_format") {
 	case "list":
 		for i, md := range mds {
-			result := handleConvertPdfToMd(c.Request.Context(), md)
+			result := handleConvertPdfToMd(c.Request.Context(), meta, md)
 			mds[i] = result
 		}
 
@@ -425,7 +430,7 @@ func handleParsePdfResponse(
 			builder.WriteString(md)
 		}
 
-		result := handleConvertPdfToMd(c.Request.Context(), builder.String())
+		result := handleConvertPdfToMd(c.Request.Context(), meta, builder.String())
 		c.JSON(http.StatusOK, relaymodel.ParsePdfResponse{
 			Pages:    pages,
 			Markdown: result,
@@ -480,7 +485,7 @@ func GetStatus(ctx context.Context, meta *meta.Meta, uid string) (*StatusRespons
 
 	req.Header.Set("Authorization", "Bearer "+meta.Channel.Key)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := utils.DoRequestWithMeta(req, meta)
 	if err != nil {
 		return nil, err
 	}

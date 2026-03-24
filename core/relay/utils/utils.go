@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,8 +12,8 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/relay/meta"
 	model "github.com/labring/aiproxy/core/relay/model"
-	"github.com/patrickmn/go-cache"
 )
 
 func UnmarshalGeneralThinking(req *http.Request) (model.GeneralOpenAIThinkingRequest, error) {
@@ -142,67 +140,31 @@ func UnmarshalMap(req *http.Request) (map[string]any, error) {
 	return request, nil
 }
 
-const (
-	defaultHeaderTimeout = time.Minute * 15
-	tlsHandshakeTimeout  = time.Second * 5
-)
-
-var (
-	defaultTransport *http.Transport
-	defaultClient    *http.Client
-	defaultDialer    = &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	clientCache = cache.New(time.Minute, time.Minute)
-)
-
-func init() {
-	defaultTransport, _ = http.DefaultTransport.(*http.Transport)
-	if defaultTransport == nil {
-		panic("http default transport is not http.Transport type")
-	}
-
-	defaultTransport = defaultTransport.Clone()
-	defaultTransport.DialContext = defaultDialer.DialContext
-	defaultTransport.ResponseHeaderTimeout = defaultHeaderTimeout
-	defaultTransport.TLSHandshakeTimeout = tlsHandshakeTimeout
-
-	defaultClient = &http.Client{
-		Transport: defaultTransport,
-	}
-}
-
-func loadHTTPClient(timeout time.Duration) *http.Client {
-	if timeout == 0 || timeout == defaultHeaderTimeout {
-		return defaultClient
-	}
-
-	key := strconv.Itoa(int(timeout))
-
-	clientI, ok := clientCache.Get(key)
-	if ok {
-		client, ok := clientI.(*http.Client)
-		if !ok {
-			panic("unknow http client type")
-		}
-
-		return client
-	}
-
-	transport := defaultTransport.Clone()
-	transport.ResponseHeaderTimeout = timeout
-
-	client := &http.Client{
-		Transport: transport,
-	}
-	clientCache.SetDefault(key, client)
-
-	return client
-}
-
 func DoRequest(req *http.Request, timeout time.Duration) (*http.Response, error) {
-	resp, err := loadHTTPClient(timeout).Do(req) //nolint:gosec // request URL is from caller
+	client, err := LoadHTTPClientE(timeout, "")
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // request URL is from caller
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func DoRequestWithMeta(req *http.Request, m *meta.Meta) (*http.Response, error) {
+	if m == nil {
+		return DoRequest(req, 0)
+	}
+
+	client, err := LoadHTTPClientE(m.RequestTimeout, m.Channel.ProxyURL)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // request URL is from caller
 	if err != nil {
 		return nil, err
 	}

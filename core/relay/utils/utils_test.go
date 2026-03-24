@@ -74,6 +74,25 @@ func TestDoRequest(t *testing.T) {
 	})
 }
 
+func TestLoadHTTPClientReuse(t *testing.T) {
+	convey.Convey("LoadHTTPClient reuse", t, func() {
+		client1, err := utils.LoadHTTPClientE(time.Second, "")
+		convey.So(err, convey.ShouldBeNil)
+
+		client2, err := utils.LoadHTTPClientE(time.Second, "")
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(client1, convey.ShouldEqual, client2)
+
+		client3, err := utils.LoadHTTPClientE(time.Second, "http://127.0.0.1:7890")
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(client3, convey.ShouldNotEqual, client1)
+
+		client4, err := utils.LoadHTTPClientE(time.Second, "http://127.0.0.1:7890")
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(client4, convey.ShouldEqual, client3)
+	})
+}
+
 func TestUnmarshalGeneralOpenAIRequest(t *testing.T) {
 	convey.Convey("UnmarshalGeneralOpenAIRequest", t, func() {
 		convey.Convey("should unmarshal valid request", func() {
