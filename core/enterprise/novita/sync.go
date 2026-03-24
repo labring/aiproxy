@@ -97,7 +97,7 @@ func ExecuteSync(
 
 	sendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsureNovitaChannels()
+	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
@@ -379,8 +379,9 @@ func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens 
 
 // EnsureNovitaChannels queries all local ModelConfig entries owned by Novita,
 // partitions them by endpoint compatibility, and writes the lists into the
-// corresponding Novita channels.
-func EnsureNovitaChannels() (ChannelsInfo, error) {
+// corresponding Novita channels. When autoCreate is true and no Novita channels
+// exist, it creates them automatically using the API key from cfg.
+func EnsureNovitaChannels(autoCreate bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -410,16 +411,36 @@ func EnsureNovitaChannels() (ChannelsInfo, error) {
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels)
+	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, cfg)
 }
 
-func ensureNovitaChannelsFromModels(anthropicModels, openaiModels []string) (ChannelsInfo, error) {
+func ensureNovitaChannelsFromModels(
+	anthropicModels, openaiModels []string,
+	autoCreate bool, cfg NovitaConfigResult,
+) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
 	var channels []model.Channel
 
 	err := model.DB.Where(novitaChannelWhere(), novitaChannelArgs()...).Find(&channels).Error
-	if err != nil || len(channels) == 0 {
+	if err != nil {
+		return info, fmt.Errorf("failed to query Novita channels: %w", err)
+	}
+
+	// Auto-create channels when none exist and the option is enabled.
+	if len(channels) == 0 {
+		if !autoCreate || cfg.APIKey == "" {
+			return info, nil
+		}
+
+		created, createErr := createNovitaChannels(cfg, anthropicModels, openaiModels)
+		if createErr != nil {
+			return info, createErr
+		}
+
+		info.Novita.Exists = true
+		info.Novita.ID = created[0].ID
+
 		return info, nil
 	}
 
@@ -439,6 +460,54 @@ func ensureNovitaChannelsFromModels(anthropicModels, openaiModels []string) (Cha
 	}
 
 	return info, nil
+}
+
+// createNovitaChannels creates the OpenAI-compatible channel and, if there are
+// anthropic-endpoint models, an Anthropic-compatible channel as well.
+// Both channels share the same API key from the Novita config.
+func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+	openaiBase := cfg.APIBase
+	if openaiBase == "" {
+		openaiBase = DefaultNovitaAPIBase
+	}
+
+	openaiCh := model.Channel{
+		Name:    "Novita (OpenAI)",
+		Type:    model.ChannelTypeNovita,
+		BaseURL: openaiBase,
+		Key:     cfg.APIKey,
+		Models:  openaiModels,
+		Status:  model.ChannelStatusEnabled,
+	}
+
+	if err := model.DB.Create(&openaiCh).Error; err != nil {
+		return nil, fmt.Errorf("failed to create Novita OpenAI channel: %w", err)
+	}
+
+	created := []model.Channel{openaiCh}
+
+	if len(anthropicModels) > 0 {
+		anthropicBase := strings.Replace(openaiBase, "/openai", "/anthropic", 1)
+
+		anthropicCh := model.Channel{
+			Name:    "Novita (Anthropic)",
+			Type:    model.ChannelTypeNovita,
+			BaseURL: anthropicBase,
+			Key:     cfg.APIKey,
+			Models:  anthropicModels,
+			Status:  model.ChannelStatusEnabled,
+		}
+
+		if err := model.DB.Create(&anthropicCh).Error; err != nil {
+			return created, fmt.Errorf("failed to create Novita Anthropic channel: %w", err)
+		}
+
+		created = append(created, anthropicCh)
+	}
+
+	log.Printf("auto-created %d Novita channel(s)", len(created))
+
+	return created, nil
 }
 
 // RecordSyncHistory records sync history to database.
