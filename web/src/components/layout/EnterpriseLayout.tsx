@@ -85,6 +85,12 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             requiredPermission: "access_control_view",
         },
         {
+            title: t("enterprise.sidebar.novitaSync"),
+            icon: RefreshCw,
+            href: ROUTES.ENTERPRISE_NOVITA_SYNC,
+            requiredPermission: "access_control_view",
+        },
+        {
             title: "",
             icon: () => null,
             href: "",

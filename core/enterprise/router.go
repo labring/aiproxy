@@ -7,6 +7,7 @@ import (
 	"github.com/labring/aiproxy/core/enterprise/analytics"
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
+	"github.com/labring/aiproxy/core/enterprise/novita"
 	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	"github.com/labring/aiproxy/core/middleware"
@@ -57,6 +58,7 @@ func RegisterRoutes(router *gin.Engine) {
 	analytics.RegisterRoutes(enterpriseAuth, permMW)
 	quota.RegisterRoutes(enterpriseAuth, permMW)
 	ppio.RegisterRoutes(enterpriseAuth, permMW)
+	novita.RegisterRoutes(enterpriseAuth, permMW)
 	RegisterTenantWhitelistRoutes(enterpriseAuth, permMW)
 	RegisterEnterpriseAuthRoutes(enterpriseAuth, permMW)
 	RegisterRolePermissionRoutes(enterpriseAuth)

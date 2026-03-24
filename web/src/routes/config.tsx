@@ -32,6 +32,7 @@ const EnterpriseCustomReport = lazy(() => import("@/pages/enterprise/custom-repo
 const EnterpriseAccessControl = lazy(() => import("@/pages/enterprise/access-control"))
 const EnterpriseUsers = lazy(() => import("@/pages/enterprise/users"))
 const EnterprisePPIOSync = lazy(() => import("@/pages/enterprise/ppio-sync"))
+const EnterpriseNovitaSync = lazy(() => import("@/pages/enterprise/novita-sync"))
 const EnterpriseMyAccess = lazy(() => import("@/pages/enterprise/my-access"))
 
 // lazy load component wrapper
@@ -127,6 +128,10 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: ROUTES.ENTERPRISE_PPIO_SYNC,
                         element: <RequirePermission permission="access_control_view">{lazyLoad(EnterprisePPIOSync)}</RequirePermission>,
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_NOVITA_SYNC,
+                        element: <RequirePermission permission="access_control_view">{lazyLoad(EnterpriseNovitaSync)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_MY_ACCESS,

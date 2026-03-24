@@ -25,6 +25,22 @@ func (PPIOSyncHistory) TableName() string {
 	return "ppio_sync_history"
 }
 
+// NovitaSyncHistory mirrors novita.SyncHistory for migration purposes.
+// Defined here to avoid circular dependency (novita → model → models → novita).
+type NovitaSyncHistory struct {
+	ID          int64     `gorm:"primaryKey"`
+	SyncedAt    time.Time `gorm:"autoCreateTime;index"`
+	Operator    string
+	SyncOptions string
+	Result      string
+	Status      string
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
+}
+
+func (NovitaSyncHistory) TableName() string {
+	return "novita_sync_history"
+}
+
 // EnterpriseAutoMigrate runs database migrations for all enterprise tables.
 func EnterpriseAutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
@@ -37,6 +53,7 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&DepartmentQuotaPolicy{},
 		&UserQuotaPolicy{},
 		&PPIOSyncHistory{},
+		&NovitaSyncHistory{},
 		&RejectedTenantLogin{},
 		&RolePermission{},
 	); err != nil {
