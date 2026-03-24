@@ -184,21 +184,21 @@ func PreviewHandler(c *gin.Context) {
 		return
 	}
 
-	// Fetch remote models
 	client, err := NewPPIOClient()
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	remoteModels, err := client.FetchModels(c.Request.Context())
+	cfg := GetPPIOConfig()
+
+	allModels, err := client.FetchAllModelsMerged(c.Request.Context(), cfg.MgmtToken)
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Compare models
-	diff, err := ComparePPIOModels(remoteModels, opts)
+	diff, err := ComparePPIOModelsV2(allModels, opts)
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return

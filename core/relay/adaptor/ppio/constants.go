@@ -5,7 +5,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
-// https://ppio.com/docs/model/llm.md
+// https://ppinfra.com/docs/model/llm.md
 
 var ModelList = []model.ModelConfig{
 	// DeepSeek models

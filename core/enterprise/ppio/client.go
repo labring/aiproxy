@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	DefaultPPIOAPIBase        = "https://api.ppio.com/v1"
-	DefaultPPIOAnthropicBase  = "https://api.ppio.com/anthropic"
-	ppioModelsEndpoint        = "https://api.ppio.com/openai/models"
-	ppioMgmtModelsEndpoint    = "https://api-server.ppio.com/v1/product/model/list"
-	DefaultTimeout            = 30 * time.Second
+	DefaultPPIOAPIBase        = "https://api.ppinfra.com/v3/openai"
+	DefaultPPIOAnthropicBase  = "https://api.ppinfra.com/v3/anthropic"
+	ppioModelsEndpoint        = "https://api.ppinfra.com/v3/openai/models"
+	ppioMgmtModelsEndpoint    = "https://api-server.ppinfra.com/v1/product/model/list"
+	defaultPPIOTimeout        = 30 * time.Second
 	ppioMaxResponseSize       = 50 << 20 // 50 MB
 )
 
@@ -58,7 +58,7 @@ func NewPPIOClient() (*PPIOClient, error) {
 		APIKey:  apiKey,
 		APIBase: apiBase,
 		client: &http.Client{
-			Timeout: DefaultTimeout,
+			Timeout: defaultPPIOTimeout,
 		},
 	}, nil
 }
@@ -69,7 +69,7 @@ func NewPPIOClient() (*PPIOClient, error) {
 func (c *PPIOClient) FetchModels(ctx context.Context) ([]PPIOModel, error) {
 	url := ppioModelsEndpoint
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -109,7 +109,7 @@ func (c *PPIOClient) FetchModels(ctx context.Context) ([]PPIOModel, error) {
 func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
 	url := ppioMgmtModelsEndpoint + "?visibility=1"
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
