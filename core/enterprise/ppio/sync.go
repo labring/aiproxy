@@ -85,112 +85,55 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	cfg := GetPPIOConfig()
-	useV2 := cfg.MgmtToken != ""
 
-	var (
-		diff    *SyncDiff
-		creator modelCreator
-	)
+	// Fetch models from both V1 (public) and V2 (mgmt) APIs, merged into V2 format.
+	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	if fetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch PPIO models: %w", fetchErr)
+	}
 
-	if useV2 {
-		sendProgress(progressCallback, "fetching", "正在通过管理接口获取全量模型（含闭源）...", 10, nil)
-
-		v2Models, fetchErr := client.FetchAllModels(cfg.MgmtToken)
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch PPIO models (mgmt API): %w", fetchErr)
+	// Log unavailable models that will be filtered out
+	unavailCount := 0
+	for _, m := range allModels {
+		if !m.IsAvailable() {
+			unavailCount++
+			log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
 		}
+	}
 
-		// Log unavailable models that will be filtered out
-		unavailCount := 0
-		for _, m := range v2Models {
-			if !m.IsAvailable() {
-				unavailCount++
-				log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
+	if unavailCount > 0 {
+		sendProgress(progressCallback, "filtering",
+			fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
+	}
+
+	sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
+
+	diff, err := ComparePPIOModelsV2(allModels, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare models: %w", err)
+	}
+
+	// Build a lookup map for create/update
+	modelMap := make(map[string]*PPIOModelV2, len(allModels))
+	for i := range allModels {
+		modelMap[allModels[i].ID] = &allModels[i]
+	}
+
+	creator := modelCreator{
+		create: func(tx *gorm.DB, modelID string) error {
+			m := modelMap[modelID]
+			if m == nil {
+				return fmt.Errorf("model %s not found in remote models", modelID)
 			}
-		}
-
-		if unavailCount > 0 {
-			sendProgress(progressCallback, "filtering",
-				fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
-		}
-
-		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
-
-		diff, err = ComparePPIOModelsV2(v2Models, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		// Build a lookup map for create/update
-		v2Map := make(map[string]*PPIOModelV2, len(v2Models))
-		for i := range v2Models {
-			v2Map[v2Models[i].ID] = &v2Models[i]
-		}
-
-		creator = modelCreator{
-			create: func(tx *gorm.DB, modelID string) error {
-				m := v2Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-				return createModelConfigV2(tx, m)
-			},
-			update: func(tx *gorm.DB, modelID string) error {
-				m := v2Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-				return updateModelConfigV2(tx, m)
-			},
-		}
-	} else {
-		remoteModels, fetchErr := client.FetchModels()
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch PPIO models: %w", fetchErr)
-		}
-
-		// Log unavailable models that will be filtered out
-		unavailCount := 0
-		for _, m := range remoteModels {
-			if !m.IsAvailable() {
-				unavailCount++
-				log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
+			return createModelConfigV2(tx, m)
+		},
+		update: func(tx *gorm.DB, modelID string) error {
+			m := modelMap[modelID]
+			if m == nil {
+				return fmt.Errorf("model %s not found in remote models", modelID)
 			}
-		}
-
-		if unavailCount > 0 {
-			sendProgress(progressCallback, "filtering",
-				fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
-		}
-
-		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
-
-		diff, err = ComparePPIOModels(remoteModels, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		v1Map := make(map[string]*PPIOModel, len(remoteModels))
-		for i := range remoteModels {
-			v1Map[remoteModels[i].ID] = &remoteModels[i]
-		}
-
-		creator = modelCreator{
-			create: func(tx *gorm.DB, modelID string) error {
-				m := v1Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-				return createModelConfig(tx, m)
-			},
-			update: func(tx *gorm.DB, modelID string) error {
-				m := v1Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-				return updateModelConfig(tx, m)
-			},
-		}
+			return updateModelConfigV2(tx, m)
+		},
 	}
 
 	result.Summary = diff.Summary

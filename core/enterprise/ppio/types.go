@@ -148,6 +148,28 @@ func (m *PPIOModelV2) GetCacheCreationPricePerToken() float64 {
 	return float64(m.CacheCreationInputTokenPricePerM) / ppioPricePerMDivisor
 }
 
+// ToV2 converts a V1 PPIOModel to PPIOModelV2 format for unified processing.
+// V2-only fields (tiered billing, cache, RPM/TPM) remain zero-valued,
+// which the V2 create/update functions handle gracefully.
+func (m *PPIOModel) ToV2() PPIOModelV2 {
+	return PPIOModelV2{
+		ID:                   m.ID,
+		Title:                m.Title,
+		Description:          m.Description,
+		ModelType:            m.ModelType,
+		ContextSize:          m.ContextSize,
+		MaxOutputTokens:      m.MaxOutputTokens,
+		InputTokenPricePerM:  int64(m.InputTokenPricePerM),
+		OutputTokenPricePerM: int64(m.OutputTokenPricePerM),
+		Endpoints:            m.Endpoints,
+		Features:             m.Features,
+		InputModalities:      m.InputModalities,
+		OutputModalities:     m.OutputModalities,
+		Status:               m.Status,
+		Tags:                 m.Tags,
+	}
+}
+
 // ModelDiff represents the difference for a single model
 type ModelDiff struct {
 	ModelID   string         `json:"model_id"`
