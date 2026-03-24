@@ -3,10 +3,13 @@
 package ppio
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -14,6 +17,12 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
 )
+
+// syncMu prevents concurrent sync executions.
+var syncMu sync.Mutex
+
+// ErrSyncInProgress is returned when a sync is already running.
+var ErrSyncInProgress = errors.New("a sync operation is already in progress")
 
 // ModelTypeToMode maps PPIO model_type strings to mode.Mode.
 var ModelTypeToMode = map[string]mode.Mode{
@@ -67,9 +76,15 @@ type modelCreator struct {
 
 // ExecuteSync performs the actual sync operation with transaction
 func ExecuteSync( //nolint:cyclop
+	ctx context.Context,
 	opts SyncOptions,
 	progressCallback func(event SyncProgressEvent),
 ) (*SyncResult, error) {
+	if !syncMu.TryLock() {
+		return nil, ErrSyncInProgress
+	}
+	defer syncMu.Unlock()
+
 	startTime := time.Now()
 	result := &SyncResult{
 		Success: false,
@@ -87,7 +102,7 @@ func ExecuteSync( //nolint:cyclop
 	cfg := GetPPIOConfig()
 
 	// Fetch models from both V1 (public) and V2 (mgmt) APIs, merged into V2 format.
-	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	allModels, fetchErr := client.FetchAllModelsMerged(ctx, cfg.MgmtToken)
 	if fetchErr != nil {
 		return nil, fmt.Errorf("failed to fetch PPIO models: %w", fetchErr)
 	}

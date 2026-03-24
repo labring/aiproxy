@@ -3,16 +3,25 @@
 package novita
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
 	"gorm.io/gorm"
 )
+
+// syncMu prevents concurrent sync executions.
+var syncMu sync.Mutex
+
+// ErrSyncInProgress is returned when a sync is already running.
+var ErrSyncInProgress = errors.New("a sync operation is already in progress")
 
 // toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.
 func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
@@ -27,9 +36,15 @@ func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
 // ExecuteSync performs the actual sync operation with transaction.
 // Always uses FetchAllModelsMerged (V1+V2 merged into V2 format).
 func ExecuteSync(
+	ctx context.Context,
 	opts SyncOptions,
 	progressCallback func(event SyncProgressEvent),
 ) (*SyncResult, error) {
+	if !syncMu.TryLock() {
+		return nil, ErrSyncInProgress
+	}
+	defer syncMu.Unlock()
+
 	startTime := time.Now()
 	result := &SyncResult{
 		Success: false,
@@ -45,7 +60,7 @@ func ExecuteSync(
 
 	cfg := GetNovitaConfig()
 
-	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	allModels, fetchErr := client.FetchAllModelsMerged(ctx, cfg.MgmtToken)
 	if fetchErr != nil {
 		return nil, fmt.Errorf("failed to fetch Novita models: %w", fetchErr)
 	}

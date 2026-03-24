@@ -277,7 +277,7 @@ func SearchModelConfigs(
 	model string,
 	owner ModelOwner,
 ) (configs []ModelConfig, total int64, err error) {
-	tx := DB.Model(&ModelConfig{}).Where("model LIKE ?", "%"+keyword+"%")
+	tx := DB.Model(&ModelConfig{})
 	if model != "" {
 		tx = tx.Where("model = ?", model)
 	}

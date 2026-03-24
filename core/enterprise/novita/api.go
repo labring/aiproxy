@@ -3,6 +3,7 @@
 package novita
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -202,7 +203,7 @@ func UpdateExchangeRateHandler(c *gin.Context) {
 
 // DiagnosticHandler handles GET /api/enterprise/novita/sync/diagnostic.
 func DiagnosticHandler(c *gin.Context) {
-	result, err := Diagnostic()
+	result, err := Diagnostic(c.Request.Context())
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -227,7 +228,7 @@ func PreviewHandler(c *gin.Context) {
 
 	cfg := GetNovitaConfig()
 
-	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	allModels, fetchErr := client.FetchAllModelsMerged(c.Request.Context(), cfg.MgmtToken)
 	if fetchErr != nil {
 		errorResponse(c, http.StatusInternalServerError, fetchErr.Error())
 		return
@@ -271,25 +272,34 @@ func ExecuteHandler(c *gin.Context) {
 	eventChan := make(chan SyncProgressEvent, 10)
 	done := make(chan struct{})
 
+	// Uses context.Background() so the sync completes even if the client disconnects;
+	// progress events are dropped (not blocked) if nobody is reading.
 	go func() {
 		defer close(done)
-		defer close(eventChan)
 
-		result, err := ExecuteSync(opts, func(event SyncProgressEvent) {
-			eventChan <- event
+		safeSend := func(event SyncProgressEvent) {
+			select {
+			case eventChan <- event:
+			default:
+			}
+		}
+
+		result, err := ExecuteSync(context.Background(), opts, func(event SyncProgressEvent) {
+			safeSend(event)
 		})
 		if err != nil {
-			eventChan <- SyncProgressEvent{
-				Type:    "error",
-				Message: fmt.Sprintf("同步失败: %v", err),
+			if errors.Is(err, ErrSyncInProgress) {
+				safeSend(SyncProgressEvent{Type: "error", Message: "同步操作正在进行中，请稍后再试"})
+			} else {
+				safeSend(SyncProgressEvent{Type: "error", Message: fmt.Sprintf("同步失败: %v", err)})
 			}
 		} else if !result.Success && len(result.Errors) > 0 {
-			eventChan <- SyncProgressEvent{
+			safeSend(SyncProgressEvent{
 				Type:    "success",
 				Step:    "complete",
 				Message: fmt.Sprintf("同步完成（部分失败：%d 个错误）", len(result.Errors)),
 				Data:    result,
-			}
+			})
 		}
 	}()
 
@@ -317,7 +327,7 @@ func ExecuteHandler(c *gin.Context) {
 		case <-done:
 			return false
 
-		case <-c.Request.Context().Done():
+		case <-ctx.Done():
 			return false
 		}
 	})

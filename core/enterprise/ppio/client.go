@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	DefaultPPIOAPIBase         = "https://api.ppio.com/v1"
-	DefaultPPIOAnthropicBase   = "https://api.ppio.com/anthropic"
-	ppioModelsEndpoint      = "https://api.ppio.com/openai/models"
-	ppioMgmtModelsEndpoint  = "https://api-server.ppio.com/v1/product/model/list"
-	DefaultTimeout          = 30 * time.Second
+	DefaultPPIOAPIBase        = "https://api.ppio.com/v1"
+	DefaultPPIOAnthropicBase  = "https://api.ppio.com/anthropic"
+	ppioModelsEndpoint        = "https://api.ppio.com/openai/models"
+	ppioMgmtModelsEndpoint    = "https://api-server.ppio.com/v1/product/model/list"
+	DefaultTimeout            = 30 * time.Second
+	ppioMaxResponseSize       = 50 << 20 // 50 MB
 )
 
 // PPIOClient handles communication with PPIO API
@@ -65,10 +66,10 @@ func NewPPIOClient() (*PPIOClient, error) {
 // FetchModels fetches all models from PPIO API.
 // Always uses DefaultPPIOAPIBase (/v1) for the models endpoint,
 // since the channel's base URL may point to /openai or /anthropic.
-func (c *PPIOClient) FetchModels() ([]PPIOModel, error) {
+func (c *PPIOClient) FetchModels(ctx context.Context) ([]PPIOModel, error) {
 	url := ppioModelsEndpoint
 
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -86,11 +87,11 @@ func (c *PPIOClient) FetchModels() ([]PPIOModel, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("PPIO API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -105,10 +106,10 @@ func (c *PPIOClient) FetchModels() ([]PPIOModel, error) {
 
 // FetchAllModels fetches the full model catalog (including pa/ closed-source models)
 // via the PPIO management API using the mgmt console token.
-func (c *PPIOClient) FetchAllModels(mgmtToken string) ([]PPIOModelV2, error) {
+func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
 	url := ppioMgmtModelsEndpoint + "?visibility=1"
 
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -126,11 +127,11 @@ func (c *PPIOClient) FetchAllModels(mgmtToken string) ([]PPIOModelV2, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("PPIO mgmt API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -150,16 +151,16 @@ func (c *PPIOClient) FetchAllModels(mgmtToken string) ([]PPIOModelV2, error) {
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
 // and merges them into a single V2 list. V2 wins on ID overlap (richer data).
 // If mgmtToken is empty, only V1 models are returned (converted to V2 format).
-func (c *PPIOClient) FetchAllModelsMerged(mgmtToken string) ([]PPIOModelV2, error) {
+func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
 	// Always fetch V1 (public API)
-	v1Models, v1Err := c.FetchModels()
+	v1Models, v1Err := c.FetchModels(ctx)
 
 	var v2Models []PPIOModelV2
 
 	if mgmtToken != "" {
 		var v2Err error
 
-		v2Models, v2Err = c.FetchAllModels(mgmtToken)
+		v2Models, v2Err = c.FetchAllModels(ctx, mgmtToken)
 		if v2Err != nil {
 			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
 		}

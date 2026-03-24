@@ -3,6 +3,7 @@
 package ppio
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -395,7 +396,7 @@ func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 }
 
 // Diagnostic performs a diagnostic check without executing sync
-func Diagnostic() (*DiagnosticResult, error) {
+func Diagnostic(ctx context.Context) (*DiagnosticResult, error) {
 	client, err := NewPPIOClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PPIO client: %w", err)
@@ -404,7 +405,7 @@ func Diagnostic() (*DiagnosticResult, error) {
 	cfg := GetPPIOConfig()
 
 	// Fetch from both V1 + V2 APIs (merged into V2 format)
-	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	allModels, fetchErr := client.FetchAllModelsMerged(ctx, cfg.MgmtToken)
 	if fetchErr != nil {
 		return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 	}

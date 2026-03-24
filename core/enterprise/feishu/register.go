@@ -11,11 +11,21 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
+
+// likeOp returns "LIKE" for SQLite (case-insensitive by default)
+// and "ILIKE" for PostgreSQL.
+func likeOp() string {
+	if common.UsingSQLite {
+		return "LIKE"
+	}
+	return "ILIKE"
+}
 
 // FeishuMiddleware holds permission middleware functions passed from the enterprise package
 // to avoid circular imports.
@@ -79,7 +89,8 @@ func GetFeishuUsers(c *gin.Context) {
 	// Keyword search
 	keyword := c.Query("keyword")
 	if keyword != "" {
-		tx = tx.Where("name LIKE ? OR email LIKE ? OR open_id LIKE ?",
+		op := likeOp()
+		tx = tx.Where("name "+op+" ? OR email "+op+" ? OR open_id "+op+" ?",
 			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
@@ -400,7 +411,8 @@ func GetFeishuDepartments(c *gin.Context) {
 
 	keyword := c.Query("keyword")
 	if keyword != "" {
-		tx = tx.Where("name LIKE ? OR department_id LIKE ?",
+		op := likeOp()
+		tx = tx.Where("name "+op+" ? OR department_id "+op+" ?",
 			"%"+keyword+"%", "%"+keyword+"%")
 	}
 

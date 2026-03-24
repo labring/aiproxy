@@ -3,6 +3,7 @@
 package novita
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -228,7 +229,7 @@ func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 
 // Diagnostic performs a diagnostic check without executing sync.
 // Always uses FetchAllModelsMerged (V1+V2 merged into V2 format).
-func Diagnostic() (*DiagnosticResult, error) {
+func Diagnostic(ctx context.Context) (*DiagnosticResult, error) {
 	client, err := NewNovitaClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Novita client: %w", err)
@@ -236,7 +237,7 @@ func Diagnostic() (*DiagnosticResult, error) {
 
 	cfg := GetNovitaConfig()
 
-	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	allModels, fetchErr := client.FetchAllModelsMerged(ctx, cfg.MgmtToken)
 	if fetchErr != nil {
 		return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 	}

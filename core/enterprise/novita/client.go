@@ -26,6 +26,8 @@ const (
 	novitaMgmtEndpoint = "https://api-server.novita.ai/v1/product/model/list"
 	// DefaultTimeout is the HTTP client timeout.
 	defaultNovitaTimeout = 30 * time.Second
+	// maxResponseSize caps the body we read from Novita API (50 MB).
+	maxResponseSize = 50 << 20
 )
 
 // NovitaClient handles communication with Novita API.
@@ -68,8 +70,8 @@ func NewNovitaClient() (*NovitaClient, error) {
 }
 
 // FetchModels fetches models from the standard Novita /v3/openai/models API.
-func (c *NovitaClient) FetchModels() ([]NovitaModel, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultNovitaTimeout)
+func (c *NovitaClient) FetchModels(ctx context.Context) ([]NovitaModel, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, novitaModelsEndpoint, nil)
@@ -88,11 +90,11 @@ func (c *NovitaClient) FetchModels() ([]NovitaModel, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("Novita API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -107,8 +109,8 @@ func (c *NovitaClient) FetchModels() ([]NovitaModel, error) {
 
 // FetchAllModels fetches the full model catalog via the Novita management API.
 // Requires a management token with extended access.
-func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultNovitaTimeout)
+func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, novitaMgmtEndpoint, nil)
@@ -129,11 +131,11 @@ func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("Novita mgmt API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -149,16 +151,16 @@ func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error)
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
 // and merges them into a single V2 list. V2 wins on ID overlap (richer data).
 // If mgmtToken is empty, only V1 models are returned (converted to V2 format).
-func (c *NovitaClient) FetchAllModelsMerged(mgmtToken string) ([]NovitaModelV2, error) {
+func (c *NovitaClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
 	// Always fetch V1 (public API)
-	v1Models, v1Err := c.FetchModels()
+	v1Models, v1Err := c.FetchModels(ctx)
 
 	var v2Models []NovitaModelV2
 
 	if mgmtToken != "" {
 		var v2Err error
 
-		v2Models, v2Err = c.FetchAllModels(mgmtToken)
+		v2Models, v2Err = c.FetchAllModels(ctx, mgmtToken)
 		if v2Err != nil {
 			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
 		}
