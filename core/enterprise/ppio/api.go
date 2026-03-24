@@ -132,6 +132,27 @@ func UpdateMgmtTokenHandler(c *gin.Context) {
 	successResponse(c, gin.H{"message": "mgmt token saved"})
 }
 
+// UpdateAPIKeyHandler handles PUT /api/enterprise/ppio/api-key
+// Accepts an API key directly (bootstrap mode when no channels exist).
+func UpdateAPIKeyHandler(c *gin.Context) {
+	var req struct {
+		APIKey  string `json:"api_key" binding:"required"`
+		APIBase string `json:"api_base"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := SetPPIOAPIKeyDirect(req.APIKey, req.APIBase); err != nil {
+		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save API key: %v", err))
+		return
+	}
+
+	successResponse(c, gin.H{"message": "API key saved"})
+}
+
 // UpdateConfigHandler handles PUT /api/enterprise/ppio/config
 // Accepts a channel_id and reads key/base_url from that channel.
 func UpdateConfigHandler(c *gin.Context) {

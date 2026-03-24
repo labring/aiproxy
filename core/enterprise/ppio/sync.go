@@ -159,9 +159,17 @@ func ExecuteSync( //nolint:cyclop
 	// Step 4: Ensure channels exist (reads from local DB, not remote list)
 	sendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsurePPIOChannels()
+	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
+	}
+
+	// If channels were auto-created, write the channel ID back to options
+	// so the sync page can find it on next load.
+	if channelsInfo.PPIO.Exists && cfg.ChannelID == 0 && channelsInfo.PPIO.ID > 0 {
+		if err := SetPPIOConfigFromChannel(channelsInfo.PPIO.ID); err != nil {
+			log.Printf("failed to write back PPIO channel config: %v", err)
+		}
 	}
 
 	result.Channels = channelsInfo
@@ -288,10 +296,9 @@ func executeSyncTransaction(
 
 // EnsurePPIOChannels queries all local ModelConfig entries owned by PPIO,
 // partitions them by endpoint compatibility, and writes the lists into the
-// corresponding PPIO channels. By building from the local DB (not the remote
-// model list), the channel always reflects models that actually exist in the
-// database — even if they were added in a previous sync cycle.
-func EnsurePPIOChannels() (ChannelsInfo, error) {
+// corresponding PPIO channels. When autoCreate is true and no PPIO channels
+// exist, it creates them automatically using the API key from cfg.
+func EnsurePPIOChannels(autoCreate bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -322,16 +329,36 @@ func EnsurePPIOChannels() (ChannelsInfo, error) {
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels)
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, cfg)
 }
 
-func ensurePPIOChannelsFromModels(anthropicModels, openaiModels []string) (ChannelsInfo, error) {
+func ensurePPIOChannelsFromModels(
+	anthropicModels, openaiModels []string,
+	autoCreate bool, cfg PPIOConfigResult,
+) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
 	var channels []model.Channel
 
 	err := model.DB.Where("base_url "+likeOp()+" ?", "%ppio%").Find(&channels).Error
-	if err != nil || len(channels) == 0 {
+	if err != nil {
+		return info, fmt.Errorf("failed to query PPIO channels: %w", err)
+	}
+
+	// Auto-create channels when none exist and the option is enabled.
+	if len(channels) == 0 {
+		if !autoCreate || cfg.APIKey == "" {
+			return info, nil
+		}
+
+		created, createErr := createPPIOChannels(cfg, anthropicModels, openaiModels)
+		if createErr != nil {
+			return info, createErr
+		}
+
+		info.PPIO.Exists = true
+		info.PPIO.ID = created[0].ID
+
 		return info, nil
 	}
 
@@ -345,15 +372,66 @@ func ensurePPIOChannelsFromModels(anthropicModels, openaiModels []string) (Chann
 			channels[i].Models = openaiModels
 		}
 
-		// Use Save() so GORM applies the fastjson serializer on the models []string field.
-		// Update("models", []string{...}) bypasses the serializer and causes
-		// "row value misused" on SQLite.
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
 			return info, fmt.Errorf("failed to update channel %d models: %w", channels[i].ID, err)
 		}
 	}
 
 	return info, nil
+}
+
+// createPPIOChannels creates the OpenAI-compatible channel and, if there are
+// anthropic-endpoint models, an Anthropic-compatible channel as well.
+func createPPIOChannels(cfg PPIOConfigResult, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+	openaiBase := cfg.APIBase
+	if openaiBase == "" {
+		openaiBase = DefaultPPIOAPIBase
+	}
+
+	var created []model.Channel
+
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		openaiCh := model.Channel{
+			Name:    "PPIO (OpenAI)",
+			Type:    model.ChannelTypePPIO,
+			BaseURL: openaiBase,
+			Key:     cfg.APIKey,
+			Models:  openaiModels,
+			Status:  model.ChannelStatusEnabled,
+		}
+
+		if err := tx.Create(&openaiCh).Error; err != nil {
+			return fmt.Errorf("failed to create PPIO OpenAI channel: %w", err)
+		}
+
+		created = append(created, openaiCh)
+
+		if len(anthropicModels) > 0 {
+			anthropicCh := model.Channel{
+				Name:    "PPIO (Anthropic)",
+				Type:    model.ChannelTypePPIO,
+				BaseURL: DefaultPPIOAnthropicBase,
+				Key:     cfg.APIKey,
+				Models:  anthropicModels,
+				Status:  model.ChannelStatusEnabled,
+			}
+
+			if err := tx.Create(&anthropicCh).Error; err != nil {
+				return fmt.Errorf("failed to create PPIO Anthropic channel: %w", err)
+			}
+
+			created = append(created, anthropicCh)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("auto-created %d PPIO channel(s)", len(created))
+
+	return created, nil
 }
 
 // RecordSyncHistory records sync history to database

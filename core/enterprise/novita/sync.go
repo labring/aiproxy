@@ -102,6 +102,14 @@ func ExecuteSync(
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
 
+	// If channels were auto-created, write the channel ID back to options
+	// so the sync page can find it on next load.
+	if channelsInfo.Novita.Exists && cfg.ChannelID == 0 && channelsInfo.Novita.ID > 0 {
+		if err := SetNovitaConfigFromChannel(channelsInfo.Novita.ID); err != nil {
+			log.Printf("failed to write back Novita channel config: %v", err)
+		}
+	}
+
 	result.Channels = channelsInfo
 	result.Success = len(result.Errors) == 0
 	result.DurationMS = time.Since(startTime).Milliseconds()

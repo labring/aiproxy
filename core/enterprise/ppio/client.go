@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	DefaultPPIOAPIBase      = "https://api.ppio.com/v1"
+	DefaultPPIOAPIBase         = "https://api.ppio.com/v1"
+	DefaultPPIOAnthropicBase   = "https://api.ppio.com/anthropic"
 	ppioModelsEndpoint      = "https://api.ppio.com/openai/models"
 	ppioMgmtModelsEndpoint  = "https://api-server.ppio.com/v1/product/model/list"
 	DefaultTimeout          = 30 * time.Second

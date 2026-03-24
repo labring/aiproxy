@@ -27,6 +27,10 @@ export const ppioApi = {
     return get<PPIOConfig>('/enterprise/ppio/config')
   },
 
+  updateAPIKey: async (apiKey: string, apiBase?: string): Promise<void> => {
+    return put('/enterprise/ppio/api-key', { api_key: apiKey, api_base: apiBase })
+  },
+
   /**
    * 选择一个 Channel 作为 PPIO 配置
    */

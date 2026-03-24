@@ -57,6 +57,29 @@ func SetPPIOMgmtToken(token string) error {
 		FirstOrCreate(&model.Option{Key: optionKeyPPIOMgmtToken}).Error
 }
 
+// SetPPIOAPIKeyDirect persists an API key and base URL directly to the Option table,
+// without requiring an existing channel. Used for bootstrap when no channels exist yet.
+func SetPPIOAPIKeyDirect(apiKey, apiBase string) error {
+	if apiBase == "" {
+		apiBase = DefaultPPIOAPIBase
+	}
+
+	return model.DB.Transaction(func(tx *gorm.DB) error {
+		for _, kv := range []struct{ key, val string }{
+			{optionKeyPPIOAPIKey, apiKey},
+			{optionKeyPPIOAPIBase, apiBase},
+		} {
+			if err := tx.Where("key = ?", kv.key).
+				Assign(model.Option{Value: kv.val}).
+				FirstOrCreate(&model.Option{Key: kv.key}).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
 // SetPPIOConfigFromChannel reads key/base_url from the given channel and persists them.
 func SetPPIOConfigFromChannel(channelID int) error {
 	var ch model.Channel

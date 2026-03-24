@@ -17,6 +17,7 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 
 	// Write endpoints — access_control_manage
 	ppioManage := group.Group("/ppio", permMW["access_control_manage"])
+	ppioManage.PUT("/api-key", UpdateAPIKeyHandler)
 	ppioManage.PUT("/config", UpdateConfigHandler)
 	ppioManage.PUT("/mgmt-token", UpdateMgmtTokenHandler)
 	ppioManage.POST("/sync/preview", PreviewHandler)

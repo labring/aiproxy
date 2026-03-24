@@ -79,6 +79,29 @@ func SetNovitaExchangeRate(rate float64) error {
 		FirstOrCreate(&model.Option{Key: optionKeyNovitaExchangeRate}).Error
 }
 
+// SetNovitaAPIKeyDirect persists an API key and base URL directly to the Option table,
+// without requiring an existing channel. Used for bootstrap when no channels exist yet.
+func SetNovitaAPIKeyDirect(apiKey, apiBase string) error {
+	if apiBase == "" {
+		apiBase = DefaultNovitaAPIBase
+	}
+
+	return model.DB.Transaction(func(tx *gorm.DB) error {
+		for _, kv := range []struct{ key, val string }{
+			{optionKeyNovitaAPIKey, apiKey},
+			{optionKeyNovitaAPIBase, apiBase},
+		} {
+			if err := tx.Where("key = ?", kv.key).
+				Assign(model.Option{Value: kv.val}).
+				FirstOrCreate(&model.Option{Key: kv.key}).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
 // SetNovitaConfigFromChannel reads key/base_url from the given channel and persists them.
 func SetNovitaConfigFromChannel(channelID int) error {
 	var ch model.Channel

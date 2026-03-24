@@ -87,6 +87,9 @@ export default function PPIOSyncPage() {
   const [selectedBaseURL, setSelectedBaseURL] = useState<string>('')
   const [selectedChannelId, setSelectedChannelId] = useState<string>('')
 
+  const [directApiKey, setDirectApiKey] = useState<string>('')
+  const [directApiKeySaving, setDirectApiKeySaving] = useState(false)
+
   // Mgmt token state
   const [mgmtToken, setMgmtToken] = useState<string>('')
   const [mgmtTokenSaving, setMgmtTokenSaving] = useState(false)
@@ -178,6 +181,24 @@ export default function PPIOSyncPage() {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setMgmtTokenSaving(false)
+    }
+  }
+
+  const saveDirectApiKey = async () => {
+    if (!directApiKey.trim()) {
+      toast.error(t('enterprise.ppio.apiKeyRequired'))
+      return
+    }
+    setDirectApiKeySaving(true)
+    try {
+      await ppioApi.updateAPIKey(directApiKey.trim())
+      toast.success(t('enterprise.ppio.apiKeySaved'))
+      setDirectApiKey('')
+      await loadConfig()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDirectApiKeySaving(false)
     }
   }
 
@@ -305,11 +326,39 @@ export default function PPIOSyncPage() {
             <div className="py-4 text-center text-muted-foreground">
               <RefreshCw className="w-5 h-5 animate-spin mx-auto" />
             </div>
-          ) : channels.length === 0 ? (
-            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
-              <span className="text-yellow-700 dark:text-yellow-400">
-                {t('enterprise.ppio.configNoChannels')}
+          ) : channels.length === 0 && !config?.configured ? (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-blue-700 dark:text-blue-400">
+                  {t('enterprise.ppio.directApiKeyHint')}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('enterprise.ppio.apiKeyLabel')}</Label>
+                <Input
+                  type="password"
+                  placeholder={t('enterprise.ppio.apiKeyPlaceholder')}
+                  value={directApiKey}
+                  onChange={(e) => setDirectApiKey(e.target.value)}
+                />
+              </div>
+              {canManage && (
+                <Button
+                  onClick={saveDirectApiKey}
+                  disabled={directApiKeySaving || !directApiKey.trim()}
+                  size="sm"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {directApiKeySaving ? t('enterprise.ppio.apiKeySaving') : t('enterprise.ppio.apiKeySave')}
+                </Button>
+              )}
+            </div>
+          ) : channels.length === 0 && config?.configured ? (
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-green-700 dark:text-green-400">
+                {t('enterprise.ppio.configConfigured')}: {config.api_base} ({config.api_key})
               </span>
             </div>
           ) : (

@@ -21,6 +21,10 @@ export const novitaApi = {
     return get<NovitaConfig>('/enterprise/novita/config')
   },
 
+  updateAPIKey: async (apiKey: string, apiBase?: string): Promise<void> => {
+    return put('/enterprise/novita/api-key', { api_key: apiKey, api_base: apiBase })
+  },
+
   updateConfig: async (channelId: number): Promise<void> => {
     return put('/enterprise/novita/config', { channel_id: channelId })
   },

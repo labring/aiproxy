@@ -122,6 +122,27 @@ func GetConfigHandler(c *gin.Context) {
 	})
 }
 
+// UpdateAPIKeyHandler handles PUT /api/enterprise/novita/api-key.
+// Accepts an API key directly (bootstrap mode when no channels exist).
+func UpdateAPIKeyHandler(c *gin.Context) {
+	var req struct {
+		APIKey  string `json:"api_key" binding:"required"`
+		APIBase string `json:"api_base"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := SetNovitaAPIKeyDirect(req.APIKey, req.APIBase); err != nil {
+		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save API key: %v", err))
+		return
+	}
+
+	successResponse(c, gin.H{"message": "API key saved"})
+}
+
 // UpdateConfigHandler handles PUT /api/enterprise/novita/config.
 func UpdateConfigHandler(c *gin.Context) {
 	var req struct {

@@ -29,7 +29,7 @@ func PostDBInit() {
 
 	// Ensure PPIO channel model lists match local ModelConfig.
 	// This fixes gaps where models were synced but Channel.Models wasn't updated.
-	if _, err := ppio.EnsurePPIOChannels(); err != nil {
+	if _, err := ppio.EnsurePPIOChannels(false, ppio.PPIOConfigResult{}); err != nil {
 		log.Warnf("PPIO channel refresh on startup: %v", err)
 	}
 
