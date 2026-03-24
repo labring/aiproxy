@@ -152,6 +152,7 @@ export const channelApi = {
         type: number
         key: string
         base_url?: string
+        proxy_url?: string
         name?: string
         model: string
         model_mapping?: Record<string, string>
@@ -167,6 +168,7 @@ export const channelApi = {
             type: number
             key: string
             base_url?: string
+            proxy_url?: string
             name?: string
             models: string[]
             model_mapping?: Record<string, string>

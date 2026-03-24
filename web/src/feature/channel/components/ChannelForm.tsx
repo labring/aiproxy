@@ -41,6 +41,7 @@ interface ChannelFormProps {
         name: string
         key: string
         base_url?: string
+        proxy_url?: string
         models: string[]
         model_mapping?: Record<string, string>
         sets?: string[]
@@ -59,6 +60,7 @@ export function ChannelForm({
         name: '',
         key: '',
         base_url: '',
+        proxy_url: '',
         models: [],
         model_mapping: {},
         sets: [],
@@ -185,6 +187,7 @@ export function ChannelForm({
             name: data.name,
             key: data.key,
             base_url: data.base_url || '',
+            proxy_url: data.proxy_url || '',
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
@@ -297,6 +300,7 @@ export function ChannelForm({
             type: formData.type,
             key: formData.key,
             base_url: formData.base_url || '',
+            proxy_url: formData.proxy_url || '',
             name: formData.name || '',
             models: testModels,
             model_mapping: testMapping,
@@ -816,6 +820,30 @@ export function ChannelForm({
                                         </FormItem>
                                     )
                                 }}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="proxy_url"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>{t("channel.dialog.proxyUrl")}</FormLabel>
+                                            <span className="text-xs text-muted-foreground">{t("common.optional")}</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input
+                                                placeholder={t("channel.dialog.proxyUrlPlaceholder")}
+                                                {...field}
+                                                value={field.value || ''}
+                                            />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {t("channel.dialog.proxyUrlHelp")}
+                                        </p>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
 
                             {/* 优先级字段 */}

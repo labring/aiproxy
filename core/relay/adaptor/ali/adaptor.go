@@ -184,7 +184,7 @@ func (a *Adaptor) DoRequest(
 	case mode.AudioTranscription:
 		return STTDoRequest(meta, req)
 	default:
-		return utils.DoRequest(req, meta.RequestTimeout)
+		return utils.DoRequestWithMeta(req, meta)
 	}
 }
 

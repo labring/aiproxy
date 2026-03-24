@@ -16,6 +16,7 @@ type OneAPIChannel struct {
 	Status       int               `gorm:"default:1"                              json:"status"`
 	Name         string            `gorm:"index"                                  json:"name"`
 	BaseURL      string            `gorm:"column:base_url;default:''"`
+	ProxyURL     string            `gorm:"column:proxy_url;default:''"`
 	Models       string            `                                              json:"models"`
 	ModelMapping map[string]string `gorm:"type:varchar(1024);serializer:fastjson"`
 	Priority     int32             `gorm:"bigint;default:0"`
@@ -137,6 +138,7 @@ func AddOneAPIChannel(ch OneAPIChannel) error {
 		Name:         ch.Name,
 		Key:          ch.Key,
 		BaseURL:      ch.BaseURL,
+		ProxyURL:     ch.ProxyURL,
 		Models:       strings.Split(ch.Models, ","),
 		ModelMapping: ch.ModelMapping,
 		Priority:     ch.Priority,

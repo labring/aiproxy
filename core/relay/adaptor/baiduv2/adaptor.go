@@ -80,7 +80,7 @@ func (a *Adaptor) SetupRequestHeader(
 	_ *gin.Context,
 	req *http.Request,
 ) error {
-	token, err := GetBearerToken(context.Background(), meta.Channel.Key)
+	token, err := GetBearerToken(context.Background(), meta.Channel.Key, meta.Channel.ProxyURL)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
