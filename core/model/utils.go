@@ -166,9 +166,14 @@ func String2Int(keyword string) int {
 }
 
 func toLimitOffset(page, perPage int) (limit, offset int) {
-	page--
-	if page < 0 {
-		page = 0
+	page, perPage = NormalizePageParams(page, perPage)
+
+	return perPage, (page - 1) * perPage
+}
+
+func NormalizePageParams(page, perPage int) (int, int) {
+	if page <= 0 {
+		page = 1
 	}
 
 	if perPage <= 0 {
@@ -177,5 +182,5 @@ func toLimitOffset(page, perPage int) (limit, offset int) {
 		perPage = 100
 	}
 
-	return perPage, page * perPage
+	return page, perPage
 }

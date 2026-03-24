@@ -3,6 +3,8 @@ import { get, post, put, del } from './index'
 import {
     Group,
     GroupsResponse,
+    GroupConsumptionRankingQuery,
+    GroupConsumptionRankingResponse,
     GroupCreateRequest,
     GroupUpdateRequest,
     GroupStatusRequest,
@@ -41,6 +43,31 @@ export const groupApi = {
             params.append('status', status.toString())
         }
         const response = await get<GroupsResponse>(`groups/search?${params.toString()}`)
+        return response
+    },
+
+    getGroupConsumptionRanking: async (query: GroupConsumptionRankingQuery): Promise<GroupConsumptionRankingResponse> => {
+        const params = new URLSearchParams()
+        if (query.page !== undefined) {
+            params.append('page', query.page.toString())
+        }
+        if (query.per_page !== undefined) {
+            params.append('per_page', query.per_page.toString())
+        }
+        if (query.start_timestamp !== undefined) {
+            params.append('start_timestamp', query.start_timestamp.toString())
+        }
+        if (query.end_timestamp !== undefined) {
+            params.append('end_timestamp', query.end_timestamp.toString())
+        }
+        if (query.timezone) {
+            params.append('timezone', query.timezone)
+        }
+        if (query.order) {
+            params.append('order', query.order)
+        }
+
+        const response = await get<GroupConsumptionRankingResponse>(`groups/ranking?${params.toString()}`)
         return response
     },
 

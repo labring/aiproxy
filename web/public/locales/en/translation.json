@@ -2,6 +2,7 @@
   "sidebar": {
     "monitor": "Dashboard",
     "group": "Groups",
+    "groupRanking": "Group Ranking",
     "key": "API Keys",
     "channel": "Channel",
     "model": "Model",
@@ -34,7 +35,8 @@
     "save": "Save",
     "saving": "Saving...",
     "search": "Search...",
-    "all": "All"
+    "all": "All",
+    "timezonePlaceholder": "Enter timezone, e.g. Asia/Shanghai"
   },
   "error": {
     "loading": "Failed to load data",
@@ -893,6 +895,22 @@
     },
     "dashboard": {
       "tokenNamePlaceholder": "Select token name"
+    },
+    "ranking": {
+      "title": "Group Consumption Ranking",
+      "description": "View consumption ranking by group for the selected range.",
+      "range": "Range in {{timezone}}: {{start}} to {{end}}",
+      "dateRangePlaceholder": "Select date range",
+      "timezonePlaceholder": "Enter timezone, e.g. Asia/Shanghai",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "group": "Group",
+      "requestCount": "Requests",
+      "totalTokens": "Total Tokens",
+      "usedAmount": "Used Amount",
+      "actions": "Actions",
+      "view": "View",
+      "summary": "{{total}} groups ranked"
     },
     "models": {
       "model": "Model",

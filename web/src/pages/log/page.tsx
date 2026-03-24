@@ -6,6 +6,7 @@ import { LogTable } from '@/feature/log/components/LogTable'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import type { LogFilters as LogFiltersType } from '@/types/log'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnixMs } from '@/utils/timezone'
 
 export default function LogPage() {
 
@@ -18,8 +19,9 @@ export default function LogPage() {
             code_type: 'all',
             page: 1,
             per_page: 10,
-            start_timestamp: oneDayAgo.getTime(),
-            end_timestamp: today.setHours(23, 59, 59, 999)
+            timezone: DEFAULT_TIMEZONE,
+            start_timestamp: zonedBoundaryToUnixMs(oneDayAgo, DEFAULT_TIMEZONE, false),
+            end_timestamp: zonedBoundaryToUnixMs(today, DEFAULT_TIMEZONE, true)
         }
     }
 

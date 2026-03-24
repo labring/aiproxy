@@ -261,8 +261,8 @@ export function GroupTable() {
     })
 
     return (
-        <>
-            <Card className="border-none shadow-none p-6 flex flex-col h-full">
+        <div className="h-full flex flex-col min-h-0">
+            <Card className="border-none shadow-none p-6 flex flex-col flex-1 min-h-0">
                 {/* Title and action buttons */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
@@ -359,6 +359,6 @@ export function GroupTable() {
                 groupId={selectedGroupId}
                 onCreated={() => setSelectedGroupId(null)}
             />
-        </>
+        </div>
     )
 }

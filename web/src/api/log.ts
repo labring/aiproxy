@@ -11,6 +11,7 @@ const buildLogSearchParams = (filters?: LogFilters): URLSearchParams => {
     if (filters?.channel) params.append('channel', filters.channel.toString())
     if (filters?.start_timestamp) params.append('start_timestamp', filters.start_timestamp.toString())
     if (filters?.end_timestamp) params.append('end_timestamp', filters.end_timestamp.toString())
+    if (filters?.timezone) params.append('timezone', filters.timezone)
     if (filters?.code_type && filters.code_type !== 'all') params.append('code_type', filters.code_type)
     if (filters?.keyword) params.append('keyword', filters.keyword)
     return params
