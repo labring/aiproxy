@@ -1,5 +1,5 @@
 // src/feature/channel/components/ChannelForm.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
     FormMessage,
 } from '@/components/ui/form'
 import { channelCreateSchema } from '@/validation/channel'
-import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
+import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useUpdateChannelStatus, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import { useTranslation } from 'react-i18next'
 import { ChannelCreateForm } from '@/validation/channel'
@@ -26,7 +26,7 @@ import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnimatedContainer } from '@/components/ui/animation/components/animated-container'
 import { toast } from 'sonner'
-import { FlaskConical, Loader2, Info } from 'lucide-react'
+import { FlaskConical, Loader2, Info, Power, PowerOff } from 'lucide-react'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
@@ -53,7 +53,7 @@ interface ChannelFormProps {
 export function ChannelForm({
     mode = 'create',
     channelId,
-    channel: _channel,
+    channel,
     onSuccess,
     defaultValues = {
         type: 0,
@@ -73,6 +73,7 @@ export function ChannelForm({
     const isCreateLikeMode = mode === 'create' || mode === 'copy'
     const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
     const [configsError, setConfigsError] = useState<string | null>(null)
+    const [currentStatus, setCurrentStatus] = useState(channel?.status ?? 1)
 
     // Determine initial useDefaultModels state
     const initialUseDefault = mode === 'create'
@@ -101,6 +102,8 @@ export function ChannelForm({
         clearError: clearUpdateError
     } = useUpdateChannel()
 
+    const { updateStatus, isLoading: isStatusUpdating } = useUpdateChannelStatus()
+
     // Test channel hook
     const {
         testChannelPreviewAll,
@@ -111,6 +114,10 @@ export function ChannelForm({
     } = useTestChannelPreviewAll()
 
     const [testDialogOpen, setTestDialogOpen] = useState(false)
+
+    useEffect(() => {
+        setCurrentStatus(channel?.status ?? 1)
+    }, [channel?.status, channel?.id])
 
     // 动态状态
     const isLoading = isCreateLikeMode ? isCreating : isUpdating
@@ -223,6 +230,22 @@ export function ChannelForm({
     // 处理提交按钮点击
     const handleSubmitClick = () => {
         setIsUserSubmitting(true)
+    }
+
+    const handleStatusToggle = () => {
+        if (mode !== 'update' || !channelId) {
+            return
+        }
+
+        const nextStatus = currentStatus === 2 ? 1 : 2
+        updateStatus(
+            { id: channelId, status: { status: nextStatus } },
+            {
+                onSuccess: () => {
+                    setCurrentStatus(nextStatus)
+                },
+            }
+        )
     }
 
     // Handle toggle between default and custom models
@@ -883,29 +906,57 @@ export function ChannelForm({
                             />
 
                             {/* 提交和测试按钮 */}
-                            <div className="flex justify-between items-center">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleTestClick}
-                                    disabled={isTesting || isLoading}
-                                    className="flex items-center gap-2"
-                                >
-                                    {isTesting ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            {t("channel.testing")}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FlaskConical className="h-4 w-4" />
-                                            {t("channel.test")}
-                                        </>
-                                    )}
-                                </Button>
+                            <div className="flex justify-between items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleTestClick}
+                                        disabled={isTesting || isLoading || isStatusUpdating}
+                                        className="flex items-center gap-2"
+                                    >
+                                        {isTesting ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                {t("channel.testing")}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FlaskConical className="h-4 w-4" />
+                                                {t("channel.test")}
+                                            </>
+                                        )}
+                                    </Button>
+                                    {mode === 'update' && channelId ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handleStatusToggle}
+                                            disabled={isLoading || isTesting || isStatusUpdating}
+                                            className="flex items-center gap-2"
+                                        >
+                                            {isStatusUpdating ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    {currentStatus === 2 ? t("channel.enable") : t("channel.disable")}
+                                                </>
+                                            ) : currentStatus === 2 ? (
+                                                <>
+                                                    <Power className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+                                                    {t("channel.enable")}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <PowerOff className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+                                                    {t("channel.disable")}
+                                                </>
+                                            )}
+                                        </Button>
+                                    ) : null}
+                                </div>
                                 <Button
                                     type="submit"
-                                    disabled={isLoading || isTesting}
+                                    disabled={isLoading || isTesting || isStatusUpdating}
                                     onClick={handleSubmitClick}
                                 >
                                     {isLoading ? t("channel.dialog.submitting") : isCreateLikeMode ? t("channel.dialog.create") : t("channel.dialog.update")}
