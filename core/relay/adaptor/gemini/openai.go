@@ -38,6 +38,22 @@ var mimeTypeMap = map[string]string{
 	"text":        "text/plain",
 }
 
+func shouldAutoIncludeThoughts(modelName string) bool {
+	modelName = strings.ToLower(modelName)
+
+	if !strings.Contains(modelName, "-2.5") && !strings.Contains(modelName, "-3") {
+		return false
+	}
+
+	// Gemini 2.5 Flash Lite defaults to non-thinking mode, so includeThoughts
+	// must not be injected unless thinking is explicitly enabled.
+	if strings.Contains(modelName, "2.5-flash-lite") {
+		return false
+	}
+
+	return true
+}
+
 type CountTokensResponse struct {
 	Error       *relaymodel.GeminiError `json:"error,omitempty"`
 	TotalTokens int                     `json:"totalTokens"`
@@ -114,7 +130,7 @@ func buildGenerationConfig(
 		switch req.Thinking.Type {
 		case relaymodel.ClaudeThinkingTypeEnabled:
 			thinkingConfig.IncludeThoughts = true
-			thinkingConfig.ThinkingBudget = req.Thinking.BudgetTokens
+			thinkingConfig.ThinkingBudget = &req.Thinking.BudgetTokens
 		case relaymodel.ClaudeThinkingTypeDisabled:
 			thinkingConfig.IncludeThoughts = false
 		}
@@ -123,9 +139,7 @@ func buildGenerationConfig(
 	}
 
 	// https://ai.google.dev/gemini-api/docs/thinking
-	if config.ThinkingConfig == nil &&
-		(strings.Contains(meta.ActualModel, "-2.5") ||
-			strings.Contains(meta.ActualModel, "-3")) {
+	if config.ThinkingConfig == nil && shouldAutoIncludeThoughts(meta.ActualModel) {
 		// disable vertexai image model include thoughts
 		// because error call gemini-3-pro-image-preview model
 		if meta.Channel.Type != model.ChannelTypeVertexAI ||

@@ -77,7 +77,7 @@ type GeminiImageConfig struct {
 }
 
 type GeminiThinkingConfig struct {
-	ThinkingBudget  int  `json:"thinkingBudget,omitempty"`
+	ThinkingBudget  *int `json:"thinkingBudget,omitempty"`
 	IncludeThoughts bool `json:"includeThoughts,omitempty"`
 }
 

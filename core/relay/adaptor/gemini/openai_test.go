@@ -140,3 +140,88 @@ func TestConvertRequest_JsonSchema(t *testing.T) {
 	_, hasAdditionalProperties := schema["additionalProperties"]
 	assert.False(t, hasAdditionalProperties, "Expected additionalProperties to be removed")
 }
+
+func TestConvertRequest_Gemini25FlashLiteDoesNotAutoInjectThinkingConfig(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash-lite",
+		model.ModelConfig{},
+	)
+
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-2.5-flash-lite",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.NotNil(t, geminiReq.GenerationConfig)
+	assert.Nil(t, geminiReq.GenerationConfig.ThinkingConfig)
+}
+
+func TestConvertRequest_Gemini25ProAutoInjectsThinkingConfig(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-pro",
+		model.ModelConfig{},
+	)
+
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-2.5-pro",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.NotNil(t, geminiReq.GenerationConfig)
+	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig)
+	assert.True(t, geminiReq.GenerationConfig.ThinkingConfig.IncludeThoughts)
+}
