@@ -13,10 +13,12 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { TimezoneInput } from '@/components/common/TimezoneInput'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
 import type { LogFilters as LogFiltersType } from '@/types/log'
 import { channelApi } from '@/api/channel'
 import { useChannelTypeMetas } from '@/feature/channel/hooks'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnixMs } from '@/utils/timezone'
 
 interface LogFiltersProps {
     onFiltersChange: (filters: LogFiltersType) => void
@@ -82,11 +84,13 @@ export function LogFilters({
     const [keyword, setKeyword] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [codeType, setCodeType] = useState<'all' | 'success' | 'error'>('all')
+    const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
 
     const buildFilters = useCallback((): LogFiltersType => {
         const effectiveModel = model === '__all__' ? '' : model
         const effectiveTokenName = tokenName === '__all__' ? '' : tokenName
         const effectiveChannel = channel === '__all__' ? '' : channel
+        const effectiveTimezone = timezone.trim() || DEFAULT_TIMEZONE
 
         const filters: LogFiltersType = {
             model: effectiveModel.trim() || undefined,
@@ -95,20 +99,19 @@ export function LogFilters({
             keyword: keyword.trim() || undefined,
             code_type: codeType,
             page: 1,
-            per_page: 10
+            per_page: 10,
+            timezone: effectiveTimezone,
         }
 
         if (dateRange?.from) {
-            filters.start_timestamp = dateRange.from.getTime()
+            filters.start_timestamp = zonedBoundaryToUnixMs(dateRange.from, effectiveTimezone, false)
         }
         if (dateRange?.to) {
-            const endDate = new Date(dateRange.to)
-            endDate.setHours(23, 59, 59, 999)
-            filters.end_timestamp = endDate.getTime()
+            filters.end_timestamp = zonedBoundaryToUnixMs(dateRange.to, effectiveTimezone, true)
         }
 
         return filters
-    }, [model, tokenName, channel, keyword, dateRange, codeType])
+    }, [model, tokenName, channel, keyword, dateRange, codeType, timezone])
 
     // Auto-refresh on filter change (skip initial mount), debounce keyword input
     const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -140,6 +143,7 @@ export function LogFilters({
         setKeyword('')
         setDateRange(getDefaultDateRange())
         setCodeType('all')
+        setTimezone(DEFAULT_TIMEZONE)
     }
 
     const showChannel = !!availableChannels && availableChannels.length > 0
@@ -202,7 +206,7 @@ export function LogFilters({
 
     return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 {/* 根据 tokenNameFirst 控制顺序 */}
                 {tokenNameFirst ? (
                     <>{tokenNameFilter}{channelFilter}{modelFilter}</>
@@ -240,6 +244,12 @@ export function LogFilters({
                         className="h-9"
                     />
                 </div>
+
+                <TimezoneInput
+                    value={timezone}
+                    onChange={setTimezone}
+                    disabled={loading}
+                />
 
                 {/* Keyword search */}
                 <div className="w-40 flex-shrink-0">

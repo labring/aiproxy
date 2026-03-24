@@ -2,6 +2,7 @@
   "sidebar": {
     "monitor": "仪表盘",
     "group": "组别管理",
+    "groupRanking": "组别消耗排名",
     "key": "API Keys",
     "channel": "渠道",
     "model": "模型",
@@ -34,7 +35,8 @@
     "save": "保存",
     "saving": "保存中...",
     "search": "搜索...",
-    "all": "全部"
+    "all": "全部",
+    "timezonePlaceholder": "输入时区，例如 Asia/Shanghai"
   },
   "error": {
     "loading": "数据加载失败",
@@ -881,6 +883,22 @@
     },
     "dashboard": {
       "tokenNamePlaceholder": "选择令牌名称"
+    },
+    "ranking": {
+      "title": "组别消耗排名",
+      "description": "查看当前时间范围内各组别的消耗排行。",
+      "range": "{{timezone}} 时区范围：{{start}} 至 {{end}}",
+      "dateRangePlaceholder": "选择统计日期范围",
+      "timezonePlaceholder": "输入时区，例如 Asia/Shanghai",
+      "collapse": "收起",
+      "expand": "展开",
+      "group": "组别",
+      "requestCount": "请求数",
+      "totalTokens": "总 Tokens",
+      "usedAmount": "消耗金额",
+      "actions": "操作",
+      "view": "查看",
+      "summary": "共 {{total}} 个组别进入排名"
     },
     "models": {
       "model": "模型",

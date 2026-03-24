@@ -12,7 +12,9 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { TimezoneInput } from '@/components/common/TimezoneInput'
 import { DashboardFilters } from '@/types/dashboard'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnix } from '@/utils/timezone'
 
 export type DataSourceMode = 'total' | 'serviceTierFlex' | 'serviceTierPriority' | 'claudeLongContext'
 
@@ -54,29 +56,27 @@ export function GroupDashboardFilters({
     const [model, setModel] = useState('')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [timespan, setTimespan] = useState<'minute' | 'hour' | 'day' | 'month'>('hour')
-
-    const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+    const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
 
     const buildFilters = useCallback((): DashboardFilters & { tokenName?: string } => {
         const effectiveTokenName = tokenName === '__all__' ? '' : tokenName
         const effectiveModel = model === '__all__' ? '' : model
+        const effectiveTimezone = timezone.trim() || DEFAULT_TIMEZONE
 
         const filters: DashboardFilters & { tokenName?: string } = {
             tokenName: effectiveTokenName || undefined,
             model: effectiveModel || undefined,
             timespan,
-            timezone: getClientTimezone(),
+            timezone: effectiveTimezone,
         }
         if (dateRange?.from) {
-            filters.start_timestamp = Math.floor(dateRange.from.getTime() / 1000)
+            filters.start_timestamp = zonedBoundaryToUnix(dateRange.from, effectiveTimezone, false)
         }
         if (dateRange?.to) {
-            const endDate = new Date(dateRange.to)
-            endDate.setHours(23, 59, 59, 999)
-            filters.end_timestamp = Math.floor(endDate.getTime() / 1000)
+            filters.end_timestamp = zonedBoundaryToUnix(dateRange.to, effectiveTimezone, true)
         }
         return filters
-    }, [tokenName, model, dateRange, timespan])
+    }, [tokenName, model, dateRange, timespan, timezone])
 
     // Auto-refresh on filter change (skip initial mount - page provides initial filters)
     const isFirstRender = useRef(true)
@@ -93,11 +93,12 @@ export function GroupDashboardFilters({
         setModel('')
         setDateRange(getDefaultDateRange())
         setTimespan('hour')
+        setTimezone(DEFAULT_TIMEZONE)
     }
 
     return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 {/* Token Name */}
                 <div className="w-44 flex-shrink-0">
                     <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
@@ -165,6 +166,12 @@ export function GroupDashboardFilters({
                         className="h-9"
                     />
                 </div>
+
+                <TimezoneInput
+                    value={timezone}
+                    onChange={setTimezone}
+                    disabled={loading}
+                />
 
                 {/* Timespan */}
                 <div className="w-22 flex-shrink-0">

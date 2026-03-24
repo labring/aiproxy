@@ -56,6 +56,30 @@ export interface GroupsResponse {
     total: number
 }
 
+export interface GroupConsumptionRankingQuery {
+    start_timestamp?: number
+    end_timestamp?: number
+    timezone?: string
+    page?: number
+    per_page?: number
+    order?: string
+}
+
+export interface GroupConsumptionRankingItem {
+    rank: number
+    group_id: string
+    request_count: number
+    used_amount: number
+    input_tokens: number
+    output_tokens: number
+    total_tokens: number
+}
+
+export interface GroupConsumptionRankingResponse {
+    items: GroupConsumptionRankingItem[]
+    total: number
+}
+
 // Group create request
 export interface GroupCreateRequest {
     rpm_ratio?: number

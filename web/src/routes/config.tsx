@@ -12,6 +12,7 @@ import MonitorPage from "@/pages/monitor/page"
 import LogPage from "@/pages/log/page"
 import MCPPage from "@/pages/mcp/page"
 import GroupPage from "@/pages/group/page"
+import GroupRankingPage from "@/pages/group-ranking/page"
 
 // import layout component directly
 import { RootLayout } from "@/components/layout/RootLayOut"
@@ -54,6 +55,10 @@ export function useRoutes(): RouteObject[] {
                 {
                     path: ROUTES.GROUP,
                     element: <GroupPage />,
+                },
+                {
+                    path: ROUTES.GROUP_RANKING,
+                    element: <GroupRankingPage />,
                 },
                 {
                     path: ROUTES.KEY,

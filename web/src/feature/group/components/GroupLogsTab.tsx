@@ -5,6 +5,7 @@ import { logApi } from '@/api/log'
 import { LogTable } from '@/feature/log/components/LogTable'
 import { LogFilters } from '@/feature/log/components/LogFilters'
 import type { LogFilters as LogFiltersType } from '@/types/log'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnixMs } from '@/utils/timezone'
 
 interface GroupLogsTabProps {
     groupId: string
@@ -21,8 +22,9 @@ export function GroupLogsTab({ groupId, initialTokenName }: GroupLogsTabProps) {
             code_type: 'all',
             page: 1,
             per_page: 10,
-            start_timestamp: oneDayAgo.getTime(),
-            end_timestamp: new Date(today.setHours(23, 59, 59, 999)).getTime(),
+            timezone: DEFAULT_TIMEZONE,
+            start_timestamp: zonedBoundaryToUnixMs(oneDayAgo, DEFAULT_TIMEZONE, false),
+            end_timestamp: zonedBoundaryToUnixMs(today, DEFAULT_TIMEZONE, true),
         }
     }
 

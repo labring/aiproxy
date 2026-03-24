@@ -4,6 +4,7 @@ import { groupApi } from '@/api/group'
 import { useState } from 'react'
 import type {
     GroupCreateRequest,
+    GroupConsumptionRankingQuery,
     GroupUpdateRequest,
     GroupStatusRequest,
     GroupModelConfigSaveRequest
@@ -33,6 +34,25 @@ export const useSearchGroups = (keyword: string, page: number, perPage: number, 
     return {
         ...query,
     }
+}
+
+export const useGroupConsumptionRanking = (query: GroupConsumptionRankingQuery) => {
+    const rankingPage = query.page ?? 1
+    const rankingPageSize = query.per_page ?? 20
+
+    return useQuery({
+        queryKey: [
+            'groups',
+            'ranking',
+            rankingPage,
+            rankingPageSize,
+            query.start_timestamp,
+            query.end_timestamp,
+            query.timezone,
+            query.order,
+        ],
+        queryFn: () => groupApi.getGroupConsumptionRanking(query),
+    })
 }
 
 // Get single group

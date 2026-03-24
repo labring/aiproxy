@@ -12,10 +12,12 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { DateRangePicker } from '@/components/common/DateRangePicker'
+import { TimezoneInput } from '@/components/common/TimezoneInput'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { DashboardFilters } from '@/types/dashboard'
 import { channelApi } from '@/api/channel'
 import { useChannelTypeMetas } from '@/feature/channel/hooks'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnix } from '@/utils/timezone'
 
 export type DataSourceMode = 'total' | 'serviceTierFlex' | 'serviceTierPriority' | 'claudeLongContext'
 
@@ -58,6 +60,7 @@ export function MonitorFilters({
     const [channel, setChannel] = useState(defaultChannel ? String(defaultChannel) : '')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [timespan, setTimespan] = useState<'minute' | 'hour' | 'day' | 'month'>('hour')
+    const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
 
     // Batch fetch channel names
     const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
@@ -88,28 +91,25 @@ export function MonitorFilters({
             })
     }, [availableChannels]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const getClientTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
-
     const buildFilters = useCallback((): DashboardFilters => {
         const effectiveModel = model === '__all__' ? '' : model
         const effectiveChannel = channel === '__all__' ? '' : channel
+        const effectiveTimezone = timezone.trim() || DEFAULT_TIMEZONE
 
         const filters: DashboardFilters = {
             model: effectiveModel || undefined,
             channel: effectiveChannel ? Number(effectiveChannel) : undefined,
             timespan,
-            timezone: getClientTimezone(),
+            timezone: effectiveTimezone,
         }
         if (dateRange?.from) {
-            filters.start_timestamp = Math.floor(dateRange.from.getTime() / 1000)
+            filters.start_timestamp = zonedBoundaryToUnix(dateRange.from, effectiveTimezone, false)
         }
         if (dateRange?.to) {
-            const endDate = new Date(dateRange.to)
-            endDate.setHours(23, 59, 59, 999)
-            filters.end_timestamp = Math.floor(endDate.getTime() / 1000)
+            filters.end_timestamp = zonedBoundaryToUnix(dateRange.to, effectiveTimezone, true)
         }
         return filters
-    }, [model, channel, dateRange, timespan])
+    }, [model, channel, dateRange, timespan, timezone])
 
     // Auto-refresh on filter change (skip initial mount - page provides initial filters)
     const isFirstRender = useRef(true)
@@ -126,13 +126,14 @@ export function MonitorFilters({
         setChannel('')
         setDateRange(getDefaultDateRange())
         setTimespan('hour')
+        setTimezone(DEFAULT_TIMEZONE)
     }
 
     const getTypeName = (type: number) => typeMetas?.[type]?.name || ''
 
     return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 {/* Channel */}
                 {availableChannels.length > 0 && (
                     <div className="w-56 flex-shrink-0">
@@ -204,6 +205,12 @@ export function MonitorFilters({
                         className="h-9"
                     />
                 </div>
+
+                <TimezoneInput
+                    value={timezone}
+                    onChange={setTimezone}
+                    disabled={loading}
+                />
 
                 {/* Timespan */}
                 <div className="w-22 flex-shrink-0">
