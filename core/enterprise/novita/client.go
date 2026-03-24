@@ -161,7 +161,6 @@ func (c *NovitaClient) FetchAllModelsMerged(mgmtToken string) ([]NovitaModelV2, 
 			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
 		}
 
-		// V1 failure is non-fatal when we have V2 results
 		if v1Err != nil {
 			log.Printf("Novita sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
 			return v2Models, nil

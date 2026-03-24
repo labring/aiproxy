@@ -387,6 +387,12 @@ func EnsureNovitaChannels() (ChannelsInfo, error) {
 	var anthropicModels, openaiModels []string
 
 	for _, mc := range localModels {
+		// Skip models whose stored status indicates they are not available.
+		// Safety net for models synced before the status filter was added.
+		if status, ok := model.GetModelConfigInt(mc.Config, "status"); ok && status != NovitaModelStatusAvailable {
+			continue
+		}
+
 		openaiModels = append(openaiModels, mc.Model)
 
 		if eps, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
