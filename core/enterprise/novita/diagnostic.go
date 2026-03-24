@@ -51,80 +51,6 @@ func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 	return mode.ChatCompletions
 }
 
-// CompareNovitaModels compares remote V1 models with local database models.
-func CompareNovitaModels(remoteModels []NovitaModel, opts SyncOptions) (*SyncDiff, error) {
-	var localModels []model.ModelConfig
-
-	err := model.DB.Where("owner = ?", string(model.ModelOwnerNovita)).Find(&localModels).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to query local models: %w", err)
-	}
-
-	localModelMap := make(map[string]*model.ModelConfig)
-	for i := range localModels {
-		localModelMap[localModels[i].Model] = &localModels[i]
-	}
-
-	available := make([]NovitaModel, 0, len(remoteModels))
-	for _, m := range remoteModels {
-		if m.IsAvailable() {
-			available = append(available, m)
-		}
-	}
-
-	remoteModelMap := make(map[string]*NovitaModel, len(available))
-	for i := range available {
-		remoteModelMap[available[i].ID] = &available[i]
-	}
-
-	diff := &SyncDiff{
-		Summary: SyncSummary{
-			TotalModels: len(available),
-		},
-	}
-
-	for _, remoteModel := range available {
-		localModel, exists := localModelMap[remoteModel.ID]
-		if !exists {
-			diff.Changes.Add = append(diff.Changes.Add, ModelDiff{
-				ModelID:   remoteModel.ID,
-				Action:    "add",
-				NewConfig: buildModelConfigMapV1(&remoteModel),
-			})
-			diff.Summary.ToAdd++
-		} else {
-			changes := compareModelConfigsV1(localModel, &remoteModel)
-			if len(changes) > 0 {
-				diff.Changes.Update = append(diff.Changes.Update, ModelDiff{
-					ModelID:   remoteModel.ID,
-					Action:    "update",
-					OldConfig: buildLocalModelConfigMap(localModel),
-					NewConfig: buildModelConfigMapV1(&remoteModel),
-					Changes:   changes,
-				})
-				diff.Summary.ToUpdate++
-			}
-		}
-	}
-
-	if opts.DeleteUnmatchedModel {
-		for modelID := range localModelMap {
-			if _, exists := remoteModelMap[modelID]; !exists {
-				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
-					ModelID:   modelID,
-					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(localModelMap[modelID]),
-				})
-				diff.Summary.ToDelete++
-			}
-		}
-	}
-
-	diff.Channels = checkChannelStatus(opts)
-
-	return diff, nil
-}
-
 // CompareNovitaModelsV2 compares remote V2 models with local database models.
 func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions) (*SyncDiff, error) {
 	var localModels []model.ModelConfig
@@ -199,33 +125,6 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions) (*Syn
 	return diff, nil
 }
 
-// compareModelConfigsV1 compares a local model config with a remote V1 model.
-func compareModelConfigsV1(local *model.ModelConfig, remote *NovitaModel) []string {
-	var changes []string
-
-	if !floatEquals(float64(local.Price.InputPrice), remote.GetInputPricePerToken()) {
-		changes = append(changes, fmt.Sprintf(
-			"input_price: %.8f → %.8f",
-			float64(local.Price.InputPrice),
-			remote.GetInputPricePerToken(),
-		))
-	}
-
-	if !floatEquals(float64(local.Price.OutputPrice), remote.GetOutputPricePerToken()) {
-		changes = append(changes, fmt.Sprintf(
-			"output_price: %.8f → %.8f",
-			float64(local.Price.OutputPrice),
-			remote.GetOutputPricePerToken(),
-		))
-	}
-
-	if !configMapsEqual(local.Config, buildConfigFromV1Model(remote)) {
-		changes = append(changes, "config updated")
-	}
-
-	return changes
-}
-
 // compareModelConfigsV2 compares a local model config with a remote V2 model.
 func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2) []string {
 	var changes []string
@@ -279,21 +178,6 @@ func floatEquals(a, b float64) bool {
 	return math.Abs(a-b) < 1e-10
 }
 
-// buildModelConfigMapV1 builds a diff-display map for a V1 model.
-func buildModelConfigMapV1(m *NovitaModel) map[string]any {
-	return map[string]any{
-		"model":        m.ID,
-		"title":        m.Title,
-		"description":  m.Description,
-		"input_price":  m.GetInputPricePerToken(),
-		"output_price": m.GetOutputPricePerToken(),
-		"context_size": m.ContextSize,
-		"endpoints":    m.Endpoints,
-		"model_type":   m.ModelType,
-		"status":       m.Status,
-	}
-}
-
 // buildModelConfigMapV2 builds a diff-display map for a V2 model.
 func buildModelConfigMapV2(m *NovitaModelV2) map[string]any {
 	return map[string]any{
@@ -321,40 +205,6 @@ func buildLocalModelConfigMap(m *model.ModelConfig) map[string]any {
 	}
 }
 
-// buildConfigFromV1Model builds the model config map stored in ModelConfig.Config.
-func buildConfigFromV1Model(m *NovitaModel) map[string]any {
-	return map[string]any{
-		"max_context_tokens": m.ContextSize,
-		"max_output_tokens":  m.MaxOutputTokens,
-		"title":              m.Title,
-		"description":        m.Description,
-		"features":           m.Features,
-		"endpoints":          m.Endpoints,
-		"input_modalities":   m.InputModalities,
-		"output_modalities":  m.OutputModalities,
-		"model_type":         m.ModelType,
-		"tags":               m.Tags,
-		"status":             m.Status,
-	}
-}
-
-// buildConfigFromV2Model builds the model config map stored in ModelConfig.Config.
-func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
-	return map[string]any{
-		"max_context_tokens": m.ContextSize,
-		"max_output_tokens":  m.MaxOutputTokens,
-		"title":              m.Title,
-		"description":        m.Description,
-		"features":           m.Features,
-		"endpoints":          m.Endpoints,
-		"input_modalities":   m.InputModalities,
-		"output_modalities":  m.OutputModalities,
-		"model_type":         m.ModelType,
-		"tags":               m.Tags,
-		"status":             m.Status,
-	}
-}
-
 // checkChannelStatus checks if a Novita channel exists.
 func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 	info := ChannelsInfo{}
@@ -373,6 +223,7 @@ func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 }
 
 // Diagnostic performs a diagnostic check without executing sync.
+// Always uses FetchAllModelsMerged (V1+V2 merged into V2 format).
 func Diagnostic() (*DiagnosticResult, error) {
 	client, err := NewNovitaClient()
 	if err != nil {
@@ -381,35 +232,17 @@ func Diagnostic() (*DiagnosticResult, error) {
 
 	cfg := GetNovitaConfig()
 
-	var remoteCount int
-
-	var diff *SyncDiff
-
-	if cfg.MgmtToken != "" {
-		v2Models, fetchErr := client.FetchAllModels(cfg.MgmtToken)
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch remote models (mgmt API): %w", fetchErr)
-		}
-
-		diff, err = CompareNovitaModelsV2(v2Models, SyncOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		remoteCount = diff.Summary.TotalModels
-	} else {
-		remoteModels, fetchErr := client.FetchModels()
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
-		}
-
-		diff, err = CompareNovitaModels(remoteModels, SyncOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		remoteCount = diff.Summary.TotalModels
+	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	if fetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 	}
+
+	diff, err := CompareNovitaModelsV2(allModels, SyncOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare models: %w", err)
+	}
+
+	remoteCount := diff.Summary.TotalModels
 
 	var localCount int64
 

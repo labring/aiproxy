@@ -14,7 +14,7 @@ const novitaPricePerMDivisor = 10_000_000_000
 // NovitaModelStatusAvailable is the status value for available models.
 const NovitaModelStatusAvailable = 1
 
-// NovitaModel represents a model from the standard Novita /v1/models API.
+// NovitaModel represents a model from the standard Novita /v3/openai/models API.
 type NovitaModel struct {
 	ID                   string   `json:"id"`
 	Object               string   `json:"object"`
@@ -34,7 +34,7 @@ type NovitaModel struct {
 	Status               int      `json:"status"`
 }
 
-// NovitaModelsResponse is the response from GET /v1/models.
+// NovitaModelsResponse is the response from GET /v3/openai/models.
 type NovitaModelsResponse struct {
 	Data []NovitaModel `json:"data"`
 }
@@ -55,30 +55,84 @@ func (m *NovitaModel) GetOutputPricePerToken() float64 {
 	return float64(m.OutputTokenPricePerM) / novitaPricePerMDivisor
 }
 
-// NovitaModelV2 represents a model from the Novita management API
-// (api-server.novita.ai/v1/user/info). Field structure is inferred from similar providers;
-// verify against actual API response and update as needed.
-type NovitaModelV2 struct {
-	ID                   string   `json:"id"`
-	Title                string   `json:"title"`
-	Description          string   `json:"description"`
-	DisplayName          string   `json:"display_name"`
-	ModelType            string   `json:"model_type"`
-	ContextSize          int64    `json:"context_size"`
-	MaxOutputTokens      int64    `json:"max_output_tokens"`
-	InputTokenPricePerM  int64    `json:"input_token_price_per_m"`
-	OutputTokenPricePerM int64    `json:"output_token_price_per_m"`
-	Endpoints            []string `json:"endpoints"`
-	Features             []string `json:"features"`
-	InputModalities      []string `json:"input_modalities"`
-	OutputModalities     []string `json:"output_modalities"`
-	Status               int      `json:"status"`
-	Tags                 []any    `json:"tags"`
-	Series               string   `json:"series"`
+// ToV2 converts a V1 NovitaModel to NovitaModelV2 format for unified processing.
+// V2-only fields (tiered billing, cache, RPM/TPM) remain zero-valued,
+// which the V2 create/update functions handle gracefully.
+func (m *NovitaModel) ToV2() NovitaModelV2 {
+	return NovitaModelV2{
+		ID:                   m.ID,
+		Title:                m.Title,
+		Description:          m.Description,
+		ModelType:            m.ModelType,
+		ContextSize:          m.ContextSize,
+		MaxOutputTokens:      m.MaxOutputTokens,
+		InputTokenPricePerM:  m.InputTokenPricePerM,
+		OutputTokenPricePerM: m.OutputTokenPricePerM,
+		Endpoints:            m.Endpoints,
+		Features:             m.Features,
+		InputModalities:      m.InputModalities,
+		OutputModalities:     m.OutputModalities,
+		Status:               m.Status,
+		Tags:                 m.Tags,
+	}
 }
 
-// NovitaMgmtModelsResponse is the response from the Novita management API.
-// The exact wrapper key ("data") must be verified against real API response.
+// NovitaPricing represents a pricing entry from the management API (unit: 万分之一美元/百万token).
+type NovitaPricing struct {
+	OriginPricePerM int64 `json:"originPricePerM"`
+	PricePerM       int64 `json:"pricePerM"`
+}
+
+// PricePerToken converts the raw PricePerM to USD/token.
+func (p NovitaPricing) PricePerToken() float64 {
+	return float64(p.PricePerM) / novitaPricePerMDivisor
+}
+
+// TieredBillingConfig represents a tiered billing tier from the management API.
+type TieredBillingConfig struct {
+	MinTokens                      int64          `json:"min_tokens"`
+	MaxTokens                      int64          `json:"max_tokens"`
+	InputPricing                   NovitaPricing  `json:"input_pricing"`
+	OutputPricing                  NovitaPricing  `json:"output_pricing"`
+	CacheReadInputPricing          NovitaPricing  `json:"cache_read_input_pricing"`
+	CacheCreationInputPricing      NovitaPricing  `json:"cache_creation_input_pricing"`
+	CacheCreation1HourInputPricing NovitaPricing  `json:"cache_creation_1_hour_input_pricing"`
+}
+
+// NovitaModelV2 represents a model from the Novita management API
+// (api-server.novita.ai/v1/product/model/list).
+type NovitaModelV2 struct {
+	ID                                    string              `json:"id"`
+	Title                                 string              `json:"title"`
+	Description                           string              `json:"description"`
+	DisplayName                           string              `json:"display_name"`
+	ModelType                             string              `json:"model_type"`
+	ContextSize                           int64               `json:"context_size"`
+	MaxOutputTokens                       int64               `json:"max_output_tokens"`
+	InputTokenPricePerM                   int64               `json:"input_token_price_per_m"`
+	OutputTokenPricePerM                  int64               `json:"output_token_price_per_m"`
+	Endpoints                             []string            `json:"endpoints"`
+	Features                              []string            `json:"features"`
+	InputModalities                       []string            `json:"input_modalities"`
+	OutputModalities                      []string            `json:"output_modalities"`
+	Status                                int                 `json:"status"`
+	Tags                                  []any               `json:"tags"`
+	IsTieredBilling                       bool                `json:"is_tiered_billing"`
+	TieredBillingConfigs                  []TieredBillingConfig `json:"tiered_billing_configs"`
+	SupportPromptCache                    bool                `json:"support_prompt_cache"`
+	CacheReadInputTokenPricePerM          int64               `json:"cache_read_input_token_price_per_m"`
+	CacheCreationInputTokenPricePerM      int64               `json:"cache_creation_input_token_price_per_m"`
+	CacheCreation1HourInputTokenPricePerM int64               `json:"cache_creation_1_hour_input_token_price_per_m"`
+	InputPricing                          NovitaPricing       `json:"input_pricing"`
+	OutputPricing                         NovitaPricing       `json:"output_pricing"`
+	Series                                string              `json:"series"`
+	Quantization                          string              `json:"quantization"`
+	RPM                                   int                 `json:"rpm"`
+	TPM                                   int                 `json:"tpm"`
+	Labels                                []map[string]string `json:"labels"`
+}
+
+// NovitaMgmtModelsResponse is the response from the Novita management model list API.
 type NovitaMgmtModelsResponse struct {
 	Data []NovitaModelV2 `json:"data"`
 }
@@ -96,6 +150,16 @@ func (m *NovitaModelV2) GetInputPricePerToken() float64 {
 // GetOutputPricePerToken converts raw price to USD/token.
 func (m *NovitaModelV2) GetOutputPricePerToken() float64 {
 	return float64(m.OutputTokenPricePerM) / novitaPricePerMDivisor
+}
+
+// GetCacheReadPricePerToken converts raw cache read price to USD/token.
+func (m *NovitaModelV2) GetCacheReadPricePerToken() float64 {
+	return float64(m.CacheReadInputTokenPricePerM) / novitaPricePerMDivisor
+}
+
+// GetCacheCreationPricePerToken converts raw cache creation price to USD/token.
+func (m *NovitaModelV2) GetCacheCreationPricePerToken() float64 {
+	return float64(m.CacheCreationInputTokenPricePerM) / novitaPricePerMDivisor
 }
 
 // ModelDiff represents the difference for a single model.

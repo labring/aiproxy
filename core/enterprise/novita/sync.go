@@ -24,14 +24,9 @@ func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
 	return out
 }
 
-// modelCreator abstracts the create/update operations for V1 and V2 models.
-type modelCreator struct {
-	create func(tx *gorm.DB, modelID string) error
-	update func(tx *gorm.DB, modelID string) error
-}
-
 // ExecuteSync performs the actual sync operation with transaction.
-func ExecuteSync( //nolint:cyclop
+// Always uses FetchAllModelsMerged (V1+V2 merged into V2 format).
+func ExecuteSync(
 	opts SyncOptions,
 	progressCallback func(event SyncProgressEvent),
 ) (*SyncResult, error) {
@@ -49,99 +44,34 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	cfg := GetNovitaConfig()
-	useV2 := cfg.MgmtToken != ""
 
-	var (
-		diff    *SyncDiff
-		creator modelCreator
-	)
+	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	if fetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch Novita models: %w", fetchErr)
+	}
 
-	if useV2 {
-		sendProgress(progressCallback, "fetching", "正在通过管理接口获取全量模型（含闭源）...", 10, nil)
-
-		v2Models, fetchErr := client.FetchAllModels(cfg.MgmtToken)
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch Novita models (mgmt API): %w", fetchErr)
+	unavailCount := 0
+	for _, m := range allModels {
+		if !m.IsAvailable() {
+			unavailCount++
 		}
+	}
 
-		unavailCount := 0
-		for _, m := range v2Models {
-			if !m.IsAvailable() {
-				unavailCount++
-			}
-		}
+	if unavailCount > 0 {
+		sendProgress(progressCallback, "filtering",
+			fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
+	}
 
-		if unavailCount > 0 {
-			sendProgress(progressCallback, "filtering",
-				fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
-		}
+	sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
 
-		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
+	diff, err := CompareNovitaModelsV2(allModels, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare models: %w", err)
+	}
 
-		diff, err = CompareNovitaModelsV2(v2Models, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		v2Map := make(map[string]*NovitaModelV2, len(v2Models))
-		for i := range v2Models {
-			v2Map[v2Models[i].ID] = &v2Models[i]
-		}
-
-		creator = modelCreator{
-			create: func(tx *gorm.DB, modelID string) error {
-				m := v2Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-
-				return createModelConfigV2(tx, m)
-			},
-			update: func(tx *gorm.DB, modelID string) error {
-				m := v2Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-
-				return updateModelConfigV2(tx, m)
-			},
-		}
-	} else {
-		remoteModels, fetchErr := client.FetchModels()
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch Novita models: %w", fetchErr)
-		}
-
-		sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
-
-		diff, err = CompareNovitaModels(remoteModels, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		v1Map := make(map[string]*NovitaModel, len(remoteModels))
-		for i := range remoteModels {
-			v1Map[remoteModels[i].ID] = &remoteModels[i]
-		}
-
-		creator = modelCreator{
-			create: func(tx *gorm.DB, modelID string) error {
-				m := v1Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-
-				return createModelConfigV1(tx, m)
-			},
-			update: func(tx *gorm.DB, modelID string) error {
-				m := v1Map[modelID]
-				if m == nil {
-					return fmt.Errorf("model %s not found in remote models", modelID)
-				}
-
-				return updateModelConfigV1(tx, m)
-			},
-		}
+	modelMap := make(map[string]*NovitaModelV2, len(allModels))
+	for i := range allModels {
+		modelMap[allModels[i].ID] = &allModels[i]
 	}
 
 	result.Summary = diff.Summary
@@ -157,7 +87,7 @@ func ExecuteSync( //nolint:cyclop
 	sendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
 
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
-		return executeSyncTransaction(tx, diff, opts, creator, result, progressCallback)
+		return executeSyncTransaction(tx, diff, opts, modelMap, result, progressCallback)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("transaction failed: %w", err)
@@ -194,7 +124,7 @@ func executeSyncTransaction(
 	tx *gorm.DB,
 	diff *SyncDiff,
 	opts SyncOptions,
-	creator modelCreator,
+	modelMap map[string]*NovitaModelV2,
 	result *SyncResult,
 	progressCallback func(event SyncProgressEvent),
 ) error {
@@ -208,7 +138,13 @@ func executeSyncTransaction(
 			progress, nil,
 		)
 
-		if err := creator.create(tx, modelDiff.ModelID); err != nil {
+		m := modelMap[modelDiff.ModelID]
+		if m == nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID))
+			continue
+		}
+
+		if err := createModelConfigV2(tx, m); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("failed to add %s: %v", modelDiff.ModelID, err))
 			continue
 		}
@@ -226,7 +162,13 @@ func executeSyncTransaction(
 			progress, nil,
 		)
 
-		if err := creator.update(tx, modelDiff.ModelID); err != nil {
+		m := modelMap[modelDiff.ModelID]
+		if m == nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID))
+			continue
+		}
+
+		if err := updateModelConfigV2(tx, m); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("failed to update %s: %v", modelDiff.ModelID, err))
 			continue
 		}
@@ -258,75 +200,28 @@ func executeSyncTransaction(
 	return nil
 }
 
-// createModelConfigV1 creates a ModelConfig from a V1 Novita model.
-func createModelConfigV1(tx *gorm.DB, m *NovitaModel) error {
-	configData := toModelConfigKeys(buildConfigFromV1Model(m))
-
-	var existing model.ModelConfig
-	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
-		existing.Owner = model.ModelOwnerNovita
-		existing.Config = configData
-		existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
-		existing.RPM = 60
-		existing.TPM = 1000000
-		existing.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-		existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
-		existing.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-		existing.Price.OutputPriceUnit = model.ZeroNullInt64(1)
-
-		return tx.Save(&existing).Error
-	}
-
-	mc := model.ModelConfig{
-		Model:  m.ID,
-		Owner:  model.ModelOwnerNovita,
-		Type:   modeFromEndpoints(m.ModelType, m.Endpoints),
-		RPM:    60,
-		TPM:    1000000,
-		Config: configData,
-	}
-
-	mc.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-	mc.Price.InputPriceUnit = model.ZeroNullInt64(1)
-	mc.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-	mc.Price.OutputPriceUnit = model.ZeroNullInt64(1)
-
-	return tx.Create(&mc).Error
-}
-
-// updateModelConfigV1 updates an existing ModelConfig from a V1 Novita model.
-func updateModelConfigV1(tx *gorm.DB, m *NovitaModel) error {
-	var existing model.ModelConfig
-	if err := tx.Where("model = ? AND owner = ?", m.ID, string(model.ModelOwnerNovita)).
-		First(&existing).Error; err != nil {
-		return err
-	}
-
-	existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
-	existing.Config = toModelConfigKeys(buildConfigFromV1Model(m))
-	existing.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-	existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
-	existing.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-	existing.Price.OutputPriceUnit = model.ZeroNullInt64(1)
-
-	return tx.Save(&existing).Error
-}
-
 // createModelConfigV2 creates a ModelConfig from a V2 Novita model.
 func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 	configData := toModelConfigKeys(buildConfigFromV2Model(m))
 
+	rpm := int64(60)
+	if m.RPM > 0 {
+		rpm = int64(m.RPM)
+	}
+
+	tpm := int64(1000000)
+	if m.TPM > 0 {
+		tpm = int64(m.TPM)
+	}
+
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
 		existing.Owner = model.ModelOwnerNovita
 		existing.Config = configData
 		existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
-		existing.RPM = 60
-		existing.TPM = 1000000
-		existing.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-		existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
-		existing.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-		existing.Price.OutputPriceUnit = model.ZeroNullInt64(1)
+		existing.RPM = rpm
+		existing.TPM = tpm
+		setPriceFromV2Model(&existing.Price, m)
 
 		return tx.Save(&existing).Error
 	}
@@ -335,15 +230,12 @@ func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 		Model:  m.ID,
 		Owner:  model.ModelOwnerNovita,
 		Type:   modeFromEndpoints(m.ModelType, m.Endpoints),
-		RPM:    60,
-		TPM:    1000000,
+		RPM:    rpm,
+		TPM:    tpm,
 		Config: configData,
 	}
 
-	mc.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-	mc.Price.InputPriceUnit = model.ZeroNullInt64(1)
-	mc.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-	mc.Price.OutputPriceUnit = model.ZeroNullInt64(1)
+	setPriceFromV2Model(&mc.Price, m)
 
 	return tx.Create(&mc).Error
 }
@@ -359,12 +251,125 @@ func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2) error {
 	existing.Owner = model.ModelOwnerNovita
 	existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
 	existing.Config = toModelConfigKeys(buildConfigFromV2Model(m))
-	existing.Price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
-	existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
-	existing.Price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
-	existing.Price.OutputPriceUnit = model.ZeroNullInt64(1)
+
+	if m.RPM > 0 {
+		existing.RPM = int64(m.RPM)
+	}
+
+	if m.TPM > 0 {
+		existing.TPM = int64(m.TPM)
+	}
+
+	setPriceFromV2Model(&existing.Price, m)
 
 	return tx.Save(&existing).Error
+}
+
+// setPriceFromV2Model populates Price fields from a V2 model, including cache pricing.
+func setPriceFromV2Model(price *model.Price, m *NovitaModelV2) {
+	price.InputPrice = model.ZeroNullFloat64(m.GetInputPricePerToken())
+	price.InputPriceUnit = model.ZeroNullInt64(1)
+	price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
+	price.OutputPriceUnit = model.ZeroNullInt64(1)
+
+	if m.SupportPromptCache && m.CacheReadInputTokenPricePerM > 0 {
+		price.CachedPrice = model.ZeroNullFloat64(m.GetCacheReadPricePerToken())
+		price.CachedPriceUnit = model.ZeroNullInt64(1)
+	}
+
+	if m.SupportPromptCache && m.CacheCreationInputTokenPricePerM > 0 {
+		price.CacheCreationPrice = model.ZeroNullFloat64(m.GetCacheCreationPricePerToken())
+		price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
+	}
+
+	if m.IsTieredBilling && len(m.TieredBillingConfigs) > 0 {
+		conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
+
+		for i, tier := range m.TieredBillingConfigs {
+			minTokens, maxTokens := adjustTierBounds(m.TieredBillingConfigs, i)
+			if maxTokens > 0 && minTokens > maxTokens {
+				continue
+			}
+
+			cp := model.ConditionalPrice{
+				Condition: model.PriceCondition{
+					InputTokenMin: minTokens,
+					InputTokenMax: maxTokens,
+				},
+				Price: model.Price{
+					InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
+					InputPriceUnit:  model.ZeroNullInt64(1),
+					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
+					OutputPriceUnit: model.ZeroNullInt64(1),
+				},
+			}
+
+			if tier.CacheReadInputPricing.PricePerM > 0 {
+				cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken())
+				cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
+			}
+
+			if tier.CacheCreationInputPricing.PricePerM > 0 {
+				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
+				cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
+			}
+
+			conditionalPrices = append(conditionalPrices, cp)
+		}
+
+		price.ConditionalPrices = conditionalPrices
+	}
+}
+
+// buildConfigFromV2Model builds the model config map stored in ModelConfig.Config from a V2 model.
+func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
+	cfg := map[string]any{
+		"max_context_tokens": m.ContextSize,
+		"max_output_tokens":  m.MaxOutputTokens,
+		"title":              m.Title,
+		"description":        m.Description,
+		"features":           m.Features,
+		"endpoints":          m.Endpoints,
+		"input_modalities":   m.InputModalities,
+		"output_modalities":  m.OutputModalities,
+		"model_type":         m.ModelType,
+		"tags":               m.Tags,
+		"status":             m.Status,
+	}
+
+	if m.DisplayName != "" {
+		cfg["display_name"] = m.DisplayName
+	}
+
+	if m.Series != "" {
+		cfg["series"] = m.Series
+	}
+
+	if m.IsTieredBilling {
+		cfg["is_tiered_billing"] = true
+	}
+
+	if m.SupportPromptCache {
+		cfg["support_prompt_cache"] = true
+	}
+
+	return cfg
+}
+
+// adjustTierBounds returns the effective [min, max] for tier i, bumping min by 1
+// when it overlaps with the previous tier's max.
+func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens int64) {
+	minTokens = tiers[i].MinTokens
+	maxTokens = tiers[i].MaxTokens
+
+	if i > 0 && minTokens > 0 {
+		prevMax := tiers[i-1].MaxTokens
+		if prevMax > 0 && minTokens <= prevMax {
+			minTokens = prevMax + 1
+		}
+	}
+
+	return minTokens, maxTokens
 }
 
 // EnsureNovitaChannels queries all local ModelConfig entries owned by Novita,

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -143,4 +144,49 @@ func (c *PPIOClient) FetchAllModels(mgmtToken string) ([]PPIOModelV2, error) {
 	}
 
 	return mgmtResp.Data, nil
+}
+
+// FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
+// and merges them into a single V2 list. V2 wins on ID overlap (richer data).
+// If mgmtToken is empty, only V1 models are returned (converted to V2 format).
+func (c *PPIOClient) FetchAllModelsMerged(mgmtToken string) ([]PPIOModelV2, error) {
+	// Always fetch V1 (public API)
+	v1Models, v1Err := c.FetchModels()
+
+	var v2Models []PPIOModelV2
+
+	if mgmtToken != "" {
+		var v2Err error
+
+		v2Models, v2Err = c.FetchAllModels(mgmtToken)
+		if v2Err != nil {
+			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
+		}
+
+		// V1 failure is non-fatal when we have V2 results
+		if v1Err != nil {
+			// Log but continue with V2 only
+			log.Printf("PPIO sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
+			return v2Models, nil
+		}
+	} else {
+		// No mgmt token — V1 is the only source
+		if v1Err != nil {
+			return nil, fmt.Errorf("failed to fetch models: %w", v1Err)
+		}
+	}
+
+	// Merge: V2 wins on overlap (richer data with tiered billing, cache, RPM/TPM)
+	v2Set := make(map[string]struct{}, len(v2Models))
+	for _, m := range v2Models {
+		v2Set[m.ID] = struct{}{}
+	}
+
+	for _, m := range v1Models {
+		if _, exists := v2Set[m.ID]; !exists {
+			v2Models = append(v2Models, m.ToV2())
+		}
+	}
+
+	return v2Models, nil
 }

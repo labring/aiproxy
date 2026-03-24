@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -18,9 +19,9 @@ const (
 	DefaultNovitaAPIBase = "https://api.novita.ai/v3/openai"
 	// novitaModelsEndpoint is the standard model listing endpoint (under the v3/openai base).
 	novitaModelsEndpoint = "https://api.novita.ai/v3/openai/models"
-	// novitaMgmtEndpoint is the management API endpoint providing full model catalog.
-	// Requires a management token with extended access.
-	novitaMgmtEndpoint = "https://api-server.novita.ai/v1/user/info"
+	// novitaMgmtEndpoint is the management API endpoint providing full model catalog
+	// with richer data (RPM/TPM, cache pricing, tiered billing).
+	novitaMgmtEndpoint = "https://api-server.novita.ai/v1/product/model/list"
 	// DefaultTimeout is the HTTP client timeout.
 	defaultNovitaTimeout = 30 * time.Second
 )
@@ -64,7 +65,7 @@ func NewNovitaClient() (*NovitaClient, error) {
 	}, nil
 }
 
-// FetchModels fetches models from the standard Novita /v1/models API.
+// FetchModels fetches models from the standard Novita /v3/openai/models API.
 func (c *NovitaClient) FetchModels() ([]NovitaModel, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultNovitaTimeout)
 	defer cancel()
@@ -103,9 +104,7 @@ func (c *NovitaClient) FetchModels() ([]NovitaModel, error) {
 }
 
 // FetchAllModels fetches the full model catalog via the Novita management API.
-// Requires a management token (mgmtToken) with extended access.
-// NOTE: The response structure of api-server.novita.ai/v1/user/info is inferred;
-// verify NovitaMgmtModelsResponse against actual API response and adjust if needed.
+// Requires a management token with extended access.
 func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultNovitaTimeout)
 	defer cancel()
@@ -117,6 +116,8 @@ func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error)
 
 	req.Header.Set("Authorization", "Bearer "+mgmtToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://novita.ai")
+	req.Header.Set("Referer", "https://novita.ai/")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -141,4 +142,48 @@ func (c *NovitaClient) FetchAllModels(mgmtToken string) ([]NovitaModelV2, error)
 	}
 
 	return mgmtResp.Data, nil
+}
+
+// FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
+// and merges them into a single V2 list. V2 wins on ID overlap (richer data).
+// If mgmtToken is empty, only V1 models are returned (converted to V2 format).
+func (c *NovitaClient) FetchAllModelsMerged(mgmtToken string) ([]NovitaModelV2, error) {
+	// Always fetch V1 (public API)
+	v1Models, v1Err := c.FetchModels()
+
+	var v2Models []NovitaModelV2
+
+	if mgmtToken != "" {
+		var v2Err error
+
+		v2Models, v2Err = c.FetchAllModels(mgmtToken)
+		if v2Err != nil {
+			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
+		}
+
+		// V1 failure is non-fatal when we have V2 results
+		if v1Err != nil {
+			log.Printf("Novita sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
+			return v2Models, nil
+		}
+	} else {
+		// No mgmt token — V1 is the only source
+		if v1Err != nil {
+			return nil, fmt.Errorf("failed to fetch models: %w", v1Err)
+		}
+	}
+
+	// Merge: V2 wins on overlap (richer data with cache pricing, RPM/TPM)
+	v2Set := make(map[string]struct{}, len(v2Models))
+	for _, m := range v2Models {
+		v2Set[m.ID] = struct{}{}
+	}
+
+	for _, m := range v1Models {
+		if _, exists := v2Set[m.ID]; !exists {
+			v2Models = append(v2Models, m.ToV2())
+		}
+	}
+
+	return v2Models, nil
 }

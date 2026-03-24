@@ -186,26 +186,13 @@ func PreviewHandler(c *gin.Context) {
 
 	cfg := GetNovitaConfig()
 
-	var diff *SyncDiff
-
-	if cfg.MgmtToken != "" {
-		v2Models, fetchErr := client.FetchAllModels(cfg.MgmtToken)
-		if fetchErr != nil {
-			errorResponse(c, http.StatusInternalServerError, fetchErr.Error())
-			return
-		}
-
-		diff, err = CompareNovitaModelsV2(v2Models, opts)
-	} else {
-		remoteModels, fetchErr := client.FetchModels()
-		if fetchErr != nil {
-			errorResponse(c, http.StatusInternalServerError, fetchErr.Error())
-			return
-		}
-
-		diff, err = CompareNovitaModels(remoteModels, opts)
+	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	if fetchErr != nil {
+		errorResponse(c, http.StatusInternalServerError, fetchErr.Error())
+		return
 	}
 
+	diff, err := CompareNovitaModelsV2(allModels, opts)
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 		return

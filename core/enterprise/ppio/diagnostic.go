@@ -403,38 +403,18 @@ func Diagnostic() (*DiagnosticResult, error) {
 
 	cfg := GetPPIOConfig()
 
-	var remoteCount int
-
-	var diff *SyncDiff
-
-	if cfg.MgmtToken != "" {
-		// Use management API for full model catalog
-		v2Models, fetchErr := client.FetchAllModels(cfg.MgmtToken)
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch remote models (mgmt API): %w", fetchErr)
-		}
-
-		diff, err = ComparePPIOModelsV2(v2Models, SyncOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		// Use TotalModels from diff (which already excludes unavailable models)
-		remoteCount = diff.Summary.TotalModels
-	} else {
-		// Fall back to public API
-		remoteModels, fetchErr := client.FetchModels()
-		if fetchErr != nil {
-			return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
-		}
-
-		diff, err = ComparePPIOModels(remoteModels, SyncOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to compare models: %w", err)
-		}
-
-		remoteCount = diff.Summary.TotalModels
+	// Fetch from both V1 + V2 APIs (merged into V2 format)
+	allModels, fetchErr := client.FetchAllModelsMerged(cfg.MgmtToken)
+	if fetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch remote models: %w", fetchErr)
 	}
+
+	diff, err := ComparePPIOModelsV2(allModels, SyncOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare models: %w", err)
+	}
+
+	remoteCount := diff.Summary.TotalModels
 
 	// Count local models
 	var localCount int64
