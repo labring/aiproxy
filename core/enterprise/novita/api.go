@@ -3,6 +3,7 @@
 package novita
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -327,7 +328,7 @@ func ExecuteHandler(c *gin.Context) {
 		case <-done:
 			return false
 
-		case <-ctx.Done():
+		case <-c.Request.Context().Done():
 			return false
 		}
 	})
