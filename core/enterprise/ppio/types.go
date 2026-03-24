@@ -13,6 +13,14 @@ import (
 // avoid "MODEL_NOT_AVAILABLE" 500 errors at request time.
 const PPIOModelStatusAvailable = 1
 
+// ppioPricePerMDivisor converts PPIO's raw price field (万分之一元/百万token)
+// to 元/token.  raw / ppioPricePerMDivisor = 元/token.
+//
+// Derivation: raw / 10_000 = 元/百万token, then / 1_000_000 for per-token.
+// Cross-verified against official pricing for GPT-4.1 nano, Claude Opus 4,
+// DeepSeek-R1, DeepSeek-V3-Turbo (all exact ¥ match at CNY/USD 7.25).
+const ppioPricePerMDivisor = 10_000_000_000
+
 // PPIOModel represents a model from PPIO API
 type PPIOModel struct {
 	ID                   string         `json:"id"`
@@ -22,8 +30,8 @@ type PPIOModel struct {
 	Description          string         `json:"description"`
 	ContextSize          int64          `json:"context_size"`
 	MaxOutputTokens      int64          `json:"max_output_tokens"`
-	InputTokenPricePerM  float64        `json:"input_token_price_per_m"`  // Price per million tokens (CNY 元)
-	OutputTokenPricePerM float64        `json:"output_token_price_per_m"` // Price per million tokens (CNY 元)
+	InputTokenPricePerM  float64        `json:"input_token_price_per_m"`  // 万分之一元/百万token (raw / 10000 = ¥/Mt)
+	OutputTokenPricePerM float64        `json:"output_token_price_per_m"` // 万分之一元/百万token (raw / 10000 = ¥/Mt)
 	Endpoints            []string       `json:"endpoints"`
 	Features             []string       `json:"features"`
 	InputModalities      []string       `json:"input_modalities"`
@@ -44,20 +52,25 @@ func (m *PPIOModel) IsAvailable() bool {
 	return m.Status == PPIOModelStatusAvailable
 }
 
-// GetInputPricePerToken returns input price per token (not per million)
+// GetInputPricePerToken returns input price in 元/token.
 func (m *PPIOModel) GetInputPricePerToken() float64 {
-	return m.InputTokenPricePerM / 1000000
+	return m.InputTokenPricePerM / ppioPricePerMDivisor
 }
 
-// GetOutputPricePerToken returns output price per token (not per million)
+// GetOutputPricePerToken returns output price in 元/token.
 func (m *PPIOModel) GetOutputPricePerToken() float64 {
-	return m.OutputTokenPricePerM / 1000000
+	return m.OutputTokenPricePerM / ppioPricePerMDivisor
 }
 
-// PPIOPricing represents a pricing entry from the management API (unit: 厘/百万token)
+// PPIOPricing represents a pricing entry from the management API (unit: 万分之一元/百万token)
 type PPIOPricing struct {
 	OriginPricePerM int64 `json:"originPricePerM"`
 	PricePerM       int64 `json:"pricePerM"`
+}
+
+// PricePerToken converts the raw PricePerM to 元/token.
+func (p PPIOPricing) PricePerToken() float64 {
+	return float64(p.PricePerM) / ppioPricePerMDivisor
 }
 
 // TieredBillingConfig represents a tiered billing tier from the management API
@@ -115,44 +128,24 @@ type PPIOMgmtModelsResponse struct {
 	Data    []PPIOModelV2 `json:"data"`
 }
 
-// GetInputPricePerToken converts 厘/百万token → 元/token
+// GetInputPricePerToken converts 万分之一元/百万token → 元/token.
 func (m *PPIOModelV2) GetInputPricePerToken() float64 {
-	return float64(m.InputTokenPricePerM) / 1_000_000_000
+	return float64(m.InputTokenPricePerM) / ppioPricePerMDivisor
 }
 
-// GetOutputPricePerToken converts 厘/百万token → 元/token
+// GetOutputPricePerToken converts 万分之一元/百万token → 元/token.
 func (m *PPIOModelV2) GetOutputPricePerToken() float64 {
-	return float64(m.OutputTokenPricePerM) / 1_000_000_000
+	return float64(m.OutputTokenPricePerM) / ppioPricePerMDivisor
 }
 
-// GetCacheReadPricePerToken converts 厘/百万token → 元/token
+// GetCacheReadPricePerToken converts 万分之一元/百万token → 元/token.
 func (m *PPIOModelV2) GetCacheReadPricePerToken() float64 {
-	return float64(m.CacheReadInputTokenPricePerM) / 1_000_000_000
+	return float64(m.CacheReadInputTokenPricePerM) / ppioPricePerMDivisor
 }
 
-// GetCacheCreationPricePerToken converts 厘/百万token → 元/token
+// GetCacheCreationPricePerToken converts 万分之一元/百万token → 元/token.
 func (m *PPIOModelV2) GetCacheCreationPricePerToken() float64 {
-	return float64(m.CacheCreationInputTokenPricePerM) / 1_000_000_000
-}
-
-// ToV1 converts a PPIOModelV2 to PPIOModel for backward compatibility
-func (m *PPIOModelV2) ToV1() PPIOModel {
-	return PPIOModel{
-		ID:                   m.ID,
-		Title:                m.Title,
-		Description:          m.Description,
-		ContextSize:          m.ContextSize,
-		MaxOutputTokens:      m.MaxOutputTokens,
-		InputTokenPricePerM:  float64(m.InputTokenPricePerM) / 1000, // 厘→元
-		OutputTokenPricePerM: float64(m.OutputTokenPricePerM) / 1000,
-		Endpoints:            m.Endpoints,
-		Features:             m.Features,
-		InputModalities:      m.InputModalities,
-		OutputModalities:     m.OutputModalities,
-		ModelType:            m.ModelType,
-		Tags:                 m.Tags,
-		Status:               m.Status,
-	}
+	return float64(m.CacheCreationInputTokenPricePerM) / ppioPricePerMDivisor
 }
 
 // ModelDiff represents the difference for a single model

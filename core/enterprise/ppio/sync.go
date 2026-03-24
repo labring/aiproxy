@@ -624,21 +624,21 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 					InputTokenMax: maxTokens,
 				},
 				Price: model.Price{
-					InputPrice:     model.ZeroNullFloat64(float64(tier.InputPricing.PricePerM) / 1_000_000_000),
+					InputPrice:     model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
 					InputPriceUnit: model.ZeroNullInt64(1),
-					OutputPrice:     model.ZeroNullFloat64(float64(tier.OutputPricing.PricePerM) / 1_000_000_000),
+					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
 					OutputPriceUnit: model.ZeroNullInt64(1),
 				},
 			}
 
 			// Tier-level cache pricing
 			if tier.CacheReadInputPricing.PricePerM > 0 {
-				cp.Price.CachedPrice = model.ZeroNullFloat64(float64(tier.CacheReadInputPricing.PricePerM) / 1_000_000_000)
+				cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken())
 				cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
 			}
 
 			if tier.CacheCreationInputPricing.PricePerM > 0 {
-				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(float64(tier.CacheCreationInputPricing.PricePerM) / 1_000_000_000)
+				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
 				cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 			}
 
