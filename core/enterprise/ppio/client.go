@@ -16,7 +16,7 @@ import (
 
 const (
 	DefaultPPIOAPIBase        = "https://api.ppinfra.com/v3/openai"
-	DefaultPPIOAnthropicBase  = "https://api.ppinfra.com/v3/anthropic"
+	DefaultPPIOAnthropicBase  = "https://api.ppio.com/anthropic"
 	ppioModelsEndpoint        = "https://api.ppinfra.com/v3/openai/models"
 	ppioMgmtModelsEndpoint    = "https://api-server.ppinfra.com/v1/product/model/list"
 	defaultPPIOTimeout        = 30 * time.Second

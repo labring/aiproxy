@@ -425,7 +425,7 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicModels, openaiModels []st
 		if len(anthropicModels) > 0 {
 			anthropicCh := model.Channel{
 				Name:    "PPIO (Anthropic)",
-				Type:    model.ChannelTypePPIO,
+				Type:    model.ChannelTypeAnthropic,
 				BaseURL: DefaultPPIOAnthropicBase,
 				Key:     cfg.APIKey,
 				Models:  anthropicModels,

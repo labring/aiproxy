@@ -515,7 +515,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 		if len(anthropicModels) > 0 {
 			anthropicCh := model.Channel{
 				Name:    "Novita (Anthropic)",
-				Type:    model.ChannelTypeNovita,
+				Type:    model.ChannelTypeAnthropic,
 				BaseURL: DefaultNovitaAnthropicBase,
 				Key:     cfg.APIKey,
 				Models:  anthropicModels,
