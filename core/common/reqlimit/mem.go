@@ -1,6 +1,8 @@
 package reqlimit
 
 import (
+	"path"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,12 +16,23 @@ type windowCounts struct {
 
 type entry struct {
 	sync.Mutex
-	windows    map[int64]*windowCounts
-	lastAccess atomic.Value
+	windows              map[int64]*windowCounts
+	lastAccess           atomic.Value
+	windowSeconds        int64
+	totalNormal          int64
+	totalOver            int64
+	lastCleanedCutoff    int64
+	aggregateInitialized bool
 }
 
 type InMemoryRecord struct {
 	entries sync.Map
+}
+
+type recordSnapshot struct {
+	Keys        []string
+	TotalCount  int64
+	SecondCount int64
 }
 
 func NewInMemoryRecord() *InMemoryRecord {
@@ -45,20 +58,49 @@ func (m *InMemoryRecord) getEntry(keys []string) *entry {
 	return e
 }
 
-func (m *InMemoryRecord) cleanupAndCount(e *entry, cutoff int64) (int64, int64) {
+func (m *InMemoryRecord) rebuildAggregateLocked(e *entry, windowSeconds, cutoff int64) {
 	normalCount := int64(0)
-
 	overCount := int64(0)
+
 	for ts, wc := range e.windows {
 		if ts < cutoff {
 			delete(e.windows, ts)
-		} else {
-			normalCount += wc.normal
-			overCount += wc.over
+			continue
 		}
+
+		normalCount += wc.normal
+		overCount += wc.over
 	}
 
-	return normalCount, overCount
+	e.windowSeconds = windowSeconds
+	e.totalNormal = normalCount
+	e.totalOver = overCount
+	e.lastCleanedCutoff = cutoff
+	e.aggregateInitialized = true
+}
+
+func (m *InMemoryRecord) refreshAggregateLocked(e *entry, nowSecond, windowSeconds int64) {
+	cutoff := nowSecond - windowSeconds
+
+	if !e.aggregateInitialized || e.windowSeconds != windowSeconds {
+		m.rebuildAggregateLocked(e, windowSeconds, cutoff)
+		return
+	}
+
+	for ts := e.lastCleanedCutoff; ts < cutoff; ts++ {
+		wc, ok := e.windows[ts]
+		if !ok {
+			continue
+		}
+
+		e.totalNormal -= wc.normal
+		e.totalOver -= wc.over
+		delete(e.windows, ts)
+	}
+
+	if e.lastCleanedCutoff < cutoff {
+		e.lastCleanedCutoff = cutoff
+	}
 }
 
 func (m *InMemoryRecord) PushRequest(
@@ -76,9 +118,8 @@ func (m *InMemoryRecord) PushRequest(
 	e.lastAccess.Store(now)
 
 	windowStart := now.Unix()
-	cutoff := windowStart - int64(duration.Seconds())
-
-	normalCount, overCount = m.cleanupAndCount(e, cutoff)
+	windowSeconds := int64(duration.Seconds())
+	m.refreshAggregateLocked(e, windowStart, windowSeconds)
 
 	wc, exists := e.windows[windowStart]
 	if !exists {
@@ -86,15 +127,15 @@ func (m *InMemoryRecord) PushRequest(
 		e.windows[windowStart] = wc
 	}
 
-	if overed == 0 || normalCount <= overed {
+	if overed == 0 || e.totalNormal <= overed {
 		wc.normal += n
-		normalCount += n
+		e.totalNormal += n
 	} else {
 		wc.over += n
-		overCount += n
+		e.totalOver += n
 	}
 
-	return normalCount, overCount, wc.normal + wc.over
+	return e.totalNormal, e.totalOver, wc.normal + wc.over
 }
 
 func (m *InMemoryRecord) GetRequest(
@@ -102,7 +143,27 @@ func (m *InMemoryRecord) GetRequest(
 	keys ...string,
 ) (totalCount, secondCount int64) {
 	nowSecond := time.Now().Unix()
-	cutoff := nowSecond - int64(duration.Seconds())
+	windowSeconds := int64(duration.Seconds())
+
+	if !hasWildcard(keys) {
+		value, ok := m.entries.Load(strings.Join(keys, ":"))
+		if !ok {
+			return 0, 0
+		}
+
+		e, _ := value.(*entry)
+		e.Lock()
+		m.refreshAggregateLocked(e, nowSecond, windowSeconds)
+		nowWindow := e.windows[nowSecond]
+		totalCount = e.totalNormal + e.totalOver
+		e.Unlock()
+
+		if nowWindow != nil {
+			secondCount = nowWindow.normal + nowWindow.over
+		}
+
+		return totalCount, secondCount
+	}
 
 	m.entries.Range(func(key, value any) bool {
 		k, _ := key.(string)
@@ -111,11 +172,12 @@ func (m *InMemoryRecord) GetRequest(
 		if matchKeys(keys, currentKeys) {
 			e, _ := value.(*entry)
 			e.Lock()
-			normalCount, overCount := m.cleanupAndCount(e, cutoff)
+			m.refreshAggregateLocked(e, nowSecond, windowSeconds)
 			nowWindow := e.windows[nowSecond]
+			entryTotalCount := e.totalNormal + e.totalOver
 			e.Unlock()
 
-			totalCount += normalCount + overCount
+			totalCount += entryTotalCount
 
 			if nowWindow != nil {
 				secondCount += nowWindow.normal + nowWindow.over
@@ -151,6 +213,37 @@ func (m *InMemoryRecord) cleanupInactiveEntries(interval, maxInactivity time.Dur
 	}
 }
 
+func (m *InMemoryRecord) Snapshot(duration time.Duration) []recordSnapshot {
+	nowSecond := time.Now().Unix()
+	windowSeconds := int64(duration.Seconds())
+	snapshots := make([]recordSnapshot, 0)
+
+	m.entries.Range(func(key, value any) bool {
+		k, _ := key.(string)
+		e, _ := value.(*entry)
+		e.Lock()
+		m.refreshAggregateLocked(e, nowSecond, windowSeconds)
+		nowWindow := e.windows[nowSecond]
+		totalCount := e.totalNormal + e.totalOver
+		e.Unlock()
+
+		secondCount := int64(0)
+		if nowWindow != nil {
+			secondCount = nowWindow.normal + nowWindow.over
+		}
+
+		snapshots = append(snapshots, recordSnapshot{
+			Keys:        parseKeys(k),
+			TotalCount:  totalCount,
+			SecondCount: secondCount,
+		})
+
+		return true
+	})
+
+	return snapshots
+}
+
 func parseKeys(key string) []string {
 	return strings.Split(key, ":")
 }
@@ -161,10 +254,27 @@ func matchKeys(pattern, keys []string) bool {
 	}
 
 	for i, p := range pattern {
-		if p != "*" && p != keys[i] {
+		if isGlobPattern(p) {
+			matched, err := path.Match(p, keys[i])
+			if err != nil || !matched {
+				return false
+			}
+
+			continue
+		}
+
+		if p != keys[i] {
 			return false
 		}
 	}
 
 	return true
+}
+
+func hasWildcard(keys []string) bool {
+	return slices.ContainsFunc(keys, isGlobPattern)
+}
+
+func isGlobPattern(key string) bool {
+	return strings.ContainsAny(key, "*?[")
 }

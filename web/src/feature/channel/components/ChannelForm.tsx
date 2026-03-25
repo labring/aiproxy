@@ -30,6 +30,7 @@ import { FlaskConical, Loader2, Info, Power, PowerOff } from 'lucide-react'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
+import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update' | 'copy'
@@ -86,6 +87,7 @@ export function ChannelForm({
 
     // 获取所有模型
     const { data: models, isLoading: isModelsLoading } = useModels()
+    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     // API hooks
     const {
@@ -139,6 +141,7 @@ export function ChannelForm({
     const { data: defaultModelsData, isLoading: isDefaultModelsLoading } = useChannelDefaultModels(watchedType)
 
     const hasDefaults = !!(defaultModelsData?.models && defaultModelsData.models.length > 0)
+    const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`
 
     // Effective flag follows user's selected mode even when no defaults exist yet.
     const effectiveUseDefault = useDefaultModels
@@ -448,7 +451,20 @@ export function ChannelForm({
                                 className="inline-flex items-center rounded-md border border-transparent bg-secondary px-2 py-0.5 text-xs font-mono text-secondary-foreground transition-colors hover:border-primary/30 hover:bg-secondary/80"
                                 title={t('channel.dialog.configureDefaultModels')}
                             >
-                                {model}
+                                <span>{model}</span>
+                                {(() => {
+                                    const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[model] : undefined
+                                    const modelMetric = runtimeMetrics?.models?.[model]
+                                    if (!pair && !modelMetric) return null
+                                    const metric = pair || modelMetric
+                                    return (
+                                        <span className="ml-2 inline-flex items-center gap-1 text-[10px]">
+                                            <span>RPM {metric?.rpm || 0}</span>
+                                            <span>TPM {metric?.tpm || 0}</span>
+                                            <span>ERR {formatPercent(metric?.error_rate)}</span>
+                                        </span>
+                                    )
+                                })()}
                             </button>
                         ))}
                     </div>
@@ -692,10 +708,34 @@ export function ChannelForm({
                                                                         </div>
                                                                     )
                                                                 }
-                                                                return item
+                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const modelMetric = runtimeMetrics?.models?.[item]
+                                                                const metric = pair || modelMetric
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span>{item}</span>
+                                                                        {metric && (
+                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                                RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )
                                                             }}
                                                             handleSelectedItemDisplay={(item) => {
-                                                                return item
+                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const modelMetric = runtimeMetrics?.models?.[item]
+                                                                const metric = pair || modelMetric
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span>{item}</span>
+                                                                        {metric && (
+                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                                RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )
                                                             }}
                                                         />
                                                     )

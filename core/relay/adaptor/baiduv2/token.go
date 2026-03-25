@@ -54,7 +54,10 @@ type TokenResponse struct {
 	Token      string    `json:"token"`
 }
 
-func getBaiduAccessTokenHelper(ctx context.Context, apiKey, proxyURL string) (*TokenResponse, error) {
+func getBaiduAccessTokenHelper(
+	ctx context.Context,
+	apiKey, proxyURL string,
+) (*TokenResponse, error) {
 	ak, sk, err := getAKAndSK(apiKey)
 	if err != nil {
 		return nil, err

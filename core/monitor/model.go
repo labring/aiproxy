@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,14 +29,50 @@ func modelKeyPrefix() string {
 var (
 	addRequestScript                 = redis.NewScript(addRequestLuaScript)
 	getErrorRateScript               = redis.NewScript(getErrorRateLuaScript)
+	getStatsSnapshotScript           = redis.NewScript(getStatsSnapshotLuaScript)
 	clearChannelModelErrorsScript    = redis.NewScript(clearChannelModelErrorsLuaScript)
 	clearChannelAllModelErrorsScript = redis.NewScript(clearChannelAllModelErrorsLuaScript)
 	clearAllModelErrorsScript        = redis.NewScript(clearAllModelErrorsLuaScript)
+	redisMonitorModel                = newRedisModelMonitor(
+		func() *redis.Client { return common.RDB },
+	)
 )
+
+type redisModelMonitor struct {
+	getRDB func() *redis.Client
+}
+
+func newRedisModelMonitor(getRDB func() *redis.Client) *redisModelMonitor {
+	return &redisModelMonitor{
+		getRDB: getRDB,
+	}
+}
 
 func GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
 	if !common.RedisEnabled {
 		return memModelMonitor.GetModelsErrorRate(ctx)
+	}
+
+	return redisMonitorModel.GetModelsErrorRate(ctx)
+}
+
+func (m *redisModelMonitor) rdb() (*redis.Client, error) {
+	if m == nil || m.getRDB == nil {
+		return nil, errors.New("redis client getter is nil")
+	}
+
+	rdb := m.getRDB()
+	if rdb == nil {
+		return nil, errors.New("redis client is nil")
+	}
+
+	return rdb, nil
+}
+
+func (m *redisModelMonitor) GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
 	}
 
 	result := make(map[string]float64)
@@ -43,7 +80,7 @@ func GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
 
 	now := time.Now().UnixMilli()
 
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 		model := strings.TrimPrefix(key, modelKeyPrefix())
@@ -51,7 +88,7 @@ func GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
 
 		rate, err := getErrorRateScript.Run(
 			ctx,
-			common.RDB,
+			rdb,
 			[]string{key},
 			now,
 		).Float64()
@@ -98,6 +135,30 @@ func AddRequest(
 		return beyondThreshold, banExecution, nil
 	}
 
+	return redisMonitorModel.AddRequest(
+		ctx,
+		model,
+		channelID,
+		isError,
+		tryBan,
+		warnErrorRate,
+		maxErrorRate,
+	)
+}
+
+func (m *redisModelMonitor) AddRequest(
+	ctx context.Context,
+	model string,
+	channelID int64,
+	isError, tryBan bool,
+	warnErrorRate,
+	maxErrorRate float64,
+) (beyondThreshold, banExecution bool, err error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return false, false, err
+	}
+
 	errorFlag := 0
 	if isError {
 		errorFlag = 1
@@ -109,7 +170,7 @@ func AddRequest(
 
 	val, err := addRequestScript.Run(
 		ctx,
-		common.RDB,
+		rdb,
 		[]string{common.RedisKeyPrefix(), model},
 		channelID,
 		errorFlag,
@@ -160,11 +221,23 @@ func GetChannelModelErrorRates(ctx context.Context, channelID int64) (map[string
 		return memModelMonitor.GetChannelModelErrorRates(ctx, channelID)
 	}
 
+	return redisMonitorModel.GetChannelModelErrorRates(ctx, channelID)
+}
+
+func (m *redisModelMonitor) GetChannelModelErrorRates(
+	ctx context.Context,
+	channelID int64,
+) (map[string]float64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make(map[string]float64)
 	pattern := buildStatsKey("*", strconv.FormatInt(channelID, 10))
 	now := time.Now().UnixMilli()
 
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
@@ -175,7 +248,7 @@ func GetChannelModelErrorRates(ctx context.Context, channelID int64) (map[string
 
 		rate, err := getErrorRateScript.Run(
 			ctx,
-			common.RDB,
+			rdb,
 			[]string{key},
 			now,
 		).Float64()
@@ -198,11 +271,23 @@ func GetModelChannelErrorRate(ctx context.Context, model string) (map[int64]floa
 		return memModelMonitor.GetModelChannelErrorRate(ctx, model)
 	}
 
+	return redisMonitorModel.GetModelChannelErrorRate(ctx, model)
+}
+
+func (m *redisModelMonitor) GetModelChannelErrorRate(
+	ctx context.Context,
+	model string,
+) (map[int64]float64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make(map[int64]float64)
 	pattern := buildStatsKey(model, "*")
 	now := time.Now().UnixMilli()
 
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
@@ -213,7 +298,7 @@ func GetModelChannelErrorRate(ctx context.Context, model string) (map[int64]floa
 
 		rate, err := getErrorRateScript.Run(
 			ctx,
-			common.RDB,
+			rdb,
 			[]string{key},
 			now,
 		).Float64()
@@ -237,10 +322,22 @@ func GetBannedChannelsWithModel(ctx context.Context, model string) ([]int64, err
 		return memModelMonitor.GetBannedChannelsWithModel(ctx, model)
 	}
 
+	return redisMonitorModel.GetBannedChannelsWithModel(ctx, model)
+}
+
+func (m *redisModelMonitor) GetBannedChannelsWithModel(
+	ctx context.Context,
+	model string,
+) ([]int64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := []int64{}
 	prefix := modelKeyPrefix() + model + channelKeyPart
 	pattern := prefix + "*" + bannedKeySuffix
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
 	for iter.Next(ctx) {
 		key := iter.Val()
@@ -267,10 +364,22 @@ func GetBannedChannelsMapWithModel(ctx context.Context, model string) (map[int64
 		return memModelMonitor.GetBannedChannelsMapWithModel(ctx, model)
 	}
 
+	return redisMonitorModel.GetBannedChannelsMapWithModel(ctx, model)
+}
+
+func (m *redisModelMonitor) GetBannedChannelsMapWithModel(
+	ctx context.Context,
+	model string,
+) (map[int64]struct{}, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make(map[int64]struct{})
 	prefix := modelKeyPrefix() + model + channelKeyPart
 	pattern := prefix + "*" + bannedKeySuffix
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
 	for iter.Next(ctx) {
 		key := iter.Val()
@@ -297,9 +406,22 @@ func ClearChannelModelErrors(ctx context.Context, model string, channelID int) e
 		return memModelMonitor.ClearChannelModelErrors(ctx, model, channelID)
 	}
 
+	return redisMonitorModel.ClearChannelModelErrors(ctx, model, channelID)
+}
+
+func (m *redisModelMonitor) ClearChannelModelErrors(
+	ctx context.Context,
+	model string,
+	channelID int,
+) error {
+	rdb, err := m.rdb()
+	if err != nil {
+		return err
+	}
+
 	return clearChannelModelErrorsScript.Run(
 		ctx,
-		common.RDB,
+		rdb,
 		[]string{common.RedisKeyPrefix(), model},
 		strconv.Itoa(channelID),
 	).Err()
@@ -311,9 +433,18 @@ func ClearChannelAllModelErrors(ctx context.Context, channelID int) error {
 		return memModelMonitor.ClearChannelAllModelErrors(ctx, channelID)
 	}
 
+	return redisMonitorModel.ClearChannelAllModelErrors(ctx, channelID)
+}
+
+func (m *redisModelMonitor) ClearChannelAllModelErrors(ctx context.Context, channelID int) error {
+	rdb, err := m.rdb()
+	if err != nil {
+		return err
+	}
+
 	return clearChannelAllModelErrorsScript.Run(
 		ctx,
-		common.RDB,
+		rdb,
 		[]string{common.RedisKeyPrefix()},
 		strconv.Itoa(channelID),
 	).Err()
@@ -324,7 +455,17 @@ func ClearAllModelErrors(ctx context.Context) error {
 	if !common.RedisEnabled {
 		return memModelMonitor.ClearAllModelErrors(ctx)
 	}
-	return clearAllModelErrorsScript.Run(ctx, common.RDB, []string{common.RedisKeyPrefix()}).Err()
+
+	return redisMonitorModel.ClearAllModelErrors(ctx)
+}
+
+func (m *redisModelMonitor) ClearAllModelErrors(ctx context.Context) error {
+	rdb, err := m.rdb()
+	if err != nil {
+		return err
+	}
+
+	return clearAllModelErrorsScript.Run(ctx, rdb, []string{common.RedisKeyPrefix()}).Err()
 }
 
 // GetAllBannedModelChannels gets all banned channels for all models
@@ -333,9 +474,20 @@ func GetAllBannedModelChannels(ctx context.Context) (map[string][]int64, error) 
 		return memModelMonitor.GetAllBannedModelChannels(ctx)
 	}
 
+	return redisMonitorModel.GetAllBannedModelChannels(ctx)
+}
+
+func (m *redisModelMonitor) GetAllBannedModelChannels(
+	ctx context.Context,
+) (map[string][]int64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make(map[string][]int64)
 	pattern := modelKeyPrefix() + "*" + channelKeyPart + "*" + bannedKeySuffix
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
 	for iter.Next(ctx) {
 		key := iter.Val()
@@ -372,11 +524,32 @@ func GetAllChannelModelErrorRates(ctx context.Context) (map[int64]map[string]flo
 		return memModelMonitor.GetAllChannelModelErrorRates(ctx)
 	}
 
+	return redisMonitorModel.GetAllChannelModelErrorRates(ctx)
+}
+
+func GetAllModelChannelStats(
+	ctx context.Context,
+) (map[string]map[int64]ModelChannelStatsSnapshot, error) {
+	if !common.RedisEnabled {
+		return memModelMonitor.GetAllModelChannelStats(ctx)
+	}
+
+	return redisMonitorModel.GetAllModelChannelStats(ctx)
+}
+
+func (m *redisModelMonitor) GetAllChannelModelErrorRates(
+	ctx context.Context,
+) (map[int64]map[string]float64, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make(map[int64]map[string]float64)
 	pattern := buildStatsKey("*", "*")
 	now := time.Now().UnixMilli()
 
-	iter := common.RDB.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
@@ -387,7 +560,7 @@ func GetAllChannelModelErrorRates(ctx context.Context) (map[int64]map[string]flo
 
 		rate, err := getErrorRateScript.Run(
 			ctx,
-			common.RDB,
+			rdb,
 			[]string{key},
 			now,
 		).Float64()
@@ -400,6 +573,75 @@ func GetAllChannelModelErrorRates(ctx context.Context) (map[int64]map[string]flo
 		}
 
 		result[channelID][model] = rate
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (m *redisModelMonitor) GetAllModelChannelStats(
+	ctx context.Context,
+) (map[string]map[int64]ModelChannelStatsSnapshot, error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[int64]ModelChannelStatsSnapshot)
+	pattern := buildStatsKey("*", "*")
+	now := time.Now().UnixMilli()
+
+	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+
+		model, channelID, ok := getModelChannelID(key)
+		if !ok {
+			continue
+		}
+
+		stats, err := getStatsSnapshotScript.Run(ctx, rdb, []string{key}, now).Int64Slice()
+		if err != nil {
+			return nil, err
+		}
+
+		if _, exists := result[model]; !exists {
+			result[model] = make(map[int64]ModelChannelStatsSnapshot)
+		}
+
+		bannedKey := fmt.Sprintf(
+			"%s%s%s%d%s",
+			modelKeyPrefix(),
+			model,
+			channelKeyPart,
+			channelID,
+			bannedKeySuffix,
+		)
+
+		banned, err := rdb.Exists(ctx, bannedKey).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		reqCount := int64(0)
+		errCount := int64(0)
+
+		if len(stats) > 0 {
+			reqCount = stats[0]
+		}
+
+		if len(stats) > 1 {
+			errCount = stats[1]
+		}
+
+		result[model][channelID] = ModelChannelStatsSnapshot{
+			Requests: reqCount,
+			Errors:   errCount,
+			Banned:   banned > 0,
+		}
 	}
 
 	if err := iter.Err(); err != nil {
@@ -429,6 +671,9 @@ local maxSliceCount = 12
 local statsExpiry = maxSliceCount * 10 * 1000
 local banExpiry = 5 * 60 * 1000
 local current_slice = math.floor(now_ts / 10 / 1000)
+local total_req_field = "__meta_total_req"
+local total_err_field = "__meta_total_err"
+local last_cleaned_field = "__meta_last_cleaned_slice"
 
 local function parse_req_err(value)
     if not value then return 0, 0 end
@@ -436,30 +681,76 @@ local function parse_req_err(value)
     return tonumber(r) or 0, tonumber(e) or 0
 end
 
+local function get_clean_req_err(key)
+	local total_req = tonumber(redis.call("HGET", key, total_req_field)) or 0
+	local total_err = tonumber(redis.call("HGET", key, total_err_field)) or 0
+	local last_cleaned = tonumber(redis.call("HGET", key, last_cleaned_field))
+	local min_valid_slice = current_slice - maxSliceCount
+
+    if not last_cleaned then
+        total_req = 0
+        total_err = 0
+        local all_slices = redis.call("HGETALL", key)
+        for i = 1, #all_slices, 2 do
+            local slice = tonumber(all_slices[i])
+            if slice then
+                if slice < min_valid_slice then
+                    redis.call("HDEL", key, all_slices[i])
+                else
+                    local req, err = parse_req_err(all_slices[i+1])
+                    total_req = total_req + req
+                    total_err = total_err + err
+                end
+            end
+        end
+    else
+        for slice = last_cleaned, min_valid_slice - 1 do
+            local value = redis.call("HGET", key, tostring(slice))
+            if value then
+                local req, err = parse_req_err(value)
+                total_req = total_req - req
+                total_err = total_err - err
+                redis.call("HDEL", key, tostring(slice))
+            end
+        end
+    end
+
+    redis.call(
+        "HSET",
+        key,
+        total_req_field,
+        total_req,
+        total_err_field,
+        total_err,
+        last_cleaned_field,
+        min_valid_slice
+    )
+    redis.call("PEXPIRE", key, statsExpiry)
+
+	return total_req, total_err
+end
+
 local function update_stats(key)
+    local total_req, total_err = get_clean_req_err(key)
     local req, err = parse_req_err(redis.call("HGET", key, current_slice))
     req = req + 1
     err = err + (is_error == 1 and 1 or 0)
-    redis.call("HSET", key, current_slice, req .. ":" .. err)
+    total_req = total_req + 1
+    total_err = total_err + (is_error == 1 and 1 or 0)
+    redis.call(
+        "HSET",
+        key,
+        current_slice,
+        req .. ":" .. err,
+        total_req_field,
+        total_req,
+        total_err_field,
+        total_err,
+        last_cleaned_field,
+        current_slice - maxSliceCount
+    )
     redis.call("PEXPIRE", key, statsExpiry)
     return req, err
-end
-
-local function get_clean_req_err(key)
-	local total_req, total_err = 0, 0
-	local min_valid_slice = current_slice - maxSliceCount
-    local all_slices = redis.call("HGETALL", key)
-    for i = 1, #all_slices, 2 do
-        local slice = tonumber(all_slices[i])
-        if slice < min_valid_slice then
-            redis.call("HDEL", key, all_slices[i])
-		else
-			local req, err = parse_req_err(all_slices[i+1])
-			total_req = total_req + req
-			total_err = total_err + err
-		end
-    end
-	return total_req, total_err
 end
 
 update_stats(stats_key)
@@ -483,7 +774,7 @@ local function check_channel_error()
 	end
 
 	local error_rate = total_err / total_req
-	
+
 	-- Check if we should ban (only if max_error_rate is set and exceeded)
 	if can_ban == 1 and error_rate >= max_error_rate then
 		if already_banned then
@@ -507,6 +798,10 @@ local stats_key = KEYS[1]
 local now_ts = tonumber(ARGV[1])
 local maxSliceCount = 12
 local current_slice = math.floor(now_ts / 10 / 1000)
+local total_req_field = "__meta_total_req"
+local total_err_field = "__meta_total_err"
+local last_cleaned_field = "__meta_last_cleaned_slice"
+local statsExpiry = maxSliceCount * 10 * 1000
 
 local function parse_req_err(value)
     if not value then return 0, 0 end
@@ -515,25 +810,120 @@ local function parse_req_err(value)
 end
 
 local function get_clean_req_err(key)
-	local total_req, total_err = 0, 0
+	local total_req = tonumber(redis.call("HGET", key, total_req_field)) or 0
+	local total_err = tonumber(redis.call("HGET", key, total_err_field)) or 0
+	local last_cleaned = tonumber(redis.call("HGET", key, last_cleaned_field))
 	local min_valid_slice = current_slice - maxSliceCount
-    local all_slices = redis.call("HGETALL", key)
-    for i = 1, #all_slices, 2 do
-        local slice = tonumber(all_slices[i])
-        if slice < min_valid_slice then
-            redis.call("HDEL", key, all_slices[i])
-		else
-			local req, err = parse_req_err(all_slices[i+1])
-			total_req = total_req + req
-			total_err = total_err + err
-		end
+
+    if not last_cleaned then
+        total_req = 0
+        total_err = 0
+        local all_slices = redis.call("HGETALL", key)
+        for i = 1, #all_slices, 2 do
+            local slice = tonumber(all_slices[i])
+            if slice then
+                if slice < min_valid_slice then
+                    redis.call("HDEL", key, all_slices[i])
+                else
+                    local req, err = parse_req_err(all_slices[i+1])
+                    total_req = total_req + req
+                    total_err = total_err + err
+                end
+            end
+        end
+    else
+        for slice = last_cleaned, min_valid_slice - 1 do
+            local value = redis.call("HGET", key, tostring(slice))
+            if value then
+                local req, err = parse_req_err(value)
+                total_req = total_req - req
+                total_err = total_err - err
+                redis.call("HDEL", key, tostring(slice))
+            end
+        end
     end
+
+    redis.call(
+        "HSET",
+        key,
+        total_req_field,
+        total_req,
+        total_err_field,
+        total_err,
+        last_cleaned_field,
+        min_valid_slice
+    )
+    redis.call("PEXPIRE", key, statsExpiry)
 	return total_req, total_err
 end
 
 local total_req, total_err = get_clean_req_err(stats_key)
 if total_req < 20 then return 0 end
 return string.format("%.2f", total_err / total_req)
+`
+
+	getStatsSnapshotLuaScript = `
+local stats_key = KEYS[1]
+local now_ts = tonumber(ARGV[1])
+local maxSliceCount = 12
+local current_slice = math.floor(now_ts / 10 / 1000)
+local total_req_field = "__meta_total_req"
+local total_err_field = "__meta_total_err"
+local last_cleaned_field = "__meta_last_cleaned_slice"
+local statsExpiry = maxSliceCount * 10 * 1000
+
+local function parse_req_err(value)
+    if not value then return 0, 0 end
+    local r, e = value:match("^(%d+):(%d+)$")
+    return tonumber(r) or 0, tonumber(e) or 0
+end
+
+local total_req = tonumber(redis.call("HGET", stats_key, total_req_field)) or 0
+local total_err = tonumber(redis.call("HGET", stats_key, total_err_field)) or 0
+local last_cleaned = tonumber(redis.call("HGET", stats_key, last_cleaned_field))
+local min_valid_slice = current_slice - maxSliceCount
+
+if not last_cleaned then
+    total_req = 0
+    total_err = 0
+    local all_slices = redis.call("HGETALL", stats_key)
+    for i = 1, #all_slices, 2 do
+        local slice = tonumber(all_slices[i])
+        if slice then
+            if slice < min_valid_slice then
+                redis.call("HDEL", stats_key, all_slices[i])
+            else
+                local req, err = parse_req_err(all_slices[i+1])
+                total_req = total_req + req
+                total_err = total_err + err
+            end
+        end
+    end
+else
+    for slice = last_cleaned, min_valid_slice - 1 do
+        local value = redis.call("HGET", stats_key, tostring(slice))
+        if value then
+            local req, err = parse_req_err(value)
+            total_req = total_req - req
+            total_err = total_err - err
+            redis.call("HDEL", stats_key, tostring(slice))
+        end
+    end
+end
+
+redis.call(
+    "HSET",
+    stats_key,
+    total_req_field,
+    total_req,
+    total_err_field,
+    total_err,
+    last_cleaned_field,
+    min_valid_slice
+)
+redis.call("PEXPIRE", stats_key, statsExpiry)
+
+return { total_req, total_err }
 `
 
 	clearChannelModelErrorsLuaScript = `

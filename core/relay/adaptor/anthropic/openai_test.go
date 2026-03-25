@@ -16,9 +16,21 @@ import (
 
 func TestModelDefaultMaxTokens(t *testing.T) {
 	convey.Convey("ModelDefaultMaxTokens", t, func() {
-		convey.So(anthropic.ModelDefaultMaxTokens("claude-sonnet-4-20250514"), convey.ShouldEqual, 64000)
-		convey.So(anthropic.ModelDefaultMaxTokens("claude-sonnet-4-5-20250929"), convey.ShouldEqual, 64000)
-		convey.So(anthropic.ModelDefaultMaxTokens("claude-opus-4-1-20250805"), convey.ShouldEqual, 204800)
+		convey.So(
+			anthropic.ModelDefaultMaxTokens("claude-sonnet-4-20250514"),
+			convey.ShouldEqual,
+			64000,
+		)
+		convey.So(
+			anthropic.ModelDefaultMaxTokens("claude-sonnet-4-5-20250929"),
+			convey.ShouldEqual,
+			64000,
+		)
+		convey.So(
+			anthropic.ModelDefaultMaxTokens("claude-opus-4-1-20250805"),
+			convey.ShouldEqual,
+			204800,
+		)
 	})
 }
 

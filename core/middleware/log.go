@@ -67,10 +67,11 @@ func NewLog(l *logrus.Logger) gin.HandlerFunc {
 func logColor(log *logrus.Entry, p gin.LogFormatterParams) {
 	str := formatter(p)
 
-	code := p.StatusCode
 	switch {
-	case code >= http.StatusBadRequest && code < http.StatusInternalServerError:
+	case p.StatusCode >= http.StatusInternalServerError:
 		log.Error(str)
+	case p.StatusCode >= http.StatusBadRequest:
+		log.Warn(str)
 	default:
 		log.Info(str)
 	}
