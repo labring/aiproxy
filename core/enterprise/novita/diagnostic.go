@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -38,9 +39,17 @@ var endpointToMode = map[string]mode.Mode{
 
 // modeFromEndpoints infers mode.Mode from Novita endpoint slugs and model_type.
 // Falls back to ChatCompletions when no match is found.
+// Models whose endpoints contain "responses" but no chat-family slug are
+// classified as mode.Responses so IsResponsesOnlyModel returns true.
 func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 	if m, ok := modelTypeToMode[modelType]; ok {
 		return m
+	}
+
+	hasResponses := slices.Contains(endpoints, "responses")
+	hasChatFamily := slices.Contains(endpoints, "chat/completions") || slices.Contains(endpoints, "completions")
+	if hasResponses && !hasChatFamily {
+		return mode.Responses
 	}
 
 	for _, ep := range endpoints {

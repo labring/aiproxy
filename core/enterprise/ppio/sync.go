@@ -54,9 +54,17 @@ var endpointSlugToMode = map[string]mode.Mode{
 
 // inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
 // Falls back to endpoint-based inference, then defaults to ChatCompletions.
+// Models whose endpoints contain "responses" but no chat-family slug are
+// classified as mode.Responses so IsResponsesOnlyModel returns true.
 func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
 	if m, ok := ModelTypeToMode[modelType]; ok {
 		return m
+	}
+
+	hasResponses := slices.Contains(endpoints, "responses")
+	hasChatFamily := slices.Contains(endpoints, "chat/completions") || slices.Contains(endpoints, "completions")
+	if hasResponses && !hasChatFamily {
+		return mode.Responses
 	}
 
 	for _, ep := range endpoints {
