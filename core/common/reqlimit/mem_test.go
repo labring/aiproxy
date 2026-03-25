@@ -113,6 +113,32 @@ func TestGetRequest(t *testing.T) {
 	if totalCount != 2 {
 		t.Errorf("Expected totalCount 2 for group1 wildcard, got %d", totalCount)
 	}
+
+	totalCount, secondCount = rl.GetRequest(60*time.Second, "group1", "model2")
+	if totalCount != 1 || secondCount != 1 {
+		t.Errorf(
+			"Expected exact query total=1 second=1, got total=%d second=%d",
+			totalCount,
+			secondCount,
+		)
+	}
+}
+
+func TestGetRequestWithGlobPattern(t *testing.T) {
+	rl := reqlimit.NewInMemoryRecord()
+
+	rl.PushRequest(10, 60*time.Second, 1, "group1", "model-a")
+	rl.PushRequest(10, 60*time.Second, 1, "group1", "model-b")
+	rl.PushRequest(10, 60*time.Second, 1, "group1", "other")
+
+	totalCount, secondCount := rl.GetRequest(60*time.Second, "group1", "model-*")
+	if totalCount != 2 || secondCount != 2 {
+		t.Errorf(
+			"Expected glob query total=2 second=2, got total=%d second=%d",
+			totalCount,
+			secondCount,
+		)
+	}
 }
 
 func TestMultipleGroupsAndModels(t *testing.T) {
@@ -150,6 +176,39 @@ func TestTimeWindowCleanup(t *testing.T) {
 	totalCount, _ = rl.GetRequest(2*time.Second, "group1", "model1")
 	if totalCount != 0 {
 		t.Errorf("Expected totalCount 0 after cleanup, got %d", totalCount)
+	}
+}
+
+func TestGetRequestWithDifferentDurations(t *testing.T) {
+	rl := reqlimit.NewInMemoryRecord()
+
+	rl.PushRequest(0, 60*time.Second, 1, "group1", "model1")
+
+	totalCount, secondCount := rl.GetRequest(60*time.Second, "group1", "model1")
+	if totalCount != 1 || secondCount != 1 {
+		t.Fatalf(
+			"Expected total=1 second=1 for 60s query, got total=%d second=%d",
+			totalCount,
+			secondCount,
+		)
+	}
+
+	totalCount, secondCount = rl.GetRequest(30*time.Second, "group1", "model1")
+	if totalCount != 1 || secondCount != 1 {
+		t.Fatalf(
+			"Expected total=1 second=1 for 30s query, got total=%d second=%d",
+			totalCount,
+			secondCount,
+		)
+	}
+
+	totalCount, secondCount = rl.GetRequest(60*time.Second, "group1", "model1")
+	if totalCount != 1 || secondCount != 1 {
+		t.Fatalf(
+			"Expected total=1 second=1 after switching duration back to 60s, got total=%d second=%d",
+			totalCount,
+			secondCount,
+		)
 	}
 }
 
@@ -232,6 +291,46 @@ func TestRateLimitWithOverflow(t *testing.T) {
 					i+1, expectedOver, normalCount, overCount)
 			}
 		}
+	}
+}
+
+func TestRateLimitBoundaryCompatibility(t *testing.T) {
+	rl := reqlimit.NewInMemoryRecord()
+
+	normalCount, overCount, _ := rl.PushRequest(2, 60*time.Second, 1, "group1", "model1")
+	if normalCount != 1 || overCount != 0 {
+		t.Fatalf(
+			"Expected first request normal=1 over=0, got normal=%d over=%d",
+			normalCount,
+			overCount,
+		)
+	}
+
+	normalCount, overCount, _ = rl.PushRequest(2, 60*time.Second, 1, "group1", "model1")
+	if normalCount != 2 || overCount != 0 {
+		t.Fatalf(
+			"Expected second request normal=2 over=0, got normal=%d over=%d",
+			normalCount,
+			overCount,
+		)
+	}
+
+	normalCount, overCount, _ = rl.PushRequest(2, 60*time.Second, 1, "group1", "model1")
+	if normalCount != 3 || overCount != 0 {
+		t.Fatalf(
+			"Expected third request normal=3 over=0, got normal=%d over=%d",
+			normalCount,
+			overCount,
+		)
+	}
+
+	normalCount, overCount, _ = rl.PushRequest(2, 60*time.Second, 1, "group1", "model1")
+	if normalCount != 3 || overCount != 1 {
+		t.Fatalf(
+			"Expected fourth request normal=3 over=1, got normal=%d over=%d",
+			normalCount,
+			overCount,
+		)
 	}
 }
 

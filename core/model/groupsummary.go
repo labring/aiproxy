@@ -121,7 +121,7 @@ type GroupConsumptionRankingItem struct {
 	TotalTokens  int64   `json:"total_tokens"  gorm:"column:total_tokens"`
 }
 
-func normalizeGroupConsumptionRankingOrder(order string) (normalized string, clause string) {
+func normalizeGroupConsumptionRankingOrder(order string) (normalized, clause string) {
 	switch strings.ToLower(strings.TrimSpace(order)) {
 	case "used_amount_asc":
 		return "used_amount_asc", "used_amount ASC, request_count DESC, group_id ASC"
@@ -169,6 +169,7 @@ func GetGroupConsumptionRanking(
 	baseQuery := buildGroupConsumptionRankingQuery(start, end)
 
 	var total int64
+
 	err := baseQuery.
 		Session(&gorm.Session{}).
 		Distinct("group_id").
@@ -178,6 +179,7 @@ func GetGroupConsumptionRanking(
 	}
 
 	items := make([]GroupConsumptionRankingItem, 0, perPage)
+
 	err = baseQuery.
 		Session(&gorm.Session{}).
 		Select(

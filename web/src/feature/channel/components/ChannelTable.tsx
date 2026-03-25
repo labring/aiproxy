@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
+import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 
 export function ChannelTable() {
     const { t } = useTranslation()
@@ -84,6 +85,7 @@ export function ChannelTable() {
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
     const { data: allDefaultModels } = useAllChannelDefaultModels()
+    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
 
     // 获取渠道列表
     const {
@@ -316,6 +318,8 @@ export function ChannelTable() {
         }
     }, [allDefaultModels])
 
+    const formatPercent = useCallback((value?: number) => `${((value || 0) * 100).toFixed(1)}%`, [])
+
     // 可点击单元格样式
     const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
@@ -398,6 +402,27 @@ export function ChannelTable() {
             ),
         },
         {
+            id: 'runtime',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">Runtime</div>,
+            cell: ({ row }) => {
+                const metric = runtimeMetrics?.channels?.[String(row.original.id)]
+                if (!metric) {
+                    return <div className="text-muted-foreground text-xs">-</div>
+                }
+
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">ERR {formatPercent(metric.error_rate)}</Badge>
+                        {metric.banned_models > 0 && (
+                            <Badge variant="destructive" className="text-xs">BAN {metric.banned_models}</Badge>
+                        )}
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: 'models',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
             cell: ({ row }) => {
@@ -458,12 +483,24 @@ export function ChannelTable() {
                                             key={index}
                                             type="button"
                                             className={cn(
-                                                "w-fit rounded-md border px-1.5 py-0.5 text-xs font-mono transition-colors",
+                                                "w-fit rounded-md border px-1.5 py-0.5 text-xs font-mono transition-colors text-left",
                                                 "hover:border-primary hover:text-primary"
                                             )}
                                             onClick={() => openUpdateDialog(row.original)}
                                         >
-                                            {model}
+                                            <div>{model}</div>
+                                            {(() => {
+                                                const pair = runtimeMetrics?.channel_models?.[String(row.original.id)]?.[model]
+                                                if (!pair) return null
+                                                return (
+                                                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                                                        <span>RPM {pair.rpm}</span>
+                                                        <span>TPM {pair.tpm}</span>
+                                                        <span>ERR {formatPercent(pair.error_rate)}</span>
+                                                        {pair.banned && <span>BANNED</span>}
+                                                    </div>
+                                                )
+                                            })()}
                                         </button>
                                     ))}
                                 </div>
@@ -601,7 +638,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating, getDisplayModels])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent])
 
     // 初始化表格
     const table = useReactTable({
@@ -743,7 +780,7 @@ export function ChannelTable() {
                             table={table}
                             loadingStyle="skeleton"
                             columns={columns}
-                            isLoading={isLoading}
+                            isLoading={isLoading || isLoadingRuntimeMetrics}
                             fixedHeader={true}
                             animatedRows={true}
                             showScrollShadows={true}

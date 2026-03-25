@@ -204,12 +204,13 @@ func SetAPIRouter(router *gin.Engine) {
 		monitorRoute := apiRouter.Group("/monitor")
 		{
 			monitorRoute.GET("/", controller.GetAllChannelModelErrorRates)
+			monitorRoute.GET("/runtime_metrics", controller.GetRuntimeMetrics)
+			monitorRoute.GET("/models", controller.GetModelsErrorRate)
+			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 			monitorRoute.GET("/:id", controller.GetChannelModelErrorRates)
 			monitorRoute.DELETE("/", controller.ClearAllModelErrors)
 			monitorRoute.DELETE("/:id", controller.ClearChannelAllModelErrors)
 			monitorRoute.DELETE("/:id/*model", controller.ClearChannelModelErrors)
-			monitorRoute.GET("/models", controller.GetModelsErrorRate)
-			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 		}
 
 		publicsMcpRoute := apiRouter.Group("/mcp/publics")

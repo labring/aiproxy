@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -106,6 +107,7 @@ func createTransport(timeout time.Duration, proxyURL string) (*http.Transport, e
 			resultCh := make(chan dialResult, 1)
 			go func() {
 				defer close(resultCh)
+
 				conn, err := dialer.Dial(network, addr)
 				resultCh <- dialResult{conn: conn, err: err}
 			}()
@@ -127,7 +129,7 @@ func createTransport(timeout time.Duration, proxyURL string) (*http.Transport, e
 func socks5Dialer(proxyURL *url.URL) (xproxy.Dialer, error) {
 	address := proxyURL.Host
 	if address == "" {
-		return nil, fmt.Errorf("invalid proxy url: host is required")
+		return nil, errors.New("invalid proxy url: host is required")
 	}
 
 	var auth *xproxy.Auth

@@ -93,12 +93,12 @@ func ConvertImagesEditsRequest(
 					return adaptor.ConvertResult{}, err
 				}
 			}
+
 			continue
 		}
 
 		if key == "response_format" {
 			meta.Set(MetaResponseFormat, value)
-			continue
 		}
 
 		err = multipartWriter.WriteField(key, value)

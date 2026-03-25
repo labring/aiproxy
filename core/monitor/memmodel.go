@@ -37,9 +37,19 @@ type ChannelStats struct {
 	bannedUntil time.Time
 }
 
+type ModelChannelStatsSnapshot struct {
+	Requests int64 `json:"requests"`
+	Errors   int64 `json:"errors"`
+	Banned   bool  `json:"banned"`
+}
+
 type TimeWindowStats struct {
-	slices []*timeSlice
-	mu     sync.Mutex
+	slices               []*timeSlice
+	mu                   sync.Mutex
+	totalRequests        int
+	totalErrors          int
+	lastCleanedWindowEnd time.Time
+	cacheInitialized     bool
 }
 
 type timeSlice struct {
@@ -258,6 +268,33 @@ func (m *MemModelMonitor) GetAllChannelModelErrorRates(
 	return result, nil
 }
 
+func (m *MemModelMonitor) GetAllModelChannelStats(
+	_ context.Context,
+) (map[string]map[int64]ModelChannelStatsSnapshot, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]map[int64]ModelChannelStatsSnapshot)
+	now := time.Now()
+
+	for model, data := range m.models {
+		if _, exists := result[model]; !exists {
+			result[model] = make(map[int64]ModelChannelStatsSnapshot)
+		}
+
+		for channelID, channel := range data.channels {
+			req, err := channel.timeWindows.GetStats()
+			result[model][channelID] = ModelChannelStatsSnapshot{
+				Requests: int64(req),
+				Errors:   int64(err),
+				Banned:   channel.bannedUntil.After(now),
+			}
+		}
+	}
+
+	return result, nil
+}
+
 func (m *MemModelMonitor) GetBannedChannelsWithModel(
 	_ context.Context,
 	model string,
@@ -355,27 +392,61 @@ func (m *MemModelMonitor) ClearAllModelErrors(_ context.Context) error {
 	return nil
 }
 
-func (t *TimeWindowStats) cleanupLocked(callback func(slice *timeSlice)) {
-	cutoff := time.Now().Add(-timeWindow * time.Duration(maxSliceCount))
-
+func (t *TimeWindowStats) rebuildLocked(cutoff time.Time) {
 	validSlices := t.slices[:0]
+	totalReq := 0
+
+	totalErr := 0
 	for _, s := range t.slices {
-		if s.windowStart.After(cutoff) || s.windowStart.Equal(cutoff) {
-			validSlices = append(validSlices, s)
-			if callback != nil {
-				callback(s)
-			}
+		if s.windowStart.Before(cutoff) {
+			continue
 		}
+
+		validSlices = append(validSlices, s)
+		totalReq += s.requests
+		totalErr += s.errors
 	}
 
 	t.slices = validSlices
+	t.totalRequests = totalReq
+	t.totalErrors = totalErr
+	t.lastCleanedWindowEnd = cutoff
+	t.cacheInitialized = true
+}
+
+func (t *TimeWindowStats) cleanupLocked(now time.Time, callback func(slice *timeSlice)) {
+	cutoff := now.Truncate(timeWindow).Add(-timeWindow * time.Duration(maxSliceCount-1))
+
+	if !t.cacheInitialized {
+		t.rebuildLocked(cutoff)
+	} else if t.lastCleanedWindowEnd.Before(cutoff) {
+		validSlices := t.slices[:0]
+		for _, s := range t.slices {
+			if s.windowStart.Before(cutoff) {
+				t.totalRequests -= s.requests
+				t.totalErrors -= s.errors
+				continue
+			}
+
+			validSlices = append(validSlices, s)
+		}
+
+		t.slices = validSlices
+		t.lastCleanedWindowEnd = cutoff
+	}
+
+	if callback != nil {
+		for _, s := range t.slices {
+			callback(s)
+		}
+	}
 }
 
 func (t *TimeWindowStats) AddRequest(now time.Time, isError bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(nil)
+	t.cleanupLocked(now, nil)
 
 	currentWindow := now.Truncate(timeWindow)
 
@@ -393,8 +464,11 @@ func (t *TimeWindowStats) AddRequest(now time.Time, isError bool) {
 	}
 
 	slice.requests++
+
+	t.totalRequests++
 	if isError {
 		slice.errors++
+		t.totalErrors++
 	}
 }
 
@@ -402,19 +476,16 @@ func (t *TimeWindowStats) GetStats() (totalReq, totalErr int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(func(slice *timeSlice) {
-		totalReq += slice.requests
-		totalErr += slice.errors
-	})
+	t.cleanupLocked(time.Now(), nil)
 
-	return totalReq, totalErr
+	return t.totalRequests, t.totalErrors
 }
 
 func (t *TimeWindowStats) HasValidSlices() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(nil)
+	t.cleanupLocked(time.Now(), nil)
 
 	return len(t.slices) > 0
 }

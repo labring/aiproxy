@@ -2,15 +2,24 @@ package reqlimit
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
+type ChannelModelRate struct {
+	RPM int64 `json:"rpm"`
+	TPM int64 `json:"tpm"`
+	RPS int64 `json:"rps"`
+	TPS int64 `json:"tps"`
+}
+
 var (
 	memoryGroupModelLimiter = NewInMemoryRecord()
-	redisGroupModelLimiter  = newRedisGroupModelRecord()
+	redisGroupModelLimiter  = newRedisGroupModelRecord(func() *redis.Client { return common.RDB })
 )
 
 func PushGroupModelRequest(
@@ -61,7 +70,9 @@ func GetGroupModelRequest(ctx context.Context, group, model string) (int64, int6
 
 var (
 	memoryGroupModelTokennameLimiter = NewInMemoryRecord()
-	redisGroupModelTokennameLimiter  = newRedisGroupModelTokennameRecord()
+	redisGroupModelTokennameLimiter  = newRedisGroupModelTokennameRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushGroupModelTokennameRequest(
@@ -120,7 +131,9 @@ func GetGroupModelTokennameRequest(
 
 var (
 	memoryChannelModelRecord = NewInMemoryRecord()
-	redisChannelModelRecord  = newRedisChannelModelRecord()
+	redisChannelModelRecord  = newRedisChannelModelRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushChannelModelRequest(ctx context.Context, channel, model string) (int64, int64, int64) {
@@ -171,7 +184,9 @@ func GetChannelModelRequest(ctx context.Context, channel, model string) (int64, 
 
 var (
 	memoryGroupModelTokensLimiter = NewInMemoryRecord()
-	redisGroupModelTokensLimiter  = newRedisGroupModelTokensRecord()
+	redisGroupModelTokensLimiter  = newRedisGroupModelTokensRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushGroupModelTokensRequest(
@@ -222,7 +237,9 @@ func GetGroupModelTokensRequest(ctx context.Context, group, model string) (int64
 
 var (
 	memoryGroupModelTokennameTokensLimiter = NewInMemoryRecord()
-	redisGroupModelTokennameTokensLimiter  = newRedisGroupModelTokennameTokensRecord()
+	redisGroupModelTokennameTokensLimiter  = newRedisGroupModelTokennameTokensRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushGroupModelTokennameTokensRequest(
@@ -289,7 +306,9 @@ func GetGroupModelTokennameTokensRequest(
 
 var (
 	memoryChannelModelTokensRecord = NewInMemoryRecord()
-	redisChannelModelTokensRecord  = newRedisChannelModelTokensRecord()
+	redisChannelModelTokensRecord  = newRedisChannelModelTokensRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushChannelModelTokensRequest(
@@ -340,4 +359,70 @@ func GetChannelModelTokensRequest(ctx context.Context, channel, model string) (i
 	}
 
 	return memoryChannelModelTokensRecord.GetRequest(time.Minute, channel, model)
+}
+
+func GetAllChannelModelRates(ctx context.Context) (map[int64]map[string]ChannelModelRate, error) {
+	requests := make(map[int64]map[string]ChannelModelRate)
+	appendSnapshot := func(snapshot recordSnapshot, assign func(rate *ChannelModelRate)) {
+		if len(snapshot.Keys) != 2 {
+			return
+		}
+
+		channelID, err := strconv.ParseInt(snapshot.Keys[0], 10, 64)
+		if err != nil {
+			return
+		}
+
+		model := snapshot.Keys[1]
+
+		if _, ok := requests[channelID]; !ok {
+			requests[channelID] = make(map[string]ChannelModelRate)
+		}
+
+		rate := requests[channelID][model]
+		assign(&rate)
+		requests[channelID][model] = rate
+	}
+
+	var (
+		requestSnapshots []recordSnapshot
+		tokenSnapshots   []recordSnapshot
+		err              error
+	)
+
+	if common.RedisEnabled {
+		requestSnapshots, err = redisChannelModelRecord.Snapshot(ctx, time.Minute)
+		if err != nil {
+			log.Error("redis snapshot request error: " + err.Error())
+		}
+
+		tokenSnapshots, err = redisChannelModelTokensRecord.Snapshot(ctx, time.Minute)
+		if err != nil {
+			log.Error("redis snapshot token error: " + err.Error())
+		}
+	}
+
+	if len(requestSnapshots) == 0 {
+		requestSnapshots = memoryChannelModelRecord.Snapshot(time.Minute)
+	}
+
+	if len(tokenSnapshots) == 0 {
+		tokenSnapshots = memoryChannelModelTokensRecord.Snapshot(time.Minute)
+	}
+
+	for _, snapshot := range requestSnapshots {
+		appendSnapshot(snapshot, func(rate *ChannelModelRate) {
+			rate.RPM = snapshot.TotalCount
+			rate.RPS = snapshot.SecondCount
+		})
+	}
+
+	for _, snapshot := range tokenSnapshots {
+		appendSnapshot(snapshot, func(rate *ChannelModelRate) {
+			rate.TPM = snapshot.TotalCount
+			rate.TPS = snapshot.SecondCount
+		})
+	}
+
+	return requests, nil
 }
