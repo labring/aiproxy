@@ -14,12 +14,12 @@ import (
 // --- getSupportedEndpoints ---
 
 func TestGetSupportedEndpoints_ChatFamily(t *testing.T) {
+	// ChatCompletions, Completions, Anthropic, Gemini → 3 chat-family endpoints (no /responses)
 	chatFamilyModes := []mode.Mode{
 		mode.ChatCompletions,
 		mode.Completions,
 		mode.Anthropic,
 		mode.Gemini,
-		mode.Responses,
 	}
 	want := endpointsChatFamily
 	for _, m := range chatFamilyModes {
@@ -33,6 +33,17 @@ func TestGetSupportedEndpoints_ChatFamily(t *testing.T) {
 				t.Errorf("mode %s [%d]: got %q, want %q", m, i, ep, want[i])
 			}
 		}
+	}
+}
+
+func TestGetSupportedEndpoints_ResponsesOnly(t *testing.T) {
+	got := getSupportedEndpoints(mode.Responses)
+	want := endpointsResponsesOnly
+	if len(got) != len(want) {
+		t.Errorf("Responses: got %d endpoints %v, want %d", len(got), got, len(want))
+	}
+	if len(got) > 0 && got[0] != "POST /v1/responses" {
+		t.Errorf("Responses: got %v, want [POST /v1/responses]", got)
 	}
 }
 
@@ -156,68 +167,83 @@ func makeModelConfigWithAnySlice(t mode.Mode, endpoints []string) model.ModelCon
 	return mc
 }
 
-// TestGetModelSupportedEndpoints_PPIOChatOnly verifies that a PPIO model with only
-// "chat/completions" slug returns the base chat family (3 endpoints, no /v1/responses)
-// because PPIO doesn't declare the "responses" slug and the Responses API requires
-// explicit upstream support.
+// TestGetModelSupportedEndpoints_PPIOChatOnly verifies that a model with only
+// "chat/completions" slug returns the chat family (3 endpoints, no /v1/responses).
 func TestGetModelSupportedEndpoints_PPIOChatOnly(t *testing.T) {
 	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions"})
 	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamilyBase) {
-		t.Errorf("PPIO chat-only: expected base chat family (%d), got %v", len(endpointsChatFamilyBase), got)
+	if len(got) != len(endpointsChatFamily) {
+		t.Errorf("chat-only: expected chat family (%d), got %v", len(endpointsChatFamily), got)
 	}
 	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("PPIO chat-only: /v1/responses must not appear (PPIO upstream does not support it)")
+		t.Errorf("chat-only: /v1/responses must not appear")
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOAnthropicOnly verifies that a PPIO model with
-// only "anthropic" slug (e.g., pa/claude-*) returns the base chat family — all 3
-// protocol-conversion endpoints, but NOT /v1/responses which PPIO doesn't support.
+// TestGetModelSupportedEndpoints_PPIOAnthropicOnly verifies that a model with
+// only "anthropic" slug returns the chat family — all 3 protocol-conversion
+// endpoints, but NOT /v1/responses.
 func TestGetModelSupportedEndpoints_PPIOAnthropicOnly(t *testing.T) {
 	mc := makeModelConfig(mode.ChatCompletions, []string{"anthropic"})
 	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamilyBase) {
-		t.Fatalf("PPIO anthropic-only: expected base chat family (%d), got %v", len(endpointsChatFamilyBase), got)
+	if len(got) != len(endpointsChatFamily) {
+		t.Fatalf("anthropic-only: expected chat family (%d), got %v", len(endpointsChatFamily), got)
 	}
 	if !slices.Contains(got, "POST /v1/messages") {
-		t.Errorf("PPIO anthropic-only: POST /v1/messages not in result %v", got)
+		t.Errorf("anthropic-only: POST /v1/messages not in result %v", got)
 	}
 	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("PPIO anthropic-only: /v1/responses must not appear (PPIO upstream does not support it)")
+		t.Errorf("anthropic-only: /v1/responses must not appear")
 	}
 }
 
 // TestGetModelSupportedEndpoints_PPIOMulti verifies a model with both
-// "chat/completions" and "anthropic" slugs returns the base chat family (no /v1/responses).
+// "chat/completions" and "anthropic" slugs returns the chat family (no /v1/responses).
 func TestGetModelSupportedEndpoints_PPIOMulti(t *testing.T) {
 	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "anthropic"})
 	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamilyBase) {
-		t.Errorf("PPIO multi: expected base chat family (%d), got %v", len(endpointsChatFamilyBase), got)
+	if len(got) != len(endpointsChatFamily) {
+		t.Errorf("multi: expected chat family (%d), got %v", len(endpointsChatFamily), got)
 	}
 	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("PPIO multi: /v1/responses must not appear")
+		t.Errorf("multi: /v1/responses must not appear")
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOEmbeddings verifies embedding-only PPIO models.
+// TestGetModelSupportedEndpoints_PPIOEmbeddings verifies embedding-only models.
 func TestGetModelSupportedEndpoints_PPIOEmbeddings(t *testing.T) {
-	// Embeddings models are Type=3 but PPIO stores "embeddings" slug
 	mc := makeModelConfig(mode.Embeddings, []string{"embeddings"})
 	got := getModelSupportedEndpoints(mc)
 	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
-		t.Errorf("PPIO embeddings: got %v", got)
+		t.Errorf("embeddings: got %v", got)
 	}
 }
 
 // TestGetModelSupportedEndpoints_PPIOResponses verifies that a model with only the
-// "responses" slug is promoted to the full chat family (responses is in chat-family).
+// "responses" slug returns ONLY the responses endpoint (not expanded to chat family).
 func TestGetModelSupportedEndpoints_PPIOResponses(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"responses"})
+	mc := makeModelConfig(mode.Responses, []string{"responses"})
 	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("PPIO responses: expected full chat family (%d), got %v", len(endpointsChatFamily), got)
+	if len(got) != 1 || got[0] != "POST /v1/responses" {
+		t.Errorf("responses-only: expected [POST /v1/responses], got %v", got)
+	}
+}
+
+// TestGetModelSupportedEndpoints_ChatPlusResponses verifies that a model with both
+// chat and responses slugs returns all 4 endpoints.
+func TestGetModelSupportedEndpoints_ChatPlusResponses(t *testing.T) {
+	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "responses"})
+	got := getModelSupportedEndpoints(mc)
+	// 3 chat-family + 1 responses = 4
+	wantLen := len(endpointsChatFamily) + 1
+	if len(got) != wantLen {
+		t.Errorf("chat+responses: expected %d, got %v", wantLen, got)
+	}
+	if !slices.Contains(got, "POST /v1/responses") {
+		t.Errorf("chat+responses: /v1/responses must appear")
+	}
+	if !slices.Contains(got, "POST /v1/chat/completions") {
+		t.Errorf("chat+responses: /v1/chat/completions must appear")
 	}
 }
 
@@ -226,7 +252,7 @@ func TestGetModelSupportedEndpoints_PPIOModerations(t *testing.T) {
 	mc := makeModelConfig(mode.Moderations, []string{"moderations"})
 	got := getModelSupportedEndpoints(mc)
 	if len(got) != 1 || got[0] != "POST /v1/moderations" {
-		t.Errorf("PPIO moderations: got %v", got)
+		t.Errorf("moderations: got %v", got)
 	}
 }
 
@@ -235,39 +261,39 @@ func TestGetModelSupportedEndpoints_PPIORerank(t *testing.T) {
 	mc := makeModelConfig(mode.Rerank, []string{"rerank"})
 	got := getModelSupportedEndpoints(mc)
 	if len(got) != 1 || got[0] != "POST /v1/rerank" {
-		t.Errorf("PPIO rerank: got %v", got)
+		t.Errorf("rerank: got %v", got)
 	}
 }
 
 // TestGetModelSupportedEndpoints_MixedChatAndNonChat verifies that a model with
-// slugs spanning chat-family AND non-chat-family (e.g. embeddings) is NOT promoted
-// to the full chat family — the exact slug paths are returned instead.
+// chat-base slugs AND non-chat slugs expands chat-base to full family + keeps non-chat.
 func TestGetModelSupportedEndpoints_MixedChatAndNonChat(t *testing.T) {
 	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "embeddings"})
 	got := getModelSupportedEndpoints(mc)
-	// Should NOT return the full chat family because "embeddings" is outside it.
-	if len(got) == len(endpointsChatFamily) {
-		t.Errorf("mixed chat+non-chat: should not return full chat family, got %v", got)
-	}
+	// 3 chat-family + 1 embeddings = 4
 	wantPaths := map[string]bool{
 		"POST /v1/chat/completions": true,
+		"POST /v1/completions":      true,
+		"POST /v1/messages":         true,
 		"POST /v1/embeddings":       true,
 	}
 	if len(got) != len(wantPaths) {
-		t.Fatalf("mixed chat+non-chat: expected 2 paths, got %v", got)
+		t.Fatalf("mixed chat+non-chat: expected %d paths, got %v", len(wantPaths), got)
 	}
 	for _, ep := range got {
 		if !wantPaths[ep] {
 			t.Errorf("mixed chat+non-chat: unexpected path %q", ep)
 		}
 	}
+	if slices.Contains(got, "POST /v1/responses") {
+		t.Errorf("mixed chat+non-chat: /v1/responses must not appear")
+	}
 }
 
 // TestGetModelSupportedEndpoints_UnknownSlugFallback verifies that an unrecognised
-// PPIO slug falls back through model_type → mc.Type inference.
-// makeModelConfig sets no Config["model_type"], so the final fallback is mc.Type.
+// slug falls back through model_type → mc.Type inference.
 func TestGetModelSupportedEndpoints_UnknownSlugFallback(t *testing.T) {
-	// No model_type in Config → falls back to mc.Type = ChatCompletions → 4 paths
+	// No model_type in Config → falls back to mc.Type = ChatCompletions → 3 paths
 	mc := makeModelConfig(mode.ChatCompletions, []string{"unknown-future-slug"})
 	got := getModelSupportedEndpoints(mc)
 	want := endpointsChatFamily
@@ -285,7 +311,7 @@ func TestGetModelSupportedEndpoints_EmptyConfig(t *testing.T) {
 	}
 	got := getModelSupportedEndpoints(mc)
 	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("nil config: got %v", got)
+		t.Errorf("nil config: got %v, want %d endpoints", got, len(endpointsChatFamily))
 	}
 }
 
@@ -294,7 +320,6 @@ func TestGetModelSupportedEndpoints_EmptyConfig(t *testing.T) {
 func TestGetModelSupportedEndpoints_EmptyEndpointsSlice(t *testing.T) {
 	mc := makeModelConfig(mode.ChatCompletions, []string{})
 	got := getModelSupportedEndpoints(mc)
-	// Empty slice → falls back to type-based
 	if len(got) != len(endpointsChatFamily) {
 		t.Errorf("empty slice fallback: got %v", got)
 	}
@@ -302,12 +327,11 @@ func TestGetModelSupportedEndpoints_EmptyEndpointsSlice(t *testing.T) {
 
 // TestGetModelSupportedEndpoints_AnySliceDeserialization verifies that endpoints
 // stored as []any (from JSON decode via interface{}) are handled correctly.
-// Without "responses" slug, /v1/responses must not appear.
 func TestGetModelSupportedEndpoints_AnySliceDeserialization(t *testing.T) {
 	mc := makeModelConfigWithAnySlice(mode.ChatCompletions, []string{"chat/completions", "anthropic"})
 	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamilyBase) {
-		t.Fatalf("[]any deserialization: expected base chat family (%d), got %v", len(endpointsChatFamilyBase), got)
+	if len(got) != len(endpointsChatFamily) {
+		t.Fatalf("[]any deserialization: expected chat family (%d), got %v", len(endpointsChatFamily), got)
 	}
 	if slices.Contains(got, "POST /v1/responses") {
 		t.Errorf("[]any deserialization: /v1/responses must not appear")
@@ -315,7 +339,7 @@ func TestGetModelSupportedEndpoints_AnySliceDeserialization(t *testing.T) {
 }
 
 // TestGetModelSupportedEndpoints_FallbackEmbedding verifies type-based fallback
-// for a non-PPIO embedding model (no Config).
+// for a non-synced embedding model (no Config).
 func TestGetModelSupportedEndpoints_FallbackEmbedding(t *testing.T) {
 	mc := model.ModelConfig{
 		Model: "text-embedding-3-small",
@@ -370,10 +394,17 @@ func TestGetModelSupportedEndpoints_VideoFallback(t *testing.T) {
 	}
 }
 
-// TestGetModelSupportedEndpoints_AllKnownSlugs verifies every slug in ppioSlugToPath
+// TestGetModelSupportedEndpoints_AllKnownSlugs verifies every slug in endpointSlugToPath
 // maps to at least one valid path and never panics.
 func TestGetModelSupportedEndpoints_AllKnownSlugs(t *testing.T) {
-	for slug, path := range ppioSlugToPath {
+	// Chat-base slugs that trigger protocol-conversion expansion
+	chatBaseSlugs := map[string]bool{
+		"chat/completions": true,
+		"completions":      true,
+		"anthropic":        true,
+	}
+
+	for slug, path := range endpointSlugToPath {
 		if path == "" {
 			t.Errorf("slug %q maps to empty path", slug)
 		}
@@ -383,22 +414,23 @@ func TestGetModelSupportedEndpoints_AllKnownSlugs(t *testing.T) {
 			t.Errorf("slug %q: got empty result", slug)
 			continue
 		}
-		// Chat-family slugs get promoted; non-chat slugs stay exact.
-		// "responses" slug → full family (4); other chat slugs → base family (3, no /v1/responses).
-		if slices.Contains(endpointsChatFamily, path) {
-			if slug == "responses" {
-				if len(got) != len(endpointsChatFamily) {
-					t.Errorf("slug %q: expected full family (%d), got %v", slug, len(endpointsChatFamily), got)
-				}
-			} else {
-				if len(got) != len(endpointsChatFamilyBase) {
-					t.Errorf("slug %q (chat-base): expected base family (%d), got %v", slug, len(endpointsChatFamilyBase), got)
-				}
-				if slices.Contains(got, "POST /v1/responses") {
-					t.Errorf("slug %q: /v1/responses must not appear when slug is not 'responses'", slug)
-				}
+
+		switch {
+		case chatBaseSlugs[slug]:
+			// Chat-base slugs expand to 3 chat-family endpoints
+			if len(got) != len(endpointsChatFamily) {
+				t.Errorf("slug %q (chat-base): expected %d, got %v", slug, len(endpointsChatFamily), got)
 			}
-		} else {
+			if slices.Contains(got, "POST /v1/responses") {
+				t.Errorf("slug %q: /v1/responses must not appear for chat-base slug", slug)
+			}
+		case slug == "responses":
+			// Responses slug alone → only /v1/responses
+			if len(got) != 1 || got[0] != "POST /v1/responses" {
+				t.Errorf("slug %q: expected [POST /v1/responses], got %v", slug, got)
+			}
+		default:
+			// Non-chat slugs map directly
 			if len(got) != 1 || got[0] != path {
 				t.Errorf("slug %q (non-chat): got %v, want [%s]", slug, got, path)
 			}
@@ -409,8 +441,8 @@ func TestGetModelSupportedEndpoints_AllKnownSlugs(t *testing.T) {
 // TestGetModelSupportedEndpoints_NoDuplicates verifies that no slug mapping
 // results in duplicate endpoint paths.
 func TestGetModelSupportedEndpoints_NoDuplicates(t *testing.T) {
-	allSlugs := make([]string, 0, len(ppioSlugToPath))
-	for slug := range ppioSlugToPath {
+	allSlugs := make([]string, 0, len(endpointSlugToPath))
+	for slug := range endpointSlugToPath {
 		allSlugs = append(allSlugs, slug)
 	}
 	mc := makeModelConfig(mode.ChatCompletions, allSlugs)
@@ -433,7 +465,6 @@ func TestGetModelSupportedEndpoints_ChatFamilyContents(t *testing.T) {
 		"POST /v1/chat/completions",
 		"POST /v1/completions",
 		"POST /v1/messages",
-		"POST /v1/responses",
 	}
 	if len(got) != len(expected) {
 		t.Fatalf("chat family: got %d endpoints, want %d: %v", len(got), len(expected), got)
@@ -473,15 +504,13 @@ func TestGetModelSupportedEndpoints_NoNilOrEmptyInAnyPath(t *testing.T) {
 
 // TestGetModelSupportedEndpoints_ModelTypeFallback verifies that Config["model_type"]
 // is used as a reliable fallback when Config["endpoints"] is absent or has unknown slugs.
-// This matters for PPIO models synced before inferModeFromPPIO was introduced, where
-// mc.Type may still be stale (= 1 = ChatCompletions for all types).
 func TestGetModelSupportedEndpoints_ModelTypeFallback(t *testing.T) {
 	cases := []struct {
-		name       string
-		modelType  string // Config["model_type"]
-		mcType     mode.Mode
-		wantLen    int
-		wantFirst  string
+		name      string
+		modelType string // Config["model_type"]
+		mcType    mode.Mode
+		wantLen   int
+		wantFirst string
 	}{
 		{
 			name:      "embedding model with stale mc.Type=1",
@@ -535,7 +564,6 @@ func TestGetModelSupportedEndpoints_ModelTypeFallback(t *testing.T) {
 // Config["endpoints"] has only unknown slugs AND Config["model_type"] is present,
 // the model_type takes precedence over mc.Type for the fallback.
 func TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug(t *testing.T) {
-	// Embedding model with unknown slug + correct model_type + stale mc.Type
 	mc := model.ModelConfig{
 		Model: "bge-m3",
 		Type:  mode.ChatCompletions, // stale pre-fix value
@@ -550,10 +578,10 @@ func TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug(t *testing.T) {
 	}
 }
 
-// TestPpioSlugToPath_PathFormat verifies all mapped paths follow "METHOD /path" format.
-func TestPpioSlugToPath_PathFormat(t *testing.T) {
+// TestEndpointSlugToPath_PathFormat verifies all mapped paths follow "METHOD /path" format.
+func TestEndpointSlugToPath_PathFormat(t *testing.T) {
 	validMethods := map[string]bool{"GET": true, "POST": true, "PUT": true, "DELETE": true, "PATCH": true}
-	for slug, path := range ppioSlugToPath {
+	for slug, path := range endpointSlugToPath {
 		method, apiPath, ok := strings.Cut(path, " ")
 		if !ok {
 			t.Errorf("slug %q: path %q has no space separating method from path", slug, path)

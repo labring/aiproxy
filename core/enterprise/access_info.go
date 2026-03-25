@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -44,37 +43,33 @@ type ModelAccessInfo struct {
 }
 
 var (
-	// endpointsChatFamilyBase: protocol-conversion endpoints always available for chat-type
+	// endpointsChatFamily: protocol-conversion endpoints always available for chat-type
 	// models (OpenAI Chat, OpenAI Legacy, Anthropic Messages). These work via AI Proxy's
 	// built-in protocol conversion regardless of what the upstream provider supports.
-	endpointsChatFamilyBase = []string{
-		"POST /v1/chat/completions",
-		"POST /v1/completions",
-		"POST /v1/messages",
-	}
-
-	// endpointsChatFamily: full chat family including the Responses API. Only applicable
-	// when the upstream provider explicitly supports POST /v1/responses.
+	// POST /v1/responses is NOT included — it requires explicit upstream support.
 	endpointsChatFamily = []string{
 		"POST /v1/chat/completions",
 		"POST /v1/completions",
 		"POST /v1/messages",
-		"POST /v1/responses",
 	}
-	endpointsEmbeddings    = []string{"POST /v1/embeddings"}
-	endpointsModerations   = []string{"POST /v1/moderations"}
-	endpointsImages        = []string{"POST /v1/images/generations", "POST /v1/images/edits"}
-	endpointsAudioSpeech   = []string{"POST /v1/audio/speech"}
-	endpointsAudioTransc   = []string{"POST /v1/audio/transcriptions"}
-	endpointsAudioTransl   = []string{"POST /v1/audio/translations"}
-	endpointsRerank        = []string{"POST /v1/rerank"}
-	endpointsParsePdf      = []string{"POST /v1/parse/pdf"}
-	endpointsVideo         = []string{"POST /v1/video/generations/jobs", "GET /v1/video/generations/jobs/{id}"}
+
+	// endpointsResponsesOnly: for models that only support the Responses API upstream.
+	endpointsResponsesOnly = []string{"POST /v1/responses"}
+
+	endpointsEmbeddings  = []string{"POST /v1/embeddings"}
+	endpointsModerations = []string{"POST /v1/moderations"}
+	endpointsImages      = []string{"POST /v1/images/generations", "POST /v1/images/edits"}
+	endpointsAudioSpeech = []string{"POST /v1/audio/speech"}
+	endpointsAudioTransc = []string{"POST /v1/audio/transcriptions"}
+	endpointsAudioTransl = []string{"POST /v1/audio/translations"}
+	endpointsRerank      = []string{"POST /v1/rerank"}
+	endpointsParsePdf    = []string{"POST /v1/parse/pdf"}
+	endpointsVideo       = []string{"POST /v1/video/generations/jobs", "GET /v1/video/generations/jobs/{id}"}
 )
 
-// ppioSlugToPath maps PPIO endpoint slugs (from ModelConfig.Config["endpoints"])
-// to the corresponding AI Proxy API paths.
-var ppioSlugToPath = map[string]string{
+// endpointSlugToPath maps provider endpoint slugs (from ModelConfig.Config["endpoints"])
+// to the corresponding AI Proxy API paths. Used by both PPIO and Novita sync modules.
+var endpointSlugToPath = map[string]string{
 	"chat/completions":       "POST /v1/chat/completions",
 	"completions":            "POST /v1/completions",
 	"anthropic":              "POST /v1/messages",
@@ -89,55 +84,58 @@ var ppioSlugToPath = map[string]string{
 }
 
 // getModelSupportedEndpoints returns the supported endpoint paths for a model.
-// For models with PPIO endpoint data in Config["endpoints"], it derives the list
-// from that per-model data. If every resolved path belongs to the chat-family,
-// the chat-family list is returned so that users see all equivalent endpoints
-// (AI Proxy's protocol conversion makes chat/completions, completions, and messages
-// mutually reachable). POST /v1/responses is only included when the model explicitly
-// declares the "responses" slug, because that endpoint requires upstream support.
+//
+// Endpoint slugs from Config["endpoints"] are classified into three categories:
+//   - Chat-base slugs (chat/completions, completions, anthropic) trigger protocol-
+//     conversion expansion: all three chat-family paths are returned because AI Proxy
+//     converts between them transparently.
+//   - The "responses" slug adds POST /v1/responses independently — it requires
+//     explicit upstream support and is NOT implied by chat-base slugs.
+//   - Other slugs (embeddings, rerank, audio, etc.) map directly to their paths.
 //
 // Fallback chain when Config["endpoints"] is absent or all slugs are unknown:
-//  1. Config["model_type"] string — accurate for PPIO models even if mc.Type is stale
-//     (mc.Type was hardcoded to 1 for all PPIO models before inferModeFromPPIO).
-//  2. mc.Type — authoritative for non-PPIO models.
+//  1. Config["model_type"] string — accurate for synced models even if mc.Type is stale.
+//  2. mc.Type — authoritative for non-synced models.
 func getModelSupportedEndpoints(mc model.ModelConfig) []string {
 	if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok && len(slugs) > 0 {
-		paths := make([]string, 0, len(slugs))
-		allChat := true
+		hasChatBase := false
 		hasResponses := false
+		var otherPaths []string
+
 		for _, slug := range slugs {
-			path, exists := ppioSlugToPath[slug]
-			if !exists {
-				continue
-			}
-			paths = append(paths, path)
-			if slug == "responses" {
+			switch slug {
+			case "chat/completions", "completions", "anthropic":
+				hasChatBase = true
+			case "responses":
 				hasResponses = true
-			}
-			if allChat && !slices.Contains(endpointsChatFamily, path) {
-				allChat = false
+			default:
+				if path, exists := endpointSlugToPath[slug]; exists {
+					otherPaths = append(otherPaths, path)
+				}
 			}
 		}
-		if len(paths) > 0 {
-			if allChat {
-				// Protocol conversion covers chat/completions↔completions↔messages.
-				// Only add /v1/responses when the upstream explicitly supports it.
-				if hasResponses {
-					return endpointsChatFamily
-				}
-				return endpointsChatFamilyBase
-			}
-			return paths
+
+		var result []string
+		if hasChatBase {
+			result = append(result, endpointsChatFamily...)
+		}
+		if hasResponses {
+			result = append(result, endpointsResponsesOnly...)
+		}
+		result = append(result, otherPaths...)
+
+		if len(result) > 0 {
+			return result
 		}
 	}
-	// Fallback 1: use PPIO model_type string stored in Config — more reliable than
-	// mc.Type for PPIO models that were synced before inferModeFromPPIO was added.
+	// Fallback 1: use model_type string stored in Config — more reliable than
+	// mc.Type for models that were synced before inferModeFromPPIO was added.
 	if mt, _ := mc.Config[model.ModelConfigKey("model_type")].(string); mt != "" {
 		if m, ok := ppio.ModelTypeToMode[mt]; ok {
 			return getSupportedEndpoints(m)
 		}
 	}
-	// Fallback 2: mc.Type (authoritative for non-PPIO models).
+	// Fallback 2: mc.Type (authoritative for non-synced models).
 	return getSupportedEndpoints(mc.Type)
 }
 
@@ -171,8 +169,10 @@ func modeToTypeName(m mode.Mode) string {
 
 func getSupportedEndpoints(modelType mode.Mode) []string {
 	switch modelType {
-	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini, mode.Responses:
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini:
 		return endpointsChatFamily
+	case mode.Responses:
+		return endpointsResponsesOnly
 	case mode.Embeddings:
 		return endpointsEmbeddings
 	case mode.Moderations:

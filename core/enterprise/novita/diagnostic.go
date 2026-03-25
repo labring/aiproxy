@@ -160,6 +160,25 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exch
 		))
 	}
 
+	// Compare tiered billing (count effective tiers, excluding degenerate ones
+	// that are skipped during sync — see setPriceFromV2Model)
+	remoteTieredCount := 0
+	if remote.IsTieredBilling {
+		remoteTieredCount = countEffectiveTiers(remote.TieredBillingConfigs)
+	}
+
+	localTieredCount := len(local.Price.ConditionalPrices)
+	if localTieredCount != remoteTieredCount {
+		changes = append(changes, fmt.Sprintf("tiered_billing_count: %d → %d", localTieredCount, remoteTieredCount))
+	}
+
+	// Compare cache pricing
+	remoteCacheRead := remote.GetCacheReadPricePerToken() * exchangeRate
+	if remote.SupportPromptCache && !floatEquals(float64(local.Price.CachedPrice), remoteCacheRead) {
+		changes = append(changes, fmt.Sprintf("cache_read_price: %.8f → %.8f",
+			float64(local.Price.CachedPrice), remoteCacheRead))
+	}
+
 	if !configMapsEqual(local.Config, buildConfigFromV2Model(remote)) {
 		changes = append(changes, "config updated")
 	}
@@ -171,6 +190,22 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exch
 	}
 
 	return changes
+}
+
+// countEffectiveTiers returns the number of non-degenerate tiers after boundary adjustment.
+func countEffectiveTiers(tiers []TieredBillingConfig) int {
+	count := 0
+
+	for i := range tiers {
+		minTokens, maxTokens := adjustTierBounds(tiers, i)
+		if maxTokens > 0 && minTokens > maxTokens {
+			continue
+		}
+
+		count++
+	}
+
+	return count
 }
 
 // configMapsEqual compares two config maps by normalizing through JSON.
