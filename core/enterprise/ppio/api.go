@@ -44,6 +44,19 @@ func maskAPIKey(key string) string {
 	return key[:6] + "****" + key[len(key)-4:]
 }
 
+// ppioChannelWhere returns a WHERE clause that matches all PPIO-related channels.
+// PPIO uses two domains: api.ppio.com (Anthropic) and api.ppinfra.com (OpenAI),
+// plus ChannelTypePPIO for channels that may have an empty base_url.
+func ppioChannelWhere() string {
+	like := common.LikeOp()
+	return "type = ? OR base_url " + like + " ? OR base_url " + like + " ?"
+}
+
+// ppioChannelArgs returns the args for ppioChannelWhere.
+func ppioChannelArgs() []any {
+	return []any{model.ChannelTypePPIO, "%ppio%", "%ppinfra%"}
+}
+
 // channelItem is the JSON shape returned by ListChannelsHandler.
 type channelItem struct {
 	ID      int    `json:"id"`
@@ -57,7 +70,7 @@ type channelItem struct {
 func ListChannelsHandler(c *gin.Context) {
 	var channels []model.Channel
 
-	err := model.DB.Where("base_url "+common.LikeOp()+" ?", "%ppio%").
+	err := model.DB.Where(ppioChannelWhere(), ppioChannelArgs()...).
 		Order("id ASC").
 		Find(&channels).Error
 	if err != nil {
@@ -318,7 +331,7 @@ func ModelCoverageHandler(c *gin.Context) {
 	var channels []model.Channel
 
 	if err := model.DB.Select("models").
-		Where("base_url "+common.LikeOp()+" ? AND status = ?", "%ppio%", model.ChannelStatusEnabled).
+		Where(ppioChannelWhere()+" AND status = ?", append(ppioChannelArgs(), model.ChannelStatusEnabled)...).
 		Find(&channels).Error; err != nil {
 		errorResponse(c, http.StatusInternalServerError, err.Error())
 

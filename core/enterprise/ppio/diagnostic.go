@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 )
 
@@ -385,7 +384,7 @@ func checkChannelStatus(opts SyncOptions) ChannelsInfo {
 
 	var ppioChannel model.Channel
 
-	err := model.DB.Where("base_url "+common.LikeOp()+" ?", "%ppio%").First(&ppioChannel).Error
+	err := model.DB.Where(ppioChannelWhere(), ppioChannelArgs()...).First(&ppioChannel).Error
 	if err == nil {
 		info.PPIO.Exists = true
 		info.PPIO.ID = ppioChannel.ID

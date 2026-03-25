@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
@@ -356,7 +355,7 @@ func ensurePPIOChannelsFromModels(
 
 	var channels []model.Channel
 
-	err := model.DB.Where("base_url "+common.LikeOp()+" ?", "%ppio%").Find(&channels).Error
+	err := model.DB.Where(ppioChannelWhere(), ppioChannelArgs()...).Find(&channels).Error
 	if err != nil {
 		return info, fmt.Errorf("failed to query PPIO channels: %w", err)
 	}
