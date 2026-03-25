@@ -199,7 +199,7 @@ func ConvertRequestBodyToBytes(
 	if maxTokensNode == nil || !maxTokensNode.Exists() {
 		_, _ = node.Set(
 			"max_tokens",
-			ast.NewNumber(strconv.Itoa(ModelDefaultMaxTokens(meta.ActualModel))),
+			ast.NewNumber(strconv.Itoa(GetMaxTokens(meta))),
 		)
 	}
 

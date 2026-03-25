@@ -87,6 +87,15 @@ func ModelDefaultMaxTokens(model string) int {
 	}
 }
 
+// GetMaxTokens returns the effective default max_tokens for a model.
+// Prefers ModelConfig.MaxOutputTokens over the hardcoded ModelDefaultMaxTokens.
+func GetMaxTokens(m *meta.Meta) int {
+	if maxOut, ok := m.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 {
+		return maxOut
+	}
+	return ModelDefaultMaxTokens(m.ActualModel)
+}
+
 func FixBetasStringWithModel(model, betas string, deleteFunc ...func(e string) bool) string {
 	return strings.Join(FixBetasWithModel(model, strings.Split(betas, ","), deleteFunc...), ",")
 }

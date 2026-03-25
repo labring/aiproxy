@@ -56,7 +56,7 @@ func ConvertGeminiRequestToStruct(
 	// Convert to Claude format
 	claudeReq := relaymodel.ClaudeRequest{
 		Model:     meta.ActualModel,
-		MaxTokens: ModelDefaultMaxTokens(meta.ActualModel),
+		MaxTokens: GetMaxTokens(meta),
 		Messages:  []relaymodel.ClaudeMessage{},
 		System:    convertGeminiSystemInstruction(geminiReq),
 	}
