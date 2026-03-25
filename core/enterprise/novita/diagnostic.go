@@ -164,6 +164,12 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exch
 		changes = append(changes, "config updated")
 	}
 
+	// Compare Type (mode) — catches responses-only reclassification
+	expectedType := modeFromEndpoints(remote.ModelType, remote.Endpoints)
+	if local.Type != expectedType {
+		changes = append(changes, fmt.Sprintf("type: %s → %s", local.Type, expectedType))
+	}
+
 	return changes
 }
 
