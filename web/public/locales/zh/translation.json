@@ -344,6 +344,7 @@
       "showKey": "显示 Key",
       "hideKey": "隐藏 Key",
       "copyKey": "复制 Key",
+      "copyUrl": "复制 URL",
       "newKeyTitle": "新 Key 已创建",
       "tokenName": "名称",
       "actions": "操作",

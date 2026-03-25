@@ -66,6 +66,7 @@ function typeNameLabel(t: (k: never) => string, name: string): string {
 // Owners not listed here fall back to CSS `capitalize` (first-letter uppercase).
 const OWNER_DISPLAY_NAMES: Record<string, string> = {
     ppio: "PPIO",
+    novita: "Novita",
     baai: "BAAI",
     xai: "xAI",
     chatglm: "ChatGLM",
@@ -485,6 +486,8 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
     }, [groups])
 
     const filteredGroups = useMemo(() => {
+        // Owner display priority: PPIO first, then Novita, then others alphabetically
+        const OWNER_ORDER: Record<string, number> = { ppio: 0, novita: 1 }
         return groups.map(g => ({
             ...g,
             models: g.models.filter(m => {
@@ -492,7 +495,12 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                 const matchEndpoint = endpointFilter === "all" || m.supported_endpoints?.includes(endpointFilter)
                 return matchSearch && matchEndpoint
             }),
-        })).filter(g => g.models.length > 0)
+        })).filter(g => g.models.length > 0).sort((a, b) => {
+            const oa = OWNER_ORDER[a.owner.toLowerCase()] ?? 99
+            const ob = OWNER_ORDER[b.owner.toLowerCase()] ?? 99
+            if (oa !== ob) return oa - ob
+            return a.owner.localeCompare(b.owner)
+        })
     }, [groups, search, endpointFilter])
 
     const toggleOwner = (owner: string) => {
@@ -706,7 +714,7 @@ export default function MyAccessPage() {
                             onClick={() => copyToClipboard(baseUrl, t("enterprise.myAccess.copied"))}
                         >
                             <Copy className="w-3.5 h-3.5 mr-1" />
-                            {t("enterprise.myAccess.copyKey")}
+                            {t("enterprise.myAccess.copyUrl")}
                         </Button>
                     </div>
                 </CardContent>
