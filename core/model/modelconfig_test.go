@@ -123,10 +123,16 @@ func TestModelConfigBeforeSaveClearsUnsupportedStreamTimeout(t *testing.T) {
 	}
 
 	if cfg.TimeoutConfig.RequestTimeout != 30 {
-		t.Fatalf("expected request timeout to remain unchanged, got %d", cfg.TimeoutConfig.RequestTimeout)
+		t.Fatalf(
+			"expected request timeout to remain unchanged, got %d",
+			cfg.TimeoutConfig.RequestTimeout,
+		)
 	}
 
 	if cfg.TimeoutConfig.StreamRequestTimeout != 0 {
-		t.Fatalf("expected unsupported stream timeout to be cleared, got %d", cfg.TimeoutConfig.StreamRequestTimeout)
+		t.Fatalf(
+			"expected unsupported stream timeout to be cleared, got %d",
+			cfg.TimeoutConfig.StreamRequestTimeout,
+		)
 	}
 }

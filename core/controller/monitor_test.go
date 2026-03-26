@@ -1,7 +1,9 @@
+//nolint:testpackage
 package controller
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"sort"
 	"testing"
@@ -180,6 +182,7 @@ func withRedisForControllerTest(t *testing.T, client *redis.Client, fn func(*gin
 	prevEnabled := common.RedisEnabled
 	prevRDB := common.RDB
 	common.RedisEnabled = true
+
 	common.RDB = client
 	defer func() {
 		common.RedisEnabled = prevEnabled
@@ -188,9 +191,11 @@ func withRedisForControllerTest(t *testing.T, client *redis.Client, fn func(*gin
 
 	w := httptest.NewRecorder()
 	testCtx, _ := gin.CreateTestContext(w)
+
 	reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	testCtx.Request = httptest.NewRequest("GET", "/monitor", nil).WithContext(reqCtx)
+
+	testCtx.Request = httptest.NewRequestWithContext(reqCtx, http.MethodGet, "/monitor", nil)
 
 	fn(testCtx)
 }
@@ -215,11 +220,15 @@ func setupRedisForControllerTest(t *testing.T, ctx context.Context) (*redis.Clie
 			}
 		}()
 
-		container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
-			Started:          true,
-		})
+		container, err = testcontainers.GenericContainer(
+			ctx,
+			testcontainers.GenericContainerRequest{
+				ContainerRequest: req,
+				Started:          true,
+			},
+		)
 	}()
+
 	if err != nil {
 		t.Skipf("skipping redis integration test: %v", err)
 	}

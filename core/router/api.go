@@ -208,7 +208,10 @@ func SetAPIRouter(router *gin.Engine) {
 			monitorRoute.GET("/group_summary_metrics", controller.GetGroupSummaryMetrics)
 			monitorRoute.GET("/group_token_metrics/:group", controller.GetGroupTokenMetrics)
 			monitorRoute.GET("/group_model_metrics/:group", controller.GetGroupModelMetrics)
-			monitorRoute.GET("/group_tokenname_model_metrics/:group", controller.GetGroupTokennameModelMetrics)
+			monitorRoute.GET(
+				"/group_tokenname_model_metrics/:group",
+				controller.GetGroupTokennameModelMetrics,
+			)
 			monitorRoute.POST("/batch_group_token_metrics", controller.BatchGetGroupTokenMetrics)
 			monitorRoute.GET("/models", controller.GetModelsErrorRate)
 			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)

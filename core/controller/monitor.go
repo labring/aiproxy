@@ -123,12 +123,14 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 	}
 
 	modelSets := model.LoadModelCaches().EnabledModel2ChannelsBySet
+
 	modelSetNames := make(map[string][]string)
 	for setName, modelChannels := range modelSets {
 		for modelName := range modelChannels {
 			modelSetNames[modelName] = append(modelSetNames[modelName], setName)
 		}
 	}
+
 	for modelName := range modelSetNames {
 		slices.Sort(modelSetNames[modelName])
 	}
@@ -142,6 +144,7 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 			}
 			metric.AccessibleGroups = len(metric.AccessibleSets)
 		}
+
 		return metric
 	}
 
@@ -152,6 +155,7 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 				Models: make(map[string]RuntimeModelMetric),
 			}
 		}
+
 		return metric
 	}
 
@@ -195,13 +199,16 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 			pair := resp.ChannelModels[channelID][modelName]
 			pair.Requests = stat.Requests
 			pair.Errors = stat.Errors
+
 			pair.Banned = stat.Banned
 			if stat.Requests > 0 {
 				pair.ErrorRate = float64(stat.Errors) / float64(stat.Requests)
 			}
+
 			resp.ChannelModels[channelID][modelName] = pair
 
 			modelMetric.Requests += stat.Requests
+
 			modelMetric.Errors += stat.Errors
 			if stat.Banned {
 				modelMetric.BannedChannels++
@@ -209,6 +216,7 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 
 			channelMetric := ensureChannel(channelID)
 			channelMetric.Requests += stat.Requests
+
 			channelMetric.Errors += stat.Errors
 			if stat.Banned {
 				channelMetric.BannedModels++
@@ -244,6 +252,7 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 		if metric.Requests > 0 {
 			metric.ErrorRate = float64(metric.Errors) / float64(metric.Requests)
 		}
+
 		resp.Models[modelName] = metric
 	}
 
@@ -251,6 +260,7 @@ func buildRuntimeMetrics(ctx *gin.Context) (RuntimeMetricsResponse, error) {
 		if metric.Requests > 0 {
 			metric.ErrorRate = float64(metric.Errors) / float64(metric.Requests)
 		}
+
 		resp.Channels[channelID] = metric
 	}
 
@@ -264,22 +274,29 @@ func parseCSVParam(value string) []string {
 
 	parts := strings.Split(value, ",")
 	result := make([]string, 0, len(parts))
+
 	seen := make(map[string]struct{}, len(parts))
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
 		}
+
 		if _, ok := seen[trimmed]; ok {
 			continue
 		}
+
 		seen[trimmed] = struct{}{}
 		result = append(result, trimmed)
 	}
+
 	return result
 }
 
-func collectGroupOverviewMetrics(ctx *gin.Context, groupIDs []string) (map[string]RuntimeRateMetric, error) {
+func collectGroupOverviewMetrics(
+	ctx *gin.Context,
+	groupIDs []string,
+) (map[string]RuntimeRateMetric, error) {
 	result := make(map[string]RuntimeRateMetric)
 	if len(groupIDs) == 0 {
 		return result, nil
@@ -311,17 +328,22 @@ func collectGroupOverviewMetrics(ctx *gin.Context, groupIDs []string) (map[strin
 			metric.RPM += snapshot.TotalCount
 			metric.RPS += snapshot.SecondCount
 		}
+
 		for _, snapshot := range tokenSnapshots {
 			metric.TPM += snapshot.TotalCount
 			metric.TPS += snapshot.SecondCount
 		}
+
 		result[groupID] = metric
 	}
 
 	return result, nil
 }
 
-func collectGroupTokenMetrics(ctx *gin.Context, groupID string) (map[string]RuntimeRateMetric, error) {
+func collectGroupTokenMetrics(
+	ctx *gin.Context,
+	groupID string,
+) (map[string]RuntimeRateMetric, error) {
 	result := make(map[string]RuntimeRateMetric)
 
 	requestSnapshots, err := reqlimit.GetGroupModelTokennameRequestSnapshots(
@@ -348,6 +370,7 @@ func collectGroupTokenMetrics(ctx *gin.Context, groupID string) (map[string]Runt
 		if len(snapshot.Keys) != 3 {
 			continue
 		}
+
 		tokenName := snapshot.Keys[2]
 		metric := result[tokenName]
 		metric.RPM += snapshot.TotalCount
@@ -359,6 +382,7 @@ func collectGroupTokenMetrics(ctx *gin.Context, groupID string) (map[string]Runt
 		if len(snapshot.Keys) != 3 {
 			continue
 		}
+
 		tokenName := snapshot.Keys[2]
 		metric := result[tokenName]
 		metric.TPM += snapshot.TotalCount
@@ -369,7 +393,10 @@ func collectGroupTokenMetrics(ctx *gin.Context, groupID string) (map[string]Runt
 	return result, nil
 }
 
-func collectGroupModelMetrics(ctx *gin.Context, groupID string) (map[string]RuntimeRateMetric, error) {
+func collectGroupModelMetrics(
+	ctx *gin.Context,
+	groupID string,
+) (map[string]RuntimeRateMetric, error) {
 	result := make(map[string]RuntimeRateMetric)
 
 	requestSnapshots, err := reqlimit.GetGroupModelRequestSnapshots(
@@ -394,6 +421,7 @@ func collectGroupModelMetrics(ctx *gin.Context, groupID string) (map[string]Runt
 		if len(snapshot.Keys) != 2 {
 			continue
 		}
+
 		modelName := snapshot.Keys[1]
 		metric := result[modelName]
 		metric.RPM += snapshot.TotalCount
@@ -405,6 +433,7 @@ func collectGroupModelMetrics(ctx *gin.Context, groupID string) (map[string]Runt
 		if len(snapshot.Keys) != 2 {
 			continue
 		}
+
 		modelName := snapshot.Keys[1]
 		metric := result[modelName]
 		metric.TPM += snapshot.TotalCount
@@ -444,6 +473,7 @@ func collectGroupTokennameModelMetrics(
 		if len(snapshot.Keys) != 3 {
 			continue
 		}
+
 		modelName := snapshot.Keys[1]
 		tokenName := snapshot.Keys[2]
 		key := tokenName + "\x00" + modelName
@@ -460,6 +490,7 @@ func collectGroupTokennameModelMetrics(
 		if len(snapshot.Keys) != 3 {
 			continue
 		}
+
 		modelName := snapshot.Keys[1]
 		tokenName := snapshot.Keys[2]
 		key := tokenName + "\x00" + modelName
@@ -522,10 +553,12 @@ func collectGroupTokenOverviewMetrics(
 			metric.RPM += snapshot.TotalCount
 			metric.RPS += snapshot.SecondCount
 		}
+
 		for _, snapshot := range tokenSnapshots {
 			metric.TPM += snapshot.TotalCount
 			metric.TPS += snapshot.SecondCount
 		}
+
 		result = append(result, metric)
 	}
 
@@ -719,6 +752,7 @@ func GetRuntimeMetrics(c *gin.Context) {
 //	@Router			/api/monitor/group_summary_metrics [get]
 func GetGroupSummaryMetrics(c *gin.Context) {
 	groupIDs := parseCSVParam(c.Query("groups"))
+
 	groups, err := collectGroupOverviewMetrics(c, groupIDs)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())

@@ -244,7 +244,10 @@ func (m *InMemoryRecord) Snapshot(duration time.Duration) []recordSnapshot {
 	return snapshots
 }
 
-func (m *InMemoryRecord) SnapshotByPattern(duration time.Duration, keys ...string) []recordSnapshot {
+func (m *InMemoryRecord) SnapshotByPattern(
+	duration time.Duration,
+	keys ...string,
+) []recordSnapshot {
 	nowSecond := time.Now().Unix()
 	windowSeconds := int64(duration.Seconds())
 	snapshots := make([]recordSnapshot, 0)
@@ -276,6 +279,7 @@ func (m *InMemoryRecord) SnapshotByPattern(duration time.Duration, keys ...strin
 
 	m.entries.Range(func(key, value any) bool {
 		k, _ := key.(string)
+
 		currentKeys := parseKeys(k)
 		if !matchKeys(keys, currentKeys) {
 			return true

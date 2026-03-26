@@ -209,11 +209,15 @@ func setupRedisForMonitorTest(t *testing.T, ctx context.Context) (*redis.Client,
 			}
 		}()
 
-		container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
-			Started:          true,
-		})
+		container, err = testcontainers.GenericContainer(
+			ctx,
+			testcontainers.GenericContainerRequest{
+				ContainerRequest: req,
+				Started:          true,
+			},
+		)
 	}()
+
 	if err != nil {
 		t.Skipf("skipping redis integration test: %v", err)
 	}

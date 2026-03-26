@@ -23,6 +23,7 @@ type RateSnapshot struct {
 	SecondCount int64    `json:"second_count"`
 }
 
+//nolint:unparam
 func snapshotRateRecord(
 	ctx context.Context,
 	duration time.Duration,
@@ -116,6 +117,7 @@ func GetGroupModelRequestSnapshots(
 	if group == "" {
 		group = "*"
 	}
+
 	if model == "" {
 		model = "*"
 	}
@@ -198,9 +200,11 @@ func GetGroupModelTokennameRequestSnapshots(
 	if group == "" {
 		group = "*"
 	}
+
 	if model == "" {
 		model = "*"
 	}
+
 	if tokenname == "" {
 		tokenname = "*"
 	}
@@ -329,6 +333,7 @@ func GetGroupModelTokensRequestSnapshots(
 	if group == "" {
 		group = "*"
 	}
+
 	if model == "" {
 		model = "*"
 	}
@@ -419,9 +424,11 @@ func GetGroupModelTokennameTokensRequestSnapshots(
 	if group == "" {
 		group = "*"
 	}
+
 	if model == "" {
 		model = "*"
 	}
+
 	if tokenname == "" {
 		tokenname = "*"
 	}
