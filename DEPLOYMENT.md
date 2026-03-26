@@ -880,6 +880,34 @@ curl -s http://127.0.0.1:3000/api/status
 sudo journalctl -u aiproxy -n 20 --no-pager
 ```
 
+#### 仅后端更新（快速部署，无前端变更时使用）
+
+当变更仅涉及后端 Go 代码（无前端改动）时，可跳过前端编译，显著缩短部署时间：
+
+```bash
+# 1. 拉取代码
+cd /data/aiproxy
+sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main
+
+# 2. 编译后端
+cd /data/aiproxy/core
+sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/go-cache" \
+  go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
+
+# 3. 停止服务 → 复制二进制 → 启动服务
+#    [易错点] go build 输出到 /data/aiproxy/core/aiproxy，
+#    但 systemd ExecStart 指向 /data/aiproxy/aiproxy，
+#    必须先停服务再复制，否则 "Text file busy" 错误。
+sudo systemctl stop aiproxy
+sudo cp /data/aiproxy/core/aiproxy /data/aiproxy/aiproxy
+sudo chown aiproxy:aiproxy /data/aiproxy/aiproxy
+sudo systemctl start aiproxy
+
+# 4. 验证
+sudo systemctl status aiproxy
+curl -s http://127.0.0.1:3000/api/status
+```
+
 #### 用户影响评估
 
 | 阶段 | 耗时 | 服务影响 |
@@ -923,7 +951,185 @@ sudo systemctl restart aiproxy
 
 ---
 
-## 十一、部署检查清单
+## 十一、远程服务器操作手册
+
+> 本节记录在生产服务器上执行日常运维操作的完整步骤和注意事项，避免重复踩坑。
+
+### 11.1 登录信息速查
+
+| 项目 | 值 |
+|------|-----|
+| **服务器** | `1.13.81.31`（CVM 公网 IP） |
+| **登录用户** | `ppuser`（SSH 密钥认证，有 sudo 权限） |
+| **SSH 私钥** | `/home/ppuser/.ssh/id_ed25519`（服务器上，用于 git 操作） |
+| **AI Proxy 服务用户** | `aiproxy`（nologin，仅运行服务） |
+| **代码路径** | `/data/aiproxy` |
+| **服务二进制路径** | `/data/aiproxy/aiproxy`（systemd ExecStart 指向此处） |
+| **编译输出路径** | `/data/aiproxy/core/aiproxy`（go build 默认输出） |
+| **Systemd 服务名** | `aiproxy.service` |
+| **Admin Key** | 见 `/data/aiproxy/.env` 中的 `ADMIN_KEY` |
+| **PostgreSQL** | Docker 容器 `aiproxy-postgres`，用户 `aiproxy`，库 `aiproxy`，端口 `5432` |
+| **Redis** | Docker 容器 `aiproxy-redis`，端口 `6379` |
+
+### 11.2 SSH 登录
+
+```bash
+# 从本地登录（需要密钥已配置）
+ssh ppuser@1.13.81.31
+```
+
+> **注意：** 服务器禁用了 root SSH 登录，所有操作通过 `ppuser` + `sudo` 执行。
+
+### 11.3 Git 操作
+
+> **[易错点]** `/data/aiproxy` 目录归属 `aiproxy` 用户（服务运行需要），但 git 操作需要 SSH 密钥（存在 `ppuser` home 下）。因此 git 命令必须通过 `sudo` + 指定 SSH 密钥执行。
+
+```bash
+# 拉取最新代码
+cd /data/aiproxy
+sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main
+
+# 查看状态
+sudo git status
+sudo git log --oneline -5
+```
+
+### 11.4 后端编译
+
+> **[易错点]** Go 安装在 `/usr/local/go/bin`，ppuser 的环境变量可能不包含此路径，必须通过 `sudo env` 显式传递。
+
+```bash
+cd /data/aiproxy/core
+
+# 编译（含企业模块）
+sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/go-cache" \
+  go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
+
+# 验证编译产物
+ls -la /data/aiproxy/core/aiproxy
+```
+
+### 11.5 部署（替换二进制并重启）
+
+> **[P0 易错点]** `go build` 输出到 `/data/aiproxy/core/aiproxy`，但 systemd `ExecStart` 指向 `/data/aiproxy/aiproxy`。如果只重启服务而不复制二进制，会继续运行旧版本！
+
+```bash
+# 必须先停服务，否则复制时报 "Text file busy"
+sudo systemctl stop aiproxy
+
+# 复制新二进制到服务路径
+sudo cp /data/aiproxy/core/aiproxy /data/aiproxy/aiproxy
+sudo chown aiproxy:aiproxy /data/aiproxy/aiproxy
+
+# 启动服务
+sudo systemctl start aiproxy
+
+# 验证
+sudo systemctl status aiproxy
+curl -s http://127.0.0.1:3000/api/status
+sudo journalctl -u aiproxy -n 20 --no-pager
+```
+
+> **确认正在运行新版本的方法：** 检查二进制文件的修改时间是否与编译时间一致：
+> ```bash
+> stat /data/aiproxy/aiproxy | grep Modify
+> stat /data/aiproxy/core/aiproxy | grep Modify
+> # 两者应相同，且为刚才的编译时间
+> ```
+
+### 11.6 数据库操作
+
+```bash
+# 进入 PostgreSQL 交互式 Shell
+sudo docker exec -it aiproxy-postgres psql -U aiproxy -d aiproxy
+
+# 常用查询示例
+# 查看模型总数
+SELECT COUNT(*) FROM model_configs;
+
+# 查看某个模型的配置
+SELECT model, owner, type, config FROM model_configs WHERE model = 'pa/gpt-5.3-codex';
+
+# 查看 Channel 列表
+SELECT id, name, type, base_url, status FROM channels;
+
+# 查看最近的同步历史
+SELECT * FROM sync_histories ORDER BY synced_at DESC LIMIT 5;
+```
+
+```bash
+# Redis 操作
+sudo docker exec -it aiproxy-redis redis-cli
+# 如有密码：
+# sudo docker exec -it aiproxy-redis redis-cli -a <Redis密码>
+```
+
+### 11.7 日志排查
+
+```bash
+# 实时查看 AI Proxy 日志
+sudo journalctl -u aiproxy -f
+
+# 查看最近 100 行日志
+sudo journalctl -u aiproxy -n 100 --no-pager
+
+# 按时间查看日志
+sudo journalctl -u aiproxy --since "2026-03-25 14:00" --until "2026-03-25 15:00"
+
+# Nginx 日志
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+# Docker 容器日志
+sudo docker logs -f aiproxy-postgres
+sudo docker logs -f aiproxy-redis
+```
+
+### 11.8 服务管理
+
+```bash
+# 启动/停止/重启
+sudo systemctl start aiproxy
+sudo systemctl stop aiproxy
+sudo systemctl restart aiproxy
+
+# 查看状态
+sudo systemctl status aiproxy
+
+# 查看服务配置
+sudo systemctl cat aiproxy
+
+# Docker 容器管理
+sudo docker compose -f /data/docker-compose.yml ps
+sudo docker compose -f /data/docker-compose.yml restart postgres
+sudo docker compose -f /data/docker-compose.yml restart redis
+```
+
+### 11.9 完整快速部署流程（一键 Copy）
+
+以下为最常见的"仅后端变更"快速部署完整命令序列：
+
+```bash
+# === 登录服务器 ===
+ssh ppuser@1.13.81.31
+
+# === 拉取 + 编译 + 部署（约 1 分钟） ===
+cd /data/aiproxy && \
+sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main && \
+cd core && \
+sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/go-cache" \
+  go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy && \
+sudo systemctl stop aiproxy && \
+sudo cp /data/aiproxy/core/aiproxy /data/aiproxy/aiproxy && \
+sudo chown aiproxy:aiproxy /data/aiproxy/aiproxy && \
+sudo systemctl start aiproxy && \
+echo "=== 部署完成 ===" && \
+sudo systemctl status aiproxy --no-pager
+```
+
+---
+
+## 十二、部署检查清单
 
 ### 基础设施
 
@@ -990,7 +1196,7 @@ sudo systemctl restart aiproxy
 
 ---
 
-## 十二、易错点汇总
+## 十三、易错点汇总
 
 | # | 优先级 | 位置 | 易错描述 | 后果 |
 |---|--------|------|---------|------|
@@ -1009,6 +1215,8 @@ sudo systemctl restart aiproxy
 | 13 | P2 | Nginx | 没有删除 `/etc/nginx/sites-enabled/default` | default server 可能拦截请求，导致两个域名都 404 |
 | 14 | P2 | 安全组 | CVM 安全组把 80/81 开放给 0.0.0.0/0 | 可绕过 CLB 直连 CVM，绕过 SSL 和 CLB 安全策略 |
 | 18 | P1 | 环境变量 | 未设置 `ENTERPRISE_BASE_URL` | 「我的接入」页面显示内网地址 `ai.paigod.work/v1`，用户在公网无法使用 |
+| 19 | P0 | 部署 | `go build` 输出到 `core/aiproxy`，但 systemd 运行 `/data/aiproxy/aiproxy`，重启未复制二进制 | 重启后仍运行旧版本，新代码不生效，且无任何报错 |
+| 20 | P1 | 部署 | 服务运行时直接 `cp` 覆盖二进制 | 报 "Text file busy"，必须先 `systemctl stop` 再复制 |
 | 15 | P3 | docker-compose | PostgreSQL/Redis 密码中包含特殊字符（`@`, `#`, `%`） | 连接串解析失败，AI Proxy 启动报数据库连接错误 |
 | 16 | P1 | Channel 配置 | PPIO 默认域名已迁移至 `api.ppinfra.com`，旧域名 `api.ppio.com` 不可用 | Channel base_url 使用旧域名，所有 PPIO 请求返回 404 |
 | 17 | P1 | Channel 配置 | Anthropic 通道（base_url 含 `/anthropic`）中包含非 Claude 模型 | 非 Claude 模型被随机路由到 Anthropic 通道，拼接 `/chat/completions` 后 URL 不兼容，约 50% 请求 404 |
