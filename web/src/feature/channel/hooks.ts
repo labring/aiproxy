@@ -52,6 +52,18 @@ export const useChannels = (
     }
 }
 
+export const useAllChannels = (enabled = true) => {
+    const query = useQuery({
+        queryKey: ['allChannels'],
+        queryFn: channelApi.getAllChannels,
+        enabled,
+    })
+
+    return {
+        ...query,
+    }
+}
+
 // 创建渠道
 export const useCreateChannel = () => {
     const queryClient = useQueryClient()

@@ -11,6 +11,7 @@ import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
 import type { Channel } from '@/types/channel'
 import { toast } from 'sonner'
+import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 
 // Format price with unit
 const formatPrice = (price: number, unit: number): string => {
@@ -27,10 +28,19 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
 
     const openChannelEdit = (channelId: number) => {
-        channelApi.getChannel(channelId).then(channel => {
-            setEditingChannel(channel)
-            setChannelDialogOpen(true)
-        }).catch(() => {})
+        openResourceDialog({
+            fetcher: () => channelApi.getChannel(channelId),
+            onSuccess: (channel) => {
+                setEditingChannel(channel)
+                setChannelDialogOpen(true)
+            },
+            onNotFound: () => {
+                showDeletedResourceToast(t('channel.deleted'))
+            },
+            onError: () => {
+                showDeletedResourceToast(t('channel.fetchFailed'))
+            },
+        })
     }
 
     useEffect(() => {

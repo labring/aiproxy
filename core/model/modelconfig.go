@@ -295,7 +295,7 @@ func GetModelConfig(model string) (ModelConfig, error) {
 	err := DB.Model(&ModelConfig{}).
 		Where("model = ?", model).
 		Omit("created_at", "updated_at").
-		First(config).
+		First(&config).
 		Error
 
 	return config, HandleNotFound(err, ErrModelConfigNotFound)

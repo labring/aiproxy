@@ -48,6 +48,7 @@ import {
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
+import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 
 export function ChannelTable() {
     const { t } = useTranslation()
@@ -835,12 +836,18 @@ export function ChannelTable() {
                     let channel = channels.find(c => c.id === channelId)
 
                     if (!channel) {
-                        try {
-                            channel = await channelApi.getChannel(channelId)
-                        } catch {
-                            toast.error(t("channel.fetchFailed"))
-                            return
-                        }
+                        await openResourceDialog({
+                            fetcher: () => channelApi.getChannel(channelId),
+                            onSuccess: (fullChannel) => {
+                                channel = fullChannel
+                            },
+                            onNotFound: () => {
+                                showDeletedResourceToast(t("channel.deleted"))
+                            },
+                            onError: () => {
+                                showDeletedResourceToast(t("channel.fetchFailed"))
+                            },
+                        })
                     }
 
                     if (channel) {

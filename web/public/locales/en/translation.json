@@ -2,7 +2,7 @@
   "sidebar": {
     "monitor": "Dashboard",
     "group": "Groups",
-    "groupRanking": "Group Ranking",
+    "consumptionRanking": "Consumption Ranking",
     "key": "API Keys",
     "channel": "Channel",
     "model": "Model",
@@ -742,6 +742,7 @@
     "refresh": "Refresh",
     "noResults": "No channels found",
     "fetchFailed": "Failed to fetch channel",
+    "deleted": "Channel has been deleted or does not exist",
     "sets": "Groups",
     "models": "Models",
     "modelsCount": "models",
@@ -1033,9 +1034,33 @@
       "importing": "Importing...",
       "exportSuccess": "Model configs exported successfully",
       "importSuccess": "{{count}} model configs imported successfully",
-      "importFailed": "Failed to import model configs",
-      "noDataToExport": "No model configs to export",
+    "importFailed": "Failed to import model configs",
+    "fetchFailed": "Failed to fetch model",
+    "deleted": "Model has been deleted or does not exist",
+    "noDataToExport": "No model configs to export",
       "invalidFormat": "Invalid file format"
     }
+  },
+  "consumptionRanking": {
+    "title": "Consumption Ranking",
+    "description": "View channel, model, and group consumption rankings for the selected range.",
+    "range": "Range in {{timezone}}: {{start}} to {{end}}",
+    "dateRangePlaceholder": "Select date range",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "channelTab": "Channel",
+    "modelTab": "Model",
+    "groupTab": "Group",
+    "channel": "Channel",
+    "model": "Model",
+    "group": "Group",
+    "requestCount": "Requests",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "totalTokens": "Total Tokens",
+    "usedAmount": "Used Amount",
+    "actions": "Actions",
+    "view": "View",
+    "summary": "{{total}} items ranked"
   }
 }
