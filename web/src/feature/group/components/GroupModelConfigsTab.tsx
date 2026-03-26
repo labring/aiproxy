@@ -5,13 +5,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -45,7 +38,7 @@ import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon
 import { useGroupModelConfigs } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import type { GroupModelConfig, GroupModelConfigSaveRequest } from '@/types/group'
-import type { ModelPrice } from '@/types/model'
+import type { ModelPrice, TimeoutConfig } from '@/types/model'
 import { PriceFormFields } from '@/components/price/PriceFormFields'
 import { PriceDisplay } from '@/components/price/PriceDisplay'
 import { Combobox } from '@/components/ui/combobox'
@@ -62,8 +55,14 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
     tpm: 0,
     override_retry_times: false,
     retry_times: 0,
+    override_timeout_config: false,
+    timeout_config: {},
     override_force_save_detail: false,
     force_save_detail: false,
+    override_request_body_storage_max_size: false,
+    request_body_storage_max_size: 0,
+    override_response_body_storage_max_size: false,
+    response_body_storage_max_size: 0,
     override_summary_service_tier: false,
     summary_service_tier: false,
     override_summary_claude_long_context: false,
@@ -77,62 +76,17 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
     const { data: systemModels } = useModels()
     const [searchKeyword, setSearchKeyword] = useState('')
-    const [ownerFilter, setOwnerFilter] = useState('')
     const [isImporting, setIsImporting] = useState(false)
-
-    const modelOwnerMap = useMemo(() => {
-        const map = new Map<string, string>()
-        for (const model of systemModels || []) {
-            map.set(model.model, model.owner || '')
-        }
-        return map
-    }, [systemModels])
 
     const filteredData = useMemo(() => {
         if (!data) return []
         let filtered = data
         if (searchKeyword) {
             const keyword = searchKeyword.toLowerCase()
-            filtered = filtered.filter((config) => {
-                const owner = modelOwnerMap.get(config.model) || ''
-                return config.model.toLowerCase().includes(keyword) || owner.toLowerCase().includes(keyword)
-            })
-        }
-        if (ownerFilter === '__empty__') {
-            filtered = filtered.filter((config) => !(modelOwnerMap.get(config.model) || ''))
-        } else if (ownerFilter && ownerFilter !== '__all__') {
-            filtered = filtered.filter((config) => (modelOwnerMap.get(config.model) || '') === ownerFilter)
+            filtered = filtered.filter((config) => config.model.toLowerCase().includes(keyword))
         }
         return filtered
-    }, [data, searchKeyword, ownerFilter, modelOwnerMap])
-
-    const ownerOptions = useMemo(() => {
-        if (!data) return []
-
-        const ownerSet = new Set<string>()
-        let hasEmptyOwner = false
-
-        for (const config of data) {
-            const owner = modelOwnerMap.get(config.model) || ''
-            if (owner) {
-                ownerSet.add(owner)
-            } else {
-                hasEmptyOwner = true
-            }
-        }
-
-        const options = [...ownerSet]
-            .sort((a, b) => a.localeCompare(b))
-        if (hasEmptyOwner) {
-            options.push('__empty__')
-        }
-        return options
-    }, [data, modelOwnerMap])
-
-    const ownerLabel = (owner: string) => {
-        if (owner === '__empty__') return t('model.emptyOwner')
-        return owner
-    }
+    }, [data, searchKeyword])
 
     const modelOptions = useMemo(() => {
         if (!systemModels) return []
@@ -157,8 +111,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [formTpm, setFormTpm] = useState(0)
     const [formOverrideRetryTimes, setFormOverrideRetryTimes] = useState(false)
     const [formRetryTimes, setFormRetryTimes] = useState(0)
+    const [formOverrideTimeoutConfig, setFormOverrideTimeoutConfig] = useState(false)
+    const [formTimeoutConfig, setFormTimeoutConfig] = useState<TimeoutConfig>({})
     const [formOverrideForceSaveDetail, setFormOverrideForceSaveDetail] = useState(false)
     const [formForceSaveDetail, setFormForceSaveDetail] = useState(false)
+    const [formOverrideRequestBodyStorageMaxSize, setFormOverrideRequestBodyStorageMaxSize] = useState(false)
+    const [formRequestBodyStorageMaxSize, setFormRequestBodyStorageMaxSize] = useState(0)
+    const [formOverrideResponseBodyStorageMaxSize, setFormOverrideResponseBodyStorageMaxSize] = useState(false)
+    const [formResponseBodyStorageMaxSize, setFormResponseBodyStorageMaxSize] = useState(0)
     const [formOverrideSummaryServiceTier, setFormOverrideSummaryServiceTier] = useState(false)
     const [formSummaryServiceTier, setFormSummaryServiceTier] = useState(false)
     const [formOverrideSummaryClaudeLongContext, setFormOverrideSummaryClaudeLongContext] = useState(false)
@@ -203,8 +163,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormTpm(config.tpm)
             setFormOverrideRetryTimes(config.override_retry_times)
             setFormRetryTimes(config.retry_times)
+            setFormOverrideTimeoutConfig(config.override_timeout_config)
+            setFormTimeoutConfig(config.timeout_config || {})
             setFormOverrideForceSaveDetail(config.override_force_save_detail)
             setFormForceSaveDetail(config.force_save_detail)
+            setFormOverrideRequestBodyStorageMaxSize(config.override_request_body_storage_max_size)
+            setFormRequestBodyStorageMaxSize(config.request_body_storage_max_size)
+            setFormOverrideResponseBodyStorageMaxSize(config.override_response_body_storage_max_size)
+            setFormResponseBodyStorageMaxSize(config.response_body_storage_max_size)
             setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
             setFormSummaryServiceTier(config.summary_service_tier)
             setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
@@ -220,8 +186,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormTpm(defaults.tpm!)
             setFormOverrideRetryTimes(defaults.override_retry_times!)
             setFormRetryTimes(defaults.retry_times!)
+            setFormOverrideTimeoutConfig(defaults.override_timeout_config!)
+            setFormTimeoutConfig(defaults.timeout_config || {})
             setFormOverrideForceSaveDetail(defaults.override_force_save_detail!)
             setFormForceSaveDetail(defaults.force_save_detail!)
+            setFormOverrideRequestBodyStorageMaxSize(defaults.override_request_body_storage_max_size!)
+            setFormRequestBodyStorageMaxSize(defaults.request_body_storage_max_size!)
+            setFormOverrideResponseBodyStorageMaxSize(defaults.override_response_body_storage_max_size!)
+            setFormResponseBodyStorageMaxSize(defaults.response_body_storage_max_size!)
             setFormOverrideSummaryServiceTier(defaults.override_summary_service_tier!)
             setFormSummaryServiceTier(defaults.summary_service_tier!)
             setFormOverrideSummaryClaudeLongContext(defaults.override_summary_claude_long_context!)
@@ -259,8 +231,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         setFormTpm(config.tpm)
         setFormOverrideRetryTimes(config.override_retry_times)
         setFormRetryTimes(config.retry_times)
+        setFormOverrideTimeoutConfig(config.override_timeout_config)
+        setFormTimeoutConfig(config.timeout_config || {})
         setFormOverrideForceSaveDetail(config.override_force_save_detail)
         setFormForceSaveDetail(config.force_save_detail)
+        setFormOverrideRequestBodyStorageMaxSize(config.override_request_body_storage_max_size)
+        setFormRequestBodyStorageMaxSize(config.request_body_storage_max_size)
+        setFormOverrideResponseBodyStorageMaxSize(config.override_response_body_storage_max_size)
+        setFormResponseBodyStorageMaxSize(config.response_body_storage_max_size)
         setFormOverrideSummaryServiceTier(config.override_summary_service_tier)
         setFormSummaryServiceTier(config.summary_service_tier)
         setFormOverrideSummaryClaudeLongContext(config.override_summary_claude_long_context)
@@ -287,8 +265,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             tpm: formTpm,
             override_retry_times: formOverrideRetryTimes,
             retry_times: formRetryTimes,
+            override_timeout_config: formOverrideTimeoutConfig,
+            ...(formOverrideTimeoutConfig && { timeout_config: formTimeoutConfig }),
             override_force_save_detail: formOverrideForceSaveDetail,
             force_save_detail: formForceSaveDetail,
+            override_request_body_storage_max_size: formOverrideRequestBodyStorageMaxSize,
+            request_body_storage_max_size: formRequestBodyStorageMaxSize,
+            override_response_body_storage_max_size: formOverrideResponseBodyStorageMaxSize,
+            response_body_storage_max_size: formResponseBodyStorageMaxSize,
             override_summary_service_tier: formOverrideSummaryServiceTier,
             summary_service_tier: formSummaryServiceTier,
             override_summary_claude_long_context: formOverrideSummaryClaudeLongContext,
@@ -401,19 +385,6 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 className="h-9 pl-8"
                             />
                         </div>
-                        <div className="w-44">
-                            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                                <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={t('model.ownerFilterPlaceholder')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__all__">{t('model.allOwners')}</SelectItem>
-                                    {ownerOptions.map((owner) => (
-                                        <SelectItem key={owner} value={owner}>{ownerLabel(owner)}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -472,13 +443,15 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             <thead className="bg-muted/50">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.modelName')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.owner')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideLimit')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">RPM</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">TPM</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideRetryTimes')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.retryTimes')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideTimeoutConfig')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.forceSaveDetail')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.requestBodyStorageMaxSize')}</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.responseBodyStorageMaxSize')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordServiceTier')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordClaudeLongContext')}</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overridePrice')}</th>
@@ -493,11 +466,6 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                         onClick={() => openEditDialog(config)}
                                     >
                                         <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {modelOwnerMap.get(config.model) || (
-                                                <span className="text-muted-foreground">{t('model.emptyOwner')}</span>
-                                            )}
-                                        </td>
                                         <td className="px-4 py-3 text-sm">
                                             <Badge variant={config.override_limit ? 'default' : 'secondary'} className="text-xs">
                                                 {config.override_limit ? t('common.yes') : t('common.no')}
@@ -518,11 +486,22 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                             {config.override_retry_times ? config.retry_times : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-sm">
+                                            <Badge variant={config.override_timeout_config ? 'default' : 'secondary'} className="text-xs">
+                                                {config.override_timeout_config ? t('common.yes') : t('common.no')}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
                                             {config.override_force_save_detail ? (
                                                 <Badge variant={config.force_save_detail ? 'default' : 'secondary'} className="text-xs">
                                                     {config.force_save_detail ? t('common.yes') : t('common.no')}
                                                 </Badge>
                                             ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm font-mono">
+                                            {config.override_request_body_storage_max_size ? config.request_body_storage_max_size : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm font-mono">
+                                            {config.override_response_body_storage_max_size ? config.response_body_storage_max_size : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-sm">
                                             {config.override_summary_service_tier ? (
@@ -580,7 +559,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={14} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>
@@ -678,6 +657,43 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </div>
                         )}
 
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideTimeoutConfig')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideTimeoutConfigDesc')}</p>
+                            </div>
+                            <Switch checked={formOverrideTimeoutConfig} onCheckedChange={setFormOverrideTimeoutConfig} />
+                        </div>
+
+                        {formOverrideTimeoutConfig && (
+                            <div className="grid grid-cols-2 gap-4 pl-4">
+                                <div className="space-y-2">
+                                    <Label>{t('model.dialog.timeout')}</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={formTimeoutConfig.request_timeout ?? 0}
+                                        onChange={(e) => setFormTimeoutConfig((prev) => ({
+                                            ...prev,
+                                            request_timeout: Number(e.target.value),
+                                        }))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>{t('model.dialog.streamTimeout')}</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={formTimeoutConfig.stream_request_timeout ?? 0}
+                                        onChange={(e) => setFormTimeoutConfig((prev) => ({
+                                            ...prev,
+                                            stream_request_timeout: Number(e.target.value),
+                                        }))}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* Override Force Save Detail */}
                         <div className="flex items-center justify-between rounded-lg border p-3">
                             <div className="space-y-0.5">
@@ -691,6 +707,56 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             <div className="flex items-center gap-2 pl-4">
                                 <Label>{t('model.forceSaveDetail')}</Label>
                                 <Switch checked={formForceSaveDetail} onCheckedChange={setFormForceSaveDetail} />
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideRequestBodyStorageMaxSize')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRequestBodyStorageMaxSizeDesc')}</p>
+                            </div>
+                            <Switch
+                                checked={formOverrideRequestBodyStorageMaxSize}
+                                onCheckedChange={setFormOverrideRequestBodyStorageMaxSize}
+                            />
+                        </div>
+
+                        {formOverrideRequestBodyStorageMaxSize && (
+                            <div className="pl-4">
+                                <div className="space-y-2">
+                                    <Label>{t('model.requestBodyStorageMaxSize')}</Label>
+                                    <Input
+                                        type="number"
+                                        value={formRequestBodyStorageMaxSize}
+                                        onChange={(e) => setFormRequestBodyStorageMaxSize(Number(e.target.value))}
+                                    />
+                                    <p className="text-xs text-muted-foreground">{t('group.modelConfig.storageMaxSizeHint')}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label>{t('group.modelConfig.overrideResponseBodyStorageMaxSize')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideResponseBodyStorageMaxSizeDesc')}</p>
+                            </div>
+                            <Switch
+                                checked={formOverrideResponseBodyStorageMaxSize}
+                                onCheckedChange={setFormOverrideResponseBodyStorageMaxSize}
+                            />
+                        </div>
+
+                        {formOverrideResponseBodyStorageMaxSize && (
+                            <div className="pl-4">
+                                <div className="space-y-2">
+                                    <Label>{t('model.responseBodyStorageMaxSize')}</Label>
+                                    <Input
+                                        type="number"
+                                        value={formResponseBodyStorageMaxSize}
+                                        onChange={(e) => setFormResponseBodyStorageMaxSize(Number(e.target.value))}
+                                    />
+                                    <p className="text-xs text-muted-foreground">{t('group.modelConfig.storageMaxSizeHint')}</p>
+                                </div>
                             </div>
                         )}
 

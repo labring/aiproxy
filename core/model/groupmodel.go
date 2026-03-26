@@ -27,8 +27,17 @@ type GroupModelConfig struct {
 	OverrideRetryTimes bool  `json:"override_retry_times"`
 	RetryTimes         int64 `json:"retry_times"`
 
+	OverrideTimeoutConfig bool          `json:"override_timeout_config"`
+	TimeoutConfig         TimeoutConfig `gorm:"embedded" json:"timeout_config,omitempty"`
+
 	OverrideForceSaveDetail bool `json:"override_force_save_detail"`
 	ForceSaveDetail         bool `json:"force_save_detail"`
+
+	OverrideRequestBodyStorageMaxSize bool  `json:"override_request_body_storage_max_size"`
+	RequestBodyStorageMaxSize         int64 `json:"request_body_storage_max_size"`
+
+	OverrideResponseBodyStorageMaxSize bool  `json:"override_response_body_storage_max_size"`
+	ResponseBodyStorageMaxSize         int64 `json:"response_body_storage_max_size"`
 
 	OverrideSummaryServiceTier bool `json:"override_summary_service_tier"`
 	SummaryServiceTier         bool `json:"summary_service_tier"`

@@ -155,6 +155,8 @@ export const modelCreateSchema = z.object({
     stream_timeout: z.number().nonnegative('Stream timeout must be a non-negative number').optional(),
     max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
     force_save_detail: z.boolean().optional(),
+    request_body_storage_max_size: z.number().optional(),
+    response_body_storage_max_size: z.number().optional(),
     summary_service_tier: z.boolean().optional(),
     summary_claude_long_context: z.boolean().optional(),
     price: priceSchema,

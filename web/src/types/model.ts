@@ -74,6 +74,8 @@ export interface ModelConfig {
     warn_error_rate?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    request_body_storage_max_size?: number
+    response_body_storage_max_size?: number
     summary_service_tier?: boolean
     summary_claude_long_context?: boolean
     plugin?: Plugin
@@ -160,6 +162,8 @@ export interface ModelCreateRequest {
     warn_error_rate?: number
     max_error_rate?: number
     force_save_detail?: boolean
+    request_body_storage_max_size?: number
+    response_body_storage_max_size?: number
     summary_service_tier?: boolean
     summary_claude_long_context?: boolean
     price?: ModelPrice | Record<string, unknown>

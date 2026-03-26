@@ -4,9 +4,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/common/config"
-	"gorm.io/gorm"
 )
 
 type RetryLog struct {
@@ -25,28 +22,6 @@ type RetryLog struct {
 	Code                  int             `gorm:"index"                                             json:"code,omitempty"`
 	Mode                  int             `                                                         json:"mode,omitempty"`
 	RetryTimes            ZeroNullInt64   `                                                         json:"retry_times,omitempty"`
-}
-
-func (r *RetryLog) BeforeSave(_ *gorm.DB) (err error) {
-	if reqMax := config.GetLogDetailRequestBodyMaxSize(); reqMax > 0 &&
-		int64(len(r.RequestBody)) > reqMax {
-		r.RequestBody = common.TruncateByRune(r.RequestBody, int(reqMax)) + "..."
-		r.RequestBodyTruncated = true
-	} else if reqMax < 0 {
-		r.RequestBody = ""
-		r.RequestBodyTruncated = true
-	}
-
-	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
-		int64(len(r.ResponseBody)) > respMax {
-		r.ResponseBody = common.TruncateByRune(r.ResponseBody, int(respMax)) + "..."
-		r.ResponseBodyTruncated = true
-	} else if respMax < 0 {
-		r.ResponseBody = ""
-		r.ResponseBodyTruncated = true
-	}
-
-	return err
 }
 
 func (r *RetryLog) MarshalJSON() ([]byte, error) {
