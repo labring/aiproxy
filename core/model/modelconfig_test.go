@@ -67,6 +67,66 @@ func TestModelConfigLoadFromGroupModelConfigSummaryClaudeLongContext(t *testing.
 	}
 }
 
+func TestModelConfigLoadFromGroupModelConfigBodyStorageMaxSize(t *testing.T) {
+	base := (&model.ModelConfig{
+		RequestBodyStorageMaxSize:  1024,
+		ResponseBodyStorageMaxSize: 2048,
+	}).LoadFromGroupModelConfig(
+		model.GroupModelConfig{
+			OverrideRequestBodyStorageMaxSize:  true,
+			RequestBodyStorageMaxSize:          512,
+			OverrideResponseBodyStorageMaxSize: true,
+			ResponseBodyStorageMaxSize:         1536,
+		},
+	)
+
+	if base.RequestBodyStorageMaxSize != 512 {
+		t.Fatalf(
+			"expected request_body_storage_max_size to be overridden to 512, got %d",
+			base.RequestBodyStorageMaxSize,
+		)
+	}
+
+	if base.ResponseBodyStorageMaxSize != 1536 {
+		t.Fatalf(
+			"expected response_body_storage_max_size to be overridden to 1536, got %d",
+			base.ResponseBodyStorageMaxSize,
+		)
+	}
+}
+
+func TestModelConfigLoadFromGroupModelConfigTimeoutConfig(t *testing.T) {
+	base := (&model.ModelConfig{
+		Type: mode.ChatCompletions,
+		TimeoutConfig: model.TimeoutConfig{
+			RequestTimeout:       30,
+			StreamRequestTimeout: 60,
+		},
+	}).LoadFromGroupModelConfig(
+		model.GroupModelConfig{
+			OverrideTimeoutConfig: true,
+			TimeoutConfig: model.TimeoutConfig{
+				RequestTimeout:       45,
+				StreamRequestTimeout: 90,
+			},
+		},
+	)
+
+	if base.TimeoutConfig.RequestTimeout != 45 {
+		t.Fatalf(
+			"expected request timeout to be overridden to 45, got %d",
+			base.TimeoutConfig.RequestTimeout,
+		)
+	}
+
+	if base.TimeoutConfig.StreamRequestTimeout != 90 {
+		t.Fatalf(
+			"expected stream request timeout to be overridden to 90, got %d",
+			base.TimeoutConfig.StreamRequestTimeout,
+		)
+	}
+}
+
 func TestModelConfigSupportStreamTimeout(t *testing.T) {
 	t.Run("supports stream timeout for stream-capable modes", func(t *testing.T) {
 		modes := []mode.Mode{

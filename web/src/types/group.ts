@@ -10,7 +10,7 @@ export const GROUP_STATUS = {
 export type GroupStatus = typeof GROUP_STATUS[keyof typeof GROUP_STATUS]
 
 // Re-export price types from model
-import type { ModelPrice } from './model'
+import type { ModelPrice, TimeoutConfig } from './model'
 
 // Group model config price (alias for ModelPrice)
 export type GroupModelConfigPrice = ModelPrice
@@ -27,8 +27,14 @@ export interface GroupModelConfig {
     image_prices: Record<string, number>
     override_retry_times: boolean
     retry_times: number
+    override_timeout_config: boolean
+    timeout_config?: TimeoutConfig
     override_force_save_detail: boolean
     force_save_detail: boolean
+    override_request_body_storage_max_size: boolean
+    request_body_storage_max_size: number
+    override_response_body_storage_max_size: boolean
+    response_body_storage_max_size: number
     override_summary_service_tier: boolean
     summary_service_tier: boolean
     override_summary_claude_long_context: boolean
@@ -131,8 +137,14 @@ export interface GroupModelConfigSaveRequest {
     image_prices?: Record<string, number>
     override_retry_times?: boolean
     retry_times?: number
+    override_timeout_config?: boolean
+    timeout_config?: TimeoutConfig
     override_force_save_detail?: boolean
     force_save_detail?: boolean
+    override_request_body_storage_max_size?: boolean
+    request_body_storage_max_size?: number
+    override_response_body_storage_max_size?: boolean
+    response_body_storage_max_size?: number
     override_summary_service_tier?: boolean
     summary_service_tier?: boolean
     override_summary_claude_long_context?: boolean

@@ -23,26 +23,26 @@ type RequestDetail struct {
 	LogID                 int       `gorm:"index"                json:"log_id"`
 }
 
-func (d *RequestDetail) BeforeSave(_ *gorm.DB) (err error) {
-	if reqMax := config.GetLogDetailRequestBodyMaxSize(); reqMax > 0 &&
-		int64(len(d.RequestBody)) > reqMax {
-		d.RequestBody = common.TruncateByRune(d.RequestBody, int(reqMax)) + "..."
-		d.RequestBodyTruncated = true
-	} else if reqMax < 0 {
-		d.RequestBody = ""
-		d.RequestBodyTruncated = true
-	}
+func truncateDetailBody(body string, maxSize int64) (string, bool) {
+	switch {
+	case maxSize < 0:
+		return "", true
+	case maxSize == 0:
+		return body, false
+	case int64(len(body)) <= maxSize:
+		return body, false
+	default:
+		if maxSize <= 3 {
+			return common.TruncateByRune(body, int(maxSize)), true
+		}
 
-	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
-		int64(len(d.ResponseBody)) > respMax {
-		d.ResponseBody = common.TruncateByRune(d.ResponseBody, int(respMax)) + "..."
-		d.ResponseBodyTruncated = true
-	} else if respMax < 0 {
-		d.ResponseBody = ""
-		d.ResponseBodyTruncated = true
+		return common.TruncateByRune(body, int(maxSize)-3) + "...", true
 	}
+}
 
-	return err
+func (d *RequestDetail) ApplyBodySizeLimits(requestMaxSize, responseMaxSize int64) {
+	d.RequestBody, d.RequestBodyTruncated = truncateDetailBody(d.RequestBody, requestMaxSize)
+	d.ResponseBody, d.ResponseBodyTruncated = truncateDetailBody(d.ResponseBody, responseMaxSize)
 }
 
 type Log struct {

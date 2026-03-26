@@ -328,9 +328,21 @@ func recordResult(
 
 	firstByteAt := result.Detail.FirstByteAt
 	if config.GetSaveAllLogDetail() || meta.ModelConfig.ForceSaveDetail || code != http.StatusOK {
-		detail = &model.RequestDetail{
-			RequestBody:  result.Detail.RequestBody,
-			ResponseBody: result.Detail.ResponseBody,
+		requestBodyMaxSize := effectiveDetailBodyMaxSize(
+			meta.ModelConfig.RequestBodyStorageMaxSize,
+			config.GetLogDetailRequestBodyMaxSize(),
+		)
+		responseBodyMaxSize := effectiveDetailBodyMaxSize(
+			meta.ModelConfig.ResponseBodyStorageMaxSize,
+			config.GetLogDetailResponseBodyMaxSize(),
+		)
+
+		if requestBodyMaxSize >= 0 || responseBodyMaxSize >= 0 {
+			detail = &model.RequestDetail{
+				RequestBody:  result.Detail.RequestBody,
+				ResponseBody: result.Detail.ResponseBody,
+			}
+			detail.ApplyBodySizeLimits(requestBodyMaxSize, responseBodyMaxSize)
 		}
 	}
 
@@ -364,6 +376,14 @@ func recordResult(
 		result.UpstreamID,
 		meta.RequestServiceTier,
 	)
+}
+
+func effectiveDetailBodyMaxSize(modelLimit, globalLimit int64) int64 {
+	if modelLimit != 0 {
+		return modelLimit
+	}
+
+	return globalLimit
 }
 
 type retryState struct {
