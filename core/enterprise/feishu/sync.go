@@ -289,7 +289,10 @@ func deactivateFeishuUser(db *gorm.DB, openID, source string) {
 	}
 
 	// Soft-delete the feishu user (sets deleted_at, JWT auth will fail on user lookup)
-	db.Delete(&feishuUser)
+	if err := db.Delete(&feishuUser).Error; err != nil {
+		log.Errorf("feishu %s: failed to soft-delete user %s (%s): %v", source, feishuUser.Name, openID, err)
+		return
+	}
 
 	log.Infof("feishu %s: deactivated user %s (%s), group=%s",
 		source, feishuUser.Name, openID, feishuUser.GroupID)
@@ -487,8 +490,6 @@ func deactivateDepartedUsers(db *gorm.DB, stats *syncStats) {
 			len(stats.syncedOpenIDs), len(dbUsers))
 		return
 	}
-
-	log.Infof("feishu sync: detected %d departed user(s), deactivating...", len(departedOpenIDs))
 
 	for _, openID := range departedOpenIDs {
 		deactivateFeishuUser(db, openID, "sync")

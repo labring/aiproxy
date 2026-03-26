@@ -538,9 +538,9 @@ func DisableAllGroupTokens(groupID string) (int64, error) {
 		return 0, errors.New("group is empty")
 	}
 
-	// Find all enabled tokens in the group first (for cache invalidation)
+	// Find all enabled tokens in the group first (need keys for cache invalidation)
 	var tokens []Token
-	DB.Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).Find(&tokens)
+	DB.Select("key").Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).Find(&tokens)
 
 	if len(tokens) == 0 {
 		return 0, nil
