@@ -1,9 +1,61 @@
 **/.vscode
 **/__debug_bin*
 **/.DS_Store
+
+# Core build artifacts & runtime
 core/.env.local
 core/.env.aiproxy.local
-core/aiproxy-enterprise
-core/aiproxy.db
 core/aiproxy
+core/aiproxy-enterprise
+core/aiproxy-dev
+core/aiproxy-new
+core/aiproxy.log
+
+# Database files
+*.db
+
+# Log files
+*.log
+
+# Claude / Codex local config
+.claude/*.local.md
+.claude/QUICK-REFERENCE.md
+.claude/QUICKSTART.md
+.claude/hookify-rules.md
+.claude/workflows.md
 .claude/settings.local.json
+.codex/
+
+# Backup files
+*.bak
+
+# Test config & temp scripts
+test-config.env
+test-*.sh
+test-*.py
+
+# Temporary docs (not part of main docs)
+PPIO-*.md
+MULTIMODAL-SUPPORT.md
+DATA-CONSISTENCY-MEMO.md
+QUICK-START.md
+SETUP.md
+TEST-RESULTS.md
+implementation-guide.md
+manual-test-setup.md
+
+# Scripts: mock data & temp sync
+scripts/generate-mock-data.go
+scripts/generate-mock-data.go.bak
+scripts/sync-ppio-*.sh
+scripts/test-*.sh
+scripts/MOCK-DATA-README.md
+
+# Examples (not ready for main)
+examples/
+
+# Enterprise temp docs
+enterprise/docs/
+
+# Test notification temp dir
+core/test-notif/
