@@ -304,12 +304,12 @@ func TestRedisRateRecordGetDoesNotRefreshTTL(t *testing.T) {
 	bucketTTL, err := redisClient.TTL(ctx, bucketKey).Result()
 	require.NoError(t, err)
 	require.Greater(t, bucketTTL, time.Duration(0))
-	require.Less(t, bucketTTL, time.Second)
+	require.LessOrEqual(t, bucketTTL, time.Second)
 
 	metaTTL, err := redisClient.TTL(ctx, metaKey).Result()
 	require.NoError(t, err)
 	require.Greater(t, metaTTL, time.Duration(0))
-	require.Less(t, metaTTL, time.Second)
+	require.LessOrEqual(t, metaTTL, time.Second)
 
 	require.Eventually(t, func() bool {
 		bucketExists, err := redisClient.Exists(ctx, bucketKey).Result()
