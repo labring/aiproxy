@@ -87,7 +87,6 @@ export function ChannelForm({
 
     // 获取所有模型
     const { data: models, isLoading: isModelsLoading } = useModels()
-    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     // API hooks
     const {
@@ -136,9 +135,9 @@ export function ChannelForm({
     })
 
     const watchedType = form.watch('type')
-
     // Fetch default models for the selected channel type
     const { data: defaultModelsData, isLoading: isDefaultModelsLoading } = useChannelDefaultModels(watchedType)
+    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     const hasDefaults = !!(defaultModelsData?.models && defaultModelsData.models.length > 0)
     const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`

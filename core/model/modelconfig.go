@@ -59,6 +59,10 @@ func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
 		return err
 	}
 
+	if !c.SupportStreamTimeout() {
+		c.TimeoutConfig.StreamRequestTimeout = 0
+	}
+
 	return nil
 }
 
@@ -74,6 +78,15 @@ func (c *ModelConfig) RequestTimeout() time.Duration {
 
 func (c *ModelConfig) StreamRequestTimeout() time.Duration {
 	return timeoutSecond(c.TimeoutConfig.StreamRequestTimeout)
+}
+
+func (c *ModelConfig) SupportStreamTimeout() bool {
+	switch c.Type {
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Responses, mode.Gemini:
+		return true
+	default:
+		return false
+	}
 }
 
 func timeoutSecond(second int64) time.Duration {

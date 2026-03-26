@@ -249,7 +249,7 @@ export function ModelTable() {
     {
       id: "runtime",
       header: () => (
-        <div className="font-medium py-3.5">Runtime</div>
+        <div className="font-medium py-3.5">{t("common.runtime")}</div>
       ),
       cell: ({ row }) => {
         const metric = runtimeMetrics?.models?.[row.original.model];

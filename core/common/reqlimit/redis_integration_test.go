@@ -3,6 +3,7 @@ package reqlimit
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -281,6 +282,45 @@ func TestRedisRateRecordTTLAndNaturalExpiry(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
+func TestRedisRateRecordGetDoesNotRefreshTTL(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForReqLimitTest(t, ctx)
+	defer cleanup()
+
+	record := newRedisChannelModelRecord(func() *redis.Client { return redisClient })
+
+	_, _, _, err := record.PushRequest(ctx, 0, 2*time.Second, 1, "ttl-read-channel", "model-d")
+	require.NoError(t, err)
+
+	bucketKey := record.buildBucketKey("ttl-read-channel", "model-d")
+	metaKey := record.buildMetaKey("ttl-read-channel", "model-d")
+
+	time.Sleep(1200 * time.Millisecond)
+
+	_, _, err = record.GetRequest(ctx, 2*time.Second, "ttl-read-channel", "model-d")
+	require.NoError(t, err)
+
+	bucketTTL, err := redisClient.TTL(ctx, bucketKey).Result()
+	require.NoError(t, err)
+	require.Greater(t, bucketTTL, time.Duration(0))
+	require.Less(t, bucketTTL, time.Second)
+
+	metaTTL, err := redisClient.TTL(ctx, metaKey).Result()
+	require.NoError(t, err)
+	require.Greater(t, metaTTL, time.Duration(0))
+	require.Less(t, metaTTL, time.Second)
+
+	require.Eventually(t, func() bool {
+		bucketExists, err := redisClient.Exists(ctx, bucketKey).Result()
+		require.NoError(t, err)
+		metaExists, err := redisClient.Exists(ctx, metaKey).Result()
+		require.NoError(t, err)
+
+		return bucketExists == 0 && metaExists == 0
+	}, 4*time.Second, 100*time.Millisecond)
+}
+
 func setupRedisForReqLimitTest(t *testing.T, ctx context.Context) (*redis.Client, func()) {
 	t.Helper()
 
@@ -290,11 +330,25 @@ func setupRedisForReqLimitTest(t *testing.T, ctx context.Context) (*redis.Client
 		WaitingFor:   wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second),
 	}
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	require.NoError(t, err)
+	var (
+		container testcontainers.Container
+		err       error
+	)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("docker unavailable: %v", r)
+			}
+		}()
+
+		container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		})
+	}()
+	if err != nil {
+		t.Skipf("skipping redis integration test: %v", err)
+	}
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)

@@ -184,8 +184,6 @@ local function cleanup_meta(bucket_key, meta_key)
         'last_cleaned_second',
         cutoff_slice
     )
-    redis.call('EXPIRE', bucket_key, window_seconds)
-    redis.call('EXPIRE', meta_key, window_seconds)
 
     return count, over
 end
@@ -334,12 +332,25 @@ func (r *redisRateRecord) Snapshot(
 	ctx context.Context,
 	duration time.Duration,
 ) ([]recordSnapshot, error) {
+	return r.SnapshotByPattern(ctx, duration, "*")
+}
+
+func (r *redisRateRecord) SnapshotByPattern(
+	ctx context.Context,
+	duration time.Duration,
+	keys ...string,
+) ([]recordSnapshot, error) {
 	rdb := r.getRDB()
 	if rdb == nil {
 		return nil, errors.New("redis client is nil")
 	}
 
-	pattern := common.RedisKey(r.prefix+":*") + ":meta"
+	metaPattern := r.buildMetaKey(keys...)
+	if !hasWildcard(keys) {
+		metaPattern = r.buildMetaKey(keys...)
+	}
+
+	pattern := metaPattern
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	nowUnix := time.Now().Unix()
 	windowSeconds := duration.Seconds()

@@ -130,6 +130,7 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                         detailRanking={data.detailRanking}
                         hasModelFilter={!!filters.model}
                         isGroup={true}
+                        groupId={groupId}
                         loading={isLoading}
                     />
                 )

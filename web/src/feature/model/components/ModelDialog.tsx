@@ -47,6 +47,7 @@ export function ModelDialog({
             owner: model.owner ?? '',
             type: model.type,
             timeout: model.timeout_config?.request_timeout,
+            stream_timeout: model.timeout_config?.stream_request_timeout,
             price: model.price,
             plugin: model.plugin
         }

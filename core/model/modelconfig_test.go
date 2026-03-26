@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 func TestModelConfigShouldSummaryServiceTier(t *testing.T) {
@@ -63,5 +64,69 @@ func TestModelConfigLoadFromGroupModelConfigSummaryClaudeLongContext(t *testing.
 
 	if !base.SummaryClaudeLongContext {
 		t.Fatal("expected override to set summary_claude_long_context to true")
+	}
+}
+
+func TestModelConfigSupportStreamTimeout(t *testing.T) {
+	t.Run("supports stream timeout for stream-capable modes", func(t *testing.T) {
+		modes := []mode.Mode{
+			mode.ChatCompletions,
+			mode.Completions,
+			mode.Anthropic,
+			mode.Responses,
+			mode.Gemini,
+		}
+
+		for _, m := range modes {
+			cfg := &model.ModelConfig{Type: m}
+			if !cfg.SupportStreamTimeout() {
+				t.Fatalf("expected mode %s to support stream timeout", m.String())
+			}
+		}
+	})
+
+	t.Run("does not support stream timeout for non-stream modes", func(t *testing.T) {
+		modes := []mode.Mode{
+			mode.Embeddings,
+			mode.Moderations,
+			mode.ImagesGenerations,
+			mode.ImagesEdits,
+			mode.AudioSpeech,
+			mode.AudioTranscription,
+			mode.AudioTranslation,
+			mode.Rerank,
+			mode.ParsePdf,
+			mode.VideoGenerationsJobs,
+		}
+
+		for _, m := range modes {
+			cfg := &model.ModelConfig{Type: m}
+			if cfg.SupportStreamTimeout() {
+				t.Fatalf("expected mode %s to not support stream timeout", m.String())
+			}
+		}
+	})
+}
+
+func TestModelConfigBeforeSaveClearsUnsupportedStreamTimeout(t *testing.T) {
+	cfg := &model.ModelConfig{
+		Model: "test-embedding",
+		Type:  mode.Embeddings,
+		TimeoutConfig: model.TimeoutConfig{
+			RequestTimeout:       30,
+			StreamRequestTimeout: 120,
+		},
+	}
+
+	if err := cfg.BeforeSave(nil); err != nil {
+		t.Fatalf("expected BeforeSave to succeed, got error: %v", err)
+	}
+
+	if cfg.TimeoutConfig.RequestTimeout != 30 {
+		t.Fatalf("expected request timeout to remain unchanged, got %d", cfg.TimeoutConfig.RequestTimeout)
+	}
+
+	if cfg.TimeoutConfig.StreamRequestTimeout != 0 {
+		t.Fatalf("expected unsupported stream timeout to be cleared, got %d", cfg.TimeoutConfig.StreamRequestTimeout)
 	}
 }

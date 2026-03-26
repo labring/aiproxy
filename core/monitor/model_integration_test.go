@@ -3,12 +3,12 @@ package monitor
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -21,19 +21,11 @@ func TestRedisMonitorAddRequestAndGetRates(t *testing.T) {
 	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
 	defer cleanup()
 
-	prevEnabled := common.RedisEnabled
-	prevRDB := common.RDB
-	common.RedisEnabled = true
-
-	common.RDB = redisClient
-	defer func() {
-		common.RedisEnabled = prevEnabled
-		common.RDB = prevRDB
-	}()
+	monitor := newTestRedisModelMonitor(redisClient)
 
 	for i := range minRequestCount {
 		isError := i < 10
-		beyondThreshold, banExecution, err := AddRequest(
+		beyondThreshold, banExecution, err := monitor.AddRequest(
 			ctx,
 			"model-a",
 			101,
@@ -53,22 +45,22 @@ func TestRedisMonitorAddRequestAndGetRates(t *testing.T) {
 		}
 	}
 
-	modelRates, err := GetModelsErrorRate(ctx)
+	modelRates, err := monitor.GetModelsErrorRate(ctx)
 	require.NoError(t, err)
 	require.Contains(t, modelRates, "model-a")
 	require.InDelta(t, 0.5, modelRates["model-a"], 0.01)
 
-	channelRates, err := GetModelChannelErrorRate(ctx, "model-a")
+	channelRates, err := monitor.GetModelChannelErrorRate(ctx, "model-a")
 	require.NoError(t, err)
 	require.Contains(t, channelRates, int64(101))
 	require.InDelta(t, 0.5, channelRates[101], 0.01)
 
-	modelByChannel, err := GetChannelModelErrorRates(ctx, 101)
+	modelByChannel, err := monitor.GetChannelModelErrorRates(ctx, 101)
 	require.NoError(t, err)
 	require.Contains(t, modelByChannel, "model-a")
 	require.InDelta(t, 0.5, modelByChannel["model-a"], 0.01)
 
-	allRates, err := GetAllChannelModelErrorRates(ctx)
+	allRates, err := monitor.GetAllChannelModelErrorRates(ctx)
 	require.NoError(t, err)
 	require.Contains(t, allRates, int64(101))
 	require.Contains(t, allRates[101], "model-a")
@@ -81,31 +73,31 @@ func TestRedisMonitorBanAndBannedQuery(t *testing.T) {
 	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
 	defer cleanup()
 
-	prevEnabled := common.RedisEnabled
-	prevRDB := common.RDB
-	common.RedisEnabled = true
-
-	common.RDB = redisClient
-	defer func() {
-		common.RedisEnabled = prevEnabled
-		common.RDB = prevRDB
-	}()
+	monitor := newTestRedisModelMonitor(redisClient)
 
 	for range minRequestCount {
-		_, _, err := AddRequest(ctx, "model-ban", 202, true, false, 0.3, 0.8)
+		_, _, err := monitor.AddRequest(ctx, "model-ban", 202, true, false, 0.3, 0.8)
 		require.NoError(t, err)
 	}
 
-	beyondThreshold, banExecution, err := AddRequest(ctx, "model-ban", 202, true, false, 0.3, 0.8)
+	beyondThreshold, banExecution, err := monitor.AddRequest(
+		ctx,
+		"model-ban",
+		202,
+		true,
+		false,
+		0.3,
+		0.8,
+	)
 	require.NoError(t, err)
 	require.True(t, beyondThreshold)
 	require.False(t, banExecution)
 
-	bannedChannels, err := GetBannedChannelsWithModel(ctx, "model-ban")
+	bannedChannels, err := monitor.GetBannedChannelsWithModel(ctx, "model-ban")
 	require.NoError(t, err)
 	require.Contains(t, bannedChannels, int64(202))
 
-	bannedMap, err := GetBannedChannelsMapWithModel(ctx, "model-ban")
+	bannedMap, err := monitor.GetBannedChannelsMapWithModel(ctx, "model-ban")
 	require.NoError(t, err)
 
 	_, ok := bannedMap[202]
@@ -118,15 +110,7 @@ func TestRedisMonitorConcurrentAddRequest(t *testing.T) {
 	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
 	defer cleanup()
 
-	prevEnabled := common.RedisEnabled
-	prevRDB := common.RDB
-	common.RedisEnabled = true
-
-	common.RDB = redisClient
-	defer func() {
-		common.RedisEnabled = prevEnabled
-		common.RDB = prevRDB
-	}()
+	monitor := newTestRedisModelMonitor(redisClient)
 
 	const (
 		numGoroutines        = 40
@@ -141,7 +125,15 @@ func TestRedisMonitorConcurrentAddRequest(t *testing.T) {
 			defer wg.Done()
 
 			for j := range requestsPerGoroutine {
-				_, _, err := AddRequest(ctx, "model-concurrent", 303, (id+j)%4 == 0, false, 0.3, 0)
+				_, _, err := monitor.AddRequest(
+					ctx,
+					"model-concurrent",
+					303,
+					(id+j)%4 == 0,
+					false,
+					0.3,
+					0,
+				)
 				require.NoError(t, err)
 			}
 		}(i)
@@ -149,7 +141,7 @@ func TestRedisMonitorConcurrentAddRequest(t *testing.T) {
 
 	wg.Wait()
 
-	rates, err := GetModelChannelErrorRate(ctx, "model-concurrent")
+	rates, err := monitor.GetModelChannelErrorRate(ctx, "model-concurrent")
 	require.NoError(t, err)
 	require.Contains(t, rates, int64(303))
 	require.Greater(t, rates[303], 0.0)
@@ -161,15 +153,7 @@ func TestRedisMonitorCleansExpiredSlicesWithCachedTotals(t *testing.T) {
 	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
 	defer cleanup()
 
-	prevEnabled := common.RedisEnabled
-	prevRDB := common.RDB
-	common.RedisEnabled = true
-
-	common.RDB = redisClient
-	defer func() {
-		common.RedisEnabled = prevEnabled
-		common.RDB = prevRDB
-	}()
+	monitor := newTestRedisModelMonitor(redisClient)
 
 	statsKey := buildStatsKey("model-expired", "404")
 	currentSlice := time.Now().UnixMilli() / 10000
@@ -189,7 +173,7 @@ func TestRedisMonitorCleansExpiredSlicesWithCachedTotals(t *testing.T) {
 		redisClient.PExpire(ctx, statsKey, time.Duration(maxSliceCount*10)*time.Second).Err(),
 	)
 
-	rates, err := GetModelChannelErrorRate(ctx, "model-expired")
+	rates, err := monitor.GetModelChannelErrorRate(ctx, "model-expired")
 	require.NoError(t, err)
 	require.Contains(t, rates, int64(404))
 	require.InDelta(t, 0.5, rates[404], 0.01)
@@ -197,6 +181,12 @@ func TestRedisMonitorCleansExpiredSlicesWithCachedTotals(t *testing.T) {
 	exists, err := redisClient.HExists(ctx, statsKey, strconv.FormatInt(expiredSlice, 10)).Result()
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+func newTestRedisModelMonitor(client *redis.Client) *redisModelMonitor {
+	return newRedisModelMonitor(func() *redis.Client {
+		return client
+	})
 }
 
 func setupRedisForMonitorTest(t *testing.T, ctx context.Context) (*redis.Client, func()) {
@@ -208,11 +198,25 @@ func setupRedisForMonitorTest(t *testing.T, ctx context.Context) (*redis.Client,
 		WaitingFor:   wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second),
 	}
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	require.NoError(t, err)
+	var (
+		container testcontainers.Container
+		err       error
+	)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("docker unavailable: %v", r)
+			}
+		}()
+
+		container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		})
+	}()
+	if err != nil {
+		t.Skipf("skipping redis integration test: %v", err)
+	}
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)
