@@ -30,28 +30,43 @@ func policyPeriodTypeToTokenPeriodType(pt int) string {
 		return model.PeriodTypeDaily
 	case models.PeriodTypeWeekly:
 		return model.PeriodTypeWeekly
+	case models.PeriodTypeMonthly:
+		return model.PeriodTypeMonthly
 	default:
+		log.Warnf("unknown policy PeriodType %d, falling back to monthly", pt)
 		return model.PeriodTypeMonthly
 	}
 }
 
-// withUserToken resolves a FeishuUser's token ID and calls fn with it. Skips silently if user not found or has no token.
-func withUserToken(openID string, fn func(tokenID int)) {
+// withGroupTokens resolves a FeishuUser's group and calls fn for every enabled token in that group.
+// This ensures policy sync covers ALL keys (auto-created + user-created), not just feishu_user.token_id.
+func withGroupTokens(openID string, fn func(tokenID int)) {
 	var user models.FeishuUser
 	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
 		return
 	}
 
-	if user.TokenID <= 0 {
+	if user.GroupID == "" {
 		return
 	}
 
-	fn(user.TokenID)
+	var tokenIDs []int
+	if err := model.DB.Model(&model.Token{}).
+		Select("id").
+		Where("group_id = ? AND status = ?", user.GroupID, model.TokenStatusEnabled).
+		Find(&tokenIDs).Error; err != nil {
+		log.Errorf("withGroupTokens: failed to list tokens for group %s: %v", user.GroupID, err)
+		return
+	}
+
+	for _, id := range tokenIDs {
+		fn(id)
+	}
 }
 
-// syncPolicyToToken updates a user's Token PeriodQuota/PeriodType based on the given policy.
+// syncPolicyToToken updates ALL tokens in the user's group with PeriodQuota/PeriodType from the given policy.
 func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
-	withUserToken(openID, func(tokenID int) {
+	withGroupTokens(openID, func(tokenID int) {
 		periodQuota := policy.PeriodQuota
 		periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
 
@@ -64,9 +79,9 @@ func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
 	})
 }
 
-// clearUserToken resets a user's Token PeriodQuota to 0.
+// clearUserToken resets PeriodQuota to 0 for ALL tokens in the user's group.
 func clearUserToken(openID string) {
-	withUserToken(openID, func(tokenID int) {
+	withGroupTokens(openID, func(tokenID int) {
 		zero := float64(0)
 		if _, err := model.UpdateToken(tokenID, model.UpdateTokenRequest{
 			PeriodQuota: &zero,

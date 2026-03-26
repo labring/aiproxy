@@ -5,12 +5,17 @@ package quota
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
+
+// pendingSyncs tracks token IDs that already have an in-flight auto-sync goroutine,
+// preventing repeated goroutine spawns on every request for the same unsynced token.
+var pendingSyncs sync.Map
 
 // CheckQuotaTier evaluates the token's period usage against the quota policy
 // with multi-level priority: user policy > department policy > group policy.
@@ -117,6 +122,26 @@ func tierThreshold(policy *models.QuotaPolicy, tier int) float64 {
 
 // applyPolicyTiers applies the tiered policy logic based on usage ratio.
 func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, requestModel string) (string, float64, float64, bool) {
+
+	// If token has no PeriodQuota but the policy does, the token was never synced
+	// (e.g. user-created key). Use the policy's quota directly for enforcement,
+	// and trigger a one-shot async sync to fix the token record.
+	if token.PeriodQuota <= 0 && policy.PeriodQuota > 0 {
+		if _, alreadyPending := pendingSyncs.LoadOrStore(token.ID, struct{}{}); !alreadyPending {
+			go func() {
+				defer pendingSyncs.Delete(token.ID)
+				periodQuota := policy.PeriodQuota
+				periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
+				if _, err := model.UpdateToken(token.ID, model.UpdateTokenRequest{
+					PeriodQuota: &periodQuota,
+					PeriodType:  &periodType,
+				}); err != nil {
+					log.Errorf("auto-sync policy to unsynced token %d: %v", token.ID, err)
+				}
+			}()
+		}
+		token.PeriodQuota = policy.PeriodQuota
+	}
 
 	// Guard against zero PeriodQuota to avoid division by zero
 	if token.PeriodQuota <= 0 {
