@@ -85,8 +85,6 @@ export function ChannelTable() {
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
     const { data: allDefaultModels } = useAllChannelDefaultModels()
-    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
-
     // 获取渠道列表
     const {
         data,
@@ -114,6 +112,7 @@ export function ChannelTable() {
         [data?.channels]
     )
     const total = data?.total || 0
+    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
 
     // 打开创建渠道对话框
     const openCreateDialog = () => {
@@ -403,7 +402,7 @@ export function ChannelTable() {
         },
         {
             id: 'runtime',
-            header: () => <div className="font-medium py-3.5 whitespace-nowrap">Runtime</div>,
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("common.runtime")}</div>,
             cell: ({ row }) => {
                 const metric = runtimeMetrics?.channels?.[String(row.original.id)]
                 if (!metric) {

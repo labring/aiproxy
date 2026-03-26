@@ -17,6 +17,48 @@ type ChannelModelRate struct {
 	TPS int64 `json:"tps"`
 }
 
+type RateSnapshot struct {
+	Keys        []string `json:"keys"`
+	TotalCount  int64    `json:"total_count"`
+	SecondCount int64    `json:"second_count"`
+}
+
+//nolint:unparam
+func snapshotRateRecord(
+	ctx context.Context,
+	duration time.Duration,
+	redisRecord *redisRateRecord,
+	memoryRecord *InMemoryRecord,
+	keys ...string,
+) ([]RateSnapshot, error) {
+	var (
+		rawSnapshots []recordSnapshot
+		err          error
+	)
+
+	if common.RedisEnabled {
+		rawSnapshots, err = redisRecord.SnapshotByPattern(ctx, duration, keys...)
+		if err != nil {
+			log.Error("redis snapshot error: " + err.Error())
+		}
+	}
+
+	if len(rawSnapshots) == 0 {
+		rawSnapshots = memoryRecord.SnapshotByPattern(duration, keys...)
+	}
+
+	snapshots := make([]RateSnapshot, 0, len(rawSnapshots))
+	for _, snapshot := range rawSnapshots {
+		snapshots = append(snapshots, RateSnapshot{
+			Keys:        append([]string(nil), snapshot.Keys...),
+			TotalCount:  snapshot.TotalCount,
+			SecondCount: snapshot.SecondCount,
+		})
+	}
+
+	return snapshots, nil
+}
+
 var (
 	memoryGroupModelLimiter = NewInMemoryRecord()
 	redisGroupModelLimiter  = newRedisGroupModelRecord(func() *redis.Client { return common.RDB })
@@ -66,6 +108,28 @@ func GetGroupModelRequest(ctx context.Context, group, model string) (int64, int6
 	}
 
 	return memoryGroupModelLimiter.GetRequest(time.Minute, group, model)
+}
+
+func GetGroupModelRequestSnapshots(
+	ctx context.Context,
+	group, model string,
+) ([]RateSnapshot, error) {
+	if group == "" {
+		group = "*"
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	return snapshotRateRecord(
+		ctx,
+		time.Minute,
+		redisGroupModelLimiter,
+		memoryGroupModelLimiter,
+		group,
+		model,
+	)
 }
 
 var (
@@ -127,6 +191,33 @@ func GetGroupModelTokennameRequest(
 	}
 
 	return memoryGroupModelTokennameLimiter.GetRequest(time.Minute, group, model, tokenname)
+}
+
+func GetGroupModelTokennameRequestSnapshots(
+	ctx context.Context,
+	group, model, tokenname string,
+) ([]RateSnapshot, error) {
+	if group == "" {
+		group = "*"
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	if tokenname == "" {
+		tokenname = "*"
+	}
+
+	return snapshotRateRecord(
+		ctx,
+		time.Minute,
+		redisGroupModelTokennameLimiter,
+		memoryGroupModelTokennameLimiter,
+		group,
+		model,
+		tokenname,
+	)
 }
 
 var (
@@ -235,6 +326,28 @@ func GetGroupModelTokensRequest(ctx context.Context, group, model string) (int64
 	return memoryGroupModelTokensLimiter.GetRequest(time.Minute, group, model)
 }
 
+func GetGroupModelTokensRequestSnapshots(
+	ctx context.Context,
+	group, model string,
+) ([]RateSnapshot, error) {
+	if group == "" {
+		group = "*"
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	return snapshotRateRecord(
+		ctx,
+		time.Minute,
+		redisGroupModelTokensLimiter,
+		memoryGroupModelTokensLimiter,
+		group,
+		model,
+	)
+}
+
 var (
 	memoryGroupModelTokennameTokensLimiter = NewInMemoryRecord()
 	redisGroupModelTokennameTokensLimiter  = newRedisGroupModelTokennameTokensRecord(
@@ -302,6 +415,33 @@ func GetGroupModelTokennameTokensRequest(
 	}
 
 	return memoryGroupModelTokennameTokensLimiter.GetRequest(time.Minute, group, model, tokenname)
+}
+
+func GetGroupModelTokennameTokensRequestSnapshots(
+	ctx context.Context,
+	group, model, tokenname string,
+) ([]RateSnapshot, error) {
+	if group == "" {
+		group = "*"
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	if tokenname == "" {
+		tokenname = "*"
+	}
+
+	return snapshotRateRecord(
+		ctx,
+		time.Minute,
+		redisGroupModelTokennameTokensLimiter,
+		memoryGroupModelTokennameTokensLimiter,
+		group,
+		model,
+		tokenname,
+	)
 }
 
 var (

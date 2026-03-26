@@ -111,6 +111,8 @@ const KNOWN_CONFIG_KEYS = new Set([
     'support_voices',
 ])
 
+const STREAM_TIMEOUT_SUPPORTED_TYPES = new Set([1, 2, 12, 16, 21])
+
 interface ModelFormProps {
     mode?: 'create' | 'update'
     onSuccess?: () => void
@@ -129,6 +131,7 @@ interface ModelFormProps {
         timeout_config?: ModelConfig['timeout_config']
         warn_error_rate?: number
         timeout?: number
+        stream_timeout?: number
         max_error_rate?: number
         force_save_detail?: boolean
         summary_service_tier?: boolean
@@ -206,6 +209,7 @@ export function ModelForm({
             tpm: defaultValues.tpm,
             retry_times: defaultValues.retry_times,
             timeout: defaultValues.timeout,
+            stream_timeout: defaultValues.stream_timeout ?? defaultValues.timeout_config?.stream_request_timeout,
             max_error_rate: defaultValues.max_error_rate,
             force_save_detail: defaultValues.force_save_detail ?? false,
             summary_service_tier: defaultValues.summary_service_tier ?? false,
@@ -228,6 +232,7 @@ export function ModelForm({
 
     const supportFormatsValue = form.watch('config.support_formats')
     const supportVoicesValue = form.watch('config.support_voices')
+    const supportStreamTimeout = STREAM_TIMEOUT_SUPPORTED_TYPES.has(watchedType)
 
     const configFieldVisibility = (() => {
         switch (watchedType) {
@@ -585,13 +590,16 @@ export function ModelForm({
         }
 
         const preservedTimeoutConfigFields = Object.fromEntries(
-            Object.entries((baseConfig?.timeout_config || {}) as Record<string, unknown>).filter(([key]) => key !== 'request_timeout')
+            Object.entries((baseConfig?.timeout_config || {}) as Record<string, unknown>).filter(([key]) => (
+                key !== 'request_timeout' && key !== 'stream_request_timeout'
+            ))
         )
         const mergedTimeoutConfig = (() => {
-            if (data.timeout !== undefined) {
+            if (data.timeout !== undefined || data.stream_timeout !== undefined) {
                 return {
                     ...preservedTimeoutConfigFields,
-                    request_timeout: Number(data.timeout),
+                    ...(data.timeout !== undefined && { request_timeout: Number(data.timeout) }),
+                    ...(supportStreamTimeout && data.stream_timeout !== undefined && { stream_request_timeout: Number(data.stream_timeout) }),
                 }
             }
             if (Object.keys(preservedTimeoutConfigFields).length > 0) {
@@ -665,7 +673,7 @@ export function ModelForm({
                 ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
                 ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
                 ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
-                ...(data.timeout !== undefined && { timeout_config: { request_timeout: Number(data.timeout) } }),
+                ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
                 ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
                 ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
@@ -874,6 +882,27 @@ export function ModelForm({
                             </FormItem>
                         )}
                     />
+
+                    {supportStreamTimeout && (
+                        <FormField
+                            control={form.control}
+                            name="stream_timeout"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{t("model.dialog.streamTimeout")}</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            placeholder={t("model.dialog.streamTimeoutPlaceholder")}
+                                            {...field}
+                                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
 
                     {/* Max Error Rate Field */}
                     <FormField

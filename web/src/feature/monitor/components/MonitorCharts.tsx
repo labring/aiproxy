@@ -13,6 +13,7 @@ import { useChannelTypeMetas } from '@/feature/channel/hooks'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
 import type { Channel } from '@/types/channel'
+import { useGroupModelMetrics, useGroupTokennameModelMetrics, useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 
 interface MonitorChartsProps {
     chartData: ChartDataPoint[]
@@ -20,6 +21,7 @@ interface MonitorChartsProps {
     detailRanking?: ModelSummary[]
     hasModelFilter?: boolean
     isGroup?: boolean
+    groupId?: string
     loading?: boolean
 }
 
@@ -70,7 +72,7 @@ function ChartBox({ title, children, rightSlot, className }: {
     )
 }
 
-export function MonitorCharts({ chartData, modelRanking, detailRanking = [], hasModelFilter = false, isGroup = false, loading = false }: MonitorChartsProps) {
+export function MonitorCharts({ chartData, modelRanking, detailRanking = [], hasModelFilter = false, isGroup = false, groupId, loading = false }: MonitorChartsProps) {
     const { t } = useTranslation()
     const { theme } = useTheme()
     const { data: typeMetas } = useChannelTypeMetas()
@@ -261,6 +263,27 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     }, [detailRanking])
 
     const hasDetailData = detailRanking.length > 0
+    const rankingModels = useMemo(
+        () => [...new Set(modelRanking.map((item) => item.model).filter((model): model is string => Boolean(model)))],
+        [modelRanking],
+    )
+    const rankingChannels = useMemo(() => [...new Set(detailRanking.map((item) => item.channel_id || 0).filter(Boolean))], [detailRanking])
+    const rankingTokens = useMemo(
+        () => [...new Set(detailRanking.map((item) => item.token_name).filter((tokenName): tokenName is string => Boolean(tokenName)))],
+        [detailRanking],
+    )
+    const shouldFetchRuntimeMetrics = rankingModels.length > 0 || rankingChannels.length > 0 || rankingTokens.length > 0
+    const { data: channelRuntimeMetrics } = useRuntimeMetrics()
+    const { data: groupModelMetrics } = useGroupModelMetrics(groupId, shouldFetchRuntimeMetrics && isGroup && !!groupId)
+    const { data: groupTokennameModelMetrics } = useGroupTokennameModelMetrics(groupId, shouldFetchRuntimeMetrics && isGroup && !!groupId)
+    const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`
+    const groupTokennameModelMetricMap = useMemo(() => {
+        const map: Record<string, { rpm: number; tpm: number; rps: number; tps: number }> = {}
+        for (const item of groupTokennameModelMetrics?.items || []) {
+            map[`${item.model}\0${item.token_name}`] = item
+        }
+        return map
+    }, [groupTokennameModelMetrics])
 
     // Batch fetch channel info for detail rows
     const [channelInfoMap, setChannelInfoMap] = useState<Record<number, { name: string; type: number }>>({})
@@ -523,12 +546,14 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                     <EChart
                         option={(() => {
                             const tokenSeries: { key: keyof ChartDataPoint; name: string; color: string }[] = [
-                                { key: 'textInputTokens', name: t('monitor.charts.tokensBreakdown.input'), color: '#3b82f6' },
+                                { key: 'inputTokens', name: t('monitor.charts.tokensBreakdown.totalInput'), color: '#1d4ed8' },
+                                { key: 'outputTokens', name: t('monitor.charts.tokensBreakdown.totalOutput'), color: '#059669' },
+                                { key: 'textInputTokens', name: t('monitor.charts.tokensBreakdown.textInput'), color: '#3b82f6' },
                                 { key: 'cachedTokens', name: t('monitor.charts.tokensBreakdown.cached'), color: '#6366f1' },
                                 { key: 'cacheCreationTokens', name: t('monitor.charts.tokensBreakdown.cacheCreation'), color: '#a78bfa' },
                                 { key: 'imageInputTokens', name: t('monitor.charts.tokensBreakdown.imageInput'), color: '#06b6d4' },
                                 { key: 'audioInputTokens', name: t('monitor.charts.tokensBreakdown.audioInput'), color: '#8b5cf6' },
-                                { key: 'textOutputTokens', name: t('monitor.charts.tokensBreakdown.output'), color: '#10b981' },
+                                { key: 'textOutputTokens', name: t('monitor.charts.tokensBreakdown.textOutput'), color: '#10b981' },
                                 { key: 'imageOutputTokens', name: t('monitor.charts.tokensBreakdown.imageOutput'), color: '#14b8a6' },
                             ]
                             // Filter out series that have no data at all
@@ -620,12 +645,14 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                 <EChart
                     option={(() => {
                         const costBreakdownSeries: { key: keyof ChartDataPoint; name: string; color: string }[] = [
-                            { key: 'inputAmount', name: t('monitor.charts.costBreakdownTypes.input'), color: '#3b82f6' },
+                            { key: 'totalInputAmount', name: t('monitor.charts.costBreakdownTypes.totalInput'), color: '#1d4ed8' },
+                            { key: 'totalOutputAmount', name: t('monitor.charts.costBreakdownTypes.totalOutput'), color: '#059669' },
+                            { key: 'inputAmount', name: t('monitor.charts.costBreakdownTypes.textInput'), color: '#3b82f6' },
                             { key: 'cachedAmount', name: t('monitor.charts.costBreakdownTypes.cached'), color: '#6366f1' },
                             { key: 'cacheCreationAmount', name: t('monitor.charts.costBreakdownTypes.cacheCreation'), color: '#a78bfa' },
                             { key: 'imageInputAmount', name: t('monitor.charts.costBreakdownTypes.imageInput'), color: '#06b6d4' },
                             { key: 'audioInputAmount', name: t('monitor.charts.costBreakdownTypes.audioInput'), color: '#8b5cf6' },
-                            { key: 'outputAmount', name: t('monitor.charts.costBreakdownTypes.output'), color: '#10b981' },
+                            { key: 'outputAmount', name: t('monitor.charts.costBreakdownTypes.textOutput'), color: '#10b981' },
                             { key: 'imageOutputAmount', name: t('monitor.charts.costBreakdownTypes.imageOutput'), color: '#14b8a6' },
                             { key: 'webSearchAmount', name: t('monitor.charts.costBreakdownTypes.webSearch'), color: '#0ea5e9' },
                         ]
@@ -751,6 +778,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                             <thead>
                                 <tr className="border-b bg-muted/50">
                                     <th className="text-left p-3 font-medium text-muted-foreground">{t('monitor.table.model')}</th>
+                                    <th className="text-left p-3 font-medium text-muted-foreground">{t('common.runtime')}</th>
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.totalCalls')}</th>
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.errorCalls')}</th>
                                     <th className="text-right p-3 font-medium text-muted-foreground">{t('monitor.table.cost')}</th>
@@ -787,6 +815,30 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                                         {row.model}
                                                     </div>
                                                 </td>
+                                                <td className="p-3 text-xs">
+                                                    {(() => {
+                                                        if (isGroup && groupId) {
+                                                            const metric = groupModelMetrics?.models?.[row.model]
+                                                            if (!metric) return <span className="text-muted-foreground">-</span>
+                                                            return (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    <span>RPM {metric.rpm.toLocaleString()}</span>
+                                                                    <span>TPM {metric.tpm.toLocaleString()}</span>
+                                                                </div>
+                                                            )
+                                                        }
+
+                                                        const metric = channelRuntimeMetrics?.models?.[row.model]
+                                                        if (!metric) return <span className="text-muted-foreground">-</span>
+                                                        return (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                <span>RPM {metric.rpm.toLocaleString()}</span>
+                                                                <span>TPM {metric.tpm.toLocaleString()}</span>
+                                                                <span>ERR {formatPercent(metric.error_rate)}</span>
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                </td>
                                                 <td className="p-3 text-right text-blue-600 dark:text-blue-400">{row.totalCalls.toLocaleString()}</td>
                                                 <td className="p-3 text-right text-red-600 dark:text-red-400">{row.errorCalls.toLocaleString()}</td>
                                                 <td className="p-3 text-right">${row.usedAmount.toFixed(4)}</td>
@@ -815,6 +867,30 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                                             {detail.channelId && detail.tokenName ? <span>/</span> : null}
                                                             {detail.tokenName || (!detail.channelId ? row.model : null)}
                                                         </span>
+                                                    </td>
+                                                    <td className="p-3 text-xs">
+                                                        {(() => {
+                                                            if (isGroup && groupId) {
+                                                                const metric = groupTokennameModelMetricMap[`${detail.model}\0${detail.tokenName}`]
+                                                                if (!metric) return <span className="text-muted-foreground">-</span>
+                                                                return (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        <span>RPM {metric.rpm.toLocaleString()}</span>
+                                                                        <span>TPM {metric.tpm.toLocaleString()}</span>
+                                                                    </div>
+                                                                )
+                                                            }
+
+                                                            const metric = channelRuntimeMetrics?.channel_models?.[String(detail.channelId)]?.[detail.model]
+                                                            if (!metric) return <span className="text-muted-foreground">-</span>
+                                                            return (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    <span>RPM {metric.rpm.toLocaleString()}</span>
+                                                                    <span>TPM {metric.tpm.toLocaleString()}</span>
+                                                                    <span>ERR {formatPercent(metric.error_rate)}</span>
+                                                                </div>
+                                                            )
+                                                        })()}
                                                     </td>
                                                     <td className="p-3 text-right text-xs text-blue-600 dark:text-blue-400">{detail.totalCalls.toLocaleString()}</td>
                                                     <td className="p-3 text-right text-xs text-red-600 dark:text-red-400">{detail.errorCalls.toLocaleString()}</td>

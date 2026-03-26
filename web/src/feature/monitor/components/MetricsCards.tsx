@@ -208,7 +208,7 @@ export function MetricsCards({
             <MetricCard
                 title={t('monitor.metrics.totalTokens')}
                 value={agg?.total_tokens || 0}
-                subtitle={`${t('monitor.metrics.cachedTokens')}: ${formatCompact(agg?.cached_tokens || 0)}`}
+                subtitle={`${t('monitor.metrics.totalInputTokens')}: ${formatCompact(agg?.input_tokens || 0)}`}
                 icon={<Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
                 bgColor="bg-amber-50 dark:bg-amber-950/30"
                 iconColor="bg-amber-100 dark:bg-amber-900/50"

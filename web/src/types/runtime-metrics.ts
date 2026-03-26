@@ -51,3 +51,50 @@ export interface RuntimeMetricsResponse {
     channels: Record<string, RuntimeChannelSummary>
     channel_models: Record<string, Record<string, RuntimeChannelModelMetric>>
 }
+
+export interface GroupSummaryMetricsResponse {
+    groups: Record<string, RuntimeRateMetric>
+}
+
+export interface GroupTokenMetricsResponse {
+    tokens: Record<string, RuntimeRateMetric>
+}
+
+export interface GroupModelMetricsResponse {
+    models: Record<string, RuntimeRateMetric>
+}
+
+export interface GroupTokennameModelMetricsResponseItem extends RuntimeRateMetric {
+    group: string
+    token_name: string
+    model: string
+}
+
+export interface GroupTokennameModelMetricsResponse {
+    items: GroupTokennameModelMetricsResponseItem[]
+}
+
+export interface BatchGroupTokenMetricsRequestItem {
+    group: string
+    token_name: string
+}
+
+export interface BatchGroupTokenMetricsResponseItem extends RuntimeRateMetric {
+    group: string
+    token_name: string
+}
+
+export interface BatchGroupTokenMetricsResponse {
+    items: BatchGroupTokenMetricsResponseItem[]
+}
+
+export interface RuntimeRateMetric {
+    rpm: number
+    tpm: number
+    rps: number
+    tps: number
+}
+
+export interface GroupSummaryMetricsQuery {
+    groups?: string[]
+}

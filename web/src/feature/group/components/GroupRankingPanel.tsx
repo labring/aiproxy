@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { TimezoneInput } from '@/components/common/TimezoneInput'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import {
     Table,
     TableBody,
@@ -26,6 +27,7 @@ import {
 import { DateRangePicker } from '@/components/common/DateRangePicker'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { DEFAULT_TIMEZONE, formatRangeTimestamp, zonedBoundaryToUnix } from '@/utils/timezone'
+import { useGroupSummaryMetrics } from '@/feature/monitor/runtime-hooks'
 
 const getDefaultDateRange = (): DateRange => {
     const today = new Date()
@@ -82,6 +84,16 @@ export function GroupRankingPanel({ onViewGroup }: GroupRankingPanelProps) {
     }, [dateRange, page, pageSize, timezone])
 
     const { data, isLoading, isFetching } = useGroupConsumptionRanking(query)
+    const currentPageGroupIds = useMemo(
+        () => (data?.items || []).map((item) => item.group_id).filter(Boolean),
+        [data?.items],
+    )
+    const { data: runtimeMetrics } = useGroupSummaryMetrics(
+        {
+            groups: currentPageGroupIds,
+        },
+        currentPageGroupIds.length > 0,
+    )
     const effectiveTimezone = query.timezone || DEFAULT_TIMEZONE
 
     const handleDateRangeChange = (nextRange: DateRange | undefined) => {
@@ -168,6 +180,7 @@ export function GroupRankingPanel({ onViewGroup }: GroupRankingPanelProps) {
                                         <TableHead className="w-16">#</TableHead>
                                         <TableHead>{t('group.ranking.group')}</TableHead>
                                         <TableHead>{t('group.ranking.requestCount')}</TableHead>
+                                        <TableHead>{t('common.runtime')}</TableHead>
                                         <TableHead>{t('group.ranking.totalTokens')}</TableHead>
                                         <TableHead className="text-right">{t('group.ranking.usedAmount')}</TableHead>
                                         <TableHead className="w-28 text-right">{t('group.ranking.actions')}</TableHead>
@@ -180,6 +193,7 @@ export function GroupRankingPanel({ onViewGroup }: GroupRankingPanelProps) {
                                                 <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                                                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                                                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                                                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                                                 <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-20" /></TableCell>
                                                 <TableCell className="text-right"><Skeleton className="ml-auto h-8 w-20" /></TableCell>
@@ -199,6 +213,20 @@ export function GroupRankingPanel({ onViewGroup }: GroupRankingPanelProps) {
                                                     </button>
                                                 </TableCell>
                                                 <TableCell className="font-mono">{item.request_count.toLocaleString()}</TableCell>
+                                                <TableCell>
+                                                    {runtimeMetrics?.groups?.[item.group_id] ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            <Badge variant="outline" className="text-xs">
+                                                                RPM {runtimeMetrics.groups[item.group_id].rpm.toLocaleString()}
+                                                            </Badge>
+                                                            <Badge variant="outline" className="text-xs">
+                                                                TPM {runtimeMetrics.groups[item.group_id].tpm.toLocaleString()}
+                                                            </Badge>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-muted-foreground text-sm">-</div>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="font-mono">{formatTokens(item.total_tokens)}</TableCell>
                                                 <TableCell className="text-right font-mono">{formatAmount(item.used_amount)}</TableCell>
                                                 <TableCell className="text-right">
@@ -217,7 +245,7 @@ export function GroupRankingPanel({ onViewGroup }: GroupRankingPanelProps) {
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                                            <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                                                 {t('common.noResult')}
                                             </TableCell>
                                         </TableRow>

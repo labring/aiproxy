@@ -24,6 +24,7 @@ import {
 import { PriceDisplay } from '@/components/price/PriceDisplay'
 import { toast } from 'sonner'
 import { Copy, Search } from 'lucide-react'
+import { useGroupModelMetrics } from '@/feature/monitor/runtime-hooks'
 
 interface GroupModelsTabProps {
     groupId: string
@@ -76,7 +77,7 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
         }
         return filtered
     }, [models, searchKeyword, ownerFilter])
-
+    const { data: runtimeMetrics } = useGroupModelMetrics(groupId, !!groupId && filteredModels.length > 0)
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
             toast.success(t('common.copied'))
@@ -147,6 +148,7 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                             <TableHead>{t('group.models.model')}</TableHead>
                             <TableHead>{t('model.owner')}</TableHead>
                             <TableHead>{t('group.models.type')}</TableHead>
+                            <TableHead>{t('common.runtime')}</TableHead>
                             <TableHead>{t('group.models.rpm')}</TableHead>
                             <TableHead>{t('group.models.tpm')}</TableHead>
                             <TableHead>{t('group.price.title')}</TableHead>
@@ -177,6 +179,18 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                                         {t(`modeType.${model.type}` as never)}
                                     </Badge>
                                 </TableCell>
+                                <TableCell>
+                                    {(() => {
+                                        const metric = runtimeMetrics?.models?.[model.model]
+                                        if (!metric) return <span className="text-muted-foreground text-sm">-</span>
+                                        return (
+                                            <div className="flex flex-wrap gap-1">
+                                                <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                                                <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                                            </div>
+                                        )
+                                    })()}
+                                </TableCell>
                                 <TableCell>{model.rpm || '-'}</TableCell>
                                 <TableCell>{model.tpm || '-'}</TableCell>
                                 <TableCell>
@@ -199,7 +213,7 @@ export function GroupModelsTab({ groupId }: GroupModelsTabProps) {
                         ))}
                         {filteredModels.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                                <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                                     {t('common.noResult')}
                                 </TableCell>
                             </TableRow>

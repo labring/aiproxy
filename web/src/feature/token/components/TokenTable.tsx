@@ -30,6 +30,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
 import { useRef } from 'react'
+import { useBatchGroupTokenMetrics } from '@/feature/monitor/runtime-hooks'
 
 // 遮蔽 API Key，只显示前缀和最后4位
 const maskApiKey = (key: string): string => {
@@ -137,6 +138,27 @@ export function TokenTable() {
 
     const tokens = useMemo(() => data?.tokens || [], [data?.tokens])
     const total = data?.total || 0
+    const runtimeItems = useMemo(
+        () =>
+            tokens
+                .filter((token) => token.group && token.name)
+                .map((token) => ({
+                    group: token.group,
+                    token_name: token.name,
+                })),
+        [tokens],
+    )
+    const { data: runtimeMetrics } = useBatchGroupTokenMetrics(
+        runtimeItems,
+        runtimeItems.length > 0,
+    )
+    const runtimeMetricsMap = useMemo(() => {
+        const map: Record<string, { rpm: number; tpm: number; rps: number; tps: number }> = {}
+        for (const item of runtimeMetrics?.items || []) {
+            map[`${item.group}\0${item.token_name}`] = item
+        }
+        return map
+    }, [runtimeMetrics])
 
     // 打开删除对话框
     const openDeleteDialog = (id: number) => {
@@ -240,6 +262,22 @@ export function TokenTable() {
                     </Button>
                 </div>
             ),
+        },
+        {
+            id: 'runtime',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("common.runtime")}</div>,
+            cell: ({ row }) => {
+                const metric = runtimeMetricsMap[`${row.original.group}\0${row.original.name}`]
+                if (!metric) {
+                    return <div className="text-muted-foreground text-sm">-</div>
+                }
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                    </div>
+                )
+            },
         },
         {
             accessorKey: 'quota',
@@ -431,7 +469,7 @@ export function TokenTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isStatusUpdating])
+    ], [t, isStatusUpdating, runtimeMetricsMap])
 
     // 初始化表格
     const table = useReactTable({
