@@ -113,7 +113,10 @@ func TestModelConfigLoadFromGroupModelConfigTimeoutConfig(t *testing.T) {
 	)
 
 	if base.TimeoutConfig.RequestTimeout != 45 {
-		t.Fatalf("expected request timeout to be overridden to 45, got %d", base.TimeoutConfig.RequestTimeout)
+		t.Fatalf(
+			"expected request timeout to be overridden to 45, got %d",
+			base.TimeoutConfig.RequestTimeout,
+		)
 	}
 
 	if base.TimeoutConfig.StreamRequestTimeout != 90 {

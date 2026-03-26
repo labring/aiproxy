@@ -28,7 +28,7 @@ type GroupModelConfig struct {
 	RetryTimes         int64 `json:"retry_times"`
 
 	OverrideTimeoutConfig bool          `json:"override_timeout_config"`
-	TimeoutConfig         TimeoutConfig `gorm:"embedded" json:"timeout_config,omitempty"`
+	TimeoutConfig         TimeoutConfig `json:"timeout_config,omitempty" gorm:"embedded"`
 
 	OverrideForceSaveDetail bool `json:"override_force_save_detail"`
 	ForceSaveDetail         bool `json:"force_save_detail"`
