@@ -62,7 +62,7 @@ export function ConsumptionRankingPanel({
     onViewModel,
 }: ConsumptionRankingPanelProps) {
     const { t } = useTranslation()
-    const [rankingType, setRankingType] = useState<ConsumptionRankingType>('group')
+    const [rankingType, setRankingType] = useState<ConsumptionRankingType>('channel')
     const [dateRange, setDateRange] = useState<DateRange | undefined>(getDefaultDateRange())
     const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
     const [page, setPage] = useState(1)
@@ -125,7 +125,7 @@ export function ConsumptionRankingPanel({
     }
 
     const handleReset = () => {
-        setRankingType('group')
+        setRankingType('channel')
         setDateRange(getDefaultDateRange())
         setTimezone(DEFAULT_TIMEZONE)
         setPage(1)

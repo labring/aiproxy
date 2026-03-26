@@ -79,6 +79,7 @@ You can use either `type_name` (human-readable string) or `type` (numeric code).
 - `groq`: Groq
 - `mistral`: Mistral AI
 - `cohere`: Cohere
+- `fake`: Local fake adaptor for protocol simulation and integration testing
 - `openrouter`: OpenRouter
 - And many more... (see `core/model/yaml_integration.go` for the complete list)
 
@@ -87,7 +88,86 @@ You can use either `type_name` (human-readable string) or `type` (numeric code).
 - `3`: Azure
 - `14`: Anthropic/Claude
 - `24`: Google Gemini
+- `53`: Fake adaptor
 - See `core/model/chtype.go` for complete list
+
+### Fake Adaptor Example
+
+The `fake` channel type is intended for local protocol verification, end-to-end integration tests, demos, and front-end development without calling any upstream provider. It synthesizes responses for:
+
+- OpenAI `chat/completions`
+- OpenAI `completions`
+- OpenAI `responses` and related sub-APIs
+- Anthropic native `/messages`
+- Gemini native `/models/*:generateContent`
+- `embeddings`
+- `images/generations`
+- `rerank`
+
+Example YAML:
+
+```yaml
+channels:
+  - name: "fake-debug"
+    type_name: "fake"
+    key: "fake-key"
+    models:
+      - "fake-chat"
+      - "fake-response"
+      - "fake-gemini"
+      - "fake-anthropic"
+      - "fake-embedding"
+      - "fake-image"
+      - "fake-rerank"
+    configs:
+      static_text: "Fake adaptor says hello."
+      response_prefix: "[debug] "
+      response_suffix: " <eom>"
+      reasoning_text: "Synthesized locally."
+      stream_chunks: 4
+      usage:
+        input_tokens: 32
+        output_tokens: 16
+        cached_tokens: 4
+        reasoning_tokens: 3
+      embedding:
+        dimensions: 12
+      image:
+        url: "https://fake.local/assets/fake-image.png"
+        b64_json: "ZmFrZS1pbWFnZQ=="
+      rerank:
+        base_score: 0.98
+        step: 0.07
+      response:
+        store: true
+        status: "completed"
+      anthropic:
+        stop_reason: "end_turn"
+      gemini:
+        finish_reason: "STOP"
+      metadata:
+        environment: "local"
+      openapi:
+        spec_version: "3.1.0"
+        info:
+          title: "Fake Adaptor Template"
+          version: "1.0.0"
+```
+
+#### Fake Adaptor Config Keys
+
+- `static_text`: Main synthesized output text for chat/completion/responses/anthropic/gemini.
+- `response_prefix` / `response_suffix`: Wrap synthesized text.
+- `reasoning_text`: Summary inserted into Responses API reasoning output.
+- `delay_ms`: Artificial latency in milliseconds.
+- `stream_chunks` / `stream_chunk_size`: Control streaming segmentation.
+- `usage.*`: Override input, output, cached, reasoning, and image token counts.
+- `embedding.dimensions`: Output vector dimensions.
+- `image.url` / `image.b64_json`: Fake image payload.
+- `rerank.base_score` / `rerank.step`: Fake rerank score template.
+- `response.store`: Whether fake Responses API objects should be pinned into the internal store for subsequent `GET /responses/{id}` style calls.
+- `metadata`: Arbitrary metadata copied into fake Responses API objects.
+- `openapi.*`: OpenAPI-style templating section for documenting or versioning fake channel config payloads.
 
 ### 2. Model Configurations
 

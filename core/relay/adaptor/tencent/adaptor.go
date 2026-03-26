@@ -4,12 +4,17 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 )
 
 // https://cloud.tencent.com/document/api/1729/101837
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeTencent, &Adaptor{})
 }
 
 const baseURL = "https://api.hunyuan.cloud.tencent.com/v1"

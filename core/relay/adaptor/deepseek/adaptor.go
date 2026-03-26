@@ -1,8 +1,10 @@
 package deepseek
 
 import (
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
@@ -10,6 +12,10 @@ var _ adaptor.Adaptor = (*Adaptor)(nil)
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeDeepseek, &Adaptor{})
 }
 
 const baseURL = "https://api.deepseek.com/v1"

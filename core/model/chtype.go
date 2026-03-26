@@ -52,6 +52,7 @@ const (
 	ChannelTypeSangforAICP             ChannelType = 50
 	ChannelTypeStreamlake              ChannelType = 51
 	ChannelTypeZhipuCoding             ChannelType = 52
+	ChannelTypeFake                    ChannelType = 53
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -95,13 +96,5 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeSangforAICP:             "Sangfor AICP",
 	ChannelTypeStreamlake:              "Streamlake",
 	ChannelTypeZhipuCoding:             "zhipu coding",
-}
-
-func AllChannelTypes() []ChannelType {
-	types := make([]ChannelType, 0, len(channelTypeNames))
-	for t := range channelTypeNames {
-		types = append(types, t)
-	}
-
-	return types
+	ChannelTypeFake:                    "fake",
 }
