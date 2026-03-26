@@ -33,16 +33,16 @@ export default function FeishuCallbackPage() {
             return
         }
 
-        // Case 1: Backend redirected here with token_key directly (browser OAuth flow)
-        const tokenKey = searchParams.get("token_key")
-        if (tokenKey) {
+        // Browser OAuth flow: backend redirected with auth token in URL params
+        const authToken = searchParams.get("session_token") || searchParams.get("token_key")
+        if (authToken) {
             const user = {
                 name: searchParams.get("name") || "",
                 avatar: searchParams.get("avatar") || "",
                 openId: searchParams.get("open_id") || "",
                 role: (searchParams.get("role") || "viewer") as 'viewer' | 'analyst' | 'admin',
             }
-            loginWithFeishu(tokenKey, user)
+            loginWithFeishu(authToken, user)
             navigate(ROUTES.ENTERPRISE, { replace: true })
             return
         }
@@ -58,7 +58,9 @@ export default function FeishuCallbackPage() {
             try {
                 const resp = await enterpriseApi.feishuCallback(code)
                 const user = enterpriseApi.toEnterpriseUser(resp)
-                loginWithFeishu(resp.token_key, user)
+                // Prefer JWT session_token; fall back to legacy token_key
+                const authToken = resp.session_token || resp.token_key
+                loginWithFeishu(authToken, user)
                 navigate(ROUTES.ENTERPRISE, { replace: true })
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err)

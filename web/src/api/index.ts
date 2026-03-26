@@ -51,10 +51,13 @@ const apiClient = axios.create({
 // 请求拦截器
 apiClient.interceptors.request.use(
     (config) => {
-        const token = useAuthStore.getState().token
+        const { sessionToken, token } = useAuthStore.getState()
+        const authToken = sessionToken || token
 
-        if (token && config.headers) {
-            config.headers.Authorization = `${token}`
+        if (authToken && config.headers) {
+            config.headers.Authorization = authToken.includes('.')
+                ? `Bearer ${authToken}`
+                : `${authToken}`
         }
 
         return config
@@ -67,6 +70,11 @@ apiClient.interceptors.request.use(
 // 响应拦截器 - 统一处理错误和响应格式
 apiClient.interceptors.response.use(
     (response) => {
+        const newToken = response.headers['x-new-token']
+        if (newToken) {
+            useAuthStore.getState().refreshSessionToken(newToken)
+        }
+
         // Skip JSON parsing for blob responses (e.g., file downloads)
         if (response.config.responseType === 'blob') {
             return response
@@ -89,7 +97,7 @@ apiClient.interceptors.response.use(
         const status = error.response?.status
         const errorData = error.response?.data
 
-        // Handle 401 unauthorized error
+        // Handle 401 unauthorized error (session expired or invalid)
         if (status === 401) {
             useAuthStore.getState().logout()
             window.location.href = '/login'

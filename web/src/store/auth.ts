@@ -10,19 +10,22 @@ export interface EnterpriseUser {
 
 export interface AuthState {
     token: string | null
+    sessionToken: string | null  // JWT session token (independent of API keys)
     isAuthenticated: boolean
     isAuthenticating: boolean
     enterpriseUser: EnterpriseUser | null
     login: (token: string) => void
-    loginWithFeishu: (token: string, user: EnterpriseUser) => void
+    loginWithFeishu: (sessionToken: string, user: EnterpriseUser) => void
     logout: () => void
     setToken: (token: string) => void
+    refreshSessionToken: (newToken: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
     persist(
         (set) => ({
             token: null,
+            sessionToken: null,
             isAuthenticated: false,
             isAuthenticating: false,
             enterpriseUser: null,
@@ -35,9 +38,10 @@ export const useAuthStore = create<AuthState>()(
                 })
             },
 
-            loginWithFeishu: (token: string, user: EnterpriseUser) => {
+            loginWithFeishu: (sessionToken: string, user: EnterpriseUser) => {
                 set({
-                    token,
+                    sessionToken,
+                    token: sessionToken, // backward compat: keep token in sync
                     isAuthenticated: true,
                     enterpriseUser: user,
                 })
@@ -46,6 +50,7 @@ export const useAuthStore = create<AuthState>()(
             logout: () => {
                 set({
                     token: null,
+                    sessionToken: null,
                     isAuthenticated: false,
                     enterpriseUser: null,
                 })
@@ -56,11 +61,19 @@ export const useAuthStore = create<AuthState>()(
                     token,
                 })
             },
+
+            refreshSessionToken: (newToken: string) => {
+                set({
+                    sessionToken: newToken,
+                    token: newToken,
+                })
+            },
         }),
         {
             name: 'auth-storage',
             partialize: (state) => ({
                 token: state.token,
+                sessionToken: state.sessionToken,
                 isAuthenticated: state.isAuthenticated,
                 enterpriseUser: state.enterpriseUser,
             }),
@@ -68,4 +81,4 @@ export const useAuthStore = create<AuthState>()(
     )
 )
 
-export default useAuthStore 
+export default useAuthStore

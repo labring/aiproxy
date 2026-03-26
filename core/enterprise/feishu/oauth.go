@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	enterprisemodels "github.com/labring/aiproxy/core/enterprise/models"
+	"github.com/labring/aiproxy/core/enterprise/session"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -200,7 +201,8 @@ func HandleCallback(c *gin.Context) {
 		return
 	}
 
-	// Find or create Token for the user
+	// Ensure an API key exists for the user (for AI API calls, NOT for web session).
+	// Only creates a new key if no key exists yet for this group+name combo.
 	tokenName := userInfo.Name
 	if tokenName == "" {
 		tokenName = userInfo.OpenID
@@ -229,6 +231,19 @@ func HandleCallback(c *gin.Context) {
 		model.DB.Model(&feishuUser).Update("token_id", token.ID)
 	}
 
+	role := feishuUser.Role
+	if role == "" {
+		role = enterprisemodels.RoleViewer
+	}
+
+	sessionJWT, err := session.GenerateJWT(userInfo.OpenID, role, groupID)
+	if err != nil {
+		log.Errorf("feishu generate JWT failed: %v", err)
+		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to generate session token")
+
+		return
+	}
+
 	// If the request comes from the frontend API call (has explicit
 	// "application/json" in Accept header, not just wildcard */*),
 	// return JSON. Otherwise redirect to the frontend callback page.
@@ -236,7 +251,8 @@ func HandleCallback(c *gin.Context) {
 	if c.GetHeader("X-Requested-With") != "" ||
 		strings.Contains(accept, "application/json") {
 		middleware.SuccessResponse(c, gin.H{
-			"token_key": token.Key,
+			"session_token": sessionJWT,
+			"token_key":     token.Key, // kept for backward compatibility
 			"user": gin.H{
 				"open_id": userInfo.OpenID,
 				"name":    userInfo.Name,
@@ -252,7 +268,7 @@ func HandleCallback(c *gin.Context) {
 	// Browser redirect: pass auth data to frontend via URL params
 	frontendURL := GetFrontendURL()
 	params := url.Values{}
-	params.Set("token_key", token.Key)
+	params.Set("session_token", sessionJWT)
 	params.Set("open_id", userInfo.OpenID)
 	params.Set("name", userInfo.Name)
 	params.Set("avatar", userInfo.Avatar)

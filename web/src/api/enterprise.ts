@@ -141,7 +141,8 @@ export interface UserQuotaPolicy {
 
 // Enterprise API response types
 export interface FeishuCallbackResponse {
-    token_key: string
+    session_token?: string   // JWT session token (new, preferred)
+    token_key: string        // Legacy API key token (backward compat)
     user: {
         open_id: string
         name: string

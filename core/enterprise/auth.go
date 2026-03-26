@@ -12,6 +12,7 @@ import (
 
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/enterprise/models"
+	"github.com/labring/aiproxy/core/enterprise/session"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 )
@@ -22,9 +23,10 @@ const (
 	CtxEnterpriseUser = "enterprise_user"
 )
 
-// EnterpriseAdminAuth is like AdminAuth but also accepts admin-role Feishu user tokens.
-// Used in enterprise builds to allow Feishu admin users to access the admin panel.
-func EnterpriseAdminAuth(c *gin.Context) {
+// extractToken reads the auth token from the request header or query param
+// and returns (rawToken, plainToken). rawToken has "Bearer " stripped;
+// plainToken additionally has "sk-" stripped (for AdminKey / legacy key comparison).
+func extractToken(c *gin.Context) (rawToken, plainToken string, ok bool) {
 	accessToken := c.Request.Header.Get("Authorization")
 	if accessToken == "" {
 		accessToken = c.Query("key")
@@ -34,14 +36,113 @@ func EnterpriseAdminAuth(c *gin.Context) {
 		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: no access token provided")
 		c.Abort()
 
+		return "", "", false
+	}
+
+	rawToken = strings.TrimPrefix(accessToken, "Bearer ")
+	plainToken = strings.TrimPrefix(rawToken, "sk-")
+
+	return rawToken, plainToken, true
+}
+
+// authenticateJWT parses a JWT, verifies the user exists and is active,
+// and returns the user + claims. Returns nil user on any failure (already
+// writes the HTTP error response).
+func authenticateJWT(c *gin.Context, rawToken string) (*models.FeishuUser, *session.Claims) {
+	claims, err := session.ParseJWT(rawToken)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: invalid session token")
+		c.Abort()
+
+		return nil, nil
+	}
+
+	var feishuUser models.FeishuUser
+	if err := model.DB.Where("open_id = ?", claims.Subject).First(&feishuUser).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: user no longer exists")
+		c.Abort()
+
+		return nil, nil
+	}
+
+	if feishuUser.Status != 1 {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: enterprise user is disabled")
+		c.Abort()
+
+		return nil, nil
+	}
+
+	return &feishuUser, claims
+}
+
+// authenticateLegacyToken validates an API key token and looks up the associated
+// FeishuUser. Returns nil on any failure (already writes the HTTP error response).
+func authenticateLegacyToken(c *gin.Context, plainToken string) *models.FeishuUser {
+	tokenCache, err := model.GetAndValidateToken(plainToken)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		c.Abort()
+
+		return nil
+	}
+
+	var feishuUser models.FeishuUser
+	if err := model.DB.Where("token_id = ?", tokenCache.ID).First(&feishuUser).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		c.Abort()
+
+		return nil
+	}
+
+	if feishuUser.Status != 1 {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: enterprise user is disabled")
+		c.Abort()
+
+		return nil
+	}
+
+	return &feishuUser
+}
+
+// effectiveRole returns the user's role, defaulting to viewer if empty.
+func effectiveRole(user *models.FeishuUser) string {
+	if user.Role == "" {
+		return models.RoleViewer
+	}
+
+	return user.Role
+}
+
+// maybeRefreshJWT issues a new JWT via response header if the current one is close to expiry.
+func maybeRefreshJWT(c *gin.Context, claims *session.Claims) {
+	if !session.ShouldRefresh(claims) {
 		return
 	}
 
-	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-	accessToken = strings.TrimPrefix(accessToken, "sk-")
+	newToken, err := session.GenerateJWT(claims.Subject, claims.Role, claims.GroupID)
+	if err != nil {
+		log.Warnf("failed to refresh JWT for %s: %v", claims.Subject, err)
+		return
+	}
 
-	// Path 1: AdminKey → full access (identical to AdminAuth)
-	if config.AdminKey != "" && accessToken == config.AdminKey {
+	c.Header("X-New-Token", newToken)
+}
+
+// isJWT returns true if the token string looks like a JWT (three dot-separated parts).
+func isJWT(token string) bool {
+	return strings.Count(token, ".") == 2
+}
+
+// EnterpriseAdminAuth authenticates admin-panel requests.
+// Accepts: AdminKey, JWT (admin role only), or legacy API key (admin role only).
+func EnterpriseAdminAuth(c *gin.Context) {
+	rawToken, plainToken, ok := extractToken(c)
+	if !ok {
+		return
+	}
+
+	// Path 1: AdminKey
+	if config.AdminKey != "" && plainToken == config.AdminKey {
 		c.Set(middleware.Token, &model.TokenCache{Key: config.AdminKey})
 		c.Set(CtxEnterpriseRole, models.RoleAdmin)
 		c.Next()
@@ -49,106 +150,87 @@ func EnterpriseAdminAuth(c *gin.Context) {
 		return
 	}
 
-	// Path 2: Feishu admin-role token → also grant admin panel access
-	tokenCache, err := model.GetAndValidateToken(accessToken)
-	if err != nil {
-		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: "+err.Error())
-		c.Abort()
+	// Path 2: JWT session token
+	if isJWT(rawToken) {
+		user, claims := authenticateJWT(c, rawToken)
+		if user == nil {
+			return
+		}
+
+		if user.Role != models.RoleAdmin {
+			middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: admin role required for admin panel")
+			c.Abort()
+
+			return
+		}
+
+		c.Set(middleware.Token, &model.TokenCache{Key: config.AdminKey})
+		c.Set(CtxEnterpriseRole, models.RoleAdmin)
+		c.Set(CtxEnterpriseUser, user)
+		maybeRefreshJWT(c, claims)
+		c.Next()
 
 		return
 	}
 
-	var feishuUser models.FeishuUser
-
-	if err := model.DB.Where("token_id = ?", tokenCache.ID).First(&feishuUser).Error; err != nil {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
-		c.Abort()
-
+	// Path 3 (legacy): API key token
+	user := authenticateLegacyToken(c, plainToken)
+	if user == nil {
 		return
 	}
 
-	if feishuUser.Status != 1 {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: enterprise user is disabled")
-		c.Abort()
-
-		return
-	}
-
-	if feishuUser.Role != models.RoleAdmin {
+	if user.Role != models.RoleAdmin {
 		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: admin role required for admin panel")
 		c.Abort()
 
 		return
 	}
 
-	c.Set(middleware.Token, &model.TokenCache{Key: tokenCache.Key})
+	c.Set(middleware.Token, &model.TokenCache{Key: config.AdminKey})
 	c.Set(CtxEnterpriseRole, models.RoleAdmin)
-	c.Set(CtxEnterpriseUser, &feishuUser)
+	c.Set(CtxEnterpriseUser, user)
 	c.Next()
 }
 
-// EnterpriseAuth is a middleware that authenticates requests using either
-// the admin key or a Feishu user token. It sets enterprise_role and
-// enterprise_user (for Feishu users) in the gin context.
-//
-// This middleware lives in the enterprise module (build-tagged) so it
-// does not affect the core module's independence.
+// EnterpriseAuth authenticates enterprise dashboard requests.
+// Accepts: AdminKey (full access), JWT, or legacy API key token.
 func EnterpriseAuth(c *gin.Context) {
-	accessToken := c.Request.Header.Get("Authorization")
-	if accessToken == "" {
-		accessToken = c.Query("key")
-	}
-
-	if accessToken == "" {
-		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: no access token provided")
-		c.Abort()
-
+	rawToken, plainToken, ok := extractToken(c)
+	if !ok {
 		return
 	}
 
-	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-	accessToken = strings.TrimPrefix(accessToken, "sk-")
-
-	// Path 1: AdminKey → full access
-	if config.AdminKey != "" && accessToken == config.AdminKey {
+	// Path 1: AdminKey
+	if config.AdminKey != "" && plainToken == config.AdminKey {
 		c.Set(CtxEnterpriseRole, models.RoleAdmin)
 		c.Next()
 
 		return
 	}
 
-	// Path 2: Regular token → look up FeishuUser
-	tokenCache, err := model.GetAndValidateToken(accessToken)
-	if err != nil {
-		middleware.ErrorResponse(c, http.StatusUnauthorized, "unauthorized: "+err.Error())
-		c.Abort()
+	// Path 2: JWT session token
+	if isJWT(rawToken) {
+		user, claims := authenticateJWT(c, rawToken)
+		if user == nil {
+			return
+		}
+
+		c.Set(CtxEnterpriseRole, effectiveRole(user))
+		c.Set(CtxEnterpriseUser, user)
+		maybeRefreshJWT(c, claims)
+		c.Next()
 
 		return
 	}
 
-	var feishuUser models.FeishuUser
-
-	if err := model.DB.Where("token_id = ?", tokenCache.ID).First(&feishuUser).Error; err != nil {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
-		c.Abort()
-
+	// Path 3 (legacy): API key token
+	user := authenticateLegacyToken(c, plainToken)
+	if user == nil {
 		return
 	}
 
-	if feishuUser.Status != 1 {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: enterprise user is disabled")
-		c.Abort()
-
-		return
-	}
-
-	role := feishuUser.Role
-	if role == "" {
-		role = models.RoleViewer
-	}
-
-	c.Set(CtxEnterpriseRole, role)
-	c.Set(CtxEnterpriseUser, &feishuUser)
+	c.Set(CtxEnterpriseRole, effectiveRole(user))
+	c.Set(CtxEnterpriseUser, user)
 	c.Next()
 }
 
