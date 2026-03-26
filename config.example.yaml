@@ -58,6 +58,76 @@ channels:
       - "gemini-pro"
     status: 1
 
+  - name: "fake-channel-1"
+    type_name: "fake"
+    key: "fake-key"
+    base_url: "https://fake.local/v1"
+    models:
+      - "fake-chat"
+      - "fake-completion"
+      - "fake-response"
+      - "fake-anthropic"
+      - "fake-gemini"
+      - "fake-embedding"
+      - "fake-image"
+      - "fake-rerank"
+    status: 1
+    priority: 100
+    sets:
+      - "default"
+      - "debug"
+    configs:
+      static_text: "Fake adaptor says hello."
+      response_prefix: "[debug] "
+      response_suffix: " <eom>"
+      reasoning_text: "This result is synthesized locally for testing."
+      delay_ms: 0
+      stream_chunks: 4
+      stream_chunk_size: 8
+      usage:
+        input_tokens: 32
+        output_tokens: 16
+        cached_tokens: 4
+        reasoning_tokens: 3
+        image_input_tokens: 12
+        image_output_tokens: 64
+      embedding:
+        dimensions: 12
+        base: "fake-embedding-seed"
+      image:
+        url: "https://fake.local/assets/fake-image.png"
+        b64_json: "ZmFrZS1pbWFnZQ=="
+        revised_prompt: "fake revised prompt"
+        image_tokens_in: 12
+        image_tokens_out: 64
+      rerank:
+        base_score: 0.98
+        step: 0.07
+        return_documents: true
+      response:
+        store: true
+        status: "completed"
+        parallel_tool_calls: true
+      anthropic:
+        stop_reason: "end_turn"
+        type: "message"
+      gemini:
+        finish_reason: "STOP"
+        model_version: "fake-1.0"
+      metadata:
+        environment: "local"
+        owner: "qa"
+      openapi:
+        spec_version: "3.1.0"
+        info:
+          title: "Fake Adaptor Template"
+          version: "1.0.0"
+          description: "OpenAPI-style config payload for the fake adaptor"
+        components:
+          examples:
+            chat:
+              summary: "Fake chat response"
+
 # Model Configurations
 modelconfigs:
   - model: "gpt-4"

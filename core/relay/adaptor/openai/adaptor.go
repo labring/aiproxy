@@ -7,7 +7,9 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,6 +19,10 @@ import (
 var _ adaptor.Adaptor = (*Adaptor)(nil)
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeOpenAI, &Adaptor{})
+}
 
 const baseURL = "https://api.openai.com/v1"
 

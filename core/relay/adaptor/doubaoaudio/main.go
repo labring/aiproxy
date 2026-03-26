@@ -6,7 +6,9 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -31,6 +33,10 @@ func GetRequestURL(meta *meta.Meta) (adaptor.RequestURL, error) {
 }
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeDoubaoAudio, &Adaptor{})
+}
 
 const baseURL = "https://openspeech.bytedance.com"
 

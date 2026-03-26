@@ -9,13 +9,19 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeCohere, &Adaptor{})
+}
 
 const baseURL = "https://api.cohere.ai"
 
