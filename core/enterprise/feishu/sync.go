@@ -22,11 +22,13 @@ import (
 
 // syncStats tracks sync statistics for logging
 type syncStats struct {
-	totalDepts     int
-	deptsWithName  int
-	totalUsers     int
-	usersWithName  int
-	usersWithEmail int
+	totalDepts      int
+	deptsWithName   int
+	totalUsers      int
+	usersWithName   int
+	usersWithEmail  int
+	departedUsers   int // users in DB but no longer in Feishu (deactivated during sync)
+	syncedOpenIDs   map[string]struct{} // all open_ids seen from Feishu API during this sync
 }
 
 // SyncStatus holds the result of the last Feishu sync operation.
@@ -38,6 +40,7 @@ type SyncStatus struct {
 	TotalUsers     int       `json:"total_users"`
 	UsersWithName  int       `json:"users_with_name"`
 	UsersWithEmail int       `json:"users_with_email"`
+	DepartedUsers  int       `json:"departed_users"`
 	Error          string    `json:"error,omitempty"`
 }
 
@@ -258,24 +261,38 @@ func handleUserDeletedEvent(data json.RawMessage) {
 		return
 	}
 
-	// Soft-delete the feishu user and disable the token
+	deactivateFeishuUser(model.DB, evt.Object.OpenID, "webhook")
+}
+
+// deactivateFeishuUser disables all tokens in the user's group and soft-deletes the feishu_user record.
+// This is the single offboarding path used by both webhook events and full-sync departed detection.
+// The `source` parameter is for logging only ("webhook" or "sync").
+func deactivateFeishuUser(db *gorm.DB, openID, source string) {
 	var feishuUser models.FeishuUser
 
-	err := model.DB.Where("open_id = ?", evt.Object.OpenID).First(&feishuUser).Error
+	err := db.Where("open_id = ?", openID).First(&feishuUser).Error
 	if err != nil {
-		log.Errorf("feishu webhook: user %s not found for deletion: %v", evt.Object.OpenID, err)
+		log.Errorf("feishu %s: user %s not found for deactivation: %v", source, openID, err)
 		return
 	}
 
-	// Disable the associated token
-	if feishuUser.TokenID > 0 {
-		if err := model.UpdateTokenStatus(feishuUser.TokenID, model.TokenStatusDisabled); err != nil {
-			log.Errorf("feishu webhook: failed to disable token %d: %v", feishuUser.TokenID, err)
+	// Disable ALL tokens in the user's group (not just the auto-created one).
+	// This revokes all API access, including keys the user created manually.
+	if feishuUser.GroupID != "" {
+		disabled, err := model.DisableAllGroupTokens(feishuUser.GroupID)
+		if err != nil {
+			log.Errorf("feishu %s: failed to disable tokens for group %s: %v", source, feishuUser.GroupID, err)
+		} else if disabled > 0 {
+			log.Infof("feishu %s: disabled %d token(s) for departed user %s (%s)",
+				source, disabled, feishuUser.Name, openID)
 		}
 	}
 
-	// Soft-delete the feishu user
-	model.DB.Delete(&feishuUser)
+	// Soft-delete the feishu user (sets deleted_at, JWT auth will fail on user lookup)
+	db.Delete(&feishuUser)
+
+	log.Infof("feishu %s: deactivated user %s (%s), group=%s",
+		source, feishuUser.Name, openID, feishuUser.GroupID)
 }
 
 func handleDeptEvent(data json.RawMessage) {
@@ -335,7 +352,9 @@ func handleDeptDeletedEvent(data json.RawMessage) {
 // SyncAll performs a full synchronization of all departments and users from Feishu.
 func SyncAll(db *gorm.DB) error {
 	ctx := context.Background()
-	stats := &syncStats{}
+	stats := &syncStats{
+		syncedOpenIDs: make(map[string]struct{}),
+	}
 
 	setSyncStatus(SyncStatus{
 		LastSyncAt: time.Now(),
@@ -408,6 +427,13 @@ func SyncAll(db *gorm.DB) error {
 			"contact:department.base:readonly")
 	}
 
+	// Detect departed users: active in DB but no longer returned by Feishu API.
+	// Safety guard: only run if we synced a reasonable number of users (>0) to avoid
+	// mass-deactivation due to API errors returning empty lists.
+	if len(stats.syncedOpenIDs) > 0 {
+		deactivateDepartedUsers(db, stats)
+	}
+
 	log.Info("feishu sync: full organization sync completed")
 
 	setSyncStatus(SyncStatus{
@@ -418,9 +444,58 @@ func SyncAll(db *gorm.DB) error {
 		TotalUsers:     stats.totalUsers,
 		UsersWithName:  stats.usersWithName,
 		UsersWithEmail: stats.usersWithEmail,
+		DepartedUsers:  stats.departedUsers,
 	})
 
 	return nil
+}
+
+// deactivateDepartedUsers compares all active feishu_users in DB against the open_ids
+// returned by the Feishu API during this sync. Users present in DB but absent from
+// Feishu are considered departed (resigned/removed) and are deactivated.
+//
+// Safety: this only runs when syncedOpenIDs is non-empty. If the Feishu API returned
+// zero users (e.g., due to permission revocation), this function is skipped entirely
+// to avoid mass-deactivation.
+func deactivateDepartedUsers(db *gorm.DB, stats *syncStats) {
+	// Load all active (non-soft-deleted) feishu_users from DB
+	var dbUsers []models.FeishuUser
+	if err := db.Select("open_id", "name").Find(&dbUsers).Error; err != nil {
+		log.Errorf("feishu sync: failed to load DB users for departed check: %v", err)
+		return
+	}
+
+	// Find users in DB but not in Feishu API response
+	var departedOpenIDs []string
+	for _, u := range dbUsers {
+		if _, exists := stats.syncedOpenIDs[u.OpenID]; !exists {
+			departedOpenIDs = append(departedOpenIDs, u.OpenID)
+		}
+	}
+
+	if len(departedOpenIDs) == 0 {
+		return
+	}
+
+	// Safety: if more than 50% of users would be deactivated, something is likely wrong
+	// with the Feishu API response. Log a warning and skip to prevent mass-deactivation.
+	ratio := float64(len(departedOpenIDs)) / float64(len(dbUsers))
+	if ratio > 0.5 && len(departedOpenIDs) > 5 {
+		log.Warnf("feishu sync: skipping departed user deactivation — %d/%d (%.0f%%) users would be deactivated, "+
+			"likely an API issue. Feishu returned %d users, DB has %d.",
+			len(departedOpenIDs), len(dbUsers), ratio*100,
+			len(stats.syncedOpenIDs), len(dbUsers))
+		return
+	}
+
+	log.Infof("feishu sync: detected %d departed user(s), deactivating...", len(departedOpenIDs))
+
+	for _, openID := range departedOpenIDs {
+		deactivateFeishuUser(db, openID, "sync")
+		stats.departedUsers++
+	}
+
+	log.Infof("feishu sync: deactivated %d departed user(s)", stats.departedUsers)
 }
 
 // syncDepartmentsRecursive fetches departments from Feishu API recursively and
@@ -513,6 +588,9 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 		if u.OpenID == "" {
 			continue
 		}
+
+		// Track all open_ids seen from Feishu API for departed user detection
+		stats.syncedOpenIDs[u.OpenID] = struct{}{}
 
 		stats.totalUsers++
 

@@ -861,6 +861,8 @@ pnpm install && pnpm run build
 
 # ============================================================
 # 第 3 步：嵌入前端 + 编译后端（服务不中断，~30 秒）
+# [P0 易错点#21] npm 输出到 web/dist/，但 go:embed 读取
+# core/public/dist/，必须同步！否则 Go 二进制嵌入旧前端。
 # ============================================================
 cd /data/aiproxy
 rsync -a --delete web/dist/ core/public/dist/
@@ -880,9 +882,11 @@ curl -s http://127.0.0.1:3000/api/status
 sudo journalctl -u aiproxy -n 20 --no-pager
 ```
 
-#### 仅后端更新（快速部署，无前端变更时使用）
+#### 仅后端更新（快速部署，确认无前端变更时使用）
 
-当变更仅涉及后端 Go 代码（无前端改动）时，可跳过前端编译，显著缩短部署时间：
+> ⚠️ **判断是否有前端变更：** `git diff HEAD~1 --stat | grep "web/src/"` — 如果有输出，说明包含前端改动，**必须走标准更新流程**，不能用此快捷方式。忽略此步是常见事故原因（易错点 #21）。
+
+当变更**仅**涉及后端 Go 代码时，可跳过前端编译：
 
 ```bash
 # 1. 拉取代码
@@ -895,7 +899,7 @@ sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/g
   go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
 
 # 3. 停止服务 → 复制二进制 → 启动服务
-#    [易错点] go build 输出到 /data/aiproxy/core/aiproxy，
+#    [易错点#19] go build 输出到 /data/aiproxy/core/aiproxy，
 #    但 systemd ExecStart 指向 /data/aiproxy/aiproxy，
 #    必须先停服务再复制，否则 "Text file busy" 错误。
 sudo systemctl stop aiproxy
@@ -994,7 +998,24 @@ sudo git status
 sudo git log --oneline -5
 ```
 
-### 11.4 后端编译
+### 11.4 前端编译（有前端改动时）
+
+> **[P0 易错点#21]** 前端编译输出到 `web/dist/`，但 Go 的 `go:embed` 读取的是 `core/public/dist/`。**编译前端后必须同步到 embed 目录**，否则 Go 二进制嵌入的仍是旧版前端，新功能在浏览器中不可用且无任何报错。
+
+```bash
+# 1. 编译前端
+cd /data/aiproxy/web
+sudo npm run build
+
+# 2. [关键] 同步到 go:embed 目录
+sudo rsync -a --delete /data/aiproxy/web/dist/ /data/aiproxy/core/public/dist/
+
+# 3. 验证同步（两边 hash 应一致）
+ls /data/aiproxy/web/dist/assets/ | grep "index-"
+ls /data/aiproxy/core/public/dist/assets/ | grep "index-"
+```
+
+### 11.5 后端编译
 
 > **[易错点]** Go 安装在 `/usr/local/go/bin`，ppuser 的环境变量可能不包含此路径，必须通过 `sudo env` 显式传递。
 
@@ -1009,7 +1030,7 @@ sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/g
 ls -la /data/aiproxy/core/aiproxy
 ```
 
-### 11.5 部署（替换二进制并重启）
+### 11.6 部署（替换二进制并重启）
 
 > **[P0 易错点]** `go build` 输出到 `/data/aiproxy/core/aiproxy`，但 systemd `ExecStart` 指向 `/data/aiproxy/aiproxy`。如果只重启服务而不复制二进制，会继续运行旧版本！
 
@@ -1037,7 +1058,7 @@ sudo journalctl -u aiproxy -n 20 --no-pager
 > # 两者应相同，且为刚才的编译时间
 > ```
 
-### 11.6 数据库操作
+### 11.7 数据库操作
 
 ```bash
 # 进入 PostgreSQL 交互式 Shell
@@ -1064,7 +1085,7 @@ sudo docker exec -it aiproxy-redis redis-cli
 # sudo docker exec -it aiproxy-redis redis-cli -a <Redis密码>
 ```
 
-### 11.7 日志排查
+### 11.8 日志排查
 
 ```bash
 # 实时查看 AI Proxy 日志
@@ -1085,7 +1106,7 @@ sudo docker logs -f aiproxy-postgres
 sudo docker logs -f aiproxy-redis
 ```
 
-### 11.8 服务管理
+### 11.9 服务管理
 
 ```bash
 # 启动/停止/重启
@@ -1105,15 +1126,41 @@ sudo docker compose -f /data/docker-compose.yml restart postgres
 sudo docker compose -f /data/docker-compose.yml restart redis
 ```
 
-### 11.9 完整快速部署流程（一键 Copy）
+### 11.10 完整快速部署流程（一键 Copy）
 
-以下为最常见的"仅后端变更"快速部署完整命令序列：
+> **先判断变更范围再选方案：** `git log --oneline origin/main..main` 查看待部署 commit，`git diff origin/main --stat | grep "web/src/"` 判断是否含前端改动。
+
+#### 方案 A：含前端改动（完整部署，约 1.5 分钟）
 
 ```bash
 # === 登录服务器 ===
 ssh ppuser@1.13.81.31
 
-# === 拉取 + 编译 + 部署（约 1 分钟） ===
+# === 拉取 + 前端 + 后端 + 部署 ===
+cd /data/aiproxy && \
+sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main && \
+cd web && sudo npm run build && \
+sudo rsync -a --delete /data/aiproxy/web/dist/ /data/aiproxy/core/public/dist/ && \
+cd /data/aiproxy/core && \
+sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/go-cache" \
+  go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy && \
+sudo systemctl stop aiproxy && \
+sudo cp /data/aiproxy/core/aiproxy /data/aiproxy/aiproxy && \
+sudo chown aiproxy:aiproxy /data/aiproxy/aiproxy && \
+sudo systemctl start aiproxy && \
+echo "=== 部署完成 ===" && \
+sudo systemctl status aiproxy --no-pager
+```
+
+#### 方案 B：仅后端改动（快速部署，约 1 分钟）
+
+> ⚠️ **确认无前端改动后才能用此方案！** 否则会导致易错点 #21：前端代码不生效。
+
+```bash
+# === 登录服务器 ===
+ssh ppuser@1.13.81.31
+
+# === 拉取 + 编译 + 部署 ===
 cd /data/aiproxy && \
 sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main && \
 cd core && \
@@ -1217,6 +1264,7 @@ sudo systemctl status aiproxy --no-pager
 | 18 | P1 | 环境变量 | 未设置 `ENTERPRISE_BASE_URL` | 「我的接入」页面显示内网地址 `ai.paigod.work/v1`，用户在公网无法使用 |
 | 19 | P0 | 部署 | `go build` 输出到 `core/aiproxy`，但 systemd 运行 `/data/aiproxy/aiproxy`，重启未复制二进制 | 重启后仍运行旧版本，新代码不生效，且无任何报错 |
 | 20 | P1 | 部署 | 服务运行时直接 `cp` 覆盖二进制 | 报 "Text file busy"，必须先 `systemctl stop` 再复制 |
+| 21 | P0 | 前端部署 | `npm run build` 输出到 `web/dist/`，但 `go:embed` 嵌入的是 `core/public/dist/`，编译前未同步 | 前端代码不生效，Go 二进制仍嵌入旧版前端，新功能（如 JWT 登录）在浏览器中不可用，且无任何报错 |
 | 15 | P3 | docker-compose | PostgreSQL/Redis 密码中包含特殊字符（`@`, `#`, `%`） | 连接串解析失败，AI Proxy 启动报数据库连接错误 |
 | 16 | P1 | Channel 配置 | PPIO 默认域名已迁移至 `api.ppinfra.com`，旧域名 `api.ppio.com` 不可用 | Channel base_url 使用旧域名，所有 PPIO 请求返回 404 |
 | 17 | P1 | Channel 配置 | Anthropic 通道（base_url 含 `/anthropic`）中包含非 Claude 模型 | 非 Claude 模型被随机路由到 Anthropic 通道，拼接 `/chat/completions` 后 URL 不兼容，约 50% 请求 404 |

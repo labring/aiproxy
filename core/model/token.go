@@ -531,6 +531,40 @@ func UpdateTokenStatus(id, status int) (err error) {
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
+// DisableAllGroupTokens disables all tokens in a group and evicts them from cache.
+// Used when a user is offboarded (e.g., Feishu user deleted) to revoke all API access.
+func DisableAllGroupTokens(groupID string) (int64, error) {
+	if groupID == "" {
+		return 0, errors.New("group is empty")
+	}
+
+	// Find all enabled tokens in the group first (for cache invalidation)
+	var tokens []Token
+	DB.Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).Find(&tokens)
+
+	if len(tokens) == 0 {
+		return 0, nil
+	}
+
+	// Disable all tokens in one UPDATE
+	result := DB.Model(&Token{}).
+		Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).
+		Update("status", TokenStatusDisabled)
+
+	if result.Error != nil {
+		return 0, result.Error
+	}
+
+	// Evict disabled tokens from cache
+	for _, t := range tokens {
+		if err := CacheUpdateTokenStatus(t.Key, TokenStatusDisabled); err != nil {
+			log.Error("disable all group tokens: cache evict failed for key " + t.Key + ": " + err.Error())
+		}
+	}
+
+	return result.RowsAffected, nil
+}
+
 func UpdateGroupTokenStatus(group string, id, status int) (err error) {
 	if id == 0 || group == "" {
 		return errors.New("id or group is empty")
