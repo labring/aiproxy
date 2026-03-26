@@ -59,6 +59,7 @@ import { channelApi } from "@/api/channel";
 import { modelApi } from "@/api/model";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { openResourceDialog, showDeletedResourceToast } from "@/utils/resource-dialog";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -321,14 +322,20 @@ export function ModelTable() {
                         <div
                           key={channel.id}
                           className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
-                          onClick={async () => {
-                            try {
-                              const fullChannel = await channelApi.getChannel(channel.id);
+                          onClick={() => {
+                            openResourceDialog({
+                              fetcher: () => channelApi.getChannel(channel.id),
+                              onSuccess: (fullChannel) => {
                               setSelectedChannel(fullChannel);
                               setChannelDialogOpen(true);
-                            } catch {
-                              toast.error(t("channel.fetchFailed"));
-                            }
+                              },
+                              onNotFound: () => {
+                                showDeletedResourceToast(t("channel.deleted"));
+                              },
+                              onError: () => {
+                                showDeletedResourceToast(t("channel.fetchFailed"));
+                              },
+                            });
                           }}
                         >
                           <Badge variant="secondary" className="text-xs">

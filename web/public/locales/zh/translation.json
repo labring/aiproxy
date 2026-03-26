@@ -2,7 +2,7 @@
   "sidebar": {
     "monitor": "仪表盘",
     "group": "组别管理",
-    "groupRanking": "组别消耗排名",
+    "consumptionRanking": "消耗排行",
     "key": "API Keys",
     "channel": "渠道",
     "model": "模型",
@@ -730,6 +730,7 @@
     "refresh": "刷新",
     "noResults": "未找到渠道",
     "fetchFailed": "获取渠道信息失败",
+    "deleted": "渠道已被删除或不存在",
     "sets": "分组",
     "models": "模型",
     "modelsCount": "个模型",
@@ -1021,9 +1022,33 @@
       "importing": "导入中...",
       "exportSuccess": "模型配置导出成功",
       "importSuccess": "成功导入 {{count}} 个模型配置",
-      "importFailed": "导入模型配置失败",
-      "noDataToExport": "没有可导出的模型配置",
+    "importFailed": "导入模型配置失败",
+    "fetchFailed": "获取模型信息失败",
+    "deleted": "模型已被删除或不存在",
+    "noDataToExport": "没有可导出的模型配置",
       "invalidFormat": "文件格式无效"
     }
+  },
+  "consumptionRanking": {
+    "title": "消耗排行",
+    "description": "查看所选时间范围内的渠道、模型和组别消耗排行。",
+    "range": "{{timezone}} 时区范围：{{start}} 至 {{end}}",
+    "dateRangePlaceholder": "选择统计日期范围",
+    "collapse": "收起",
+    "expand": "展开",
+    "channelTab": "渠道",
+    "modelTab": "模型",
+    "groupTab": "组别",
+    "channel": "渠道",
+    "model": "模型",
+    "group": "组别",
+    "requestCount": "请求数",
+    "inputTokens": "输入 Tokens",
+    "outputTokens": "输出 Tokens",
+    "totalTokens": "总 Tokens",
+    "usedAmount": "消耗金额",
+    "actions": "操作",
+    "view": "查看",
+    "summary": "共 {{total}} 项进入排名"
   }
 }

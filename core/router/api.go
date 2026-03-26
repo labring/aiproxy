@@ -55,7 +55,8 @@ func SetAPIRouter(router *gin.Engine) {
 		groupsRoute := apiRouter.Group("/groups")
 		{
 			groupsRoute.GET("/", controller.GetGroups)
-			groupsRoute.GET("/ranking", controller.GetGroupConsumptionRanking)
+			groupsRoute.GET("/ranking", controller.GetConsumptionRanking)
+			groupsRoute.GET("/consumption_ranking", controller.GetConsumptionRanking)
 			groupsRoute.GET("/search", controller.SearchGroups)
 			groupsRoute.POST("/batch_delete", controller.DeleteGroups)
 			groupsRoute.POST("/batch_status", controller.UpdateGroupsStatus)

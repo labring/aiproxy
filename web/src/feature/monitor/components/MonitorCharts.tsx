@@ -14,6 +14,7 @@ import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
 import type { Channel } from '@/types/channel'
 import { useGroupModelMetrics, useGroupTokennameModelMetrics, useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
+import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 
 interface MonitorChartsProps {
     chartData: ChartDataPoint[]
@@ -82,12 +83,19 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
 
     const openChannelEdit = (channelId: number) => {
-        channelApi.getChannel(channelId)
-            .then(channel => {
+        openResourceDialog({
+            fetcher: () => channelApi.getChannel(channelId),
+            onSuccess: (channel) => {
                 setEditingChannel(channel)
                 setChannelDialogOpen(true)
-            })
-            .catch(() => {})
+            },
+            onNotFound: () => {
+                showDeletedResourceToast(t('channel.deleted'))
+            },
+            onError: () => {
+                showDeletedResourceToast(t('channel.fetchFailed'))
+            },
+        })
     }
 
     const [requestsMode, setRequestsMode] = useState<DisplayMode>('incremental')

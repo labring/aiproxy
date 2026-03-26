@@ -4,11 +4,11 @@ import { groupApi } from '@/api/group'
 import { useState } from 'react'
 import type {
     GroupCreateRequest,
-    GroupConsumptionRankingQuery,
     GroupUpdateRequest,
     GroupStatusRequest,
     GroupModelConfigSaveRequest
 } from '@/types/group'
+import type { ConsumptionRankingQuery } from '@/types/consumption-ranking'
 import { toast } from 'sonner'
 
 // Get groups list (paginated)
@@ -36,14 +36,14 @@ export const useSearchGroups = (keyword: string, page: number, perPage: number, 
     }
 }
 
-export const useGroupConsumptionRanking = (query: GroupConsumptionRankingQuery) => {
+export const useConsumptionRanking = (query: ConsumptionRankingQuery) => {
     const rankingPage = query.page ?? 1
     const rankingPageSize = query.per_page ?? 20
 
     return useQuery({
         queryKey: [
-            'groups',
-            'ranking',
+            'consumption-ranking',
+            query.type,
             rankingPage,
             rankingPageSize,
             query.start_timestamp,
@@ -51,7 +51,7 @@ export const useGroupConsumptionRanking = (query: GroupConsumptionRankingQuery) 
             query.timezone,
             query.order,
         ],
-        queryFn: () => groupApi.getGroupConsumptionRanking(query),
+        queryFn: () => groupApi.getConsumptionRanking(query),
     })
 }
 

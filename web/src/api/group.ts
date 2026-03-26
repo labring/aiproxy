@@ -3,14 +3,16 @@ import { get, post, put, del } from './index'
 import {
     Group,
     GroupsResponse,
-    GroupConsumptionRankingQuery,
-    GroupConsumptionRankingResponse,
     GroupCreateRequest,
     GroupUpdateRequest,
     GroupStatusRequest,
     GroupModelConfig,
     GroupModelConfigSaveRequest
 } from '@/types/group'
+import {
+    ConsumptionRankingQuery,
+    ConsumptionRankingResponse,
+} from '@/types/consumption-ranking'
 
 export const groupApi = {
     // Get all groups with pagination
@@ -46,8 +48,9 @@ export const groupApi = {
         return response
     },
 
-    getGroupConsumptionRanking: async (query: GroupConsumptionRankingQuery): Promise<GroupConsumptionRankingResponse> => {
+    getConsumptionRanking: async (query: ConsumptionRankingQuery): Promise<ConsumptionRankingResponse> => {
         const params = new URLSearchParams()
+        params.append('type', query.type)
         if (query.page !== undefined) {
             params.append('page', query.page.toString())
         }
@@ -67,7 +70,7 @@ export const groupApi = {
             params.append('order', query.order)
         }
 
-        const response = await get<GroupConsumptionRankingResponse>(`groups/ranking?${params.toString()}`)
+        const response = await get<ConsumptionRankingResponse>(`groups/consumption_ranking?${params.toString()}`)
         return response
     },
 
