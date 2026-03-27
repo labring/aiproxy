@@ -68,6 +68,11 @@ export function formatAmount(n: number): string {
     return `¥${n.toFixed(2)}`
 }
 
+export function formatRate(n: number): string {
+    if (n <= 0) return "-"
+    return `${n.toFixed(1)}%`
+}
+
 /** Detect dark mode and re-render on change. */
 export function useDarkMode(): boolean {
     const [isDark, setIsDark] = useState(() =>

@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMe
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { enterpriseApi, type DepartmentSummary, type ModelDistributionItem, type FeishuDepartment } from "@/api/enterprise"
 import { ROUTES } from "@/routes/constants"
-import { type TimeRange, getTimeRange, formatNumber, formatAmount, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
+import { type TimeRange, getTimeRange, formatNumber, formatAmount, formatRate, useDarkMode, getEChartsTheme } from "@/lib/enterprise"
 import { cn } from "@/lib/utils"
 
 // Column configuration for department summary table
@@ -39,7 +39,7 @@ const DEPT_COLUMNS: DeptColumnConfig[] = [
     { key: "active_users", labelKey: "enterprise.dashboard.activeUsers", align: "right", defaultVisible: true },
     { key: "member_count", labelKey: "enterprise.dashboard.memberCount", align: "right", defaultVisible: false },
     { key: "success_rate", labelKey: "enterprise.dashboard.successRate", align: "right", defaultVisible: true,
-        renderCell: (dept) => dept.success_rate > 0 ? `${dept.success_rate.toFixed(1)}%` : "-" },
+        format: formatRate },
     { key: "avg_cost", labelKey: "enterprise.dashboard.avgCost", align: "right", defaultVisible: false, format: formatAmount },
     { key: "unique_models", labelKey: "enterprise.dashboard.uniqueModels", align: "right", defaultVisible: false, format: formatNumber },
 ]
