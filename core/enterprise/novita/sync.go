@@ -381,7 +381,28 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 		cfg["support_prompt_cache"] = true
 	}
 
+	// Derive capability flags from model metadata so the admin UI
+	// can display "tool" / "vision" badges on the model table.
+	if inferToolChoice(m.ModelType, m.Features) {
+		cfg[string(model.ModelConfigToolChoiceKey)] = true
+	}
+	if slices.Contains(m.InputModalities, "image") {
+		cfg[string(model.ModelConfigVisionKey)] = true
+	}
+
 	return cfg
+}
+
+// inferToolChoice returns true when the model is likely to support tool_choice.
+// Signal priority: features list ("tool_use" / "function_calling") > model_type "chat".
+func inferToolChoice(modelType string, features []string) bool {
+	for _, f := range features {
+		switch f {
+		case "tool_use", "function_calling", "tools":
+			return true
+		}
+	}
+	return modelType == "chat"
 }
 
 // adjustTierBounds returns the effective [min, max] for tier i, bumping min by 1
@@ -473,6 +494,18 @@ func ensureNovitaChannelsFromModels(
 	for i := range channels {
 		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
 			channels[i].Models = anthropicModels
+			// Ensure recommended defaults for Novita's Anthropic endpoint:
+			// skip_image_conversion — Novita natively supports URL image sources
+			// disable_context_management — Novita rejects the beta field with 400
+			if channels[i].Configs == nil {
+				channels[i].Configs = make(model.ChannelConfigs)
+			}
+			if _, ok := channels[i].Configs["skip_image_conversion"]; !ok {
+				channels[i].Configs["skip_image_conversion"] = true
+			}
+			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
+				channels[i].Configs["disable_context_management"] = true
+			}
 		} else {
 			channels[i].Models = openaiModels
 		}
@@ -520,6 +553,11 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 				Key:     cfg.APIKey,
 				Models:  anthropicModels,
 				Status:  model.ChannelStatusEnabled,
+				// See ensureNovitaChannelsFromModels for rationale on each key.
+				Configs: model.ChannelConfigs{
+					"skip_image_conversion":      true,
+					"disable_context_management": true,
+				},
 			}
 
 			if err := tx.Create(&anthropicCh).Error; err != nil {

@@ -797,7 +797,7 @@ https://ai.paigod.work/api/enterprise/auth/feishu/callback
 ### 9.2 AI Proxy 安全配置
 
 - `ADMIN_KEY` 使用 32+ 字符强密码
-- Token 级别启用 RPM/TPM 限流，防滥用
+- Token 级别启用 RPM/TPM 限流，防滥用（详见 §9.5）
 - 启用 IP 限制（可选，配合企业出口 IP 白名单）
 - 定期检查日志中的异常请求
 
@@ -831,6 +831,76 @@ curl -s https://apiproxy.paigod.work/v1/models \
 curl -s --connect-timeout 3 http://<CVM公网IP>:80/         # 超时 ✓
 curl -s --connect-timeout 3 http://<CVM公网IP>:81/         # 超时 ✓
 ```
+
+### 9.5 RPM / TPM 限流配置
+
+> **RPM（Requests Per Minute）** 和 **TPM（Tokens Per Minute）** 是 AI Proxy 内置的按 Group+Model 粒度的滑动窗口限流机制，用于防止单个用户短时间内大量消耗资源。
+
+#### 概念说明
+
+| 指标 | 全称 | 窗口 | 含义 |
+|------|------|------|------|
+| **RPM** | Requests Per Minute | 滑动 1 分钟 | 每分钟最大请求次数 |
+| **TPM** | Tokens Per Minute | 滑动 1 分钟 | 每分钟最大 Token 消耗量（含输入+输出） |
+
+#### 工作原理
+
+1. 每个请求进入时，系统按 `Group + Model` 查询最近 1 分钟的累计 RPM/TPM
+2. 如果超过 ModelConfig 中设定的阈值，返回 `429` 错误
+3. 请求完成后，实际消耗的 Token 数会计入 TPM 滑动窗口
+4. **设为 0 表示不限制**（代码检查 `mc.TPM > 0` / `mc.RPM > 0`，为 0 时跳过检查）
+
+#### 配置方式
+
+RPM/TPM 在 **模型配置（ModelConfig）** 中按模型维度设置：
+
+```
+管理后台 → 模型管理 → 选择模型 → 编辑 → RPM / TPM 字段
+```
+
+#### 用户侧报错
+
+当触发限流时，用户会收到 HTTP 429 响应：
+
+```json
+// RPM 超限
+{"type":"error","error":{"type":"aiproxy_error","message":"request rpm limit exceeded, please try again later"}}
+
+// TPM 超限
+{"type":"error","error":{"type":"aiproxy_error","message":"request tpm limit exceeded, please try again later"}}
+```
+
+> **建议：** 对高成本模型（如 Claude Opus）设置较低的 RPM/TPM，对轻量模型（如 Haiku）可以放宽或设为 0（不限制）。
+
+### 9.6 额度策略（Quota Policy）管理
+
+> 额度策略是企业版功能，用于为员工分配周期性使用配额，并在消耗达到不同阶梯时自动调整 RPM/TPM 限制。**额度策略与 RPM/TPM 基础限流完全独立**：基础限流作用于 ModelConfig（模型维度），额度策略通过乘数动态调整已有限流。
+
+#### 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| **周期配额（PeriodQuota）** | 每个计费周期（月/周等）分配给用户的最大金额 |
+| **阶梯（Tier）** | 消耗占配额比例达到阈值时触发，共 3 级 |
+| **TPM/RPM 乘数** | 触发阶梯后，将 ModelConfig 中的 TPM/RPM 乘以此值。如 `tpm_multiplier=0.5` 表示 TPM 减半 |
+| **使用比例** | `(已用金额 - 上次周期快照) / 周期配额`，决定当前处于哪个阶梯 |
+
+#### 阶梯机制示例
+
+假设某模型 ModelConfig 设置 `TPM=100000`，额度策略配置如下：
+
+| 阶梯 | 触发条件（使用比例） | TPM 乘数 | 实际 TPM |
+|------|---------------------|---------|---------|
+| 正常 | < 70% | 1.0 | 100,000 |
+| Tier 1 | ≥ 70% | 0.8 | 80,000 |
+| Tier 2 | ≥ 90% | 0.5 | 50,000 |
+| Tier 3 | ≥ 100% | 0.0（封禁） | 0（请求被拒绝） |
+
+#### 重要注意事项
+
+- **TPM/RPM 基础值为 0 时，乘数无效**：`0 × 任何乘数 = 0`，原本不限流的模型不受额度策略影响
+- **额度策略不影响余额系统**：余额扣费和额度策略是两套独立系统
+- **乘数范围**：管理页面支持 0 ~ 10，支持小数（如 0.5、1.5），设为 0 表示完全封禁该阶梯
 
 ---
 
@@ -1271,7 +1341,7 @@ sudo systemctl status aiproxy --no-pager
 - [ ] 在内网访问飞书登录链接测试通过
 - [ ] 管理后台可正常访问（内网）
 - [ ] 至少添加一个 Channel（AI Provider），从公网 API 测试调用正常
-- [ ] **PPIO Channel base_url 使用 `api.ppinfra.com`**（非 `api.ppio.com`）：OpenAI 通道 → `https://api.ppinfra.com/v3/openai`，Anthropic 通道 → `https://api.ppinfra.com/v3/anthropic`
+- [ ] **PPIO Channel base_url 使用 `api.ppinfra.com`**（非 `api.ppio.com`）：OpenAI 通道 → `https://api.ppinfra.com/v3/openai`，Anthropic 通道 → `https://api.ppinfra.com/anthropic`
 - [ ] **Anthropic 通道仅包含 Claude 系模型**（`pa/*`、`claude-*`），非 Claude 模型只放在 OpenAI 通道，避免路由冲突导致 404
 
 ### 发布前高风险功能 Smoke 验证
