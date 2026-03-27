@@ -547,6 +547,26 @@ claude
 - 这些模型需要使用支持 Responses API 的工具（如 OpenAI 官方 SDK）
 - 如果你的工具不支持，换用对应的非 Codex 版本即可（如用 `pa/gpt-5.4` 替代）
 
+### Claude Code 报 504 / "Cannot read properties of undefined (reading 'trim')"
+
+> 这是同一个问题的两种表现，通常在使用 Claude Code 时遇到。
+
+**典型错误信息：**
+
+```
+API Error: 504 <html><head><title>504 Gateway Time-out</title></head>...
+
+API Error: Cannot read properties of undefined (reading 'trim')
+```
+
+**原因：** Claude Code 使用 extended thinking（深度思考）时，单次请求可能持续 3-10 分钟。如果网络中间层（反向代理或负载均衡）的超时设置过短，会在 AI 还没回复完时就断开连接，返回一个 HTML 格式的 504 错误页面。Claude Code 期望收到 JSON 格式的响应，解析 HTML 失败就会报第二个错误。
+
+**解决方案：** 这是服务端配置问题，**请联系管理员**，让管理员参照部署文档 §3.6 和 §7.1 将 Nginx 和 CLB 超时调整到 900 秒。
+
+**临时缓解：** 如果管理员暂时无法修改，可以尝试：
+- 减少单次对话的上下文长度（减少 token 数），缩短 AI 思考时间
+- 使用较轻量的模型（如 `pa/claude-haiku-4-5-20251001`），响应更快
+
 ### 其他 AI 工具怎么配？
 
 大部分 AI 工具都支持 **OpenAI 兼容** 模式，通用配置方法：

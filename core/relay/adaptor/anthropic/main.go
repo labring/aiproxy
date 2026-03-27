@@ -23,6 +23,28 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// messageStartMarker is used to detect message_start events in the stream
+// without allocating on every chunk.
+var messageStartMarker = []byte(`"message_start"`)
+
+// forwardUpstreamHeaders copies rate-limit and request-tracking headers from
+// the upstream Anthropic response to the client response writer. Smart clients
+// (e.g. Claude Code) use these headers for adaptive back-off and retry.
+func forwardUpstreamHeaders(c *gin.Context, resp *http.Response) {
+	for _, h := range []string{
+		"x-ratelimit-limit-requests",
+		"x-ratelimit-limit-tokens",
+		"x-ratelimit-remaining-requests",
+		"x-ratelimit-remaining-tokens",
+		"retry-after",
+		"request-id",
+	} {
+		if v := resp.Header.Get(h); v != "" {
+			c.Writer.Header().Set(h, v)
+		}
+	}
+}
+
 func ConvertRequest(
 	meta *meta.Meta,
 	req *http.Request,
@@ -118,7 +140,11 @@ func ConvertRequestToBytes(
 	return ConvertRequestBodyToBytes(meta, req.Context(), &node, callbacks...)
 }
 
-func resetCacheTTLWithContentsNode(contents *ast.Node) error {
+func resetCacheTTLWithContentsNode(contents *ast.Node, stripTTL bool) error {
+	if !stripTTL {
+		return nil
+	}
+
 	if contents.Check() != nil {
 		return nil
 	}
@@ -171,18 +197,21 @@ func ConvertRequestBodyToBytes(
 		RemoveToolsCustomDeferLoading(node)
 	}
 
-	err := ConvertImage2Base64(ctx, node)
-	if err != nil {
-		return nil, err
+	if !adaptorConfig.SkipImageConversion {
+		err := ConvertImage2Base64(ctx, node)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Set the actual model in the request
+	var err error
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return nil, err
 	}
 
-	err = resetCacheTTLWithContentsNode(node.Get("system"))
+	err = resetCacheTTLWithContentsNode(node.Get("system"), adaptorConfig.StripCacheTTL)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +219,7 @@ func ConvertRequestBodyToBytes(
 	messagesNode := node.Get("messages")
 	if messagesNode.Check() == nil {
 		_ = messagesNode.ForEach(func(_ ast.Sequence, messages *ast.Node) bool {
-			_ = resetCacheTTLWithContentsNode(messages.Get("content"))
+			_ = resetCacheTTLWithContentsNode(messages.Get("content"), adaptorConfig.StripCacheTTL)
 			return true
 		})
 	}
@@ -368,6 +397,8 @@ func StreamHandler(
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
+	forwardUpstreamHeaders(c, resp)
+
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
@@ -449,24 +480,28 @@ func StreamHandler(
 			}
 		}
 
-		node, parseErr := sonic.Get(data)
-		if parseErr != nil {
-			log.Error("error unmarshalling stream response: " + parseErr.Error())
-		} else {
-			// Check if model field exists in message.model (for message_start events)
-			messageNode := node.Get("message")
-			if messageNode != nil && messageNode.Exists() {
-				modelNode := messageNode.Get("model")
-				if modelNode != nil && modelNode.Exists() {
-					_, setErr := messageNode.Set("model", ast.NewString(m.OriginModel))
-					if setErr != nil {
-						log.Error("error set response model in message: " + setErr.Error())
-					} else {
-						newData, marshalErr := node.MarshalJSON()
-						if marshalErr != nil {
-							log.Error("error marshalling stream response: " + marshalErr.Error())
+		// Only message_start events contain a "message.model" field that
+		// needs rewriting. Skip the JSON round-trip for all other events
+		// to avoid unnecessary overhead on every streaming chunk.
+		if bytes.Contains(data, messageStartMarker) {
+			node, parseErr := sonic.Get(data)
+			if parseErr != nil {
+				log.Error("error unmarshalling stream response: " + parseErr.Error())
+			} else {
+				messageNode := node.Get("message")
+				if messageNode != nil && messageNode.Exists() {
+					modelNode := messageNode.Get("model")
+					if modelNode != nil && modelNode.Exists() {
+						_, setErr := messageNode.Set("model", ast.NewString(m.OriginModel))
+						if setErr != nil {
+							log.Error("error set response model in message: " + setErr.Error())
 						} else {
-							data = newData
+							newData, marshalErr := node.MarshalJSON()
+							if marshalErr != nil {
+								log.Error("error marshalling stream response: " + marshalErr.Error())
+							} else {
+								data = newData
+							}
 						}
 					}
 				}
@@ -508,6 +543,8 @@ func Handler(
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
+
+	forwardUpstreamHeaders(c, resp)
 
 	defer resp.Body.Close()
 

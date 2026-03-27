@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Pencil, Trash2, Shield, AlertTriangle, Search, Building2, User, Bell } from "lucide-react"
@@ -83,6 +83,60 @@ const defaultPolicy: QuotaPolicyInput = {
     tier3_blocked_models: "",
     period_quota: 0,
     period_type: 3,
+}
+
+/** Clamp-on-blur number input that avoids the broken onChange-clamp-every-keystroke pattern. */
+function MultiplierInput({
+    value,
+    onChange,
+    min = 0.01,
+    max = 2,
+    step = 0.1,
+    disabled,
+    className,
+}: {
+    value: number
+    onChange: (val: number) => void
+    min?: number
+    max?: number
+    step?: number
+    disabled?: boolean
+    className?: string
+}) {
+    const [localValue, setLocalValue] = useState(String(value))
+
+    useEffect(() => {
+        // Only sync when the external value actually differs from what we have,
+        // to avoid clobbering mid-edit text like "1." or "0.0".
+        if (parseFloat(localValue) !== value) {
+            setLocalValue(String(value))
+        }
+    }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const commit = useCallback((raw: string) => {
+        const parsed = parseFloat(raw)
+        // Round to 2dp to avoid floating-point drift (0.1+0.1+0.1 = 0.30000000000000004)
+        const clamped = isNaN(parsed)
+            ? min
+            : Math.round(Math.max(min, Math.min(max, parsed)) * 100) / 100
+        setLocalValue(String(clamped))
+        onChange(clamped)
+    }, [min, max, onChange])
+
+    return (
+        <Input
+            type="number"
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onBlur={() => commit(localValue)}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(localValue) }}
+            step={step}
+            min={min}
+            max={max}
+            disabled={disabled}
+            className={className}
+        />
+    )
 }
 
 function TierIndicator({ ratio, label }: { ratio: number; label: string }) {
@@ -216,31 +270,17 @@ function PolicyForm({
                         <div className="space-y-3">
                             <div>
                                 <Label className="text-xs">RPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier1_rpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier1_rpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
+                                    onChange={(val) => onChange({ ...policy, tier1_rpm_multiplier: val })}
                                     className="h-8"
                                 />
                             </div>
                             <div>
                                 <Label className="text-xs">TPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier1_tpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier1_tpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
+                                    onChange={(val) => onChange({ ...policy, tier1_tpm_multiplier: val })}
                                     className="h-8"
                                 />
                             </div>
@@ -255,31 +295,17 @@ function PolicyForm({
                         <div className="space-y-3">
                             <div>
                                 <Label className="text-xs">RPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier2_rpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier2_rpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
+                                    onChange={(val) => onChange({ ...policy, tier2_rpm_multiplier: val })}
                                     className="h-8"
                                 />
                             </div>
                             <div>
                                 <Label className="text-xs">TPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier2_tpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier2_tpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
+                                    onChange={(val) => onChange({ ...policy, tier2_tpm_multiplier: val })}
                                     className="h-8"
                                 />
                             </div>
@@ -307,34 +333,20 @@ function PolicyForm({
                         <div className="space-y-3">
                             <div>
                                 <Label className="text-xs">RPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier3_rpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier3_rpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
-                                    className="h-8"
+                                    onChange={(val) => onChange({ ...policy, tier3_rpm_multiplier: val })}
                                     disabled={policy.block_at_tier3}
+                                    className="h-8"
                                 />
                             </div>
                             <div>
                                 <Label className="text-xs">TPM</Label>
-                                <Input
-                                    type="number"
+                                <MultiplierInput
                                     value={policy.tier3_tpm_multiplier}
-                                    onChange={(e) => {
-                                        const val = Math.max(0.01, Math.min(2, parseFloat(e.target.value) || 0.01))
-                                        onChange({ ...policy, tier3_tpm_multiplier: val })
-                                    }}
-                                    step={0.1}
-                                    min={0.01}
-                                    max={2}
-                                    className="h-8"
+                                    onChange={(val) => onChange({ ...policy, tier3_tpm_multiplier: val })}
                                     disabled={policy.block_at_tier3}
+                                    className="h-8"
                                 />
                             </div>
                             <div>

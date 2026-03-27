@@ -196,6 +196,8 @@ func GeminiHandler(
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
+	forwardUpstreamHeaders(c, resp)
+
 	defer resp.Body.Close()
 
 	var claudeResp relaymodel.ClaudeResponse
@@ -237,6 +239,8 @@ func GeminiStreamHandler(
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
+
+	forwardUpstreamHeaders(c, resp)
 
 	defer resp.Body.Close()
 

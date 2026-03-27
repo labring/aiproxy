@@ -213,6 +213,51 @@ ssh ppuser@1.13.81.31 "sudo <command>"
 > - **方案 A（推荐）：** 使用**企业内部 DNS**将 `ai.paigod.work` 指向 CLB 内网 VIP。公网 DNS 中不添加 `ai` 记录，确保外网完全不可达。
 > - **方案 B：** 在公网 DNS 添加 `ai` 记录指向 CLB 公网 VIP，然后在 CLB 安全组或 Nginx 中限制来源 IP（仅允许公司出口 IP）。
 
+### 3.6 CLB 超时配置（P0 必须修改）
+
+> **[易错点#22] CLB 默认后端超时通常只有 60 秒。Claude Code 使用 extended thinking、长上下文对话等场景，单次请求可能持续 3-10 分钟。如果 CLB 超时太短，会导致 `504 Gateway Time-out`（错误页来自 stgw 腾讯云网关），进而引发 Claude Code 客户端报 `Cannot read properties of undefined (reading 'trim')` 错误。**
+
+**必须修改的 CLB 超时参数：**
+
+| 参数 | 默认值 | 推荐值 | 说明 |
+|------|--------|--------|------|
+| **后端响应超时** | 60s | **900s** | 等待后端返回首字节的最长时间 |
+| **空闲连接超时** | 60s | **900s** | SSE 流式响应两次数据之间的最大间隔 |
+
+**腾讯云控制台操作路径：**
+
+1. 进入「负载均衡」→ 选择 CLB 实例
+2. 点击「监听器管理」→ 找到 HTTPS:443 监听器
+3. 点击 `apiproxy.paigod.work` 的转发规则 → 「编辑」
+4. 修改「后端超时」为 **900** 秒
+5. 如有「空闲超时」选项，也改为 **900** 秒
+6. 同样修改 `ai.paigod.work` 的转发规则（管理后台也可能有长请求）
+7. 保存
+
+> **验证方法：** 修改后可使用超时测试脚本验证配置是否生效：
+> ```bash
+> # 从公网测试完整链路（需要 API Key）
+> API_KEY=sk-xxx bash scripts/test-timeout-config.sh remote
+>
+> # 从服务器本地测试（绕过 CLB）
+> API_KEY=sk-xxx bash scripts/test-timeout-config.sh local
+> ```
+
+**错误现象与排查：**
+
+```
+# 典型错误 1: 504 HTML 页面（来自腾讯云 STGW 网关）
+API Error: 504 <html>
+<head><title>504 Gateway Time-out</title></head>
+<body><center><h1>504 Gateway Time-out</h1></center>
+<hr><center>stgw</center></body></html>
+
+# 典型错误 2: Claude Code 客户端解析 504 HTML 时的连锁错误
+API Error: Cannot read properties of undefined (reading 'trim')
+```
+
+> **根因链条：** CLB/Nginx 超时 → 返回 504 HTML 页面 → Claude Code 期望 JSON/SSE 响应 → 解析 HTML 失败 → `trim` 报错。**修复超时配置后两个错误都会消失。**
+
 ---
 
 ## 四、关键地址一览
@@ -580,9 +625,13 @@ server {
         chunked_transfer_encoding on;
 
         # 超时设置
+        # [易错点#22] Claude Code 等 AI 工具使用 extended thinking 时，
+        # 单次请求可能持续 3-10 分钟。超时必须 ≥ 900s，否则会出现：
+        #   - 504 Gateway Time-out（来自 stgw 腾讯云网关）
+        #   - Claude Code 报 "Cannot read properties of undefined (reading 'trim')"
         proxy_connect_timeout 60s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
+        proxy_send_timeout 900s;
+        proxy_read_timeout 900s;
     }
 }
 ```
@@ -619,9 +668,10 @@ server {
     chunked_transfer_encoding on;
 
     # 超时设置（AI 响应可能较慢）
+    # [易错点#22] 必须 ≥ 900s，详见端口 80 注释
     proxy_connect_timeout 60s;
-    proxy_send_timeout 300s;
-    proxy_read_timeout 300s;
+    proxy_send_timeout 900s;
+    proxy_read_timeout 900s;
 
     # ============================================================
     # 白名单路径：仅开放 AI API 和 MCP 相关端点
@@ -1241,6 +1291,14 @@ sudo systemctl status aiproxy --no-pager
 - [ ] CLB 证书托管已开启自动续签
 - [ ] CLB 后端 81 端口健康检查已改为 TCP
 
+### 超时配置（Claude Code / Extended Thinking）
+
+- [ ] **Nginx `proxy_read_timeout` 和 `proxy_send_timeout` ≥ 900s**（端口 80 和 81 都要改）
+- [ ] **CLB 后端响应超时 ≥ 900s**（控制台 → 负载均衡 → 监听器 → 转发规则 → 编辑）
+- [ ] CLB 空闲连接超时 ≥ 900s（如有此选项）
+- [ ] Nginx `proxy_buffering off`（SSE 流式响应必须关闭缓冲）
+- [ ] 验证：`API_KEY=sk-xxx bash scripts/test-timeout-config.sh remote` 无 504 错误
+
 ---
 
 ## 十三、易错点汇总
@@ -1268,6 +1326,7 @@ sudo systemctl status aiproxy --no-pager
 | 15 | P3 | docker-compose | PostgreSQL/Redis 密码中包含特殊字符（`@`, `#`, `%`） | 连接串解析失败，AI Proxy 启动报数据库连接错误 |
 | 16 | P1 | Channel 配置 | PPIO 默认域名已迁移至 `api.ppinfra.com`，旧域名 `api.ppio.com` 不可用 | Channel base_url 使用旧域名，所有 PPIO 请求返回 404 |
 | 17 | P1 | Channel 配置 | Anthropic 通道（base_url 含 `/anthropic`）中包含非 Claude 模型 | 非 Claude 模型被随机路由到 Anthropic 通道，拼接 `/chat/completions` 后 URL 不兼容，约 50% 请求 404 |
+| 22 | P0 | Nginx / CLB 超时 | Nginx `proxy_read_timeout` 或 CLB 后端超时 < 900s | Claude Code 等使用 extended thinking 的工具报 504 Gateway Time-out（stgw），以及连锁错误 `Cannot read properties of undefined (reading 'trim')`。详见 §3.6 和 §7.1 |
 
 ---
 

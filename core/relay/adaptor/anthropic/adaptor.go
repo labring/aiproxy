@@ -155,10 +155,14 @@ func (a *Adaptor) SetupRequestHeader(
 
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 
+	// Pass through Anthropic-Beta as-is. Pre-filtering by model name causes
+	// Header/Body desync (e.g. stripping a beta header while the body still
+	// contains the gated field → 400 "Extra inputs are not permitted").
+	// Constrained backends (AWS Bedrock, VertexAI) apply their own filtering.
 	rawBetas := c.Request.Header.Get(AnthropicBeta)
 
 	if rawBetas != "" {
-		req.Header.Set(AnthropicBeta, FixBetasStringWithModel(meta.ActualModel, rawBetas))
+		req.Header.Set(AnthropicBeta, rawBetas)
 	}
 
 	return nil
@@ -266,6 +270,16 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 					"type":        "boolean",
 					"title":       "Remove Tool Defer Loading",
 					"description": "Strip tool defer_loading from the request body before relay.",
+				},
+				"skip_image_conversion": map[string]any{
+					"type":        "boolean",
+					"title":       "Skip Image URL to Base64 Conversion",
+					"description": "Skip converting image URLs to base64. Enable this for Anthropic-compatible upstreams that natively support URL image sources to reduce latency.",
+				},
+				"strip_cache_ttl": map[string]any{
+					"type":        "boolean",
+					"title":       "Strip Cache Control TTL",
+					"description": "Remove cache_control.ttl from the request. Enable this for upstreams that do not support the prompt-caching-scope beta.",
 				},
 			},
 		},

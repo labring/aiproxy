@@ -57,6 +57,17 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 		return nil, err
 	}
 
+	var adaptorConfig Config
+	_ = meta.ChannelConfigs.LoadConfig(&adaptorConfig)
+
+	// maybeClearTTL conditionally strips cache_control.ttl based on config
+	maybeClearTTL := func(cc *relaymodel.ClaudeCacheControl) *relaymodel.ClaudeCacheControl {
+		if adaptorConfig.StripCacheTTL {
+			return cc.ResetTTL()
+		}
+		return cc
+	}
+
 	textRequest.Model = meta.ActualModel
 	claudeTools := make([]relaymodel.ClaudeTool, 0, len(textRequest.Tools))
 
@@ -68,7 +79,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 				DisplayWidthPx:  tool.DisplayWidthPx,
 				DisplayHeightPx: tool.DisplayHeightPx,
 				DisplayNumber:   tool.DisplayNumber,
-				CacheControl:    tool.CacheControl.ResetTTL(),
+				CacheControl:    maybeClearTTL(tool.CacheControl),
 
 				MaxUses:        tool.MaxUses,
 				AllowedDomains: tool.AllowedDomains,
@@ -90,7 +101,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 						Properties: params["properties"],
 						Required:   params["required"],
 					},
-					CacheControl: tool.CacheControl.ResetTTL(),
+					CacheControl: maybeClearTTL(tool.CacheControl),
 
 					MaxUses:        tool.MaxUses,
 					AllowedDomains: tool.AllowedDomains,
@@ -179,7 +190,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 			claudeRequest.System = append(claudeRequest.System, relaymodel.ClaudeContent{
 				Type:         relaymodel.ClaudeContentTypeText,
 				Text:         message.StringContent(),
-				CacheControl: message.CacheControl.ResetTTL(),
+				CacheControl: maybeClearTTL(message.CacheControl),
 			})
 
 			continue
@@ -191,7 +202,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 
 		var content relaymodel.ClaudeContent
 
-		content.CacheControl = message.CacheControl.ResetTTL()
+		content.CacheControl = maybeClearTTL(message.CacheControl)
 		if message.IsStringContent() {
 			content.Type = relaymodel.ClaudeContentTypeText
 
@@ -563,6 +574,8 @@ func OpenAIStreamHandler(
 		return adaptor.DoResponseResult{}, OpenAIErrorHandler(resp)
 	}
 
+	forwardUpstreamHeaders(c, resp)
+
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
@@ -687,6 +700,8 @@ func OpenAIHandler(
 	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, OpenAIErrorHandler(resp)
 	}
+
+	forwardUpstreamHeaders(c, resp)
 
 	defer resp.Body.Close()
 
