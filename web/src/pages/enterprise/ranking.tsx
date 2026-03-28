@@ -261,7 +261,7 @@ export default function EnterpriseRanking() {
     const sortedRows = useMemo(() => {
         if (!rows.length) return rows
 
-        return [...rows].sort((a, b) => {
+        const sorted = [...rows].sort((a, b) => {
             const field = sortField
             if (field === "user_name" || field === "department_name") {
                 const av = field === "department_name"
@@ -278,6 +278,14 @@ export default function EnterpriseRanking() {
             const bNum = Number(b[field as keyof RankingRow]) || 0
             return sortDirection === "asc" ? aNum - bNum : bNum - aNum
         })
+
+        // Re-assign rank numbers to match current display order so that
+        // the gold/silver/bronze badges always correspond to the visible
+        // top-3, regardless of which column the user sorts by.
+        for (let i = 0; i < sorted.length; i++) {
+            sorted[i] = { ...sorted[i], rank: i + 1 }
+        }
+        return sorted
     }, [rows, sortField, sortDirection])
 
 
