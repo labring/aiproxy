@@ -9,6 +9,7 @@ import { MetricsCards } from '@/feature/monitor/components/MetricsCards'
 import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { DashboardFilters } from '@/types/dashboard'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnix } from '@/utils/timezone'
 
 export default function MonitorPage() {
     const { t } = useTranslation()
@@ -25,9 +26,9 @@ export default function MonitorPage() {
         return {
             channel: initialChannel,
             timespan: 'hour',
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            start_timestamp: Math.floor(oneDayAgo.getTime() / 1000),
-            end_timestamp: Math.floor(today.setHours(23, 59, 59, 999) / 1000)
+            timezone: DEFAULT_TIMEZONE,
+            start_timestamp: zonedBoundaryToUnix(oneDayAgo, DEFAULT_TIMEZONE, false),
+            end_timestamp: zonedBoundaryToUnix(today, DEFAULT_TIMEZONE, true)
         }
     }
 

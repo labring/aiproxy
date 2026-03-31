@@ -219,6 +219,7 @@ type AddChannelRequest struct {
 	Name         string               `json:"name"`
 	Key          string               `json:"key"`
 	BaseURL      string               `json:"base_url"`
+	ProxyURL     string               `json:"proxy_url"`
 	Models       []string             `json:"models"`
 	Type         model.ChannelType    `json:"type"`
 	Priority     int32                `json:"priority"`
@@ -263,6 +264,7 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 		Name:         r.Name,
 		Key:          r.Key,
 		BaseURL:      r.BaseURL,
+		ProxyURL:     r.ProxyURL,
 		Models:       slices.Clone(r.Models),
 		ModelMapping: maps.Clone(r.ModelMapping),
 		Priority:     r.Priority,

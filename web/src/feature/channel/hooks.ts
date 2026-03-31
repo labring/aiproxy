@@ -52,6 +52,18 @@ export const useChannels = (
     }
 }
 
+export const useAllChannels = (enabled = true) => {
+    const query = useQuery({
+        queryKey: ['allChannels'],
+        queryFn: channelApi.getAllChannels,
+        enabled,
+    })
+
+    return {
+        ...query,
+    }
+}
+
 // 创建渠道
 export const useCreateChannel = () => {
     const queryClient = useQueryClient()
@@ -232,6 +244,7 @@ export const useTestChannelPreview = () => {
         type: number
         key: string
         base_url?: string
+        proxy_url?: string
         name?: string
         model: string
         model_mapping?: Record<string, string>
@@ -278,6 +291,7 @@ export const useTestChannelPreviewAll = () => {
         type: number
         key: string
         base_url?: string
+        proxy_url?: string
         name?: string
         models: string[]
         model_mapping?: Record<string, string>

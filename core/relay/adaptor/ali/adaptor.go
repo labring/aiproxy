@@ -6,9 +6,11 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -18,6 +20,10 @@ import (
 // https://help.aliyun.com/zh/dashscope/developer-reference/api-details
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeAli, &Adaptor{})
+}
 
 const baseURL = "https://dashscope.aliyuncs.com"
 
@@ -184,7 +190,7 @@ func (a *Adaptor) DoRequest(
 	case mode.AudioTranscription:
 		return STTDoRequest(meta, req)
 	default:
-		return utils.DoRequest(req, meta.RequestTimeout)
+		return utils.DoRequestWithMeta(req, meta)
 	}
 }
 

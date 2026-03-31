@@ -461,8 +461,17 @@ type SaveGroupModelConfigRequest struct {
 	OverrideRetryTimes bool  `json:"override_retry_times"`
 	RetryTimes         int64 `json:"retry_times"`
 
+	OverrideTimeoutConfig bool                `json:"override_timeout_config"`
+	TimeoutConfig         model.TimeoutConfig `json:"timeout_config"`
+
 	OverrideForceSaveDetail bool `json:"override_force_save_detail"`
 	ForceSaveDetail         bool `json:"force_save_detail"`
+
+	OverrideRequestBodyStorageMaxSize bool  `json:"override_request_body_storage_max_size"`
+	RequestBodyStorageMaxSize         int64 `json:"request_body_storage_max_size"`
+
+	OverrideResponseBodyStorageMaxSize bool  `json:"override_response_body_storage_max_size"`
+	ResponseBodyStorageMaxSize         int64 `json:"response_body_storage_max_size"`
 
 	OverrideSummaryServiceTier bool `json:"override_summary_service_tier"`
 	SummaryServiceTier         bool `json:"summary_service_tier"`
@@ -487,12 +496,19 @@ func (r *SaveGroupModelConfigRequest) ToGroupModelConfig(groupID string) model.G
 		OverrideRetryTimes: r.OverrideRetryTimes,
 		RetryTimes:         r.RetryTimes,
 
-		OverrideForceSaveDetail:          r.OverrideForceSaveDetail,
-		ForceSaveDetail:                  r.ForceSaveDetail,
-		OverrideSummaryServiceTier:       r.OverrideSummaryServiceTier,
-		SummaryServiceTier:               r.SummaryServiceTier,
-		OverrideSummaryClaudeLongContext: r.OverrideSummaryClaudeLongContext,
-		SummaryClaudeLongContext:         r.SummaryClaudeLongContext,
+		OverrideTimeoutConfig: r.OverrideTimeoutConfig,
+		TimeoutConfig:         r.TimeoutConfig,
+
+		OverrideForceSaveDetail:            r.OverrideForceSaveDetail,
+		ForceSaveDetail:                    r.ForceSaveDetail,
+		OverrideRequestBodyStorageMaxSize:  r.OverrideRequestBodyStorageMaxSize,
+		RequestBodyStorageMaxSize:          r.RequestBodyStorageMaxSize,
+		OverrideResponseBodyStorageMaxSize: r.OverrideResponseBodyStorageMaxSize,
+		ResponseBodyStorageMaxSize:         r.ResponseBodyStorageMaxSize,
+		OverrideSummaryServiceTier:         r.OverrideSummaryServiceTier,
+		SummaryServiceTier:                 r.SummaryServiceTier,
+		OverrideSummaryClaudeLongContext:   r.OverrideSummaryClaudeLongContext,
+		SummaryClaudeLongContext:           r.SummaryClaudeLongContext,
 	}
 }
 

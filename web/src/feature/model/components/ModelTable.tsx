@@ -2,6 +2,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
+import { useRuntimeMetrics } from "@/feature/monitor/runtime-hooks";
 import { ModelConfig, ModelSaveRequest } from "@/types/model";
 import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ import { channelApi } from "@/api/channel";
 import { modelApi } from "@/api/model";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { openResourceDialog, showDeletedResourceToast } from "@/utils/resource-dialog";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -87,6 +89,7 @@ export function ModelTable() {
 
   // Get model sets data
   const { data: modelSets, isLoading: isLoadingModelSets } = useModelSets();
+  const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics();
 
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
@@ -190,6 +193,8 @@ export function ModelTable() {
     return summary;
   };
 
+  const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`;
+
   // Create table columns
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
@@ -243,6 +248,31 @@ export function ModelTable() {
       ),
     },
     {
+      id: "runtime",
+      header: () => (
+        <div className="font-medium py-3.5">{t("common.runtime")}</div>
+      ),
+      cell: ({ row }) => {
+        const metric = runtimeMetrics?.models?.[row.original.model];
+        if (!metric) {
+          return <div className="text-muted-foreground text-sm">-</div>;
+        }
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+            <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+            <Badge variant="outline" className="text-xs">ERR {formatPercent(metric.error_rate)}</Badge>
+            {metric.banned_channels > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                BAN {metric.banned_channels}
+              </Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "sets",
       header: () => (
         <div className="font-medium py-3.5">{t("model.accessibleSets")}</div>
@@ -292,14 +322,20 @@ export function ModelTable() {
                         <div
                           key={channel.id}
                           className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
-                          onClick={async () => {
-                            try {
-                              const fullChannel = await channelApi.getChannel(channel.id);
+                          onClick={() => {
+                            openResourceDialog({
+                              fetcher: () => channelApi.getChannel(channel.id),
+                              onSuccess: (fullChannel) => {
                               setSelectedChannel(fullChannel);
                               setChannelDialogOpen(true);
-                            } catch {
-                              toast.error(t("channel.fetchFailed"));
-                            }
+                              },
+                              onNotFound: () => {
+                                showDeletedResourceToast(t("channel.deleted"));
+                              },
+                              onError: () => {
+                                showDeletedResourceToast(t("channel.fetchFailed"));
+                              },
+                            });
                           }}
                         >
                           <Badge variant="secondary" className="text-xs">
@@ -308,6 +344,20 @@ export function ModelTable() {
                           <span className="text-xs text-muted-foreground">
                             ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>
+                          {(() => {
+                            const pair = runtimeMetrics?.channel_models?.[String(channel.id)]?.[modelName];
+                            if (!pair) return null;
+                            return (
+                              <div className="flex items-center gap-1 ml-auto">
+                                <Badge variant="outline" className="text-[11px]">RPM {pair.rpm}</Badge>
+                                <Badge variant="outline" className="text-[11px]">TPM {pair.tpm}</Badge>
+                                <Badge variant="outline" className="text-[11px]">ERR {formatPercent(pair.error_rate)}</Badge>
+                                {pair.banned && (
+                                  <Badge variant="destructive" className="text-[11px]">BANNED</Badge>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <Badge variant="outline" className="text-xs ml-auto">
                             {(channel.weight ?? 0).toFixed(1)}%
                           </Badge>
@@ -473,7 +523,7 @@ export function ModelTable() {
         </DropdownMenu>
       ),
     },
-  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas]);
+  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
 
   // Initialize table
   const table = useReactTable({
@@ -716,7 +766,7 @@ export function ModelTable() {
               <DataTable
                 table={table}
                 columns={columns}
-                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas}
+                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas || isLoadingRuntimeMetrics}
                 loadingStyle="skeleton"
                 fixedHeader={true}
                 animatedRows={true}

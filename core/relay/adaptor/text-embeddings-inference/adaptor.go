@@ -6,8 +6,10 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,6 +19,10 @@ import (
 // text-embeddings-inference adaptor supports rerank and embeddings models deployed by
 // https://github.com/huggingface/text-embeddings-inference
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeTextEmbeddingsInference, &Adaptor{})
+}
 
 // base url for text-embeddings-inference, fake
 const baseURL = "https://api.text-embeddings.net"
@@ -101,7 +107,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(

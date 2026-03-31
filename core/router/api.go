@@ -60,6 +60,8 @@ func SetAPIRouter(router *gin.Engine) {
 		groupsRoute := apiRouter.Group("/groups")
 		{
 			groupsRoute.GET("/", controller.GetGroups)
+			groupsRoute.GET("/ranking", controller.GetConsumptionRanking)
+			groupsRoute.GET("/consumption_ranking", controller.GetConsumptionRanking)
 			groupsRoute.GET("/search", controller.SearchGroups)
 			groupsRoute.POST("/batch_delete", controller.DeleteGroups)
 			groupsRoute.POST("/batch_status", controller.UpdateGroupsStatus)
@@ -208,12 +210,21 @@ func SetAPIRouter(router *gin.Engine) {
 		monitorRoute := apiRouter.Group("/monitor")
 		{
 			monitorRoute.GET("/", controller.GetAllChannelModelErrorRates)
+			monitorRoute.GET("/runtime_metrics", controller.GetRuntimeMetrics)
+			monitorRoute.GET("/group_summary_metrics", controller.GetGroupSummaryMetrics)
+			monitorRoute.GET("/group_token_metrics/:group", controller.GetGroupTokenMetrics)
+			monitorRoute.GET("/group_model_metrics/:group", controller.GetGroupModelMetrics)
+			monitorRoute.GET(
+				"/group_tokenname_model_metrics/:group",
+				controller.GetGroupTokennameModelMetrics,
+			)
+			monitorRoute.POST("/batch_group_token_metrics", controller.BatchGetGroupTokenMetrics)
+			monitorRoute.GET("/models", controller.GetModelsErrorRate)
+			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 			monitorRoute.GET("/:id", controller.GetChannelModelErrorRates)
 			monitorRoute.DELETE("/", controller.ClearAllModelErrors)
 			monitorRoute.DELETE("/:id", controller.ClearChannelAllModelErrors)
 			monitorRoute.DELETE("/:id/*model", controller.ClearChannelModelErrors)
-			monitorRoute.GET("/models", controller.GetModelsErrorRate)
-			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 		}
 
 		publicsMcpRoute := apiRouter.Group("/mcp/publics")

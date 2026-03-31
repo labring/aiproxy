@@ -47,6 +47,8 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
+import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
+import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 
 export function ChannelTable() {
     const { t } = useTranslation()
@@ -84,7 +86,6 @@ export function ChannelTable() {
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
     const { data: allDefaultModels } = useAllChannelDefaultModels()
-
     // 获取渠道列表
     const {
         data,
@@ -112,6 +113,7 @@ export function ChannelTable() {
         [data?.channels]
     )
     const total = data?.total || 0
+    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
 
     // 打开创建渠道对话框
     const openCreateDialog = () => {
@@ -170,6 +172,7 @@ export function ChannelTable() {
                 name: channel.name,
                 key: channel.key,
                 base_url: channel.base_url,
+                proxy_url: channel.proxy_url,
                 models: channel.models,
                 model_mapping: channel.model_mapping || undefined,
                 sets: channel.sets,
@@ -201,6 +204,7 @@ export function ChannelTable() {
             name: channel.name,
             key: channel.key,
             base_url: channel.base_url,
+            proxy_url: channel.proxy_url,
             models: channel.models,
             model_mapping: channel.model_mapping || undefined,
             sets: channel.sets,
@@ -314,6 +318,8 @@ export function ChannelTable() {
         }
     }, [allDefaultModels])
 
+    const formatPercent = useCallback((value?: number) => `${((value || 0) * 100).toFixed(1)}%`, [])
+
     // 可点击单元格样式
     const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
@@ -396,6 +402,27 @@ export function ChannelTable() {
             ),
         },
         {
+            id: 'runtime',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("common.runtime")}</div>,
+            cell: ({ row }) => {
+                const metric = runtimeMetrics?.channels?.[String(row.original.id)]
+                if (!metric) {
+                    return <div className="text-muted-foreground text-xs">-</div>
+                }
+
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">ERR {formatPercent(metric.error_rate)}</Badge>
+                        {metric.banned_models > 0 && (
+                            <Badge variant="destructive" className="text-xs">BAN {metric.banned_models}</Badge>
+                        )}
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: 'models',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.models")}</div>,
             cell: ({ row }) => {
@@ -456,12 +483,24 @@ export function ChannelTable() {
                                             key={index}
                                             type="button"
                                             className={cn(
-                                                "w-fit rounded-md border px-1.5 py-0.5 text-xs font-mono transition-colors",
+                                                "w-fit rounded-md border px-1.5 py-0.5 text-xs font-mono transition-colors text-left",
                                                 "hover:border-primary hover:text-primary"
                                             )}
                                             onClick={() => openUpdateDialog(row.original)}
                                         >
-                                            {model}
+                                            <div>{model}</div>
+                                            {(() => {
+                                                const pair = runtimeMetrics?.channel_models?.[String(row.original.id)]?.[model]
+                                                if (!pair) return null
+                                                return (
+                                                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                                                        <span>RPM {pair.rpm}</span>
+                                                        <span>TPM {pair.tpm}</span>
+                                                        <span>ERR {formatPercent(pair.error_rate)}</span>
+                                                        {pair.banned && <span>BANNED</span>}
+                                                    </div>
+                                                )
+                                            })()}
                                         </button>
                                     ))}
                                 </div>
@@ -599,7 +638,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating, getDisplayModels])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent])
 
     // 初始化表格
     const table = useReactTable({
@@ -741,7 +780,7 @@ export function ChannelTable() {
                             table={table}
                             loadingStyle="skeleton"
                             columns={columns}
-                            isLoading={isLoading}
+                            isLoading={isLoading || isLoadingRuntimeMetrics}
                             fixedHeader={true}
                             animatedRows={true}
                             showScrollShadows={true}
@@ -797,12 +836,18 @@ export function ChannelTable() {
                     let channel = channels.find(c => c.id === channelId)
 
                     if (!channel) {
-                        try {
-                            channel = await channelApi.getChannel(channelId)
-                        } catch {
-                            toast.error(t("channel.fetchFailed"))
-                            return
-                        }
+                        await openResourceDialog({
+                            fetcher: () => channelApi.getChannel(channelId),
+                            onSuccess: (fullChannel) => {
+                                channel = fullChannel
+                            },
+                            onNotFound: () => {
+                                showDeletedResourceToast(t("channel.deleted"))
+                            },
+                            onError: () => {
+                                showDeletedResourceToast(t("channel.fetchFailed"))
+                            },
+                        })
                     }
 
                     if (channel) {

@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,6 +19,10 @@ import (
 )
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeBaiduV2, &Adaptor{})
+}
 
 const (
 	baseURL = "https://qianfan.baidubce.com/v2"
@@ -80,7 +86,7 @@ func (a *Adaptor) SetupRequestHeader(
 	_ *gin.Context,
 	req *http.Request,
 ) error {
-	token, err := GetBearerToken(context.Background(), meta.Channel.Key)
+	token, err := GetBearerToken(context.Background(), meta.Channel.Key, meta.Channel.ProxyURL)
 	if err != nil {
 		return err
 	}
@@ -117,7 +123,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(

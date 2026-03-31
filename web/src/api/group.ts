@@ -9,6 +9,10 @@ import {
     GroupModelConfig,
     GroupModelConfigSaveRequest
 } from '@/types/group'
+import {
+    ConsumptionRankingQuery,
+    ConsumptionRankingResponse,
+} from '@/types/consumption-ranking'
 
 export const groupApi = {
     // Get all groups with pagination
@@ -41,6 +45,32 @@ export const groupApi = {
             params.append('status', status.toString())
         }
         const response = await get<GroupsResponse>(`groups/search?${params.toString()}`)
+        return response
+    },
+
+    getConsumptionRanking: async (query: ConsumptionRankingQuery): Promise<ConsumptionRankingResponse> => {
+        const params = new URLSearchParams()
+        params.append('type', query.type)
+        if (query.page !== undefined) {
+            params.append('page', query.page.toString())
+        }
+        if (query.per_page !== undefined) {
+            params.append('per_page', query.per_page.toString())
+        }
+        if (query.start_timestamp !== undefined) {
+            params.append('start_timestamp', query.start_timestamp.toString())
+        }
+        if (query.end_timestamp !== undefined) {
+            params.append('end_timestamp', query.end_timestamp.toString())
+        }
+        if (query.timezone) {
+            params.append('timezone', query.timezone)
+        }
+        if (query.order) {
+            params.append('order', query.order)
+        }
+
+        const response = await get<ConsumptionRankingResponse>(`groups/consumption_ranking?${params.toString()}`)
         return response
     },
 

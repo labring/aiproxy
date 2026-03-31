@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -17,6 +19,10 @@ import (
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeAzure, &Adaptor{})
 }
 
 func (a *Adaptor) DefaultBaseURL() string {
@@ -36,15 +42,39 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
+	return ConvertRequest(meta, store, req, true)
+}
+
+func ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+	replaceDot bool,
+) (adaptor.ConvertResult, error) {
 	model := meta.ActualModel
-	newmodel := strings.ReplaceAll(model, ".", "")
+
+	newmodel := model
+	if replaceDot {
+		newmodel = strings.ReplaceAll(model, ".", "")
+	}
 
 	meta.ActualModel = newmodel
 	defer func() {
 		meta.ActualModel = model
 	}()
 
-	return a.Adaptor.ConvertRequest(meta, store, req)
+	switch meta.Mode {
+	case mode.ImagesGenerations:
+		return openai.ConvertImagesRequest(
+			meta,
+			req,
+			openai.ImagesRequestRemoveModel,
+		)
+	case mode.ImagesEdits:
+		return openai.ConvertImagesEditsRequest(meta, req, false)
+	}
+
+	return openai.ConvertRequest(meta, store, req)
 }
 
 //nolint:gocyclo

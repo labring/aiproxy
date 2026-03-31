@@ -7,7 +7,9 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,6 +19,10 @@ import (
 var _ adaptor.Adaptor = (*Adaptor)(nil)
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeOpenAI, &Adaptor{})
+}
 
 const baseURL = "https://api.openai.com/v1"
 
@@ -309,7 +315,7 @@ func ConvertRequest(
 	case mode.ImagesGenerations:
 		return ConvertImagesRequest(meta, req)
 	case mode.ImagesEdits:
-		return ConvertImagesEditsRequest(meta, req)
+		return ConvertImagesEditsRequest(meta, req, true)
 	case mode.AudioTranscription, mode.AudioTranslation:
 		return ConvertSTTRequest(meta, req)
 	case mode.AudioSpeech:
@@ -439,7 +445,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(

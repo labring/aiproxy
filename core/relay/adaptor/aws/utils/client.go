@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/smithy-go/auth/bearer"
 	"github.com/labring/aiproxy/core/relay/meta"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 )
 
 type AwsConfig struct {
@@ -40,10 +41,22 @@ func GetAwsConfigFromKey(key string) (*AwsConfig, error) {
 	}, nil
 }
 
-func AwsClient(config *AwsConfig) *bedrockruntime.Client {
-	options := bedrockruntime.Options{
-		Region: config.Region,
+func awsClientFromMeta(meta *meta.Meta) (*bedrockruntime.Client, error) {
+	config, err := GetAwsConfigFromKey(meta.Channel.Key)
+	if err != nil {
+		return nil, err
 	}
+
+	httpClient, err := relayutils.LoadHTTPClientE(meta.RequestTimeout, meta.Channel.ProxyURL)
+	if err != nil {
+		return nil, err
+	}
+
+	options := bedrockruntime.Options{
+		Region:     config.Region,
+		HTTPClient: httpClient,
+	}
+
 	if config.APIKey != "" {
 		options.BearerAuthTokenProvider = bearer.TokenProviderFunc(
 			func(ctx context.Context) (bearer.Token, error) {
@@ -57,16 +70,7 @@ func AwsClient(config *AwsConfig) *bedrockruntime.Client {
 		)
 	}
 
-	return bedrockruntime.New(options)
-}
-
-func awsClientFromKey(key string) (*bedrockruntime.Client, error) {
-	config, err := GetAwsConfigFromKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return AwsClient(config), nil
+	return bedrockruntime.New(options), nil
 }
 
 const AwsClientKey = "aws_client"
@@ -82,7 +86,7 @@ func AwsClientFromMeta(meta *meta.Meta) (*bedrockruntime.Client, error) {
 		return v, nil
 	}
 
-	awsClient, err := awsClientFromKey(meta.Channel.Key)
+	awsClient, err := awsClientFromMeta(meta)
 	if err != nil {
 		return nil, err
 	}

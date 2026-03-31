@@ -409,17 +409,17 @@ func convertGeminiSystemToOpenAI(geminiReq *relaymodel.GeminiChatRequest) []rela
 		return nil
 	}
 
-	systemText := ""
+	var systemText strings.Builder
 	for _, part := range geminiReq.SystemInstruction.Parts {
 		if part.Text != "" {
-			systemText += part.Text
+			systemText.WriteString(part.Text)
 		}
 	}
 
-	if systemText != "" {
+	if systemText.String() != "" {
 		return []relaymodel.Message{{
 			Role:    relaymodel.RoleSystem,
-			Content: systemText,
+			Content: systemText.String(),
 		}}
 	}
 

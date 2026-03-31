@@ -27,6 +27,7 @@ import { CreateGroupTokenDialog } from './CreateGroupTokenDialog'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useGroupTokenMetrics } from '@/feature/monitor/runtime-hooks'
 
 // Mask API key - show prefix and last 4 chars
 const maskApiKey = (key: string): string => {
@@ -139,7 +140,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
 
     const tokens = data?.tokens || []
     const total = data?.total || 0
-
+    const { data: runtimeMetrics } = useGroupTokenMetrics(groupId, !!groupId && tokens.length > 0)
     const openDeleteDialog = (id: number) => {
         setSelectedTokenId(id)
         setDeleteDialogOpen(true)
@@ -196,6 +197,22 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                     </Button>
                 </div>
             ),
+        },
+        {
+            id: 'runtime',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("common.runtime")}</div>,
+            cell: ({ row }) => {
+                const metric = runtimeMetrics?.tokens?.[row.original.name]
+                if (!metric) {
+                    return <div className="text-muted-foreground text-sm">-</div>
+                }
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                    </div>
+                )
+            },
         },
         {
             accessorKey: 'quota',

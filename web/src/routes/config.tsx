@@ -13,6 +13,7 @@ import MonitorPage from "@/pages/monitor/page"
 import LogPage from "@/pages/log/page"
 import MCPPage from "@/pages/mcp/page"
 import GroupPage from "@/pages/group/page"
+import ConsumptionRankingPage from "@/pages/consumption-ranking/page"
 
 // import layout component directly
 import { RootLayout } from "@/components/layout/RootLayOut"
@@ -72,6 +73,14 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: ROUTES.GROUP,
                         element: <GroupPage />,
+                    },
+                    {
+                        path: ROUTES.CONSUMPTION_RANKING,
+                        element: <ConsumptionRankingPage />,
+                    },
+                    {
+                        path: ROUTES.LEGACY_GROUP_RANKING,
+                        element: <Navigate to={ROUTES.CONSUMPTION_RANKING} replace />,
                     },
                     {
                         path: ROUTES.KEY,

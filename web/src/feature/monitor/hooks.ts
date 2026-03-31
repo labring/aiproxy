@@ -19,11 +19,15 @@ export interface DashboardAggregates {
     total_time_milliseconds: number
     total_ttfb_milliseconds: number
     input_tokens: number
+    image_input_tokens: number
+    audio_input_tokens: number
     output_tokens: number
+    image_output_tokens: number
     cached_tokens: number
     cache_creation_tokens: number
     cache_hit_count: number
     cache_creation_count: number
+    reasoning_tokens: number
     total_tokens: number
     web_search_count: number
     current_rpm: number
@@ -177,6 +181,8 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
         const cacheCreationAmount = summary.reduce((acc, s) => acc + (s?.cache_creation_amount || 0), 0)
         const webSearchAmount = summary.reduce((acc, s) => acc + (s?.web_search_amount || 0), 0)
         const usedAmount = summary.reduce((acc, s) => acc + (s?.used_amount || 0), 0)
+        const totalInputAmount = inputAmount + imageInputAmount + audioInputAmount + cachedAmount + cacheCreationAmount
+        const totalOutputAmount = outputAmount + imageOutputAmount
 
         // Non-overlapping text portions (subtract sub-categories from totals)
         const textInputTokens = Math.max(0, inputTokens - imageInputTokens - audioInputTokens - cachedTokens - cacheCreationTokens)
@@ -252,9 +258,11 @@ function toChartData(timeSeries: TimeSeriesPoint[], timespan?: string, hasModelF
             webSearchCount,
             // Detailed amounts
             inputAmount,
+            totalInputAmount,
             imageInputAmount,
             audioInputAmount,
             outputAmount,
+            totalOutputAmount,
             imageOutputAmount,
             cachedAmount,
             cacheCreationAmount,
@@ -366,11 +374,15 @@ function computeDashboardResult(
         total_time_milliseconds: 0,
         total_ttfb_milliseconds: 0,
         input_tokens: 0,
+        image_input_tokens: 0,
+        audio_input_tokens: 0,
         output_tokens: 0,
+        image_output_tokens: 0,
         cached_tokens: 0,
         cache_creation_tokens: 0,
         cache_hit_count: 0,
         cache_creation_count: 0,
+        reasoning_tokens: 0,
         total_tokens: 0,
         web_search_count: 0,
         current_rpm: 0,
@@ -476,11 +488,15 @@ function computeDashboardResult(
             agg.total_time_milliseconds += normalized?.total_time_milliseconds || 0
             agg.total_ttfb_milliseconds += normalized?.total_ttfb_milliseconds || 0
             agg.input_tokens += normalized?.input_tokens || 0
+            agg.image_input_tokens += normalized?.image_input_tokens || 0
+            agg.audio_input_tokens += normalized?.audio_input_tokens || 0
             agg.output_tokens += normalized?.output_tokens || 0
+            agg.image_output_tokens += normalized?.image_output_tokens || 0
             agg.cached_tokens += normalized?.cached_tokens || 0
             agg.cache_creation_tokens += normalized?.cache_creation_tokens || 0
             agg.cache_hit_count += normalized?.cache_hit_count || 0
             agg.cache_creation_count += normalized?.cache_creation_count || 0
+            agg.reasoning_tokens += normalized?.reasoning_tokens || 0
             agg.total_tokens += normalized?.total_tokens || 0
             agg.web_search_count += normalized?.web_search_count || 0
             if ((normalized?.max_rpm || 0) > agg.max_rpm) agg.max_rpm = normalized?.max_rpm || 0

@@ -118,9 +118,11 @@ export interface ChartDataPoint {
     webSearchCount: number
     // Detailed amounts
     inputAmount: number
+    totalInputAmount: number
     imageInputAmount: number
     audioInputAmount: number
     outputAmount: number
+    totalOutputAmount: number
     imageOutputAmount: number
     cachedAmount: number
     cacheCreationAmount: number

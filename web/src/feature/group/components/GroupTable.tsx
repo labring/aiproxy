@@ -30,6 +30,7 @@ import { AnimatedButton } from '@/components/ui/animation/components/animated-bu
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
+import { useGroupSummaryMetrics } from '@/feature/monitor/runtime-hooks'
 
 // Format currency amount
 const formatAmount = (amount: number): string => {
@@ -86,7 +87,12 @@ export function GroupTable() {
 
     const groups = useMemo(() => data?.groups || [], [data?.groups])
     const total = data?.total || 0
-
+    const { data: runtimeMetrics } = useGroupSummaryMetrics(
+        {
+            groups: groups.map((group) => group.id),
+        },
+        groups.length > 0,
+    )
     // Open create group dialog
     const openCreateDialog = () => {
         setEditingGroup(null)
@@ -176,6 +182,22 @@ export function GroupTable() {
             ),
         },
         {
+            id: 'runtime',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("common.runtime")}</div>,
+            cell: ({ row }) => {
+                const metric = runtimeMetrics?.groups?.[row.original.id]
+                if (!metric) {
+                    return <div className="text-muted-foreground text-sm">-</div>
+                }
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+                        <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: 'used_amount',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.usedAmount")}</div>,
             cell: ({ row }) => (
@@ -251,7 +273,7 @@ export function GroupTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isStatusUpdating])
+    ], [t, isStatusUpdating, runtimeMetrics])
 
     // Initialize table
     const table = useReactTable({
@@ -261,8 +283,8 @@ export function GroupTable() {
     })
 
     return (
-        <>
-            <Card className="border-none shadow-none p-6 flex flex-col h-full">
+        <div className="h-full flex flex-col min-h-0">
+            <Card className="border-none shadow-none p-6 flex flex-col flex-1 min-h-0">
                 {/* Title and action buttons */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
@@ -359,6 +381,6 @@ export function GroupTable() {
                 groupId={selectedGroupId}
                 onCreated={() => setSelectedGroupId(null)}
             />
-        </>
+        </div>
     )
 }

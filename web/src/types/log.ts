@@ -103,6 +103,7 @@ export interface LogFilters {
   keyword?: string
   start_timestamp?: number
   end_timestamp?: number
+  timezone?: string
   code_type?: 'all' | 'success' | 'error'
   page?: number
   per_page?: number

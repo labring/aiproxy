@@ -1,5 +1,5 @@
 // src/feature/channel/components/ChannelForm.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
     FormMessage,
 } from '@/components/ui/form'
 import { channelCreateSchema } from '@/validation/channel'
-import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
+import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useUpdateChannelStatus, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import { useTranslation } from 'react-i18next'
 import { ChannelCreateForm } from '@/validation/channel'
@@ -26,10 +26,11 @@ import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { Skeleton } from "@/components/ui/skeleton"
 import { AnimatedContainer } from '@/components/ui/animation/components/animated-container'
 import { toast } from 'sonner'
-import { FlaskConical, Loader2, Info } from 'lucide-react'
+import { FlaskConical, Loader2, Info, Power, PowerOff } from 'lucide-react'
 import { ChannelTestDialog } from './ChannelTestDialog'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
+import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update' | 'copy'
@@ -41,6 +42,7 @@ interface ChannelFormProps {
         name: string
         key: string
         base_url?: string
+        proxy_url?: string
         models: string[]
         model_mapping?: Record<string, string>
         sets?: string[]
@@ -52,13 +54,14 @@ interface ChannelFormProps {
 export function ChannelForm({
     mode = 'create',
     channelId,
-    channel: _channel,
+    channel,
     onSuccess,
     defaultValues = {
         type: 0,
         name: '',
         key: '',
         base_url: '',
+        proxy_url: '',
         models: [],
         model_mapping: {},
         sets: [],
@@ -71,6 +74,7 @@ export function ChannelForm({
     const isCreateLikeMode = mode === 'create' || mode === 'copy'
     const [defaultModelsDialogOpen, setDefaultModelsDialogOpen] = useState(false)
     const [configsError, setConfigsError] = useState<string | null>(null)
+    const [currentStatus, setCurrentStatus] = useState(channel?.status ?? 1)
 
     // Determine initial useDefaultModels state
     const initialUseDefault = mode === 'create'
@@ -99,6 +103,8 @@ export function ChannelForm({
         clearError: clearUpdateError
     } = useUpdateChannel()
 
+    const { updateStatus, isLoading: isStatusUpdating } = useUpdateChannelStatus()
+
     // Test channel hook
     const {
         testChannelPreviewAll,
@@ -109,6 +115,10 @@ export function ChannelForm({
     } = useTestChannelPreviewAll()
 
     const [testDialogOpen, setTestDialogOpen] = useState(false)
+
+    useEffect(() => {
+        setCurrentStatus(channel?.status ?? 1)
+    }, [channel?.status, channel?.id])
 
     // 动态状态
     const isLoading = isCreateLikeMode ? isCreating : isUpdating
@@ -125,11 +135,12 @@ export function ChannelForm({
     })
 
     const watchedType = form.watch('type')
-
     // Fetch default models for the selected channel type
     const { data: defaultModelsData, isLoading: isDefaultModelsLoading } = useChannelDefaultModels(watchedType)
+    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     const hasDefaults = !!(defaultModelsData?.models && defaultModelsData.models.length > 0)
+    const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`
 
     // Effective flag follows user's selected mode even when no defaults exist yet.
     const effectiveUseDefault = useDefaultModels
@@ -185,6 +196,7 @@ export function ChannelForm({
             name: data.name,
             key: data.key,
             base_url: data.base_url || '',
+            proxy_url: data.proxy_url || '',
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
@@ -220,6 +232,22 @@ export function ChannelForm({
     // 处理提交按钮点击
     const handleSubmitClick = () => {
         setIsUserSubmitting(true)
+    }
+
+    const handleStatusToggle = () => {
+        if (mode !== 'update' || !channelId) {
+            return
+        }
+
+        const nextStatus = currentStatus === 2 ? 1 : 2
+        updateStatus(
+            { id: channelId, status: { status: nextStatus } },
+            {
+                onSuccess: () => {
+                    setCurrentStatus(nextStatus)
+                },
+            }
+        )
     }
 
     // Handle toggle between default and custom models
@@ -297,6 +325,7 @@ export function ChannelForm({
             type: formData.type,
             key: formData.key,
             base_url: formData.base_url || '',
+            proxy_url: formData.proxy_url || '',
             name: formData.name || '',
             models: testModels,
             model_mapping: testMapping,
@@ -421,7 +450,20 @@ export function ChannelForm({
                                 className="inline-flex items-center rounded-md border border-transparent bg-secondary px-2 py-0.5 text-xs font-mono text-secondary-foreground transition-colors hover:border-primary/30 hover:bg-secondary/80"
                                 title={t('channel.dialog.configureDefaultModels')}
                             >
-                                {model}
+                                <span>{model}</span>
+                                {(() => {
+                                    const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[model] : undefined
+                                    const modelMetric = runtimeMetrics?.models?.[model]
+                                    if (!pair && !modelMetric) return null
+                                    const metric = pair || modelMetric
+                                    return (
+                                        <span className="ml-2 inline-flex items-center gap-1 text-[10px]">
+                                            <span>RPM {metric?.rpm || 0}</span>
+                                            <span>TPM {metric?.tpm || 0}</span>
+                                            <span>ERR {formatPercent(metric?.error_rate)}</span>
+                                        </span>
+                                    )
+                                })()}
                             </button>
                         ))}
                     </div>
@@ -665,10 +707,34 @@ export function ChannelForm({
                                                                         </div>
                                                                     )
                                                                 }
-                                                                return item
+                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const modelMetric = runtimeMetrics?.models?.[item]
+                                                                const metric = pair || modelMetric
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span>{item}</span>
+                                                                        {metric && (
+                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                                RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )
                                                             }}
                                                             handleSelectedItemDisplay={(item) => {
-                                                                return item
+                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const modelMetric = runtimeMetrics?.models?.[item]
+                                                                const metric = pair || modelMetric
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span>{item}</span>
+                                                                        {metric && (
+                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                                RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )
                                                             }}
                                                         />
                                                     )
@@ -818,6 +884,30 @@ export function ChannelForm({
                                 }}
                             />
 
+                            <FormField
+                                control={form.control}
+                                name="proxy_url"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>{t("channel.dialog.proxyUrl")}</FormLabel>
+                                            <span className="text-xs text-muted-foreground">{t("common.optional")}</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input
+                                                placeholder={t("channel.dialog.proxyUrlPlaceholder")}
+                                                {...field}
+                                                value={field.value || ''}
+                                            />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {t("channel.dialog.proxyUrlHelp")}
+                                        </p>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
                             {/* 优先级字段 */}
                             <FormField
                                 control={form.control}
@@ -855,29 +945,57 @@ export function ChannelForm({
                             />
 
                             {/* 提交和测试按钮 */}
-                            <div className="flex justify-between items-center">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleTestClick}
-                                    disabled={isTesting || isLoading}
-                                    className="flex items-center gap-2"
-                                >
-                                    {isTesting ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            {t("channel.testing")}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FlaskConical className="h-4 w-4" />
-                                            {t("channel.test")}
-                                        </>
-                                    )}
-                                </Button>
+                            <div className="flex justify-between items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleTestClick}
+                                        disabled={isTesting || isLoading || isStatusUpdating}
+                                        className="flex items-center gap-2"
+                                    >
+                                        {isTesting ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                {t("channel.testing")}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FlaskConical className="h-4 w-4" />
+                                                {t("channel.test")}
+                                            </>
+                                        )}
+                                    </Button>
+                                    {mode === 'update' && channelId ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handleStatusToggle}
+                                            disabled={isLoading || isTesting || isStatusUpdating}
+                                            className="flex items-center gap-2"
+                                        >
+                                            {isStatusUpdating ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    {currentStatus === 2 ? t("channel.enable") : t("channel.disable")}
+                                                </>
+                                            ) : currentStatus === 2 ? (
+                                                <>
+                                                    <Power className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+                                                    {t("channel.enable")}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <PowerOff className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+                                                    {t("channel.disable")}
+                                                </>
+                                            )}
+                                        </Button>
+                                    ) : null}
+                                </div>
                                 <Button
                                     type="submit"
-                                    disabled={isLoading || isTesting}
+                                    disabled={isLoading || isTesting || isStatusUpdating}
                                     onClick={handleSubmitClick}
                                 >
                                     {isLoading ? t("channel.dialog.submitting") : isCreateLikeMode ? t("channel.dialog.create") : t("channel.dialog.update")}

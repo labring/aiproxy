@@ -8,6 +8,7 @@ import { MonitorCharts } from '@/feature/monitor/components/MonitorCharts'
 import { GroupDashboardFilters, DataSourceMode } from './GroupDashboardFilters'
 import type { DashboardFilters } from '@/types/dashboard'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DEFAULT_TIMEZONE, zonedBoundaryToUnix } from '@/utils/timezone'
 
 interface GroupDashboardTabProps {
     groupId: string
@@ -25,9 +26,9 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
         return {
             tokenName: initialTokenName || undefined,
             timespan: 'hour',
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            start_timestamp: Math.floor(oneDayAgo.getTime() / 1000),
-            end_timestamp: Math.floor(today.setHours(23, 59, 59, 999) / 1000)
+            timezone: DEFAULT_TIMEZONE,
+            start_timestamp: zonedBoundaryToUnix(oneDayAgo, DEFAULT_TIMEZONE, false),
+            end_timestamp: zonedBoundaryToUnix(today, DEFAULT_TIMEZONE, true)
         }
     }
 
@@ -129,6 +130,7 @@ export function GroupDashboardTab({ groupId, initialTokenName }: GroupDashboardT
                         detailRanking={data.detailRanking}
                         hasModelFilter={!!filters.model}
                         isGroup={true}
+                        groupId={groupId}
                         loading={isLoading}
                     />
                 )
