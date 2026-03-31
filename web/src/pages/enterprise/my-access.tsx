@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     Copy, Eye, EyeOff, Plus, Ban, ChevronDown, ChevronRight, Search,
+    Building2, Globe, Info,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import type { DateRange } from "react-day-picker"
 import {
@@ -21,8 +23,10 @@ import {
     type MyAccessResponse,
     type ModelGroupInfo,
     type MyStatsResponse,
+    type MyQuotaStatus,
+    type MetricComparison,
 } from "@/api/enterprise"
-import { getTimeRange, formatAmount, formatNumber, type TimeRange } from "@/lib/enterprise"
+import { getTimeRange, formatAmount, formatNumber, formatMs, formatRate, type TimeRange } from "@/lib/enterprise"
 
 // Semantic color groups for endpoint badges
 const EP_COLORS = {
@@ -106,11 +110,126 @@ function formatPrice(price: number, unit: number, freeLabel: string): string {
     return `¥${perMillion.toFixed(2)}`
 }
 
+// --- Comparison Metric Card ---
+function ComparisonMetricCard({
+    label,
+    value,
+    comparison,
+    formatFn,
+}: {
+    label: string
+    value: string
+    comparison?: MetricComparison
+    formatFn: (n: number) => string
+}) {
+    const { t } = useTranslation()
+
+    return (
+        <Card className="relative overflow-hidden">
+            <CardContent className="pt-4 pb-3">
+                <p className="text-xs text-muted-foreground leading-none">{label}</p>
+                <p className="text-2xl font-bold tabular-nums mt-1.5 tracking-tight">{value}</p>
+                {comparison && (
+                    <div className="mt-2.5 pt-2 border-t border-border/50 space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 tabular-nums">
+                            <Building2 className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{t("enterprise.myAccess.deptAvg" as never)}</span>
+                            <span className="ml-auto font-medium text-foreground/70">{formatFn(comparison.dept_avg)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 tabular-nums">
+                            <Globe className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{t("enterprise.myAccess.enterpriseAvg" as never)}</span>
+                            <span className="ml-auto font-medium text-foreground/70">{formatFn(comparison.enterprise_avg)}</span>
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// --- Quota Status Section (standalone, no time filter) ---
+function QuotaStatusSection({ quota }: { quota: MyQuotaStatus | null }) {
+    const { t } = useTranslation()
+
+    const tierColor = (tier: number) => {
+        if (tier === 1) return "bg-green-500"
+        if (tier === 2) return "bg-yellow-500"
+        return "bg-red-500"
+    }
+
+    const tierBadgeVariant = (tier: number): "default" | "secondary" | "destructive" => {
+        if (tier === 1) return "default"
+        if (tier === 2) return "secondary"
+        return "destructive"
+    }
+
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.quotaStatus" as never)}</CardTitle>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground/60 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                                <p className="text-xs">{t("enterprise.myAccess.quotaIndependentHint" as never)}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {!quota ? (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                        {t("enterprise.myAccess.noPolicy" as never)}
+                    </p>
+                ) : (
+                    <div className="space-y-3">
+                        {/* Progress bar */}
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>{formatAmount(quota.period_used)} / {formatAmount(quota.period_quota)}</span>
+                                <span>{quota.period_quota > 0 ? ((quota.period_used / quota.period_quota) * 100).toFixed(1) : "0.0"}%</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all ${tierColor(quota.current_tier)}`}
+                                    style={{ width: `${quota.period_quota > 0 ? Math.min((quota.period_used / quota.period_quota) * 100, 100) : 0}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className="text-xs">{quota.policy_name}</Badge>
+                            <Badge variant={tierBadgeVariant(quota.current_tier)} className="text-xs">
+                                {t("enterprise.myAccess.currentTier" as never)} {quota.current_tier}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs capitalize">{quota.period_type}</Badge>
+                        </div>
+
+                        {/* Block warning */}
+                        {quota.block_at_tier3 && quota.current_tier >= 3 && (
+                            <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                {t("enterprise.myAccess.blocked" as never)}
+                            </p>
+                        )}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
 // --- Personal Stats Section ---
-function PersonalStatsSection() {
+function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaStatus | null) => void }) {
     const { t } = useTranslation()
     const [timeRange, setTimeRange] = useState<TimeRange>("7d")
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
+    const quotaDeliveredRef = useRef(false)
 
     const { start, end } = useMemo(() => {
         if (timeRange === "custom" && customDateRange?.from) {
@@ -128,25 +247,21 @@ function PersonalStatsSection() {
         queryFn: () => enterpriseApi.getMyStats(start, end),
     })
 
-    const tierColor = (tier: number) => {
-        if (tier === 1) return "bg-green-500"
-        if (tier === 2) return "bg-yellow-500"
-        return "bg-red-500"
-    }
-
-    const tierBadgeVariant = (tier: number): "default" | "secondary" | "destructive" => {
-        if (tier === 1) return "default"
-        if (tier === 2) return "secondary"
-        return "destructive"
-    }
+    // Deliver quota to parent once (quota is time-independent, avoid re-triggering)
+    useEffect(() => {
+        if (data && !quotaDeliveredRef.current) {
+            onQuotaLoaded(data.quota)
+            quotaDeliveredRef.current = true
+        }
+    }, [data, onQuotaLoaded])
 
     if (isLoading) {
         return (
             <div className="space-y-4">
                 <div className="h-6 w-48 bg-muted animate-pulse rounded" />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map(i => (
-                        <div key={i} className="h-24 bg-muted animate-pulse rounded" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                        <div key={i} className="h-28 bg-muted animate-pulse rounded-lg" />
                     ))}
                 </div>
                 <div className="h-32 bg-muted animate-pulse rounded" />
@@ -155,7 +270,7 @@ function PersonalStatsSection() {
     }
 
     const usage = data?.usage
-    const quota = data?.quota
+    const comp = usage?.comparisons
 
     return (
         <div className="space-y-4">
@@ -182,106 +297,81 @@ function PersonalStatsSection() {
                 </div>
             </div>
 
-            {/* Usage stat cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardContent className="pt-4 pb-4">
-                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalConsumption" as never)}</p>
-                        <p className="text-2xl font-bold tabular-nums mt-1">{formatAmount(usage?.total_amount ?? 0)}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4 pb-4">
-                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalTokens" as never)}</p>
-                        <p className="text-2xl font-bold tabular-nums mt-1">{formatNumber(usage?.total_tokens ?? 0)}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4 pb-4">
-                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.totalRequests" as never)}</p>
-                        <p className="text-2xl font-bold tabular-nums mt-1">{formatNumber(usage?.total_requests ?? 0)}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4 pb-4">
-                        <p className="text-xs text-muted-foreground">{t("enterprise.myAccess.uniqueModels" as never)}</p>
-                        <p className="text-2xl font-bold tabular-nums mt-1">{usage?.unique_models ?? 0}</p>
-                    </CardContent>
-                </Card>
+            {/* 8 metric cards: 2 rows × 4 columns */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.totalConsumption" as never)}
+                    value={formatAmount(usage?.total_amount ?? 0)}
+                    comparison={comp?.total_amount}
+                    formatFn={formatAmount}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.totalTokens" as never)}
+                    value={formatNumber(usage?.total_tokens ?? 0)}
+                    comparison={comp?.total_tokens}
+                    formatFn={n => formatNumber(Math.round(n))}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.totalRequests" as never)}
+                    value={formatNumber(usage?.total_requests ?? 0)}
+                    comparison={comp?.total_requests}
+                    formatFn={n => formatNumber(Math.round(n))}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.uniqueModels" as never)}
+                    value={String(usage?.unique_models ?? 0)}
+                    comparison={comp?.unique_models}
+                    formatFn={n => n.toFixed(1)}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.avgCostPerReq" as never)}
+                    value={formatAmount(usage?.avg_cost_per_req ?? 0)}
+                    comparison={comp?.avg_cost_per_req}
+                    formatFn={formatAmount}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.successRate" as never)}
+                    value={formatRate(usage?.success_rate ?? 0)}
+                    comparison={comp?.success_rate}
+                    formatFn={formatRate}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.avgResponseTime" as never)}
+                    value={formatMs(usage?.avg_response_ms ?? 0)}
+                    comparison={comp?.avg_response_ms}
+                    formatFn={formatMs}
+                />
+                <ComparisonMetricCard
+                    label={t("enterprise.myAccess.avgTtfb" as never)}
+                    value={formatMs(usage?.avg_ttfb_ms ?? 0)}
+                    comparison={comp?.avg_ttfb_ms}
+                    formatFn={formatMs}
+                />
             </div>
 
-            {/* Top models + quota status */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Top models */}
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.topModels" as never)}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {!usage?.top_models?.length ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">—</p>
-                        ) : (
-                            <table className="w-full text-sm">
-                                <tbody>
-                                    {usage.top_models.map(m => (
-                                        <tr key={m.model} className="border-b last:border-0">
-                                            <td className="py-2 font-mono text-xs truncate max-w-[160px]">{m.model}</td>
-                                            <td className="py-2 text-right tabular-nums text-xs">{formatAmount(m.used_amount)}</td>
-                                            <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{formatNumber(m.request_count)} req</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Quota status */}
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.quotaStatus" as never)}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {!quota ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                                {t("enterprise.myAccess.noPolicy" as never)}
-                            </p>
-                        ) : (
-                            <div className="space-y-3">
-                                {/* Progress bar */}
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>{formatAmount(quota.period_used)} / {formatAmount(quota.period_quota)}</span>
-                                        <span>{((quota.period_used / quota.period_quota) * 100).toFixed(1)}%</span>
-                                    </div>
-                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full transition-all ${tierColor(quota.current_tier)}`}
-                                            style={{ width: `${Math.min((quota.period_used / quota.period_quota) * 100, 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Badges */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <Badge variant="outline" className="text-xs">{quota.policy_name}</Badge>
-                                    <Badge variant={tierBadgeVariant(quota.current_tier)} className="text-xs">
-                                        {t("enterprise.myAccess.currentTier" as never)} {quota.current_tier}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs capitalize">{quota.period_type}</Badge>
-                                </div>
-
-                                {/* Block warning */}
-                                {quota.block_at_tier3 && quota.current_tier === 3 && (
-                                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                                        ⚠ {t("enterprise.myAccess.blocked" as never)}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
+            {/* Top models (full width, no quota card beside it) */}
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.topModels" as never)}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {!usage?.top_models?.length ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">—</p>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <tbody>
+                                {usage.top_models.map(m => (
+                                    <tr key={m.model} className="border-b last:border-0">
+                                        <td className="py-2 font-mono text-xs truncate max-w-[160px]">{m.model}</td>
+                                        <td className="py-2 text-right tabular-nums text-xs">{formatAmount(m.used_amount)}</td>
+                                        <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{formatNumber(m.request_count)} req</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     )
 }
@@ -648,6 +738,7 @@ export default function MyAccessPage() {
     const [newKeyName, setNewKeyName] = useState("")
     const [newlyCreatedKey, setNewlyCreatedKey] = useState<MyTokenInfo | null>(null)
     const [disableConfirmId, setDisableConfirmId] = useState<number | null>(null)
+    const [quotaStatus, setQuotaStatus] = useState<MyQuotaStatus | null | undefined>(undefined)
 
     const { data, isLoading } = useQuery<MyAccessResponse>({
         queryKey: ["my-access"],
@@ -697,8 +788,11 @@ export default function MyAccessPage() {
         <div className="p-6 space-y-6 max-w-6xl">
             <h1 className="text-2xl font-bold">{t("enterprise.myAccess.title")}</h1>
 
+            {/* Quota Status (independent of time filter) */}
+            {quotaStatus !== undefined && <QuotaStatusSection quota={quotaStatus} />}
+
             {/* Personal Usage Overview */}
-            <PersonalStatsSection />
+            <PersonalStatsSection onQuotaLoaded={setQuotaStatus} />
 
             {/* Base URL */}
             <Card>

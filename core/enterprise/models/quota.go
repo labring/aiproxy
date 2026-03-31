@@ -149,3 +149,23 @@ type UserQuotaPolicy struct {
 func (UserQuotaPolicy) TableName() string {
 	return "enterprise_user_quota_policies"
 }
+
+// QuotaAlertHistory records each quota tier notification sent to a user.
+type QuotaAlertHistory struct {
+	ID          int64     `json:"id"           gorm:"primaryKey"`
+	CreatedAt   time.Time `json:"created_at"   gorm:"autoCreateTime;index"`
+	OpenID      string    `json:"open_id"      gorm:"size:64;index;not null"`
+	UserName    string    `json:"user_name"    gorm:"size:128"`
+	Tier        int       `json:"tier"         gorm:"not null"`           // 2, 3, or 4 (exhausted)
+	UsageRatio  float64   `json:"usage_ratio"  gorm:"not null"`           // 0.0-1.0+
+	PeriodQuota float64   `json:"period_quota" gorm:"not null"`           // currency amount
+	PeriodType  string    `json:"period_type"  gorm:"size:16;not null"`   // daily, weekly, monthly
+	Title       string    `json:"title"        gorm:"size:256"`
+	Body        string    `json:"body"         gorm:"size:1024"`
+	Status      string    `json:"status"       gorm:"size:16;not null"`   // sent, failed
+	Error       string    `json:"error,omitempty" gorm:"size:512"`
+}
+
+func (QuotaAlertHistory) TableName() string {
+	return "enterprise_quota_alert_histories"
+}

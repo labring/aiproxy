@@ -3,10 +3,12 @@
 package analytics
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
@@ -219,9 +221,14 @@ func GenerateCustomReport(req CustomReportRequest) (*CustomReportResponse, error
 	// repeated queries with identical parameters return rows in the same order.
 	sortResults(result, req.SortBy, req.SortOrder, req.Dimensions)
 
-	// Apply limit
-	if req.Limit > 0 && len(result) > req.Limit {
-		result = result[:req.Limit]
+	// Apply limit (default cap: 1000 rows)
+	limit := req.Limit
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+
+	if len(result) > limit {
+		result = result[:limit]
 	}
 
 	// Build columns
@@ -463,7 +470,10 @@ func executeQuery(
 	// Build GROUP BY clause
 	groupByParts := buildGroupByParts(req.Dimensions)
 
-	query := model.LogDB.Model(&model.GroupSummary{})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	query := model.LogDB.WithContext(ctx).Model(&model.GroupSummary{})
 
 	// Apply time range filter
 	if req.TimeRange.StartTimestamp > 0 {

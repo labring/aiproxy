@@ -73,6 +73,12 @@ export function formatRate(n: number): string {
     return `${n.toFixed(1)}%`
 }
 
+export function formatMs(ms: number): string {
+    if (ms <= 0) return "-"
+    if (ms < 1000) return `${ms.toFixed(0)}ms`
+    return `${(ms / 1000).toFixed(2)}s`
+}
+
 /** Detect dark mode and re-render on change. */
 export function useDarkMode(): boolean {
     const [isDark, setIsDark] = useState(() =>

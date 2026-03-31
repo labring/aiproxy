@@ -63,3 +63,24 @@ type FeishuDepartment struct {
 func (FeishuDepartment) TableName() string {
 	return "feishu_departments"
 }
+
+// FeishuSyncHistory records the result of each Feishu organization sync operation.
+// Persists sync status to DB so it survives service restarts.
+type FeishuSyncHistory struct {
+	ID            int64     `json:"id"              gorm:"primaryKey"`
+	SyncedAt      time.Time `json:"synced_at"       gorm:"autoCreateTime;index"`
+	Status        string    `json:"status"          gorm:"size:32;not null;index"` // syncing, success, failed
+	TotalDepts    int       `json:"total_depts"     gorm:"default:0"`
+	DeptsWithName int       `json:"depts_with_name" gorm:"default:0"`
+	TotalUsers    int       `json:"total_users"     gorm:"default:0"`
+	UsersWithName int       `json:"users_with_name" gorm:"default:0"`
+	UsersWithEmail int      `json:"users_with_email" gorm:"default:0"`
+	DepartedUsers int       `json:"departed_users"  gorm:"default:0"`
+	DurationMs    int64     `json:"duration_ms"     gorm:"default:0"`
+	Error         string    `json:"error,omitempty" gorm:"size:1024"`
+	CreatedAt     time.Time `json:"created_at"      gorm:"autoCreateTime"`
+}
+
+func (FeishuSyncHistory) TableName() string {
+	return "feishu_sync_histories"
+}

@@ -969,3 +969,54 @@ func ListUserPolicyBindings(c *gin.Context) {
 		"total":    len(details),
 	})
 }
+
+// ListAlertHistory returns paginated quota alert notification records.
+// GET /enterprise/quota/alert-history
+func ListAlertHistory(c *gin.Context) {
+	page, perPage := utils.ParsePageParams(c)
+
+	var records []models.QuotaAlertHistory
+	var total int64
+
+	tx := model.DB.Model(&models.QuotaAlertHistory{})
+
+	// Optional filters
+	if openID := c.Query("open_id"); openID != "" {
+		tx = tx.Where("open_id = ?", openID)
+	}
+
+	if status := c.Query("status"); status != "" {
+		tx = tx.Where("status = ?", status)
+	}
+
+	if tierStr := c.Query("tier"); tierStr != "" {
+		if tier, err := strconv.Atoi(tierStr); err == nil {
+			tx = tx.Where("tier = ?", tier)
+		}
+	}
+
+	if err := tx.Count(&total).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	limit := perPage
+	if limit <= 0 {
+		limit = 20
+	}
+
+	offset := (page - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	if err := tx.Order("id DESC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"records": records,
+		"total":   total,
+	})
+}

@@ -41,7 +41,7 @@ func GetPeriodComparison(startTime, endTime time.Time, departmentIDs []string) (
 	prevEnd := startTime
 	periodType := inferPeriodType(duration)
 
-	groupIDs, err := getGroupIDsForDepartments(departmentIDs)
+	groupIDs, err := GetGroupIDsForDepartments(departmentIDs)
 	if err != nil {
 		return nil, err
 	}

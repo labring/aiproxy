@@ -303,7 +303,21 @@ export interface SyncStatus {
     total_users: number
     users_with_name: number
     users_with_email: number
+    departed_users: number
+    duration_ms: number
     error?: string
+}
+
+// Feishu Sync History record (extends SyncStatus with DB metadata)
+export interface FeishuSyncHistory extends SyncStatus {
+    id: number
+    synced_at: string
+    created_at: string
+}
+
+export interface FeishuSyncHistoryResponse {
+    records: FeishuSyncHistory[]
+    total: number
 }
 
 // Tenant Summary types
@@ -358,12 +372,33 @@ export interface ModelUsage {
     total_tokens: number
 }
 
+export interface MetricComparison {
+    dept_avg: number
+    enterprise_avg: number
+}
+
+export interface UsageComparisons {
+    total_amount: MetricComparison
+    total_tokens: MetricComparison
+    total_requests: MetricComparison
+    unique_models: MetricComparison
+    avg_cost_per_req: MetricComparison
+    success_rate: MetricComparison
+    avg_response_ms: MetricComparison
+    avg_ttfb_ms: MetricComparison
+}
+
 export interface MyUsageStats {
     total_amount: number
     total_tokens: number
     total_requests: number
     unique_models: number
+    avg_cost_per_req: number
+    success_rate: number
+    avg_response_ms: number
+    avg_ttfb_ms: number
     top_models: ModelUsage[]
+    comparisons?: UsageComparisons
 }
 
 export interface MyQuotaStatus {
@@ -434,6 +469,27 @@ export interface QuotaNotifConfig {
 
 export interface QuotaNotifConfigResponse extends QuotaNotifConfig {
     p2p_available: boolean
+}
+
+// Quota Alert History
+export interface QuotaAlertHistory {
+    id: number
+    created_at: string
+    open_id: string
+    user_name: string
+    tier: number
+    usage_ratio: number
+    period_quota: number
+    period_type: string
+    title: string
+    body: string
+    status: string
+    error?: string
+}
+
+export interface QuotaAlertHistoryResponse {
+    records: QuotaAlertHistory[]
+    total: number
 }
 
 function buildTimeParams(startTimestamp?: number, endTimestamp?: number) {
@@ -677,6 +733,12 @@ export const enterpriseApi = {
         return get<SyncStatus>('/enterprise/feishu/sync-status')
     },
 
+    getFeishuSyncHistory: (page = 1, perPage = 10): Promise<FeishuSyncHistoryResponse> => {
+        return get<FeishuSyncHistoryResponse>('/enterprise/feishu/sync-history', {
+            params: { page, per_page: perPage }
+        })
+    },
+
     triggerFeishuSync: (): Promise<{ message: string }> => {
         return post('/enterprise/feishu/sync', {})
     },
@@ -762,6 +824,12 @@ export const enterpriseApi = {
 
     updateNotifConfig: (cfg: QuotaNotifConfig): Promise<QuotaNotifConfig> => {
         return put<QuotaNotifConfig>('/enterprise/quota/notif-config', cfg)
+    },
+
+    getAlertHistory: (page = 1, perPage = 20, filters?: { open_id?: string; status?: string; tier?: number }): Promise<QuotaAlertHistoryResponse> => {
+        return get<QuotaAlertHistoryResponse>('/enterprise/quota/alert-history', {
+            params: { page, per_page: perPage, ...filters }
+        })
     },
 
     // My Access APIs

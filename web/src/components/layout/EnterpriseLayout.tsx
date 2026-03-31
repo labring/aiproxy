@@ -14,6 +14,7 @@ import {
     Users,
     RefreshCw,
     Key,
+    Bell,
 } from "lucide-react"
 import type React from "react"
 import type { TFunction } from "i18next"
@@ -77,6 +78,12 @@ function createEnterpriseSidebarConfig(t: TFunction): EnterpriseSidebarItem[] {
             icon: FileBarChart,
             href: ROUTES.ENTERPRISE_CUSTOM_REPORT,
             requiredPermission: "custom_report_view",
+        },
+        {
+            title: t("enterprise.sidebar.notifications"),
+            icon: Bell,
+            href: ROUTES.ENTERPRISE_NOTIFICATIONS,
+            requiredPermission: "quota_manage_view",
         },
         {
             title: t("enterprise.sidebar.ppioSync"),

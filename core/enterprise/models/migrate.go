@@ -54,8 +54,10 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&UserQuotaPolicy{},
 		&PPIOSyncHistory{},
 		&NovitaSyncHistory{},
+		&FeishuSyncHistory{},
 		&RejectedTenantLogin{},
 		&RolePermission{},
+		&QuotaAlertHistory{},
 	); err != nil {
 		return err
 	}

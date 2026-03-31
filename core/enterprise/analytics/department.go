@@ -236,7 +236,7 @@ func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]De
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
-	groupIDs, err := getGroupIDsForDepartments([]string{departmentID})
+	groupIDs, err := GetGroupIDsForDepartments([]string{departmentID})
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +259,7 @@ func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]De
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTimestamp, endTimestamp).
 		Group("hour_timestamp").
 		Order("hour_timestamp ASC").
+		Limit(744). // ~31 days * 24 hours — safety cap
 		Find(&results).Error
 	if err != nil {
 		return nil, fmt.Errorf("query department trend: %w", err)

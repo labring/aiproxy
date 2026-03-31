@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter, KeyRound } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter, KeyRound, History, ChevronDown, ChevronRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { enterpriseApi, type FeishuUser } from "@/api/enterprise"
+import { enterpriseApi, type FeishuUser, type FeishuSyncHistory } from "@/api/enterprise"
+import { formatMs } from "@/lib/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel, VisibilityState } from "@tanstack/react-table"
 import { format } from "date-fns"
@@ -370,6 +371,15 @@ export default function UsersPage() {
         refetchOnWindowFocus: false,
     })
 
+    // Sync history
+    const [showSyncHistory, setShowSyncHistory] = useState(false)
+    const { data: syncHistoryData, isLoading: syncHistoryLoading } = useQuery({
+        queryKey: ["feishu-sync-history"],
+        queryFn: () => enterpriseApi.getFeishuSyncHistory(1, 10),
+        staleTime: 30000,
+        enabled: showSyncHistory,
+    })
+
     // Sync mutation
     const syncMutation = useMutation({
         mutationFn: () => enterpriseApi.triggerFeishuSync(),
@@ -708,6 +718,80 @@ export default function UsersPage() {
                                 {t("enterprise.users.permissionWarning")}
                             </div>
                         )}
+                        {/* Sync History Toggle */}
+                        <div className="mt-3 border-t pt-3">
+                            <button
+                                onClick={() => setShowSyncHistory(!showSyncHistory)}
+                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {showSyncHistory ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                <History className="w-4 h-4" />
+                                {t("enterprise.users.syncHistory")}
+                            </button>
+                            {showSyncHistory && (
+                                <div className="mt-2">
+                                    {syncHistoryLoading ? (
+                                        <div className="py-4 text-center text-muted-foreground">
+                                            <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                                        </div>
+                                    ) : !syncHistoryData?.records?.length ? (
+                                        <div className="py-4 text-center text-sm text-muted-foreground">
+                                            {t("enterprise.users.noSyncHistory")}
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b bg-muted/50">
+                                                        <th className="text-left p-2 font-medium text-muted-foreground">{t("enterprise.users.syncHistoryTime")}</th>
+                                                        <th className="text-left p-2 font-medium text-muted-foreground">{t("enterprise.users.syncHistoryStatus")}</th>
+                                                        <th className="text-center p-2 font-medium text-muted-foreground">{t("enterprise.users.totalDepts")}</th>
+                                                        <th className="text-center p-2 font-medium text-muted-foreground">{t("enterprise.users.totalUsers")}</th>
+                                                        <th className="text-center p-2 font-medium text-muted-foreground">{t("enterprise.users.syncHistoryDuration")}</th>
+                                                        <th className="text-left p-2 font-medium text-muted-foreground">{t("enterprise.users.syncHistoryError")}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {syncHistoryData.records.map((h: FeishuSyncHistory) => (
+                                                        <tr key={h.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
+                                                            <td className="p-2">{format(new Date(h.synced_at), "yyyy-MM-dd HH:mm:ss")}</td>
+                                                            <td className="p-2">
+                                                                {h.status === "success" && (
+                                                                    <Badge className="bg-green-100 text-green-800">
+                                                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                                                        {t("enterprise.users.syncSuccess")}
+                                                                    </Badge>
+                                                                )}
+                                                                {h.status === "failed" && (
+                                                                    <Badge className="bg-red-100 text-red-800">
+                                                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                                                        {t("enterprise.users.syncError")}
+                                                                    </Badge>
+                                                                )}
+                                                                {h.status === "syncing" && (
+                                                                    <Badge className="bg-blue-100 text-blue-800">
+                                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                                        {t("enterprise.users.syncing")}
+                                                                    </Badge>
+                                                                )}
+                                                            </td>
+                                                            <td className="p-2 text-center">{h.total_depts}</td>
+                                                            <td className="p-2 text-center">{h.total_users}</td>
+                                                            <td className="p-2 text-center text-muted-foreground">
+                                                                {formatMs(h.duration_ms)}
+                                                            </td>
+                                                            <td className="p-2 text-sm text-red-600 max-w-[200px] truncate">
+                                                                {h.error || "-"}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
             )}

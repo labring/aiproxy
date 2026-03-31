@@ -47,6 +47,7 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup, mw *FeishuMi
 		enterpriseAuth.GET("/feishu/departments", GetFeishuDepartments)
 		enterpriseAuth.GET("/feishu/department-levels", GetDepartmentLevels)
 		enterpriseAuth.GET("/feishu/sync-status", GetSyncStatusHandler)
+		enterpriseAuth.GET("/feishu/sync-history", GetSyncHistoryHandler)
 
 		// User management — view requires user_manage_view
 		umView := enterpriseAuth.Group("", mw.UserManageView)

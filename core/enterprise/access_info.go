@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/enterprise/analytics"
 	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
+	log "github.com/sirupsen/logrus"
 )
 
 type MyTokenInfo struct {
@@ -426,11 +428,34 @@ type ModelUsage struct {
 
 // MyUsageStats holds the aggregated usage stats for the current user.
 type MyUsageStats struct {
-	TotalAmount   float64      `json:"total_amount"`
-	TotalTokens   int64        `json:"total_tokens"`
-	TotalRequests int64        `json:"total_requests"`
-	UniqueModels  int          `json:"unique_models"`
-	TopModels     []ModelUsage `json:"top_models"`
+	TotalAmount   float64          `json:"total_amount"`
+	TotalTokens   int64            `json:"total_tokens"`
+	TotalRequests int64            `json:"total_requests"`
+	UniqueModels  int              `json:"unique_models"`
+	AvgCostPerReq float64          `json:"avg_cost_per_req"`
+	SuccessRate   float64          `json:"success_rate"`
+	AvgResponseMs float64          `json:"avg_response_ms"`
+	AvgTtfbMs     float64          `json:"avg_ttfb_ms"`
+	TopModels     []ModelUsage     `json:"top_models"`
+	Comparisons   *UsageComparisons `json:"comparisons,omitempty"`
+}
+
+// MetricComparison holds department and enterprise active-user averages for one metric.
+type MetricComparison struct {
+	DeptAvg       float64 `json:"dept_avg"`
+	EnterpriseAvg float64 `json:"enterprise_avg"`
+}
+
+// UsageComparisons holds department and enterprise comparison data for all metrics.
+type UsageComparisons struct {
+	TotalAmount   MetricComparison `json:"total_amount"`
+	TotalTokens   MetricComparison `json:"total_tokens"`
+	TotalRequests MetricComparison `json:"total_requests"`
+	UniqueModels  MetricComparison `json:"unique_models"`
+	AvgCostPerReq MetricComparison `json:"avg_cost_per_req"`
+	SuccessRate   MetricComparison `json:"success_rate"`
+	AvgResponseMs MetricComparison `json:"avg_response_ms"`
+	AvgTtfbMs     MetricComparison `json:"avg_ttfb_ms"`
 }
 
 // MyQuotaStatus holds the current period quota status for the user.
@@ -484,6 +509,9 @@ func GetMyStats(c *gin.Context) {
 		UsedAmount   float64 `gorm:"column:used_amount"`
 		RequestCount int64   `gorm:"column:request_count"`
 		TotalTokens  int64   `gorm:"column:total_tokens"`
+		SuccessCount int64   `gorm:"column:success_count"`
+		TotalTimeMs  int64   `gorm:"column:total_time_ms"`
+		TotalTtfbMs  int64   `gorm:"column:total_ttfb_ms"`
 	}
 
 	var aggResults []modelAgg
@@ -495,6 +523,9 @@ func GetMyStats(c *gin.Context) {
 			"SUM(used_amount) as used_amount",
 			"SUM(request_count) as request_count",
 			"SUM(total_tokens) as total_tokens",
+			"SUM(status2xx_count) as success_count",
+			"SUM(total_time_milliseconds) as total_time_ms",
+			"SUM(total_ttfb_milliseconds) as total_ttfb_ms",
 		).
 		Where("group_id = ?", feishuUser.GroupID).
 		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTs, endTs).
@@ -509,10 +540,15 @@ func GetMyStats(c *gin.Context) {
 		TopModels: make([]ModelUsage, 0, len(aggResults)),
 	}
 
+	var totalSuccessCount, totalTimeMs, totalTtfbMs int64
+
 	for _, r := range aggResults {
 		usageStats.TotalAmount += r.UsedAmount
 		usageStats.TotalTokens += r.TotalTokens
 		usageStats.TotalRequests += r.RequestCount
+		totalSuccessCount += r.SuccessCount
+		totalTimeMs += r.TotalTimeMs
+		totalTtfbMs += r.TotalTtfbMs
 		usageStats.TopModels = append(usageStats.TopModels, ModelUsage{
 			Model:        r.Model,
 			UsedAmount:   r.UsedAmount,
@@ -523,6 +559,17 @@ func GetMyStats(c *gin.Context) {
 
 	usageStats.UniqueModels = len(aggResults)
 
+	// Compute derived metrics (with zero-division protection)
+	if usageStats.TotalRequests > 0 {
+		usageStats.AvgCostPerReq = usageStats.TotalAmount / float64(usageStats.TotalRequests)
+		usageStats.SuccessRate = float64(totalSuccessCount) / float64(usageStats.TotalRequests) * 100
+		usageStats.AvgResponseMs = float64(totalTimeMs) / float64(usageStats.TotalRequests)
+	}
+
+	if totalSuccessCount > 0 {
+		usageStats.AvgTtfbMs = float64(totalTtfbMs) / float64(totalSuccessCount)
+	}
+
 	// Sort by used amount desc, keep top 5
 	sort.Slice(usageStats.TopModels, func(i, j int) bool {
 		return usageStats.TopModels[i].UsedAmount > usageStats.TopModels[j].UsedAmount
@@ -532,6 +579,8 @@ func GetMyStats(c *gin.Context) {
 		usageStats.TopModels = usageStats.TopModels[:5]
 	}
 
+	usageStats.Comparisons = computeComparisons(feishuUser.DepartmentID, startTs, endTs)
+
 	// Query quota status
 	var quotaStatus *MyQuotaStatus
 
@@ -540,19 +589,27 @@ func GetMyStats(c *gin.Context) {
 		if err := model.DB.Where("id = ?", feishuUser.TokenID).First(&token).Error; err == nil && token.PeriodQuota > 0 {
 			policy, _ := quota.GetPolicyForUser(c.Request.Context(), feishuUser.OpenID)
 			if policy != nil {
-				periodUsed := token.UsedAmount - token.PeriodLastUpdateAmount
-				if periodUsed < 0 {
+				// Check if the period needs reset — if so, period usage is effectively 0.
+				// Also trigger async reset so the DB is updated for subsequent requests.
+				var periodUsed float64
+				if needsReset, _ := token.NeedsPeriodReset(); needsReset {
 					periodUsed = 0
+					go func() {
+						if err := model.ResetTokenPeriodUsage(token.ID); err != nil {
+							log.Error("reset token period usage from my-stats: " + err.Error())
+						}
+					}()
+				} else {
+					periodUsed = token.UsedAmount - token.PeriodLastUpdateAmount
+					if periodUsed < 0 {
+						periodUsed = 0
+					}
 				}
 
 				usageRatio := periodUsed / token.PeriodQuota
 
-				currentTier := 1
-				if usageRatio >= policy.Tier2Ratio {
-					currentTier = 3
-				} else if usageRatio >= policy.Tier1Ratio {
-					currentTier = 2
-				}
+				blocked := policy.BlockAtTier3 && usageRatio >= 1.0
+				currentTier := quota.ComputeTier(policy, usageRatio, blocked)
 
 				quotaStatus = &MyQuotaStatus{
 					PeriodQuota:  token.PeriodQuota,
@@ -574,6 +631,134 @@ func GetMyStats(c *gin.Context) {
 		Usage: usageStats,
 		Quota: quotaStatus,
 	})
+}
+
+// groupAvgAgg holds the aggregated data for computing per-active-user averages.
+type groupAvgAgg struct {
+	UsedAmount   float64 `gorm:"column:used_amount"`
+	TotalTokens  int64   `gorm:"column:total_tokens"`
+	RequestCount int64   `gorm:"column:request_count"`
+	SuccessCount int64   `gorm:"column:success_count"`
+	TotalTimeMs  int64   `gorm:"column:total_time_ms"`
+	TotalTtfbMs  int64   `gorm:"column:total_ttfb_ms"`
+	ActiveUsers  int64   `gorm:"column:active_users"`
+	UniqueModels int64   `gorm:"column:unique_models"`
+}
+
+// queryGroupAvg queries aggregated usage and active user count for a set of group IDs.
+func queryGroupAvg(groupIDs []string, startTs, endTs int64) *groupAvgAgg {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	var result groupAvgAgg
+	if err := model.LogDB.
+		Model(&model.GroupSummary{}).
+		Select(
+			"SUM(used_amount) as used_amount",
+			"SUM(total_tokens) as total_tokens",
+			"SUM(request_count) as request_count",
+			"SUM(status2xx_count) as success_count",
+			"SUM(total_time_milliseconds) as total_time_ms",
+			"SUM(total_ttfb_milliseconds) as total_ttfb_ms",
+			"COUNT(DISTINCT group_id) as active_users",
+			"COUNT(DISTINCT model) as unique_models",
+		).
+		Where("group_id IN ?", groupIDs).
+		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTs, endTs).
+		Find(&result).Error; err != nil {
+		return nil
+	}
+
+	if result.ActiveUsers == 0 {
+		return nil
+	}
+
+	return &result
+}
+
+// metricAvgs holds per-active-user averages for all 8 metrics.
+type metricAvgs struct {
+	TotalAmount   float64
+	TotalTokens   float64
+	TotalRequests float64
+	UniqueModels  float64
+	AvgCostPerReq float64
+	SuccessRate   float64
+	AvgResponseMs float64
+	AvgTtfbMs     float64
+}
+
+// aggToMetrics computes per-active-user averages from aggregated data.
+func aggToMetrics(agg *groupAvgAgg) metricAvgs {
+	if agg == nil || agg.ActiveUsers == 0 {
+		return metricAvgs{}
+	}
+
+	n := float64(agg.ActiveUsers)
+	m := metricAvgs{
+		TotalAmount:   agg.UsedAmount / n,
+		TotalTokens:   float64(agg.TotalTokens) / n,
+		TotalRequests: float64(agg.RequestCount) / n,
+		UniqueModels:  float64(agg.UniqueModels) / n,
+	}
+
+	if agg.RequestCount > 0 {
+		m.AvgCostPerReq = agg.UsedAmount / float64(agg.RequestCount)
+		m.SuccessRate = float64(agg.SuccessCount) / float64(agg.RequestCount) * 100
+		m.AvgResponseMs = float64(agg.TotalTimeMs) / float64(agg.RequestCount)
+	}
+
+	if agg.SuccessCount > 0 {
+		m.AvgTtfbMs = float64(agg.TotalTtfbMs) / float64(agg.SuccessCount)
+	}
+
+	return m
+}
+
+// setDeptAvg writes metricAvgs into the DeptAvg field of each MetricComparison.
+func setDeptAvg(comp *UsageComparisons, m metricAvgs) {
+	comp.TotalAmount.DeptAvg = m.TotalAmount
+	comp.TotalTokens.DeptAvg = m.TotalTokens
+	comp.TotalRequests.DeptAvg = m.TotalRequests
+	comp.UniqueModels.DeptAvg = m.UniqueModels
+	comp.AvgCostPerReq.DeptAvg = m.AvgCostPerReq
+	comp.SuccessRate.DeptAvg = m.SuccessRate
+	comp.AvgResponseMs.DeptAvg = m.AvgResponseMs
+	comp.AvgTtfbMs.DeptAvg = m.AvgTtfbMs
+}
+
+// setEnterpriseAvg writes metricAvgs into the EnterpriseAvg field of each MetricComparison.
+func setEnterpriseAvg(comp *UsageComparisons, m metricAvgs) {
+	comp.TotalAmount.EnterpriseAvg = m.TotalAmount
+	comp.TotalTokens.EnterpriseAvg = m.TotalTokens
+	comp.TotalRequests.EnterpriseAvg = m.TotalRequests
+	comp.UniqueModels.EnterpriseAvg = m.UniqueModels
+	comp.AvgCostPerReq.EnterpriseAvg = m.AvgCostPerReq
+	comp.SuccessRate.EnterpriseAvg = m.SuccessRate
+	comp.AvgResponseMs.EnterpriseAvg = m.AvgResponseMs
+	comp.AvgTtfbMs.EnterpriseAvg = m.AvgTtfbMs
+}
+
+// computeComparisons calculates department and enterprise active-user averages.
+func computeComparisons(departmentID string, startTs, endTs int64) *UsageComparisons {
+	comp := &UsageComparisons{}
+
+	// Department averages
+	if departmentID != "" {
+		deptGroupIDs, err := analytics.GetGroupIDsForDepartments([]string{departmentID})
+		if err == nil && len(deptGroupIDs) > 0 {
+			setDeptAvg(comp, aggToMetrics(queryGroupAvg(deptGroupIDs, startTs, endTs)))
+		}
+	}
+
+	// Enterprise averages
+	entGroupIDs, err := analytics.GetAllFeishuGroupIDs()
+	if err == nil && len(entGroupIDs) > 0 {
+		setEnterpriseAvg(comp, aggToMetrics(queryGroupAvg(entGroupIDs, startTs, endTs)))
+	}
+
+	return comp
 }
 
 // DisableMyToken disables (soft-deletes) a token belonging to the current user's group.

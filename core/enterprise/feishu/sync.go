@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
@@ -31,7 +32,7 @@ type syncStats struct {
 	syncedOpenIDs   map[string]struct{} // all open_ids seen from Feishu API during this sync
 }
 
-// SyncStatus holds the result of the last Feishu sync operation.
+// SyncStatus holds the result of the last Feishu sync operation (API response type).
 type SyncStatus struct {
 	LastSyncAt     time.Time `json:"last_sync_at"`
 	Status         string    `json:"status"`
@@ -41,6 +42,7 @@ type SyncStatus struct {
 	UsersWithName  int       `json:"users_with_name"`
 	UsersWithEmail int       `json:"users_with_email"`
 	DepartedUsers  int       `json:"departed_users"`
+	DurationMs     int64     `json:"duration_ms"`
 	Error          string    `json:"error,omitempty"`
 }
 
@@ -49,10 +51,19 @@ var (
 	syncStatusMu   gosync.Mutex
 )
 
-// GetSyncStatus returns the current sync status.
+// GetSyncStatus returns the current sync status from in-memory cache.
+// Falls back to DB on first call (e.g. after service restart).
 func GetSyncStatus() SyncStatus {
 	syncStatusMu.Lock()
 	defer syncStatusMu.Unlock()
+
+	if lastSyncStatus.Status == "" && model.DB != nil {
+		// Cold start: load from DB
+		var h models.FeishuSyncHistory
+		if err := model.DB.Order("id DESC").First(&h).Error; err == nil {
+			lastSyncStatus = historyToStatus(&h)
+		}
+	}
 
 	return lastSyncStatus
 }
@@ -64,9 +75,84 @@ func setSyncStatus(s SyncStatus) {
 	lastSyncStatus = s
 }
 
+// historyToStatus converts a DB record to the API response type.
+func historyToStatus(h *models.FeishuSyncHistory) SyncStatus {
+	return SyncStatus{
+		LastSyncAt:     h.SyncedAt,
+		Status:         h.Status,
+		TotalDepts:     h.TotalDepts,
+		DeptsWithName:  h.DeptsWithName,
+		TotalUsers:     h.TotalUsers,
+		UsersWithName:  h.UsersWithName,
+		UsersWithEmail: h.UsersWithEmail,
+		DepartedUsers:  h.DepartedUsers,
+		DurationMs:     h.DurationMs,
+		Error:          h.Error,
+	}
+}
+
+// createSyncHistory inserts a new sync history record and returns its ID.
+func createSyncHistory(db *gorm.DB, status string) int64 {
+	h := models.FeishuSyncHistory{
+		Status: status,
+	}
+	if err := db.Create(&h).Error; err != nil {
+		log.Errorf("feishu sync: failed to create sync history: %v", err)
+		return 0
+	}
+
+	return h.ID
+}
+
+// updateSyncHistory updates an existing sync history record with final results.
+func updateSyncHistory(db *gorm.DB, id int64, h *models.FeishuSyncHistory) {
+	if id == 0 {
+		return
+	}
+
+	if err := db.Model(&models.FeishuSyncHistory{}).Where("id = ?", id).Updates(h).Error; err != nil {
+		log.Errorf("feishu sync: failed to update sync history %d: %v", id, err)
+	}
+}
+
 // GetSyncStatusHandler returns the current Feishu sync status.
 func GetSyncStatusHandler(c *gin.Context) {
 	middleware.SuccessResponse(c, GetSyncStatus())
+}
+
+// GetSyncHistoryHandler returns paginated sync history records.
+func GetSyncHistoryHandler(c *gin.Context) {
+	page, perPage := utils.ParsePageParams(c)
+
+	var records []models.FeishuSyncHistory
+	var total int64
+
+	tx := model.DB.Model(&models.FeishuSyncHistory{})
+
+	if err := tx.Count(&total).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	limit := perPage
+	if limit <= 0 {
+		limit = 20
+	}
+
+	offset := (page - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	if err := tx.Order("id DESC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"records": records,
+		"total":   total,
+	})
 }
 
 // feishuEvent is the top-level event payload from Feishu.
@@ -355,12 +441,16 @@ func handleDeptDeletedEvent(data json.RawMessage) {
 // SyncAll performs a full synchronization of all departments and users from Feishu.
 func SyncAll(db *gorm.DB) error {
 	ctx := context.Background()
+	startTime := time.Now()
+
 	stats := &syncStats{
 		syncedOpenIDs: make(map[string]struct{}),
 	}
 
+	// Persist "syncing" status to DB
+	historyID := createSyncHistory(db, "syncing")
 	setSyncStatus(SyncStatus{
-		LastSyncAt: time.Now(),
+		LastSyncAt: startTime,
 		Status:     "syncing",
 	})
 
@@ -391,11 +481,16 @@ func SyncAll(db *gorm.DB) error {
 	syncedDeptIDs, err := syncDepartmentsRecursive(ctx, db, "0", stats)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to sync departments: %v", err)
-		setSyncStatus(SyncStatus{
-			LastSyncAt: time.Now(),
+		durationMs := time.Since(startTime).Milliseconds()
+
+		failedHistory := &models.FeishuSyncHistory{
 			Status:     "failed",
+			DurationMs: durationMs,
 			Error:      errMsg,
-		})
+		}
+		failedHistory.SyncedAt = startTime
+		setSyncStatus(historyToStatus(failedHistory))
+		updateSyncHistory(db, historyID, failedHistory)
 
 		return fmt.Errorf("%s", errMsg)
 	}
@@ -437,10 +532,10 @@ func SyncAll(db *gorm.DB) error {
 		deactivateDepartedUsers(db, stats)
 	}
 
-	log.Info("feishu sync: full organization sync completed")
+	durationMs := time.Since(startTime).Milliseconds()
+	log.Infof("feishu sync: full organization sync completed in %dms", durationMs)
 
-	setSyncStatus(SyncStatus{
-		LastSyncAt:     time.Now(),
+	successHistory := &models.FeishuSyncHistory{
 		Status:         "success",
 		TotalDepts:     stats.totalDepts,
 		DeptsWithName:  stats.deptsWithName,
@@ -448,7 +543,11 @@ func SyncAll(db *gorm.DB) error {
 		UsersWithName:  stats.usersWithName,
 		UsersWithEmail: stats.usersWithEmail,
 		DepartedUsers:  stats.departedUsers,
-	})
+		DurationMs:     durationMs,
+	}
+	successHistory.SyncedAt = startTime
+	setSyncStatus(historyToStatus(successHistory))
+	updateSyncHistory(db, historyID, successHistory)
 
 	return nil
 }

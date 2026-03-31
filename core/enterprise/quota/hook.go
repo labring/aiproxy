@@ -42,7 +42,7 @@ func CheckQuotaTier(
 			effModel, rpmMul, tpmMul, blocked := applyPolicyTiers(policy, token, requestModel)
 			// Trigger async notification if usage entered a higher tier
 			usageRatio := computeUsageRatio(token)
-			tier := computeTier(policy, usageRatio, blocked)
+			tier := ComputeTier(policy, usageRatio, blocked)
 			if tier >= 2 {
 				go MaybeNotifyUser(
 					feishuUser.OpenID,
@@ -89,9 +89,9 @@ func computeUsageRatio(token model.TokenCache) float64 {
 	return used / token.PeriodQuota
 }
 
-// computeTier returns the effective notification tier (1–4) for the given usage state.
+// ComputeTier returns the effective tier (1–4) for the given usage state.
 // tier 1 = normal, 2 = tier2 throttle, 3 = tier3 throttle, 4 = exhausted/blocked.
-func computeTier(policy *models.QuotaPolicy, usageRatio float64, blocked bool) int {
+func ComputeTier(policy *models.QuotaPolicy, usageRatio float64, blocked bool) int {
 	switch {
 	case blocked || usageRatio >= 1.0:
 		if blocked && policy.BlockAtTier3 {

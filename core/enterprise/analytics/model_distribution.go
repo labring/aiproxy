@@ -29,7 +29,7 @@ func GetModelDistribution(startTime, endTime time.Time, departmentIDs []string) 
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
-	groupIDs, err := getGroupIDsForDepartments(departmentIDs)
+	groupIDs, err := GetGroupIDsForDepartments(departmentIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -117,9 +117,9 @@ func expandDepartmentIDs(departmentIDs []string) []string {
 	return result
 }
 
-// getAllFeishuGroupIDs returns all distinct group_ids that have feishu user mappings.
+// GetAllFeishuGroupIDs returns all distinct group_ids that have feishu user mappings.
 // Used to scope enterprise analytics to feishu-synced users only.
-func getAllFeishuGroupIDs() ([]string, error) {
+func GetAllFeishuGroupIDs() ([]string, error) {
 	var groupIDs []string
 	if err := model.DB.
 		Model(&models.FeishuUser{}).
@@ -130,12 +130,12 @@ func getAllFeishuGroupIDs() ([]string, error) {
 	return groupIDs, nil
 }
 
-// getGroupIDsForDepartments returns group IDs for a set of department filters.
+// GetGroupIDsForDepartments returns group IDs for a set of department filters.
 // Returns all feishu group IDs when departmentIDs is empty (scoped to enterprise users).
 // Returns empty slice when departments are specified but no users match.
-func getGroupIDsForDepartments(departmentIDs []string) ([]string, error) {
+func GetGroupIDsForDepartments(departmentIDs []string) ([]string, error) {
 	if len(departmentIDs) == 0 {
-		return getAllFeishuGroupIDs()
+		return GetAllFeishuGroupIDs()
 	}
 
 	expanded := expandDepartmentIDs(departmentIDs)

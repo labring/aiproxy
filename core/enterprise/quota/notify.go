@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/trylock"
+	"github.com/labring/aiproxy/core/enterprise/models"
 	enterprisenotify "github.com/labring/aiproxy/core/enterprise/notify"
 	"github.com/labring/aiproxy/core/model"
 	log "github.com/sirupsen/logrus"
@@ -182,8 +183,27 @@ func MaybeNotifyUser(
 		color = notify.FeishuColorRed
 	}
 
+	record := models.QuotaAlertHistory{
+		OpenID:      openID,
+		UserName:    userName,
+		Tier:        tier,
+		UsageRatio:  usageRatio,
+		PeriodQuota: periodQuota,
+		PeriodType:  periodType,
+		Title:       title,
+		Body:        body,
+	}
+
 	if err := n.NotifyUser(openID, title, body, color); err != nil {
 		log.WithError(err).WithField("open_id", openID).Warn("quota tier notification failed")
+		record.Status = "failed"
+		record.Error = err.Error()
+	} else {
+		record.Status = "sent"
+	}
+
+	if err := model.DB.Create(&record).Error; err != nil {
+		log.WithError(err).Warn("failed to record quota alert history")
 	}
 }
 

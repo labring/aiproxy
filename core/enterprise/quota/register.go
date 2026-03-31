@@ -41,6 +41,10 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 	notifCfg := group.Group("/quota/notif-config")
 	notifCfg.GET("", quotaViewMw, GetNotifConfigHandler)
 	notifCfg.PUT("", quotaManageMw, UpdateNotifConfigHandler)
+
+	// Alert history
+	alertHistory := group.Group("/quota", quotaViewMw)
+	alertHistory.GET("/alert-history", ListAlertHistory)
 }
 
 // Init sets up the enterprise quota hook so the middleware can call into

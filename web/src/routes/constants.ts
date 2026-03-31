@@ -18,6 +18,7 @@ export const ROUTES = {
     ENTERPRISE_PPIO_SYNC: "/enterprise/ppio-sync",
     ENTERPRISE_NOVITA_SYNC: "/enterprise/novita-sync",
     ENTERPRISE_MY_ACCESS: "/enterprise/my-access",
+    ENTERPRISE_NOTIFICATIONS: "/enterprise/notifications",
     FEISHU_CALLBACK: "/feishu/callback",
 } as const
 

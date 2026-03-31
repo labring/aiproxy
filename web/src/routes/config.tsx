@@ -34,6 +34,7 @@ const EnterpriseUsers = lazy(() => import("@/pages/enterprise/users"))
 const EnterprisePPIOSync = lazy(() => import("@/pages/enterprise/ppio-sync"))
 const EnterpriseNovitaSync = lazy(() => import("@/pages/enterprise/novita-sync"))
 const EnterpriseMyAccess = lazy(() => import("@/pages/enterprise/my-access"))
+const EnterpriseNotifications = lazy(() => import("@/pages/enterprise/notifications"))
 
 // lazy load component wrapper
 const lazyLoad = (Component: React.ComponentType) => (
@@ -136,6 +137,10 @@ export function useRoutes(): RouteObject[] {
                     {
                         path: ROUTES.ENTERPRISE_MY_ACCESS,
                         element: lazyLoad(EnterpriseMyAccess),
+                    },
+                    {
+                        path: ROUTES.ENTERPRISE_NOTIFICATIONS,
+                        element: <RequirePermission permission="quota_manage_view">{lazyLoad(EnterpriseNotifications)}</RequirePermission>,
                     },
                 ]
             }
