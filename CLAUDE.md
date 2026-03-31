@@ -118,9 +118,9 @@ Plugins extend request/response processing. Located in `core/relay/plugin/`, the
 
 - **`Group`** — Tenant/organization. Has RPM/TPM ratios, balance, available model sets.
 - **`Token`** — API key belonging to a Group. Has quota (total + period), models whitelist, subnet restrictions.
-- **`Channel`** — Backend AI provider connection. Has type (ChannelType), base URL, API key, priority, model mappings.
-- **`ModelConfig`** — Per-model configuration: pricing, RPM/TPM limits, mode type.
-- **`GroupModelConfig`** — Per-group overrides for model config (price, limits, retry).
+- **`Channel`** — Backend AI provider connection. Has type (ChannelType), base URL, proxy URL, API key, priority, model mappings.
+- **`ModelConfig`** — Per-model configuration: pricing, RPM/TPM limits, mode type, request/response body storage size limits.
+- **`GroupModelConfig`** — Per-group overrides for model config (price, limits, retry, timeout, body storage size).
 - **`GroupSummary`** — Hourly usage aggregation by (group_id, token_name, model).
 - **`Log`** — Individual request log with full details.
 
@@ -137,7 +137,16 @@ Supports PostgreSQL (primary) and SQLite (default fallback). Set via `SQL_DSN` e
 
 ### Multi-Provider Adaptor System
 
-~40 provider adaptors in `core/relay/adaptors/`. Each subfolder implements the `adaptor.Adaptor` interface. Channel types are defined in `core/model/chtype.go`. The relay controller selects an adaptor based on the channel type, then calls the adaptor methods in sequence.
+~40 provider adaptors in `core/relay/adaptor/`. Each subfolder implements the `adaptor.Adaptor` interface and self-registers via `init()` using `registry.Register(channelType, &Adaptor{})`. Channel types are defined in `core/model/chtype.go`. The relay controller selects an adaptor based on the channel type, then calls the adaptor methods in sequence.
+
+**Adaptor Registration Pattern** (since upstream #503):
+```go
+// core/relay/adaptor/myprovider/adaptor.go
+func init() {
+    registry.Register(model.ChannelTypeMyProvider, &Adaptor{})
+}
+```
+All adaptors are imported as blank imports (`_ "..."`) in `core/relay/adaptors/register.go`, which triggers their `init()`. The `registry` package (`core/relay/adaptor/registry/`) provides `Register()`, `Get()`, `Snapshot()`, and `SortedTypes()`.
 
 ### Protocol Conversion
 

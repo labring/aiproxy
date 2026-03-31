@@ -66,18 +66,27 @@
 - [x] handleGenerate useCallback 稳定性修复（mutateRef 模式）
 - [x] 路由、导航栏、i18n（中/英）配置
 
+### 第 8 阶段：通知与告警 + 性能优化 + 部署验证
+- [x] 飞书同步持久化（FeishuSyncHistory 模型，冷启动 DB 回退）
+- [x] 同步历史 API + 前端展示
+- [x] 通知配置页面（3 级模板编辑、启用开关、变量预览）
+- [x] 告警历史记录（QuotaAlertHistory 模型，分页+筛选）
+- [x] 分析查询优化（context timeout、LIMIT 保护、索引）
+- [x] 生产部署 smoke test 脚本（`scripts/smoke-test.sh`）
+
+### 第 9 阶段：上游合并同步
+- [x] 合并 labring/aiproxy #492–#503（11 commits, 155 files）
+- [x] Adaptor 自注册 registry 模式适配（PPIO adaptor 增加 init 注册）
+- [x] ChannelTypePPIO 从 53 改为 54（避免与 Fake=53 冲突）
+- [x] 消耗排行榜路由整合（consumption-ranking）
+- [x] 新增字段兼容：Channel.ProxyURL、ModelConfig body storage limits
+
 ## 待开发功能 📋
 
-### 第 8 阶段：通知与告警 UI
-- [ ] 飞书通知配置页面
-- [ ] 额度告警阈值设置
-- [ ] 告警历史记录查看
-
-### 第 9 阶段：集成与优化
+### 第 10 阶段：集成与优化
 - [ ] 前端嵌入 Go 二进制（`cp -r web/dist/ core/public/dist/`）
 - [ ] 飞书 REDIRECT_URI 配置说明文档
-- [ ] 生产环境部署测试
-- [ ] 性能优化（大数据量分页、图表懒加载）
+- [ ] 前端图表懒加载（ECharts React.lazy + IntersectionObserver）
 
 ## 前端页面清单
 
@@ -88,6 +97,12 @@
 | 部门趋势 | `/enterprise/department` | ✅ | ECharts 折线/柱状图 |
 | 额度策略 | `/enterprise/quota` | ✅ | 策略 CRUD、分配用户/部门 |
 | 自定义报表 | `/enterprise/custom-report` | ✅ | 维度/度量选择、表格/图表/透视表、模板、筛选器、CSV 导出 |
+| 通知告警 | `/enterprise/notifications` | ✅ | 通知模板配置、告警历史分页查看 |
+| 用户管理 | `/enterprise/users` | ✅ | 飞书用户列表、同步状态、同步历史 |
+| 我的接入 | `/enterprise/my-access` | ✅ | Token 管理、用量统计、额度状态 |
+| 访问控制 | `/enterprise/access-control` | ✅ | 租户白名单、角色权限管理 |
+| PPIO 同步 | `/enterprise/ppio-sync` | ✅ | PPIO 模型同步管理 |
+| Novita 同步 | `/enterprise/novita-sync` | ✅ | Novita 模型同步管理 |
 
 ## 环境变量配置
 
@@ -126,3 +141,26 @@
 
 ## 参考项目
 - `/Users/ash/AI/ai-api-gateway/gateway-ext` — 字段设计和报表格式参考
+
+## 上游同步记录
+
+### 2026-03-31: 合并 labring/aiproxy #492–#503
+
+**上游新增功能（已合入）:**
+- Fake Adaptor (#503) — 测试/mock channel type
+- Channel Proxy URL (#495) — Channel 级别代理支持
+- 消耗排行榜 (#494, #501) — `/consumption-ranking` 路由
+- 运行时监控指标 (#498, #499) — Redis 性能追踪 + runtime metrics API
+- 请求/响应体大小限制 (#500) — per-model `RequestBodyStorageMaxSize`/`ResponseBodyStorageMaxSize`
+- Adaptor Registry 重构 (#503) — 从硬编码 map 改为 `registry.Register()` init 自注册
+
+**冲突解决:**
+- `ChannelTypePPIO` 从 53→54（Fake 占用 53）
+- PPIO adaptor 适配新 `registry.Register()` 模式
+- 路由文件保留两边（上游 consumption-ranking + 企业版 EnterpriseLayout 路由）
+
+**⚠️ 数据库迁移注意:**
+如果现有数据库中有 `type=53` 的 PPIO channel 记录，需要手动执行：
+```sql
+UPDATE channels SET type = 54 WHERE type = 53;
+```
