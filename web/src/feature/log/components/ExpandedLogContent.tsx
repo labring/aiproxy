@@ -230,6 +230,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                         <div><span className="font-medium">{t('log.costBreakdown.imageInput')}:</span> {formatAmount(amount?.image_input_amount)}</div>
                         <div><span className="font-medium">{t('log.costBreakdown.audioInput')}:</span> {formatAmount(amount?.audio_input_amount)}</div>
                         <div><span className="font-medium">{t('log.costBreakdown.output')}:</span> {formatAmount(amount?.output_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.reasoning')}:</span> {formatAmount(amount?.reasoning_amount)}</div>
                         <div><span className="font-medium">{t('log.costBreakdown.imageOutput')}:</span> {formatAmount(amount?.image_output_amount)}</div>
                         <div><span className="font-medium">{t('log.costBreakdown.webSearch')}:</span> {formatAmount(amount?.web_search_amount)}</div>
                     </div>

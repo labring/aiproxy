@@ -42,8 +42,9 @@ type Price struct {
 	ImageOutputPrice     ZeroNullFloat64 `json:"image_output_price,omitempty"`
 	ImageOutputPriceUnit ZeroNullInt64   `json:"image_output_price_unit,omitempty"`
 
-	// when ThinkingModeOutputPrice and ReasoningTokens are not 0, OutputPrice and OutputPriceUnit
-	// will be overwritten
+	// when ThinkingModeOutputPrice and ReasoningTokens are both non-zero,
+	// reasoning tokens are priced at ThinkingModeOutputPrice while the
+	// remaining output tokens still use OutputPrice.
 	ThinkingModeOutputPrice     ZeroNullFloat64 `json:"thinking_mode_output_price,omitempty"`
 	ThinkingModeOutputPriceUnit ZeroNullInt64   `json:"thinking_mode_output_price_unit,omitempty"`
 
@@ -395,6 +396,13 @@ func (p *Price) GetWebSearchPriceUnit() int64 {
 	return PriceUnit
 }
 
+func (p *Price) GetThinkingModeOutputPriceUnit() int64 {
+	if p.ThinkingModeOutputPriceUnit > 0 {
+		return int64(p.ThinkingModeOutputPriceUnit)
+	}
+	return PriceUnit
+}
+
 type Usage struct {
 	InputTokens         ZeroNullInt64 `json:"input_tokens,omitempty"`
 	ImageInputTokens    ZeroNullInt64 `json:"image_input_tokens,omitempty"`
@@ -427,6 +435,7 @@ type Amount struct {
 	AudioInputAmount    float64 `json:"audio_input_amount,omitempty"`
 	OutputAmount        float64 `json:"output_amount,omitempty"`
 	ImageOutputAmount   float64 `json:"image_output_amount,omitempty"`
+	ReasoningAmount     float64 `json:"reasoning_amount,omitempty"`
 	CachedAmount        float64 `json:"cached_amount,omitempty"`
 	CacheCreationAmount float64 `json:"cache_creation_amount,omitempty"`
 	WebSearchAmount     float64 `json:"web_search_amount,omitempty"`
@@ -448,6 +457,9 @@ func (a *Amount) Add(other Amount) {
 		InexactFloat64()
 	a.ImageOutputAmount = decimal.NewFromFloat(a.ImageOutputAmount).
 		Add(decimal.NewFromFloat(other.ImageOutputAmount)).
+		InexactFloat64()
+	a.ReasoningAmount = decimal.NewFromFloat(a.ReasoningAmount).
+		Add(decimal.NewFromFloat(other.ReasoningAmount)).
 		InexactFloat64()
 	a.CachedAmount = decimal.NewFromFloat(a.CachedAmount).
 		Add(decimal.NewFromFloat(other.CachedAmount)).

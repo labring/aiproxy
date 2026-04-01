@@ -1379,6 +1379,7 @@
       "imageInput": "Image Input Cost",
       "audioInput": "Audio Input Cost",
       "output": "Text Output Cost",
+      "reasoning": "Reasoning Output Cost",
       "imageOutput": "Image Output Cost",
       "webSearch": "Web Search Cost"
     },

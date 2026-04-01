@@ -38,6 +38,7 @@ export interface LogAmount {
   audio_input_amount?: number
   output_amount?: number
   image_output_amount?: number
+  reasoning_amount?: number
   cached_amount?: number
   cache_creation_amount?: number
   web_search_amount?: number

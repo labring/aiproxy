@@ -222,14 +222,12 @@ func CalculateAmountDetail(
 		outputTokens -= usage.ImageOutputTokens
 	}
 
-	outputPrice := float64(modelPrice.OutputPrice)
-
-	outputPriceUnit := modelPrice.GetOutputPriceUnit()
+	// Split reasoning tokens from normal output tokens when ThinkingModeOutputPrice is configured.
+	// Reasoning tokens are priced separately; only the remainder uses OutputPrice.
+	var reasoningTokens model.ZeroNullInt64
 	if usage.ReasoningTokens != 0 && modelPrice.ThinkingModeOutputPrice != 0 {
-		outputPrice = float64(modelPrice.ThinkingModeOutputPrice)
-		if modelPrice.ThinkingModeOutputPriceUnit != 0 {
-			outputPriceUnit = int64(modelPrice.ThinkingModeOutputPriceUnit)
-		}
+		reasoningTokens = usage.ReasoningTokens
+		outputTokens -= reasoningTokens
 	}
 
 	inputAmount := decimal.NewFromInt(int64(inputTokens)).
@@ -257,8 +255,12 @@ func CalculateAmountDetail(
 		Div(decimal.NewFromInt(modelPrice.GetWebSearchPriceUnit()))
 
 	outputAmount := decimal.NewFromInt(int64(outputTokens)).
-		Mul(decimal.NewFromFloat(outputPrice)).
-		Div(decimal.NewFromInt(outputPriceUnit))
+		Mul(decimal.NewFromFloat(float64(modelPrice.OutputPrice))).
+		Div(decimal.NewFromInt(modelPrice.GetOutputPriceUnit()))
+
+	reasoningAmount := decimal.NewFromInt(int64(reasoningTokens)).
+		Mul(decimal.NewFromFloat(float64(modelPrice.ThinkingModeOutputPrice))).
+		Div(decimal.NewFromInt(modelPrice.GetThinkingModeOutputPriceUnit()))
 
 	imageOutputAmount := decimal.NewFromInt(int64(usage.ImageOutputTokens)).
 		Mul(decimal.NewFromFloat(float64(modelPrice.ImageOutputPrice))).
@@ -271,6 +273,7 @@ func CalculateAmountDetail(
 		Add(cacheCreationAmount).
 		Add(webSearchAmount).
 		Add(outputAmount).
+		Add(reasoningAmount).
 		Add(imageOutputAmount).
 		InexactFloat64()
 
@@ -280,6 +283,7 @@ func CalculateAmountDetail(
 		AudioInputAmount:    audioInputAmount.InexactFloat64(),
 		OutputAmount:        outputAmount.InexactFloat64(),
 		ImageOutputAmount:   imageOutputAmount.InexactFloat64(),
+		ReasoningAmount:     reasoningAmount.InexactFloat64(),
 		CachedAmount:        cachedAmount.InexactFloat64(),
 		CacheCreationAmount: cacheCreationAmount.InexactFloat64(),
 		WebSearchAmount:     webSearchAmount.InexactFloat64(),

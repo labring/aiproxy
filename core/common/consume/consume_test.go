@@ -127,7 +127,7 @@ func TestCalculateAmount(t *testing.T) {
 			want: 1, // 0.5 * 2/1
 		},
 		{
-			name: "Thinking Mode Output Pricing (ON)",
+			name: "Thinking Mode Output Pricing (ON) - split reasoning and normal output",
 			code: http.StatusOK,
 			usage: model.Usage{
 				OutputTokens:    2000,
@@ -137,10 +137,10 @@ func TestCalculateAmount(t *testing.T) {
 				OutputPrice:             0.01,
 				ThinkingModeOutputPrice: 0.03,
 			},
-			want: 0.06, // 0.03 * 2000/1000
+			want: 0.04, // reasoning: 0.03 * 1000/1000 = 0.03, normal: 0.01 * (2000-1000)/1000 = 0.01
 		},
 		{
-			name: "Thinking Mode Output Pricing (OFF)",
+			name: "Thinking Mode Output Pricing (OFF) - no reasoning tokens",
 			code: http.StatusOK,
 			usage: model.Usage{
 				OutputTokens: 2000,
@@ -149,7 +149,47 @@ func TestCalculateAmount(t *testing.T) {
 				OutputPrice:             0.01,
 				ThinkingModeOutputPrice: 0.03,
 			},
-			want: 0.02, // 0.01 * 2000/1000
+			want: 0.02, // 0.01 * 2000/1000 (ThinkingModeOutputPrice not used)
+		},
+		{
+			name: "Thinking Mode Output Pricing - all output is reasoning",
+			code: http.StatusOK,
+			usage: model.Usage{
+				OutputTokens:    3000,
+				ReasoningTokens: 3000,
+			},
+			price: model.Price{
+				OutputPrice:             0.01,
+				ThinkingModeOutputPrice: 0.03,
+			},
+			want: 0.09, // reasoning: 0.03 * 3000/1000 = 0.09, normal: 0
+		},
+		{
+			name: "Thinking Mode - no ThinkingModeOutputPrice configured",
+			code: http.StatusOK,
+			usage: model.Usage{
+				OutputTokens:    2000,
+				ReasoningTokens: 1000,
+			},
+			price: model.Price{
+				OutputPrice: 0.01,
+			},
+			want: 0.02, // 0.01 * 2000/1000 (all output at normal price)
+		},
+		{
+			name: "Thinking Mode Output Pricing with custom unit",
+			code: http.StatusOK,
+			usage: model.Usage{
+				OutputTokens:    5000,
+				ReasoningTokens: 3000,
+			},
+			price: model.Price{
+				OutputPrice:                 0.002,
+				OutputPriceUnit:             1,
+				ThinkingModeOutputPrice:     0.006,
+				ThinkingModeOutputPriceUnit: 1,
+			},
+			want: 22, // reasoning: 0.006 * 3000/1 = 18, normal: 0.002 * 2000/1 = 4
 		},
 		{
 			name: "Image Generation - With OutputTokensDetails (text + image output)",
@@ -485,6 +525,109 @@ func TestCalculateAmountWithConditionalPricing(t *testing.T) {
 		got := consume.CalculateAmount(tt.code, tt.usage, tt.price, tt.serviceTier)
 		if got != tt.want {
 			t.Errorf("CalculateAmount()\n%s\n\tgot: %v\n\twant: %v\n\t", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestCalculateAmountDetailReasoningSplit(t *testing.T) {
+	tests := []struct {
+		name           string
+		usage          model.Usage
+		price          model.Price
+		wantOutput     float64
+		wantReasoning  float64
+		wantUsedAmount float64
+	}{
+		{
+			name: "reasoning and normal output split correctly",
+			usage: model.Usage{
+				InputTokens:     1000,
+				OutputTokens:    5000,
+				ReasoningTokens: 3000,
+			},
+			price: model.Price{
+				InputPrice:                  0.004,
+				InputPriceUnit:              1,
+				OutputPrice:                 0.004,
+				OutputPriceUnit:             1,
+				ThinkingModeOutputPrice:     0.016,
+				ThinkingModeOutputPriceUnit: 1,
+			},
+			// input: 0.004 * 1000 = 4
+			// normal output: 0.004 * (5000-3000) = 8
+			// reasoning: 0.016 * 3000 = 48
+			wantOutput:     8,
+			wantReasoning:  48,
+			wantUsedAmount: 60,
+		},
+		{
+			name: "no ThinkingModeOutputPrice - reasoning in output amount",
+			usage: model.Usage{
+				InputTokens:     1000,
+				OutputTokens:    5000,
+				ReasoningTokens: 3000,
+			},
+			price: model.Price{
+				InputPrice:      0.004,
+				InputPriceUnit:  1,
+				OutputPrice:     0.016,
+				OutputPriceUnit: 1,
+			},
+			// all output at normal price: 0.016 * 5000 = 80
+			wantOutput:     80,
+			wantReasoning:  0,
+			wantUsedAmount: 84, // 0.004*1000 + 80
+		},
+		{
+			name: "zero reasoning tokens - ThinkingModeOutputPrice ignored",
+			usage: model.Usage{
+				InputTokens:  1000,
+				OutputTokens: 2000,
+			},
+			price: model.Price{
+				InputPrice:              0.001,
+				OutputPrice:             0.002,
+				ThinkingModeOutputPrice: 0.006,
+			},
+			// 0.001 * 1000/1000 + 0.002 * 2000/1000 = 0.005
+			wantOutput:     0.004,
+			wantReasoning:  0,
+			wantUsedAmount: 0.005,
+		},
+		{
+			name: "PPIO deepseek-r1 scenario - per-token pricing",
+			usage: model.Usage{
+				InputTokens:     10000,
+				OutputTokens:    8000,
+				ReasoningTokens: 6000,
+			},
+			price: model.Price{
+				InputPrice:                  0.000004,
+				InputPriceUnit:              1,
+				OutputPrice:                 0.000004,
+				OutputPriceUnit:             1,
+				ThinkingModeOutputPrice:     0.000016,
+				ThinkingModeOutputPriceUnit: 1,
+			},
+			// input: 0.000004 * 10000 = 0.04
+			// normal output: 0.000004 * 2000 = 0.008
+			// reasoning: 0.000016 * 6000 = 0.096
+			wantOutput:     0.008,
+			wantReasoning:  0.096,
+			wantUsedAmount: 0.144,
+		},
+	}
+
+	for _, tt := range tests {
+		amount := consume.CalculateAmountDetail(http.StatusOK, tt.usage, tt.price, "")
+		if amount.OutputAmount != tt.wantOutput {
+			t.Errorf("CalculateAmountDetail() %s\n\tOutputAmount got: %v, want: %v", tt.name, amount.OutputAmount, tt.wantOutput)
+		}
+		if amount.ReasoningAmount != tt.wantReasoning {
+			t.Errorf("CalculateAmountDetail() %s\n\tReasoningAmount got: %v, want: %v", tt.name, amount.ReasoningAmount, tt.wantReasoning)
+		}
+		if amount.UsedAmount != tt.wantUsedAmount {
+			t.Errorf("CalculateAmountDetail() %s\n\tUsedAmount got: %v, want: %v", tt.name, amount.UsedAmount, tt.wantUsedAmount)
 		}
 	}
 }

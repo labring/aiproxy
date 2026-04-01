@@ -1367,6 +1367,7 @@
       "imageInput": "图片输入消费",
       "audioInput": "音频输入消费",
       "output": "文本输出消费",
+      "reasoning": "推理输出消费",
       "imageOutput": "图片输出消费",
       "webSearch": "联网搜索消费"
     },
