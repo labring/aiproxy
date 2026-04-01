@@ -85,7 +85,7 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeDeepseek:                "deepseek",
 	ChannelTypeCloudflare:              "cloudflare",
 	ChannelTypeDoubao:                  "doubao",
-	ChannelTypeNovita:                  "novita",
+	ChannelTypeNovita:                  "海外",
 	ChannelTypeVertexAI:                "vertexai",
 	ChannelTypeSiliconflow:             "siliconflow",
 	ChannelTypeDoubaoAudio:             "doubao audio",

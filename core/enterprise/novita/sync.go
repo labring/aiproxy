@@ -51,7 +51,7 @@ func ExecuteSync(
 		Summary: SyncSummary{},
 	}
 
-	sendProgress(progressCallback, "fetching", "正在获取 Novita 模型列表...", 10, nil)
+	sendProgress(progressCallback, "fetching", "正在获取海外模型列表...", 10, nil)
 
 	client, err := NewNovitaClient()
 	if err != nil {
