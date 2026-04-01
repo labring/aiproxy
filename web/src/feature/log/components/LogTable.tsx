@@ -28,6 +28,7 @@ interface LogTableProps {
     onPageChange: (page: number) => void
     onPageSizeChange: (pageSize: number) => void
     onOpenGroupLog?: (group: string, tokenName?: string) => void
+    groupNames?: Record<string, string>
 }
 
 // 使用一个单独的组件来处理每行的展开内容，这样每一行都有自己的state
@@ -40,6 +41,7 @@ export function LogTable({
     onPageChange,
     onPageSizeChange,
     onOpenGroupLog,
+    groupNames,
 }: LogTableProps) {
     const { t } = useTranslation()
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -90,12 +92,14 @@ export function LogTable({
                 cell: (info) => {
                     const value = info.getValue()
                     if (!value) return <div className="text-sm text-muted-foreground">-</div>
+                    const name = groupNames?.[value]
                     return (
                         <div
                             className={`text-sm font-medium ${clickableCell}`}
                             onClick={() => onOpenGroupLog?.(value)}
+                            title={value}
                         >
-                            {value}
+                            {name || value}
                         </div>
                     )
                 },
@@ -213,7 +217,7 @@ export function LogTable({
             }),
         ],
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [t, expandedRows, onOpenGroupLog, copyToClipboard]
+        [t, expandedRows, onOpenGroupLog, copyToClipboard, groupNames]
     )
 
     const table = useReactTable({

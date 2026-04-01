@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { useLogs } from '@/feature/log/hooks'
 import { LogFilters } from '@/feature/log/components/LogFilters'
 import { LogTable } from '@/feature/log/components/LogTable'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
+import { groupApi } from '@/api/group'
 import type { LogFilters as LogFiltersType } from '@/types/log'
 import { DEFAULT_TIMEZONE, zonedBoundaryToUnixMs } from '@/utils/timezone'
 
@@ -27,7 +29,7 @@ export default function LogPage() {
 
     const [filters, setFilters] = useState<LogFiltersType>(getDefaultFilters())
 
-    // GroupDialog 状态
+    // GroupDialog state
     const [groupDialogOpen, setGroupDialogOpen] = useState(false)
     const [groupDialogGroupId, setGroupDialogGroupId] = useState<string | null>(null)
     const [groupDialogTokenName, setGroupDialogTokenName] = useState<string | undefined>()
@@ -38,6 +40,24 @@ export default function LogPage() {
         error,
         refetch
     } = useLogs(filters)
+
+    // Extract unique group IDs from current page logs
+    const groupIds = useMemo(() => {
+        if (!logData?.logs) return []
+        const ids = new Set<string>()
+        for (const log of logData.logs) {
+            if (log.group) ids.add(log.group)
+        }
+        return Array.from(ids)
+    }, [logData?.logs])
+
+    // Fetch group names for current page
+    const { data: groupNames } = useQuery({
+        queryKey: ['groupNames', groupIds],
+        queryFn: () => groupApi.getGroupNames(groupIds),
+        enabled: groupIds.length > 0,
+        staleTime: 5 * 60 * 1000,
+    })
 
     const handleFiltersChange = (newFilters: LogFiltersType) => {
         setFilters(newFilters)
@@ -55,7 +75,6 @@ export default function LogPage() {
         refetch()
     }
 
-    // 点击 group/token_name → 打开 GroupDialog 的日志标签
     const handleOpenGroupLog = useCallback((group: string, tokenName?: string) => {
         setGroupDialogGroupId(group)
         setGroupDialogTokenName(tokenName)
@@ -94,10 +113,10 @@ export default function LogPage() {
                     onPageChange={handlePageChange}
                     onPageSizeChange={handlePageSizeChange}
                     onOpenGroupLog={handleOpenGroupLog}
+                    groupNames={groupNames}
                 />
             </div>
 
-            {/* 点击 group/token_name 打开 GroupDialog 日志标签 */}
             <GroupDialog
                 open={groupDialogOpen}
                 onOpenChange={setGroupDialogOpen}

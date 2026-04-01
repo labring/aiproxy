@@ -350,6 +350,7 @@ func UpdateGroupsStatus(c *gin.Context) {
 }
 
 type CreateGroupRequest struct {
+	Name          string   `json:"name"`
 	RPMRatio      float64  `json:"rpm_ratio"`
 	TPMRatio      float64  `json:"tpm_ratio"`
 	AvailableSets []string `json:"available_sets"`
@@ -360,6 +361,7 @@ type CreateGroupRequest struct {
 
 func (r *CreateGroupRequest) ToGroup() *model.Group {
 	return &model.Group{
+		Name:          r.Name,
 		RPMRatio:      r.RPMRatio,
 		TPMRatio:      r.TPMRatio,
 		AvailableSets: r.AvailableSets,
@@ -810,6 +812,54 @@ func UpdateGroupModelConfigs(c *gin.Context) {
 	}
 
 	middleware.SuccessResponse(c, nil)
+}
+
+// GetGroupNames godoc
+//
+//	@Summary		Get group names by IDs
+//	@Description	Returns a map of group ID to display name
+//	@Tags			groups
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			ids	query		string	true	"Comma-separated group IDs"
+//	@Success		200	{object}	middleware.APIResponse{data=map[string]string}
+//	@Router			/api/groups/names [get]
+const maxGroupNameIDs = 200
+
+func GetGroupNames(c *gin.Context) {
+	idsStr := c.Query("ids")
+	if idsStr == "" {
+		middleware.SuccessResponse(c, map[string]string{})
+		return
+	}
+
+	raw := strings.Split(idsStr, ",")
+
+	// Deduplicate and cap at maxGroupNameIDs
+	seen := make(map[string]struct{}, len(raw))
+	ids := make([]string, 0, len(raw))
+	for _, id := range raw {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) > maxGroupNameIDs {
+		ids = ids[:maxGroupNameIDs]
+	}
+
+	names, err := model.GetGroupNames(ids)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, names)
 }
 
 // GetIPGroupList godoc

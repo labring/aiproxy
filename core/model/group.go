@@ -24,6 +24,7 @@ const (
 type Group struct {
 	CreatedAt              time.Time               `json:"created_at"`
 	ID                     string                  `json:"id"                       gorm:"size:64;primaryKey"`
+	Name                   string                  `json:"name,omitempty"           gorm:"size:128"`
 	Tokens                 []Token                 `json:"-"                        gorm:"foreignKey:GroupID"`
 	GroupModelConfigs      []GroupModelConfig      `json:"-"                        gorm:"foreignKey:GroupID"`
 	PublicMCPReusingParams []PublicMCPReusingParam `json:"-"                        gorm:"foreignKey:GroupID"`
@@ -189,6 +190,7 @@ func DeleteGroupsByIDs(ids []string) (err error) {
 
 type UpdateGroupRequest struct {
 	Status                int       `json:"status"`
+	Name                  *string   `json:"name,omitempty"`
 	RPMRatio              *float64  `json:"rpm_ratio,omitempty"`
 	TPMRatio              *float64  `json:"tpm_ratio,omitempty"`
 	AvailableSets         *[]string `json:"available_sets,omitempty"`
@@ -215,6 +217,12 @@ func UpdateGroup(id string, update UpdateGroupRequest) (group *Group, err error)
 	}()
 
 	selects := []string{}
+	if update.Name != nil {
+		group.Name = *update.Name
+
+		selects = append(selects, "name")
+	}
+
 	if update.RPMRatio != nil {
 		group.RPMRatio = *update.RPMRatio
 
@@ -359,9 +367,9 @@ func SearchGroup(
 	}
 
 	if !common.UsingSQLite {
-		tx = tx.Where("id ILIKE ? OR available_sets ILIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		tx = tx.Where("id ILIKE ? OR name ILIKE ? OR available_sets ILIKE ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	} else {
-		tx = tx.Where("id LIKE ? OR available_sets LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		tx = tx.Where("id LIKE ? OR name LIKE ? OR available_sets LIKE ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
 	err = tx.Count(&total).Error
@@ -386,4 +394,40 @@ func SearchGroup(
 
 func CreateGroup(group *Group) error {
 	return DB.Create(group).Error
+}
+
+// CreateOrUpdateGroupName upserts a group, updating the name if the group already exists.
+func CreateOrUpdateGroupName(groupID, name string) error {
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name"}),
+	}).Create(&Group{ID: groupID, Name: name}).Error
+}
+
+func GetGroupNames(ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var rows []struct {
+		ID   string
+		Name string
+	}
+
+	err := DB.Model(&Group{}).
+		Select("id, name").
+		Where("id IN ?", ids).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string, len(rows))
+	for _, r := range rows {
+		if r.Name != "" {
+			result[r.ID] = r.Name
+		}
+	}
+
+	return result, nil
 }

@@ -328,9 +328,8 @@ func handleUserEvent(data json.RawMessage, tenantKey string) {
 		return
 	}
 
-	// Ensure the group exists
-	group := &model.Group{ID: groupID}
-	if err := model.OnConflictDoNothing().Create(group).Error; err != nil {
+	// Ensure the group exists, update name on conflict
+	if err := model.CreateOrUpdateGroupName(groupID, obj.Name); err != nil {
 		log.Errorf("feishu webhook: failed to create group for user %s: %v", obj.OpenID, err)
 	}
 }
@@ -779,9 +778,8 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 			db.Model(&feishuUser).Update("tenant_id", tenantInfo.TenantKey)
 		}
 
-		// Ensure group exists
-		group := &model.Group{ID: groupID}
-		if err := model.OnConflictDoNothing().Create(group).Error; err != nil {
+		// Ensure group exists, update name on conflict
+		if err := model.CreateOrUpdateGroupName(groupID, u.Name); err != nil {
 			log.Errorf("feishu sync: failed to create group for user %s: %v", u.OpenID, err)
 		}
 	}

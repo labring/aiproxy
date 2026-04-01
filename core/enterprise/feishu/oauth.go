@@ -189,12 +189,8 @@ func HandleCallback(c *gin.Context) {
 		return
 	}
 
-	// Create Group if not exists (pattern from model.InsertToken with autoCreateGroup)
-	group := &model.Group{
-		ID: groupID,
-	}
-
-	if err := model.OnConflictDoNothing().Create(group).Error; err != nil {
+	// Create Group if not exists, update name on conflict
+	if err := model.CreateOrUpdateGroupName(groupID, userInfo.Name); err != nil {
 		log.Errorf("feishu create group failed: %v", err)
 		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to create group")
 

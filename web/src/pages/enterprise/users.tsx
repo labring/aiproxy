@@ -39,7 +39,7 @@ const COLUMN_KEYS: Array<{ key: string; labelKey: string; alwaysVisible?: boolea
     { key: "name", labelKey: "enterprise.users.name", alwaysVisible: true },
     { key: "role", labelKey: "enterprise.users.role", defaultVisible: true },
     { key: "department_id", labelKey: "enterprise.users.department", defaultVisible: true },
-    { key: "group_id", labelKey: "enterprise.users.group", defaultVisible: true },
+    { key: "group_id", labelKey: "enterprise.users.group", defaultVisible: false },
     { key: "effective_policy", labelKey: "enterprise.quota.effectivePolicy", defaultVisible: true },
     { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
     { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
@@ -541,7 +541,11 @@ export default function UsersPage() {
                     {renderSortIcon("group_id")}
                 </div>
             ),
-            cell: ({ row }) => <code className="text-xs">{row.original.group_id}</code>,
+            cell: ({ row }) => (
+                <code className="text-xs truncate max-w-[120px] block" title={row.original.group_id}>
+                    {row.original.group_id}
+                </code>
+            ),
         },
         {
             id: "effective_policy",

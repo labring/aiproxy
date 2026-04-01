@@ -47,7 +47,7 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
                         {isLoading ? (
                             <Skeleton className="h-6 w-32" />
                         ) : (
-                            `Group: ${group?.id || groupId}`
+                            `Group: ${group?.name || group?.id || groupId}`
                         )}
                     </DialogTitle>
                 </DialogHeader>

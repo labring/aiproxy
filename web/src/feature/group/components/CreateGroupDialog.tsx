@@ -29,6 +29,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
     const { createGroup, isLoading } = useCreateGroup()
     const { updateGroup, isLoading: isUpdating } = useUpdateGroup()
     const [groupName, setGroupName] = useState('')
+    const [displayName, setDisplayName] = useState('')
     const [availableSets, setAvailableSets] = useState<string[]>([])
     const [rpmRatio, setRpmRatio] = useState<number | undefined>(undefined)
     const [tpmRatio, setTpmRatio] = useState<number | undefined>(undefined)
@@ -45,6 +46,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
 
         if (group) {
             setGroupName(group.id)
+            setDisplayName(group.name || '')
             setAvailableSets(group.available_sets || [])
             setRpmRatio(group.rpm_ratio || undefined)
             setTpmRatio(group.tpm_ratio || undefined)
@@ -54,6 +56,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
         }
 
         setGroupName('')
+        setDisplayName('')
         setAvailableSets([])
         setRpmRatio(undefined)
         setTpmRatio(undefined)
@@ -65,6 +68,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
         e.preventDefault()
         if (!groupName.trim()) return
         const payload = {
+            name: displayName.trim() || undefined,
             available_sets: availableSets,
             rpm_ratio: rpmRatio ?? 0,
             tpm_ratio: tpmRatio ?? 0,
@@ -92,6 +96,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
             {
                 onSuccess: () => {
                     setGroupName('')
+                    setDisplayName('')
                     setAvailableSets([])
                     setRpmRatio(undefined)
                     setTpmRatio(undefined)
@@ -106,6 +111,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
     const handleOpenChange = (open: boolean) => {
         if (!open) {
             setGroupName('')
+            setDisplayName('')
             setAvailableSets([])
             setRpmRatio(undefined)
             setTpmRatio(undefined)
@@ -134,6 +140,16 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
                                 value={groupName}
                                 onChange={(e) => setGroupName(e.target.value)}
                                 disabled={loading || isEdit}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="group-display-name">{t('group.dialog.displayName')}</Label>
+                            <Input
+                                id="group-display-name"
+                                placeholder={t('group.dialog.displayNamePlaceholder')}
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                disabled={loading}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">

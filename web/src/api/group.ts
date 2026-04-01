@@ -74,6 +74,13 @@ export const groupApi = {
         return response
     },
 
+    // Get group names by IDs (lightweight batch lookup)
+    getGroupNames: async (ids: string[]): Promise<Record<string, string>> => {
+        if (ids.length === 0) return {}
+        const response = await get<Record<string, string>>(`groups/names?ids=${ids.join(',')}`)
+        return response
+    },
+
     // Get a single group by ID
     getGroup: async (groupId: string): Promise<Group> => {
         const response = await get<Group>(`group/${groupId}`)

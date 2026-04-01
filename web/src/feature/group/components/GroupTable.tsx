@@ -144,8 +144,13 @@ export function GroupTable() {
             accessorKey: 'id',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.name")}</div>,
             cell: ({ row }) => (
-                <div className="font-medium">
-                    {row.original.id}
+                <div>
+                    <div className="font-medium">{row.original.name || row.original.id}</div>
+                    {row.original.name && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[200px]" title={row.original.id}>
+                            {row.original.id}
+                        </div>
+                    )}
                 </div>
             ),
         },
