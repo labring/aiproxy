@@ -17,7 +17,6 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
-	log "github.com/sirupsen/logrus"
 )
 
 type MyTokenInfo struct {
@@ -581,7 +580,8 @@ func GetMyStats(c *gin.Context) {
 
 	usageStats.Comparisons = computeComparisons(feishuUser.DepartmentID, startTs, endTs)
 
-	// Query quota status
+	// Query quota status — use group_summaries for accurate period usage instead of
+	// token snapshot deltas, which lose precision due to lazy period resets.
 	var quotaStatus *MyQuotaStatus
 
 	if feishuUser.TokenID > 0 {
@@ -589,21 +589,16 @@ func GetMyStats(c *gin.Context) {
 		if err := model.DB.Where("id = ?", feishuUser.TokenID).First(&token).Error; err == nil && token.PeriodQuota > 0 {
 			policy, _ := quota.GetPolicyForUser(c.Request.Context(), feishuUser.OpenID)
 			if policy != nil {
-				// Check if the period needs reset — if so, period usage is effectively 0.
-				// Also trigger async reset so the DB is updated for subsequent requests.
+				periodStart := currentPeriodStart(token.PeriodType)
+
 				var periodUsed float64
-				if needsReset, _ := token.NeedsPeriodReset(); needsReset {
+				if err := model.LogDB.
+					Model(&model.GroupSummary{}).
+					Select("COALESCE(SUM(used_amount), 0)").
+					Where("group_id = ?", feishuUser.GroupID).
+					Where("hour_timestamp >= ?", periodStart.Unix()).
+					Scan(&periodUsed).Error; err != nil {
 					periodUsed = 0
-					go func() {
-						if err := model.ResetTokenPeriodUsage(token.ID); err != nil {
-							log.Error("reset token period usage from my-stats: " + err.Error())
-						}
-					}()
-				} else {
-					periodUsed = token.UsedAmount - token.PeriodLastUpdateAmount
-					if periodUsed < 0 {
-						periodUsed = 0
-					}
 				}
 
 				usageRatio := periodUsed / token.PeriodQuota
@@ -615,7 +610,7 @@ func GetMyStats(c *gin.Context) {
 					PeriodQuota:  token.PeriodQuota,
 					PeriodUsed:   periodUsed,
 					PeriodType:   string(token.PeriodType),
-					PeriodStart:  token.PeriodLastUpdateTime.Unix(),
+					PeriodStart:  periodStart.Unix(),
 					PolicyName:   policy.Name,
 					PolicyID:     policy.ID,
 					CurrentTier:  currentTier,
@@ -759,6 +754,25 @@ func computeComparisons(departmentID string, startTs, endTs int64) *UsageCompari
 	}
 
 	return comp
+}
+
+// currentPeriodStart returns the start of the current quota period based on period type.
+func currentPeriodStart(periodType model.EmptyNullString) time.Time {
+	now := time.Now()
+
+	switch periodType {
+	case model.PeriodTypeDaily:
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	case model.PeriodTypeWeekly:
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7 // Sunday = 7
+		}
+		monday := now.AddDate(0, 0, -(weekday - 1))
+		return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, now.Location())
+	default: // monthly or empty
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	}
 }
 
 // DisableMyToken disables (soft-deletes) a token belonging to the current user's group.
