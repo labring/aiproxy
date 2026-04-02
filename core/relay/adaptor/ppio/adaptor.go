@@ -47,11 +47,8 @@ func responsesBase(channelBaseURL string) string {
 	return responsesBaseURL
 }
 
-// GetRequestURL overrides the OpenAI adaptor to route Responses API requests
-// to PPIO's dedicated path prefix (/openai/v1/responses instead of
-// /v3/openai/responses). This applies both to explicit Responses modes AND
-// to responses-only models accessed via ChatCompletions/Anthropic/Gemini modes,
-// where the OpenAI adaptor would otherwise use the wrong path prefix.
+// GetRequestURL overrides the OpenAI adaptor to route all Responses API traffic
+// (including responses-only models) to PPIO's /openai/v1 prefix instead of /v3/openai.
 func (a *Adaptor) GetRequestURL(
 	m *meta.Meta,
 	store adaptor.Store,
@@ -63,23 +60,20 @@ func (a *Adaptor) GetRequestURL(
 		mode.ResponsesDelete,
 		mode.ResponsesCancel,
 		mode.ResponsesInputItems:
-		// Compute the rewritten base only for Responses modes.
 		rb := responsesBase(m.Channel.BaseURL)
 
 		return responsesURL(rb, m.Mode, m.ResponseID)
 
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
-		// Responses-only models (e.g. gpt-5.4-pro, gpt-5.3-codex) called via
-		// ChatCompletions are internally converted to the Responses API. PPIO
-		// serves Responses at /openai/v1/responses, not /v3/openai/responses,
-		// so we must rewrite the base URL here instead of delegating to OpenAI.
+		// Responses-only models are internally converted to the Responses API;
+		// rewrite the base URL so they hit /openai/v1/responses, not /v3/openai/responses.
 		if openai.IsResponsesOnlyModel(&m.ModelConfig, m.ActualModel) {
 			rb := responsesBase(m.Channel.BaseURL)
 
 			return responsesURL(rb, mode.Responses, m.ResponseID)
 		}
 
-		return a.Adaptor.GetRequestURL(m, store, c)
+		fallthrough
 
 	default:
 		return a.Adaptor.GetRequestURL(m, store, c)
