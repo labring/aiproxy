@@ -70,7 +70,7 @@ function typeNameLabel(t: (k: never) => string, name: string): string {
 // Owners not listed here fall back to CSS `capitalize` (first-letter uppercase).
 const OWNER_DISPLAY_NAMES: Record<string, string> = {
     ppio: "PPIO",
-    novita: "Novita",
+    novita: "海外",
     baai: "BAAI",
     xai: "xAI",
     chatglm: "ChatGLM",

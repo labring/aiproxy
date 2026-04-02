@@ -725,7 +725,7 @@ export default function NovitaSyncPage() {
                     ) : (
                       <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                     )}
-                    <span className="text-foreground">Novita Channel: </span>
+                    <span className="text-foreground">海外 Channel: </span>
                     <span className={diff.channels.novita.exists ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
                       {diff.channels.novita.exists
                         ? t('enterprise.novita.channelExists')
