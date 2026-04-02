@@ -502,8 +502,8 @@
       "modelCoverage": "Model Channel Coverage",
       "uncoveredHint": "The following models are synced but not assigned to any Channel, so they won't appear in My Access. Re-running sync should fix this automatically.",
       "endpointLegend": "Endpoint Guide",
-      "endpointChat": "OpenAI compatible (base_url: api.ppio.com/v1)",
-      "endpointAnthropic": "Claude native protocol (base_url: api.ppio.com/anthropic)",
+      "endpointChat": "OpenAI compatible (base_url: api.ppinfra.com/v3/openai)",
+      "endpointAnthropic": "Claude native protocol (base_url: api.ppinfra.com/anthropic)",
       "endpointResponses": "OpenAI Responses API (/v1/responses)",
       "endpointEmbeddings": "Text embeddings (/v1/embeddings)"
     },

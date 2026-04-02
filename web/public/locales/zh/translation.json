@@ -491,8 +491,8 @@
       "modelCoverage": "模型 Channel 覆盖率",
       "uncoveredHint": "以下模型已同步但未分配到任何 Channel，将不会出现在「我的接入」中。重新执行同步后应自动修复。",
       "endpointLegend": "端点说明",
-      "endpointChat": "OpenAI 兼容 (base_url: api.ppio.com/v1)",
-      "endpointAnthropic": "Claude 原生协议 (base_url: api.ppio.com/anthropic)",
+      "endpointChat": "OpenAI 兼容 (base_url: api.ppinfra.com/v3/openai)",
+      "endpointAnthropic": "Claude 原生协议 (base_url: api.ppinfra.com/anthropic)",
       "endpointResponses": "OpenAI Responses API (/v1/responses)",
       "endpointEmbeddings": "文本向量 (/v1/embeddings)"
     },

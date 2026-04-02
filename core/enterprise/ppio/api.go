@@ -46,7 +46,7 @@ func maskAPIKey(key string) string {
 
 // ppioChannelWhere returns a WHERE clause that matches all PPIO-related channels.
 // PPIO uses api.ppinfra.com for both OpenAI and Anthropic endpoints.
-// Legacy channels may still reference api.ppio.com, so we match both domains.
+// Legacy channels may still reference the deprecated api.ppio.com domain, so we match both.
 // Also matches ChannelTypePPIO for channels that may have an empty base_url.
 func ppioChannelWhere() string {
 	like := common.LikeOp()
