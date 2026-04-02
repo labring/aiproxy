@@ -37,6 +37,8 @@ func SetRelayRouter(router *gin.Engine) {
 		dashboardRouter.GET("/billing/subscription", controller.GetSubscription)
 		dashboardRouter.GET("/billing/usage", controller.GetUsage)
 		dashboardRouter.GET("/billing/quota", controller.GetQuota)
+		dashboardRouter.GET("/logs", controller.DashboardRateLimit, controller.GetTokenLogs)
+		dashboardRouter.GET("/logs/:log_id", controller.DashboardRateLimit, controller.GetTokenLogDetail)
 	}
 
 	relayRouter := v1Router.Group("")
@@ -104,6 +106,10 @@ func SetRelayRouter(router *gin.Engine) {
 		relayRouter.GET(
 			"/video/generations/:id/content/video",
 			controller.VideoGenerationsContent()...,
+		)
+		relayRouter.POST(
+			"/web-search",
+			controller.WebSearch()...,
 		)
 		relayRouter.POST("/responses",
 			controller.CreateResponse()...)

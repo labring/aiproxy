@@ -478,3 +478,10 @@ func Gemini() []gin.HandlerFunc {
 		NewRelay(mode.Gemini),
 	}
 }
+
+func WebSearch() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.WebSearch),
+		NewRelay(mode.WebSearch),
+	}
+}

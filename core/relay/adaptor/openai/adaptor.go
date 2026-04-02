@@ -51,7 +51,8 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.ResponsesGet ||
 		m == mode.ResponsesDelete ||
 		m == mode.ResponsesCancel ||
-		m == mode.ResponsesInputItems
+		m == mode.ResponsesInputItems ||
+		m == mode.WebSearch
 }
 
 //nolint:gocyclo
@@ -204,6 +205,16 @@ func (a *Adaptor) GetRequestURL(
 			Method: http.MethodGet,
 			URL:    url,
 		}, nil
+	case mode.WebSearch:
+		url, err := url.JoinPath(u, "/web-search")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
 	default:
 		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -270,6 +281,8 @@ func ConvertRequest(
 		return ConvertTTSRequest(meta, req, "")
 	case mode.Rerank:
 		return ConvertRerankRequest(meta, req)
+	case mode.WebSearch:
+		return ConvertWebSearchRequest(meta, req)
 	case mode.VideoGenerationsJobs:
 		return ConvertVideoRequest(meta, req)
 	case mode.VideoGenerationsGetJobs:
@@ -352,6 +365,8 @@ func DoResponse(
 				result, err = ClaudeHandler(meta, c, resp)
 			}
 		}
+	case mode.WebSearch:
+		result, err = WebSearchHandler(meta, c, resp)
 	case mode.VideoGenerationsJobs:
 		result, err = VideoHandler(meta, store, c, resp)
 	case mode.VideoGenerationsGetJobs:

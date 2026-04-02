@@ -1,6 +1,8 @@
 package ppio
 
 import (
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +30,8 @@ const (
 	// chat/completions → /v3/openai/chat/completions
 	// responses        → /openai/v1/responses
 	responsesBaseURL = "https://api.ppinfra.com/openai/v1"
+	// PPIO web-search lives at /v3/web-search (not under /v3/openai/).
+	webSearchBaseURL = "https://api.ppinfra.com/v3"
 )
 
 func (a *Adaptor) DefaultBaseURL() string {
@@ -42,6 +46,15 @@ func responsesBase(channelBaseURL string) string {
 	}
 
 	return responsesBaseURL
+}
+
+// webSearchBase derives the web-search base URL by stripping /openai from the channel's BaseURL.
+func webSearchBase(channelBaseURL string) string {
+	if r := strings.Replace(channelBaseURL, "/v3/openai", "/v3", 1); r != channelBaseURL {
+		return r
+	}
+
+	return webSearchBaseURL
 }
 
 // GetRequestURL overrides the OpenAI adaptor to route all Responses API traffic
@@ -70,7 +83,21 @@ func (a *Adaptor) GetRequestURL(
 			return openai.ResponsesURL(rb, mode.Responses, m.ResponseID)
 		}
 
-		fallthrough
+		return a.Adaptor.GetRequestURL(m, store, c)
+
+	case mode.WebSearch:
+		// PPIO web-search is at /v3/web-search, not /v3/openai/web-search.
+		wb := webSearchBase(m.Channel.BaseURL)
+
+		u, err := url.JoinPath(wb, "/web-search")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    u,
+		}, nil
 
 	default:
 		return a.Adaptor.GetRequestURL(m, store, c)

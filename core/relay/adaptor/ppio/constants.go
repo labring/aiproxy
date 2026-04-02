@@ -174,4 +174,11 @@ var ModelList = []model.ModelConfig{
 		Type:  mode.Embeddings,
 		Owner: model.ModelOwnerBAAI,
 	},
+
+	// Web Search (virtual model for PPIO's standalone web-search API)
+	{
+		Model: "ppio-web-search",
+		Type:  mode.WebSearch,
+		Owner: model.ModelOwnerPPIO,
+	},
 }

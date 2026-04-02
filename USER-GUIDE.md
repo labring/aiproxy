@@ -372,6 +372,7 @@ claude
 | **Responses** | OpenAI Responses 格式 | 部分新版 GPT 模型的专用格式 |
 | **Embeddings** | 文本向量化 | 用于语义搜索、知识库构建，非对话用途 |
 | **Rerank** | 结果重排序 | 搜索结果优化，非对话用途 |
+| **Web Search** | 实时网页搜索 | 独立的搜索接口，可被 AI 工具作为 tool/skill 调用 |
 
 **常见组合解读：**
 
@@ -384,7 +385,92 @@ claude
 
 ---
 
-## 四、推荐模型
+## 四、Web Search（实时搜索）
+
+平台提供了独立的实时网页搜索接口，AI 工具（Claude Code、OpenClaw 等）可以将其配置为 tool / skill，让模型在回答时主动检索最新信息。
+
+### 接口信息
+
+| 项目 | 值 |
+|------|---|
+| **端点** | `POST https://apiproxy.paigod.work/v1/web-search` |
+| **虚拟模型** | `ppio-web-search`（请求体中必须包含此字段） |
+| **认证** | 与其他接口相同，`Authorization: Bearer sk-xxxx` |
+
+### 请求示例
+
+```bash
+curl -X POST https://apiproxy.paigod.work/v1/web-search \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ppio-web-search",
+    "query": "React 19.1 新特性",
+    "count": 5
+  }'
+```
+
+### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model` | string | 是 | 固定填 `ppio-web-search` |
+| `query` | string | 是 | 搜索关键词 |
+| `count` | int | 否 | 返回结果数量（默认 10，最大 50） |
+| `freshness` | string | 否 | 时效过滤：`24h`、`7d`、`30d` |
+| `summary` | bool | 否 | 是否返回摘要（默认 false） |
+
+### 响应格式
+
+返回标准搜索结果结构（Bing Search 兼容格式），包含 `webPages`、`images`、`videos` 等字段。
+
+### 在 Claude Code 中使用
+
+在 Claude Code 的 MCP 配置或 skill 中将 Web Search 配置为一个 tool，让模型在需要实时信息时自动调用：
+
+**方式一：通过 `.claude/commands/` 创建 skill**
+
+创建文件 `.claude/commands/web-search.md`：
+
+```markdown
+搜索以下内容并返回结果摘要：$ARGUMENTS
+
+使用 curl 调用搜索 API：
+curl -s -X POST https://apiproxy.paigod.work/v1/web-search \
+  -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"ppio-web-search","query":"$ARGUMENTS","count":5}'
+```
+
+然后在 Claude Code 中通过 `/web-search React 19.1 新特性` 触发。
+
+**方式二：直接让 Claude Code 调用 Bash**
+
+在对话中直接告诉 Claude Code：
+
+```
+搜索一下 "React 19.1 breaking changes" 的最新信息，
+用 curl POST https://apiproxy.paigod.work/v1/web-search 调用，
+请求体 {"model":"ppio-web-search","query":"React 19.1 breaking changes","count":5}，
+header 用 Authorization: Bearer $ANTHROPIC_API_KEY
+```
+
+### 在 OpenClaw 中使用
+
+在 OpenClaw 的搜索 skill 配置中，将搜索端点设置为：
+
+```
+URL:    https://apiproxy.paigod.work/v1/web-search
+Method: POST
+Header: Authorization: Bearer sk-xxxxxxxxxxxx
+Body:   {"model": "ppio-web-search", "query": "{{query}}", "count": 5}
+```
+
+> 💡 Web Search 使用与其他模型相同的 API Key 和认证方式，无需额外申请。搜索接口当前不计费。
+
+---
+
+## 五、推荐模型
 
 以下是平台上最新、最值得使用的模型，覆盖日常办公、编程、创作等主要场景。
 
@@ -518,7 +604,7 @@ claude
 
 ---
 
-## 五、常见问题
+## 六、常见问题
 
 ### 连接不上 / 报错 401
 
@@ -620,7 +706,7 @@ API Error: Cannot read properties of undefined (reading 'trim')
 
 ---
 
-## 六、获取帮助
+## 七、获取帮助
 
 - **管理后台：** [https://ai.paigod.work](https://ai.paigod.work)（内网）
 - **飞书登录：** [https://ai.paigod.work/api/enterprise/auth/feishu/login](https://ai.paigod.work/api/enterprise/auth/feishu/login)（内网，可分享给同事）

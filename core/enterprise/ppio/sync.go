@@ -355,13 +355,23 @@ func EnsurePPIOChannels(autoCreate bool, cfg PPIOConfigResult) (ChannelsInfo, er
 			continue
 		}
 
-		openaiModels = append(openaiModels, mc.Model)
+		hasAnthropicEndpoint := false
 
 		if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
-			if slices.Contains(slugs, "anthropic") {
-				anthropicModels = append(anthropicModels, mc.Model)
+			hasAnthropicEndpoint = slices.Contains(slugs, "anthropic")
+		}
+
+		if hasAnthropicEndpoint {
+			anthropicModels = append(anthropicModels, mc.Model)
+
+			// Claude models are excluded from the OpenAI channel to avoid
+			// OpenAI→Anthropic double protocol conversion that drops fields.
+			if isClaudeModel(mc.Model) {
+				continue
 			}
 		}
+
+		openaiModels = append(openaiModels, mc.Model)
 	}
 
 	slices.Sort(anthropicModels)
@@ -795,6 +805,11 @@ func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens 
 	}
 
 	return minTokens, maxTokens
+}
+
+// isClaudeModel returns true if the model ID refers to an Anthropic Claude model.
+func isClaudeModel(modelID string) bool {
+	return strings.Contains(strings.ToLower(modelID), "claude")
 }
 
 // countEffectiveTiers returns the number of non-degenerate tiers after boundary adjustment.

@@ -50,6 +50,8 @@ func (m Mode) String() string {
 		return "ResponsesInputItems"
 	case Gemini:
 		return "Gemini"
+	case WebSearch:
+		return "WebSearch"
 	default:
 		return fmt.Sprintf("Mode(%d)", m)
 	}
@@ -78,4 +80,5 @@ const (
 	ResponsesCancel
 	ResponsesInputItems
 	Gemini
+	WebSearch
 )

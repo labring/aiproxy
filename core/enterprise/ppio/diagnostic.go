@@ -10,6 +10,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 // ComparePPIOModels compares remote PPIO models (V1) with local database models
@@ -22,9 +23,15 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
 
-	// Build local model map for quick lookup
+	// Build local model map for quick lookup.
+	// Skip virtual models (e.g. ppio-web-search) that are not sourced from
+	// the remote API — they would otherwise be flagged for deletion.
 	localModelMap := make(map[string]*model.ModelConfig)
 	for i := range localModels {
+		if localModels[i].Type == mode.WebSearch {
+			continue
+		}
+
 		localModelMap[localModels[i].Model] = &localModels[i]
 	}
 
@@ -107,9 +114,15 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
 
-	// Build local model map for quick lookup
+	// Build local model map for quick lookup.
+	// Skip virtual models (e.g. ppio-web-search) that are not sourced from
+	// the remote API — they would otherwise be flagged for deletion.
 	localModelMap := make(map[string]*model.ModelConfig)
 	for i := range localModels {
+		if localModels[i].Type == mode.WebSearch {
+			continue
+		}
+
 		localModelMap[localModels[i].Model] = &localModels[i]
 	}
 
