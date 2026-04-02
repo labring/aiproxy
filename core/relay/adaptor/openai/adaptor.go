@@ -63,68 +63,16 @@ func (a *Adaptor) GetRequestURL(
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
-	case mode.Responses:
-		url, err := url.JoinPath(u, "/responses")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
+	case mode.Responses,
+		mode.ResponsesGet,
+		mode.ResponsesDelete,
+		mode.ResponsesCancel,
+		mode.ResponsesInputItems:
+		return ResponsesURL(u, meta.Mode, meta.ResponseID)
 
-		return adaptor.RequestURL{
-			Method: http.MethodPost,
-			URL:    url,
-		}, nil
-	case mode.ResponsesGet:
-		url, err := url.JoinPath(u, "/responses", meta.ResponseID)
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{
-			Method: http.MethodGet,
-			URL:    url,
-		}, nil
-	case mode.ResponsesDelete:
-		url, err := url.JoinPath(u, "/responses", meta.ResponseID)
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{
-			Method: http.MethodDelete,
-			URL:    url,
-		}, nil
-	case mode.ResponsesCancel:
-		url, err := url.JoinPath(u, "/responses", meta.ResponseID, "cancel")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{
-			Method: http.MethodPost,
-			URL:    url,
-		}, nil
-	case mode.ResponsesInputItems:
-		url, err := url.JoinPath(u, "/responses", meta.ResponseID, "input_items")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{
-			Method: http.MethodGet,
-			URL:    url,
-		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
-		// Check if model requires Responses API
 		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
-			url, err := url.JoinPath(u, "/responses")
-			if err != nil {
-				return adaptor.RequestURL{}, err
-			}
-
-			return adaptor.RequestURL{
-				Method: http.MethodPost,
-				URL:    url,
-			}, nil
+			return ResponsesURL(u, mode.Responses, meta.ResponseID)
 		}
 
 		url, err := url.JoinPath(u, "/chat/completions")

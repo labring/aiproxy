@@ -1,9 +1,6 @@
 package ppio
 
 import (
-	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -62,7 +59,7 @@ func (a *Adaptor) GetRequestURL(
 		mode.ResponsesInputItems:
 		rb := responsesBase(m.Channel.BaseURL)
 
-		return responsesURL(rb, m.Mode, m.ResponseID)
+		return openai.ResponsesURL(rb, m.Mode, m.ResponseID)
 
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		// Responses-only models are internally converted to the Responses API;
@@ -70,60 +67,13 @@ func (a *Adaptor) GetRequestURL(
 		if openai.IsResponsesOnlyModel(&m.ModelConfig, m.ActualModel) {
 			rb := responsesBase(m.Channel.BaseURL)
 
-			return responsesURL(rb, mode.Responses, m.ResponseID)
+			return openai.ResponsesURL(rb, mode.Responses, m.ResponseID)
 		}
 
 		fallthrough
 
 	default:
 		return a.Adaptor.GetRequestURL(m, store, c)
-	}
-}
-
-func responsesURL(base string, m mode.Mode, responseID string) (adaptor.RequestURL, error) {
-	switch m {
-	case mode.Responses:
-		u, err := url.JoinPath(base, "/responses")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{Method: http.MethodPost, URL: u}, nil
-
-	case mode.ResponsesGet:
-		u, err := url.JoinPath(base, "/responses", responseID)
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{Method: http.MethodGet, URL: u}, nil
-
-	case mode.ResponsesDelete:
-		u, err := url.JoinPath(base, "/responses", responseID)
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{Method: http.MethodDelete, URL: u}, nil
-
-	case mode.ResponsesCancel:
-		u, err := url.JoinPath(base, "/responses", responseID, "cancel")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{Method: http.MethodPost, URL: u}, nil
-
-	case mode.ResponsesInputItems:
-		u, err := url.JoinPath(base, "/responses", responseID, "input_items")
-		if err != nil {
-			return adaptor.RequestURL{}, err
-		}
-
-		return adaptor.RequestURL{Method: http.MethodGet, URL: u}, nil
-
-	default:
-		return adaptor.RequestURL{}, fmt.Errorf("unsupported responses mode: %s", m)
 	}
 }
 
