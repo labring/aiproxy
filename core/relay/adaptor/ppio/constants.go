@@ -178,11 +178,23 @@ var ModelList = []model.ModelConfig{
 		Model: "qwen/qwen3-embedding-8b",
 		Type:  mode.Embeddings,
 		Owner: model.ModelOwnerAlibaba,
+		Price: model.Price{
+			InputPrice: 0.0005, // ¥0.5/M tokens (Qwen3-Embedding official)
+		},
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(8192),
+		),
 	},
 	{
-		Model: "text-embedding-3-large",
+		Model: "pa/text-embedding-3-large",
 		Type:  mode.Embeddings,
 		Owner: model.ModelOwnerOpenAI,
+		Price: model.Price{
+			InputPrice: 0.00091, // $0.13/M tokens × 7 = ¥0.91/M (OpenAI official)
+		},
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(8191),
+		),
 	},
 
 	// Web Search (virtual model for PPIO's standalone web-search API)
