@@ -30,6 +30,10 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
+func (a *Adaptor) NativeMode(m mode.Mode) bool {
+	return m != mode.Anthropic && m != mode.Gemini && a.SupportMode(m)
+}
+
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||

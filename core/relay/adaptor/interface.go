@@ -107,4 +107,15 @@ type KeyValidator interface {
 	ValidateKey(key string) error
 }
 
+// NativeModeChecker is an optional interface. Adaptors that support cross-protocol
+// conversion should implement this to indicate which modes they handle natively
+// (without protocol conversion). The channel selector uses this to prefer
+// passthrough channels over conversion channels.
+//
+// If an adaptor does not implement this interface, all modes returned by
+// SupportMode are considered native.
+type NativeModeChecker interface {
+	NativeMode(mode mode.Mode) bool
+}
+
 type ConfigValidator func(model.ChannelConfigs) error

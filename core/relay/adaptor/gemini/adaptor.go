@@ -26,6 +26,10 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
+func (a *Adaptor) NativeMode(m mode.Mode) bool {
+	return m == mode.Gemini || m == mode.Embeddings
+}
+
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Anthropic ||

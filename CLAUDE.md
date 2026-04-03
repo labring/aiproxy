@@ -160,6 +160,8 @@ Handled in `core/relay/adaptor/`. This enables:
 
 Conversion logic is implemented in each provider's adaptor (`ConvertRequest`/`DoResponse` methods).
 
+**Native Mode Preference:** When a model exists in multiple channels (e.g., both an OpenAI-type and Anthropic-type channel), the channel selector prefers channels that natively handle the request protocol without conversion. Adaptors implement the optional `NativeModeChecker` interface (`core/relay/adaptor/interface.go`) to declare which modes they handle natively. For example, an Anthropic protocol request will prefer an Anthropic-type channel (passthrough) over an OpenAI-type channel (which would require Anthropic→OpenAI conversion). Channels requiring conversion are used as fallback when no native channel is available. See `filterNativeChannels()` in `core/controller/relay-channel.go`.
+
 ### Notification System
 
 `core/common/notify/notify.go` defines a `Notifier` interface. Default implementation is `StdNotifier` (log). `FeishuNotifier` sends to Feishu/Lark webhooks. Set via `notify.SetDefaultNotifier()`.
