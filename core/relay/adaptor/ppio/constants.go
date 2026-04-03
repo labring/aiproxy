@@ -174,6 +174,11 @@ var ModelList = []model.ModelConfig{
 		Type:  mode.Embeddings,
 		Owner: model.ModelOwnerBAAI,
 	},
+	{
+		Model: "qwen/qwen3-embedding-8b",
+		Type:  mode.Embeddings,
+		Owner: model.ModelOwnerAlibaba,
+	},
 
 	// Web Search (virtual model for PPIO's standalone web-search API)
 	{
