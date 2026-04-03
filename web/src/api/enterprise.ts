@@ -370,6 +370,10 @@ export interface ModelUsage {
     used_amount: number
     request_count: number
     total_tokens: number
+    success_rate: number
+    avg_response_ms: number
+    avg_ttfb_ms: number
+    avg_cost_per_req: number
 }
 
 export interface MetricComparison {

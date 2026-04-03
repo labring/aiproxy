@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     Copy, Eye, EyeOff, Plus, Ban, ChevronDown, ChevronRight, Search,
-    Building2, Globe, Info,
+    Building2, Globe, Info, ArrowUpDown, ArrowUp, ArrowDown, Settings2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import {
+    DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import type { DateRange } from "react-day-picker"
@@ -26,6 +30,7 @@ import {
     type MyQuotaStatus,
     type MetricComparison,
     type TokenPeriodStats,
+    type ModelUsage,
 } from "@/api/enterprise"
 import { computeTimeRangeTs, formatAmount, formatNumber, formatMs, formatRate, type TimeRange } from "@/lib/enterprise"
 
@@ -225,6 +230,206 @@ function QuotaStatusSection({ quota }: { quota: MyQuotaStatus | null }) {
     )
 }
 
+// --- Top Models Column Definitions ---
+type TopModelSortField = keyof ModelUsage
+
+interface TopModelColumnDef {
+    key: TopModelSortField
+    labelKey: string
+    align: "left" | "right"
+    defaultVisible: boolean
+    sortable: boolean
+    optional?: boolean
+    format?: (v: number) => string
+    renderCell?: (row: ModelUsage) => React.ReactNode
+}
+
+const TOP_MODEL_COLUMNS: TopModelColumnDef[] = [
+    {
+        key: "model", labelKey: "enterprise.myAccess.modelName",
+        align: "left", defaultVisible: true, sortable: true,
+        renderCell: (row) => <span className="font-mono text-xs">{row.model}</span>,
+    },
+    {
+        key: "used_amount", labelKey: "enterprise.myAccess.totalConsumption",
+        align: "right", defaultVisible: true, sortable: true, format: formatAmount,
+    },
+    {
+        key: "total_tokens", labelKey: "enterprise.myAccess.totalTokens",
+        align: "right", defaultVisible: true, sortable: true, format: formatNumber,
+    },
+    {
+        key: "request_count", labelKey: "enterprise.myAccess.totalRequests",
+        align: "right", defaultVisible: true, sortable: true, format: formatNumber,
+    },
+    {
+        key: "success_rate", labelKey: "enterprise.myAccess.successRate",
+        align: "right", defaultVisible: true, sortable: true,
+        renderCell: (row) => row.success_rate > 0 ? (
+            <span className={
+                row.success_rate >= 99 ? "text-emerald-600 dark:text-emerald-400" :
+                    row.success_rate >= 95 ? "text-yellow-600 dark:text-yellow-400" :
+                        "text-red-600 dark:text-red-400"
+            }>
+                {formatRate(row.success_rate)}
+            </span>
+        ) : <span className="text-muted-foreground">-</span>,
+    },
+    {
+        key: "avg_response_ms", labelKey: "enterprise.myAccess.avgResponseTime",
+        align: "right", defaultVisible: false, sortable: true, optional: true, format: formatMs,
+    },
+    {
+        key: "avg_ttfb_ms", labelKey: "enterprise.myAccess.avgTtfb",
+        align: "right", defaultVisible: false, sortable: true, optional: true, format: formatMs,
+    },
+    {
+        key: "avg_cost_per_req", labelKey: "enterprise.myAccess.avgCostPerReq",
+        align: "right", defaultVisible: false, sortable: true, optional: true, format: formatAmount,
+    },
+]
+
+const TOP_MODEL_DEFAULT_VISIBLE = new Set(
+    TOP_MODEL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key),
+)
+const TOP_MODEL_DEFAULT_COLS = TOP_MODEL_COLUMNS.filter(c => !c.optional)
+const TOP_MODEL_OPTIONAL_COLS = TOP_MODEL_COLUMNS.filter(c => c.optional)
+
+function TopModelsTable({ models }: { models: ModelUsage[] }) {
+    const { t } = useTranslation()
+    const [visibleColumns, setVisibleColumns] = useState(() => new Set(TOP_MODEL_DEFAULT_VISIBLE))
+    const [sortField, setSortField] = useState<TopModelSortField>("used_amount")
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+
+    const visibleCols = useMemo(
+        () => TOP_MODEL_COLUMNS.filter(c => visibleColumns.has(c.key)),
+        [visibleColumns],
+    )
+
+    const sortedModels = useMemo(() => {
+        return [...models].sort((a, b) => {
+            const av = a[sortField]
+            const bv = b[sortField]
+            if (typeof av === "string" && typeof bv === "string") {
+                const cmp = av.localeCompare(bv)
+                return sortDirection === "asc" ? cmp : -cmp
+            }
+            const aNum = Number(av) || 0
+            const bNum = Number(bv) || 0
+            return sortDirection === "asc" ? aNum - bNum : bNum - aNum
+        })
+    }, [models, sortField, sortDirection])
+
+    const handleSort = (field: TopModelSortField) => {
+        if (sortField === field) {
+            setSortDirection(d => d === "asc" ? "desc" : "asc")
+        } else {
+            setSortField(field)
+            setSortDirection(field === "model" ? "asc" : "desc")
+        }
+    }
+
+    const renderSortIcon = (field: TopModelSortField) => {
+        if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
+        return sortDirection === "asc"
+            ? <ArrowUp className="ml-1 h-3 w-3 text-primary" />
+            : <ArrowDown className="ml-1 h-3 w-3 text-primary" />
+    }
+
+    const toggleColumn = (key: TopModelSortField) => {
+        const isHiding = visibleColumns.has(key)
+        setVisibleColumns(prev => {
+            const next = new Set(prev)
+            if (next.has(key)) next.delete(key)
+            else next.add(key)
+            return next
+        })
+        if (isHiding && sortField === key) {
+            setSortField("used_amount")
+            setSortDirection("desc")
+        }
+    }
+
+    const getCellValue = (row: ModelUsage, col: TopModelColumnDef) => {
+        if (col.renderCell) return col.renderCell(row)
+        const value = row[col.key]
+        if (col.format && typeof value === "number") return col.format(value)
+        return value
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex justify-end">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                            <Settings2 className="h-3.5 w-3.5" />
+                            {t("enterprise.myAccess.columns" as never)}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                        {TOP_MODEL_DEFAULT_COLS.map(col => (
+                            <DropdownMenuCheckboxItem
+                                key={col.key}
+                                checked={visibleColumns.has(col.key)}
+                                onCheckedChange={() => toggleColumn(col.key)}
+                            >
+                                {t(col.labelKey as never)}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                        {TOP_MODEL_OPTIONAL_COLS.map(col => (
+                            <DropdownMenuCheckboxItem
+                                key={col.key}
+                                checked={visibleColumns.has(col.key)}
+                                onCheckedChange={() => toggleColumn(col.key)}
+                            >
+                                {t(col.labelKey as never)}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+            <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b bg-muted/50">
+                            {visibleCols.map(col => (
+                                <th
+                                    key={col.key}
+                                    className={`px-3 py-2 font-medium ${col.align === "right" ? "text-right" : "text-left"}`}
+                                >
+                                    {col.sortable ? (
+                                        <button
+                                            className="inline-flex items-center cursor-pointer select-none hover:text-primary transition-colors"
+                                            onClick={() => handleSort(col.key)}
+                                        >
+                                            {t(col.labelKey as never)}{renderSortIcon(col.key)}
+                                        </button>
+                                    ) : t(col.labelKey as never)}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedModels.map(row => (
+                            <tr key={row.model} className="border-b last:border-b-0 hover:bg-muted/30">
+                                {visibleCols.map(col => (
+                                    <td
+                                        key={col.key}
+                                        className={`px-3 py-2 text-xs tabular-nums ${col.align === "right" ? "text-right" : ""}`}
+                                    >
+                                        {getCellValue(row, col)}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )
+}
+
 // --- Personal Stats Section ---
 function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaStatus | null) => void }) {
     const { t } = useTranslation()
@@ -344,7 +549,7 @@ function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaSta
                 />
             </div>
 
-            {/* Top models (full width, no quota card beside it) */}
+            {/* Top models (full width) */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold">{t("enterprise.myAccess.topModels" as never)}</CardTitle>
@@ -353,17 +558,7 @@ function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaSta
                     {!usage?.top_models?.length ? (
                         <p className="text-sm text-muted-foreground text-center py-4">—</p>
                     ) : (
-                        <table className="w-full text-sm">
-                            <tbody>
-                                {usage.top_models.map(m => (
-                                    <tr key={m.model} className="border-b last:border-0">
-                                        <td className="py-2 font-mono text-xs truncate max-w-[160px]">{m.model}</td>
-                                        <td className="py-2 text-right tabular-nums text-xs">{formatAmount(m.used_amount)}</td>
-                                        <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{formatNumber(m.request_count)} req</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        <TopModelsTable models={usage.top_models} />
                     )}
                 </CardContent>
             </Card>
@@ -559,11 +754,39 @@ print(message.content[0].text)`,
 }
 
 // --- Model Group Accordion ---
+type ModelSortField = "max_context" | "max_output" | "input_price" | "output_price"
+
+const SORT_COLUMNS: { field: ModelSortField; labelKey: string }[] = [
+    { field: "max_context", labelKey: "enterprise.myAccess.context" },
+    { field: "max_output", labelKey: "enterprise.myAccess.maxOutput" },
+    { field: "input_price", labelKey: "enterprise.myAccess.inputPrice" },
+    { field: "output_price", labelKey: "enterprise.myAccess.outputPrice" },
+]
+
 function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; baseUrl: string }) {
     const { t } = useTranslation()
     const [search, setSearch] = useState("")
     const [endpointFilter, setEndpointFilter] = useState("all")
     const [openOwners, setOpenOwners] = useState<Set<string>>(() => new Set(groups.map(g => g.owner)))
+
+    const [sortField, setSortField] = useState<ModelSortField | null>(null)
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+
+    const handleSort = (field: ModelSortField) => {
+        if (sortField === field) {
+            setSortDirection(d => d === "asc" ? "desc" : "asc")
+        } else {
+            setSortField(field)
+            setSortDirection("desc")
+        }
+    }
+
+    const renderSortIcon = (field: ModelSortField) => {
+        if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
+        return sortDirection === "asc"
+            ? <ArrowUp className="ml-1 h-3 w-3 text-primary" />
+            : <ArrowDown className="ml-1 h-3 w-3 text-primary" />
+    }
 
     // Collect unique endpoints across all models, ordered by ENDPOINT_LABELS definition order
     const allEndpoints = useMemo(() => {
@@ -581,20 +804,27 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
     const filteredGroups = useMemo(() => {
         // Owner display priority: PPIO first, then Novita, then others alphabetically
         const OWNER_ORDER: Record<string, number> = { ppio: 0, novita: 1 }
-        return groups.map(g => ({
-            ...g,
-            models: g.models.filter(m => {
+        return groups.map(g => {
+            const models = g.models.filter(m => {
                 const matchSearch = !search || m.model.toLowerCase().includes(search.toLowerCase())
                 const matchEndpoint = endpointFilter === "all" || m.supported_endpoints?.includes(endpointFilter)
                 return matchSearch && matchEndpoint
-            }),
-        })).filter(g => g.models.length > 0).sort((a, b) => {
+            })
+            if (sortField) {
+                models.sort((a, b) => {
+                    const av = a[sortField] ?? 0
+                    const bv = b[sortField] ?? 0
+                    return sortDirection === "asc" ? av - bv : bv - av
+                })
+            }
+            return { ...g, models }
+        }).filter(g => g.models.length > 0).sort((a, b) => {
             const oa = OWNER_ORDER[a.owner.toLowerCase()] ?? 99
             const ob = OWNER_ORDER[b.owner.toLowerCase()] ?? 99
             if (oa !== ob) return oa - ob
             return a.owner.localeCompare(b.owner)
         })
-    }, [groups, search, endpointFilter])
+    }, [groups, search, endpointFilter, sortField, sortDirection])
 
     const toggleOwner = (owner: string) => {
         setOpenOwners(prev => {
@@ -660,10 +890,13 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                             <tr className="border-b bg-muted/50">
                                                 <th className="px-3 py-2 text-left font-medium">Model</th>
                                                 <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.endpoints")}</th>
-                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.context" as never)}</th>
-                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.maxOutput" as never)}</th>
-                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.inputPrice")}</th>
-                                                <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.outputPrice")}</th>
+                                                {SORT_COLUMNS.map(({ field, labelKey }) => (
+                                                    <th key={field} className="px-3 py-2 text-right font-medium">
+                                                        <button className="inline-flex items-center cursor-pointer select-none hover:text-primary transition-colors" onClick={() => handleSort(field)}>
+                                                            {t(labelKey as never)}{renderSortIcon(field)}
+                                                        </button>
+                                                    </th>
+                                                ))}
                                                 <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.limits" as never)}</th>
                                             </tr>
                                         </thead>

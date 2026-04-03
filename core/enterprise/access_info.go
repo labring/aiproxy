@@ -419,10 +419,14 @@ func CreateMyToken(c *gin.Context) {
 
 // ModelUsage holds aggregated usage for a single model.
 type ModelUsage struct {
-	Model        string  `json:"model"`
-	UsedAmount   float64 `json:"used_amount"`
-	RequestCount int64   `json:"request_count"`
-	TotalTokens  int64   `json:"total_tokens"`
+	Model         string  `json:"model"`
+	UsedAmount    float64 `json:"used_amount"`
+	RequestCount  int64   `json:"request_count"`
+	TotalTokens   int64   `json:"total_tokens"`
+	SuccessRate   float64 `json:"success_rate"`
+	AvgResponseMs float64 `json:"avg_response_ms"`
+	AvgTtfbMs     float64 `json:"avg_ttfb_ms"`
+	AvgCostPerReq float64 `json:"avg_cost_per_req"`
 }
 
 // MyUsageStats holds the aggregated usage stats for the current user.
@@ -555,12 +559,21 @@ func GetMyStats(c *gin.Context) {
 		totalSuccessCount += r.SuccessCount
 		totalTimeMs += r.TotalTimeMs
 		totalTtfbMs += r.TotalTtfbMs
-		usageStats.TopModels = append(usageStats.TopModels, ModelUsage{
+		mu := ModelUsage{
 			Model:        r.Model,
 			UsedAmount:   r.UsedAmount,
 			RequestCount: r.RequestCount,
 			TotalTokens:  r.TotalTokens,
-		})
+		}
+		if r.RequestCount > 0 {
+			mu.SuccessRate = float64(r.SuccessCount) / float64(r.RequestCount) * 100
+			mu.AvgResponseMs = float64(r.TotalTimeMs) / float64(r.RequestCount)
+			mu.AvgCostPerReq = r.UsedAmount / float64(r.RequestCount)
+		}
+		if r.SuccessCount > 0 {
+			mu.AvgTtfbMs = float64(r.TotalTtfbMs) / float64(r.SuccessCount)
+		}
+		usageStats.TopModels = append(usageStats.TopModels, mu)
 	}
 
 	usageStats.UniqueModels = len(aggResults)
@@ -576,13 +589,13 @@ func GetMyStats(c *gin.Context) {
 		usageStats.AvgTtfbMs = float64(totalTtfbMs) / float64(totalSuccessCount)
 	}
 
-	// Sort by used amount desc, keep top 5
+	// Sort by used amount desc, keep top 10
 	sort.Slice(usageStats.TopModels, func(i, j int) bool {
 		return usageStats.TopModels[i].UsedAmount > usageStats.TopModels[j].UsedAmount
 	})
 
-	if len(usageStats.TopModels) > 5 {
-		usageStats.TopModels = usageStats.TopModels[:5]
+	if len(usageStats.TopModels) > 10 {
+		usageStats.TopModels = usageStats.TopModels[:10]
 	}
 
 	usageStats.Comparisons = computeComparisons(feishuUser.DepartmentID, startTs, endTs)
