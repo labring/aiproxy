@@ -297,17 +297,23 @@ func writeAnthropic(
 		Usage:      relaymodel.ClaudeFromModelUsage(usage),
 	}
 	if reqCtx.Stream {
-		_ = render.ClaudeEventObjectData(c, "message_start", relaymodel.ClaudeStreamResponse{
-			Type:    relaymodel.ClaudeStreamTypeMessageStart,
-			Message: &resp,
+		_ = render.ClaudeEventObjectData(c, "message_start", relaymodel.ClaudeStreamMessageStartEvent{
+			Type: relaymodel.ClaudeStreamTypeMessageStart,
+			Message: &relaymodel.ClaudeStreamStartMessage{
+				ID:      resp.ID,
+				Type:    resp.Type,
+				Role:    resp.Role,
+				Model:   resp.Model,
+				Content: []relaymodel.ClaudeContent{},
+				Usage:   resp.Usage,
+			},
 		})
 
-		_ = render.ClaudeEventObjectData(c, "content_block_start", relaymodel.ClaudeStreamResponse{
+		_ = render.ClaudeEventObjectData(c, "content_block_start", relaymodel.ClaudeStreamTextBlockStartEvent{
 			Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 			Index: 0,
-			ContentBlock: &relaymodel.ClaudeContent{
+			ContentBlock: &relaymodel.ClaudeTextContentBlock{
 				Type: relaymodel.ClaudeContentTypeText,
-				Text: "",
 			},
 		})
 		for _, part := range splitChunks(synthesizeText(cfg, reqCtx), cfg.StreamChunks, cfg.StreamChunkSize) {
@@ -329,10 +335,12 @@ func writeAnthropic(
 			Type:  relaymodel.ClaudeStreamTypeContentBlockStop,
 			Index: 0,
 		})
-		_ = render.ClaudeEventObjectData(c, "message_delta", relaymodel.ClaudeStreamResponse{
+		fakeUsage := relaymodel.ClaudeFromModelUsage(usage)
+		fakeStopReason := resp.StopReason
+		_ = render.ClaudeEventObjectData(c, "message_delta", relaymodel.ClaudeStreamMessageDeltaEvent{
 			Type:  relaymodel.ClaudeStreamTypeMessageDelta,
-			Usage: new(relaymodel.ClaudeFromModelUsage(usage)),
-			Delta: &relaymodel.ClaudeDelta{StopReason: new(resp.StopReason)},
+			Delta: &relaymodel.ClaudeStreamMessageDelta{StopReason: &fakeStopReason},
+			Usage: &fakeUsage,
 		})
 		_ = render.ClaudeEventObjectData(c, "message_stop", relaymodel.ClaudeStreamResponse{
 			Type: relaymodel.ClaudeStreamTypeMessageStop,

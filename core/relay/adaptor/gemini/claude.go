@@ -176,24 +176,23 @@ func ClaudeStreamHandler(
 		if !sentMessageStart {
 			sentMessageStart = true
 
-			messageStartResp := relaymodel.ClaudeStreamResponse{
-				Type: relaymodel.ClaudeStreamTypeMessageStart,
-				Message: &relaymodel.ClaudeResponse{
-					ID:      messageID,
-					Type:    "message",
-					Role:    relaymodel.RoleAssistant,
-					Model:   meta.ActualModel,
-					Content: []relaymodel.ClaudeContent{},
-				},
+			messageStartMsg := &relaymodel.ClaudeStreamStartMessage{
+				ID:      messageID,
+				Type:    relaymodel.ClaudeTypeMessage,
+				Role:    relaymodel.RoleAssistant,
+				Model:   meta.ActualModel,
+				Content: []relaymodel.ClaudeContent{},
 			}
 
 			// Add initial usage if available
 			if geminiResponse.UsageMetadata != nil {
-				claudeUsage := geminiResponse.UsageMetadata.ToUsage().ToClaudeUsage()
-				messageStartResp.Message.Usage = claudeUsage
+				messageStartMsg.Usage = geminiResponse.UsageMetadata.ToUsage().ToClaudeUsage()
 			}
 
-			_ = render.ClaudeObjectData(c, messageStartResp)
+			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamMessageStartEvent{
+				Type:    relaymodel.ClaudeStreamTypeMessageStart,
+				Message: messageStartMsg,
+			})
 
 			// Send ping event
 			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{Type: "ping"})
@@ -226,12 +225,11 @@ func ClaudeStreamHandler(
 						currentContentIndex++
 						currentContentType = relaymodel.ClaudeContentTypeThinking
 
-						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
+						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamThinkingBlockStartEvent{
 							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
-							ContentBlock: &relaymodel.ClaudeContent{
-								Type:     relaymodel.ClaudeContentTypeThinking,
-								Thinking: "",
+							ContentBlock: &relaymodel.ClaudeThinkingContentBlock{
+								Type: relaymodel.ClaudeContentTypeThinking,
 							},
 						})
 
@@ -263,12 +261,11 @@ func ClaudeStreamHandler(
 						currentContentIndex++
 						currentContentType = relaymodel.ClaudeContentTypeText
 
-						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
+						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamTextBlockStartEvent{
 							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
-							ContentBlock: &relaymodel.ClaudeContent{
+							ContentBlock: &relaymodel.ClaudeTextContentBlock{
 								Type: relaymodel.ClaudeContentTypeText,
-								Text: "",
 							},
 						})
 					}
@@ -335,11 +332,9 @@ func ClaudeStreamHandler(
 	}
 
 	// Send message_delta with final usage
-	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-		Type: relaymodel.ClaudeStreamTypeMessageDelta,
-		Delta: &relaymodel.ClaudeDelta{
-			StopReason: &stopReason,
-		},
+	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamMessageDeltaEvent{
+		Type:  relaymodel.ClaudeStreamTypeMessageDelta,
+		Delta: &relaymodel.ClaudeStreamMessageDelta{StopReason: &stopReason},
 		Usage: &claudeUsage,
 	})
 
