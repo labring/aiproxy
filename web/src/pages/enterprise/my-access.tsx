@@ -25,8 +25,9 @@ import {
     type MyStatsResponse,
     type MyQuotaStatus,
     type MetricComparison,
+    type TokenPeriodStats,
 } from "@/api/enterprise"
-import { getTimeRange, formatAmount, formatNumber, formatMs, formatRate, type TimeRange } from "@/lib/enterprise"
+import { computeTimeRangeTs, formatAmount, formatNumber, formatMs, formatRate, type TimeRange } from "@/lib/enterprise"
 
 // Semantic color groups for endpoint badges
 const EP_COLORS = {
@@ -231,16 +232,10 @@ function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaSta
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
     const quotaDeliveredRef = useRef(false)
 
-    const { start, end } = useMemo(() => {
-        if (timeRange === "custom" && customDateRange?.from) {
-            const s = Math.floor(customDateRange.from.getTime() / 1000)
-            const e = customDateRange.to
-                ? Math.floor(customDateRange.to.getTime() / 1000) + 86399
-                : s + 86399
-            return { start: s, end: e }
-        }
-        return getTimeRange(timeRange)
-    }, [timeRange, customDateRange])
+    const { start, end } = useMemo(
+        () => computeTimeRangeTs(timeRange, customDateRange),
+        [timeRange, customDateRange],
+    )
 
     const { data, isLoading } = useQuery<MyStatsResponse>({
         queryKey: ["my-stats", start, end],
@@ -377,8 +372,9 @@ function PersonalStatsSection({ onQuotaLoaded }: { onQuotaLoaded: (q: MyQuotaSta
 }
 
 // --- Token Row ---
-function TokenRow({ token, onDisable }: {
+function TokenRow({ token, stats, onDisable }: {
     token: MyTokenInfo
+    stats?: TokenPeriodStats
     onDisable: (id: number) => void
 }) {
     const { t } = useTranslation()
@@ -412,14 +408,21 @@ function TokenRow({ token, onDisable }: {
                     {disabled ? t("enterprise.myAccess.disabled") : t("enterprise.myAccess.enabled")}
                 </Badge>
             </td>
-            <td className="px-4 py-3 text-sm text-muted-foreground">
-                {new Date(token.created_at).toLocaleDateString()}
+            <td className="px-4 py-3 text-sm text-right tabular-nums">
+                {stats ? formatAmount(stats.used_amount) : "—"}
             </td>
             <td className="px-4 py-3 text-sm text-right tabular-nums">
-                ¥{(token.used_amount || 0).toFixed(4)}
+                {stats ? formatNumber(stats.request_count) : "—"}
             </td>
             <td className="px-4 py-3 text-sm text-right tabular-nums">
-                {token.request_count || 0}
+                {stats ? formatNumber(stats.total_tokens) : "—"}
+            </td>
+            <td className="px-4 py-3 text-sm text-right tabular-nums">
+                {stats ? (
+                    <span className={stats.success_rate >= 99 ? "text-emerald-600" : stats.success_rate >= 95 ? "text-yellow-600" : "text-red-600"}>
+                        {stats.success_rate.toFixed(1)}%
+                    </span>
+                ) : "—"}
             </td>
             <td className="px-4 py-3 text-sm">
                 {!disabled && (
@@ -739,6 +742,26 @@ export default function MyAccessPage() {
     const [newlyCreatedKey, setNewlyCreatedKey] = useState<MyTokenInfo | null>(null)
     const [disableConfirmId, setDisableConfirmId] = useState<number | null>(null)
     const [quotaStatus, setQuotaStatus] = useState<MyQuotaStatus | null | undefined>(undefined)
+    const [tokenTimeRange, setTokenTimeRange] = useState<TimeRange>("7d")
+    const [tokenCustomDateRange, setTokenCustomDateRange] = useState<DateRange | undefined>()
+
+    const { start: tokenStart, end: tokenEnd } = useMemo(
+        () => computeTimeRangeTs(tokenTimeRange, tokenCustomDateRange),
+        [tokenTimeRange, tokenCustomDateRange],
+    )
+
+    const { data: tokenStatsData } = useQuery<TokenPeriodStats[]>({
+        queryKey: ["my-token-stats", tokenStart, tokenEnd],
+        queryFn: () => enterpriseApi.getMyTokenStats(tokenStart, tokenEnd),
+    })
+
+    const tokenStatsMap = useMemo(() => {
+        const map: Record<string, TokenPeriodStats> = {}
+        for (const s of tokenStatsData || []) {
+            map[s.token_name] = s
+        }
+        return map
+    }, [tokenStatsData])
 
     const { data, isLoading } = useQuery<MyAccessResponse>({
         queryKey: ["my-access"],
@@ -818,7 +841,27 @@ export default function MyAccessPage() {
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{t("enterprise.myAccess.apiKeys")}</CardTitle>
+                        <div className="flex items-center gap-3">
+                            <CardTitle className="text-base">{t("enterprise.myAccess.apiKeys")}</CardTitle>
+                            <div className="flex items-center gap-2">
+                                <Select value={tokenTimeRange} onValueChange={v => setTokenTimeRange(v as TimeRange)}>
+                                    <SelectTrigger className="h-8 w-32 text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="7d">{t("enterprise.myAccess.last7Days" as never)}</SelectItem>
+                                        <SelectItem value="30d">{t("enterprise.myAccess.last30Days" as never)}</SelectItem>
+                                        <SelectItem value="month">{t("enterprise.myAccess.thisMonth" as never)}</SelectItem>
+                                        <SelectItem value="last_week">{t("enterprise.myAccess.lastWeek" as never)}</SelectItem>
+                                        <SelectItem value="last_month">{t("enterprise.myAccess.lastMonth" as never)}</SelectItem>
+                                        <SelectItem value="custom">{t("enterprise.myAccess.customRange" as never)}</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {tokenTimeRange === "custom" && (
+                                    <DateRangePicker value={tokenCustomDateRange} onChange={setTokenCustomDateRange} />
+                                )}
+                            </div>
+                        </div>
                         <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
                             <Plus className="w-4 h-4 mr-1" />
                             {t("enterprise.myAccess.createKey")}
@@ -838,9 +881,10 @@ export default function MyAccessPage() {
                                         <th className="px-4 py-3 text-left text-sm font-medium">{t("enterprise.myAccess.tokenName")}</th>
                                         <th className="px-4 py-3 text-left text-sm font-medium">Key</th>
                                         <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
-                                        <th className="px-4 py-3 text-left text-sm font-medium">Created</th>
                                         <th className="px-4 py-3 text-right text-sm font-medium">{t("enterprise.myAccess.usedAmount")}</th>
                                         <th className="px-4 py-3 text-right text-sm font-medium">{t("enterprise.myAccess.requestCount")}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-medium">{t("enterprise.myAccess.totalTokens" as never)}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-medium">{t("enterprise.myAccess.successRate" as never)}</th>
                                         <th className="px-4 py-3 text-left text-sm font-medium">{t("enterprise.myAccess.actions")}</th>
                                     </tr>
                                 </thead>
@@ -849,6 +893,7 @@ export default function MyAccessPage() {
                                         <TokenRow
                                             key={token.id}
                                             token={token}
+                                            stats={tokenStatsMap[token.name]}
                                             onDisable={setDisableConfirmId}
                                         />
                                     ))}

@@ -54,6 +54,24 @@ export function getTimeRange(range: TimeRange, customStart?: number, customEnd?:
     }
 }
 
+/**
+ * Compute { start, end } unix-second timestamps from a TimeRange + optional DateRange.
+ * Encapsulates the DateRange→unix-second conversion so callers don't repeat the arithmetic.
+ */
+export function computeTimeRangeTs(
+    range: TimeRange,
+    customDateRange?: { from?: Date | null; to?: Date | null },
+): { start: number; end: number } {
+    if (range === "custom" && customDateRange?.from) {
+        const s = Math.floor(customDateRange.from.getTime() / 1000)
+        const e = customDateRange.to
+            ? Math.floor(customDateRange.to.getTime() / 1000) + 86399
+            : s + 86399
+        return getTimeRange("custom", s, e)
+    }
+    return getTimeRange(range)
+}
+
 export function formatNumber(n: number): string {
     if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`

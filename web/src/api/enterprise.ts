@@ -456,6 +456,14 @@ export interface MyAccessResponse {
     model_groups: ModelGroupInfo[]
 }
 
+export interface TokenPeriodStats {
+    token_name: string
+    used_amount: number
+    request_count: number
+    total_tokens: number
+    success_rate: number
+}
+
 // Quota Notification Config
 export interface QuotaNotifConfig {
     enabled: boolean
@@ -849,5 +857,11 @@ export const enterpriseApi = {
 
     disableMyToken: (id: number): Promise<void> => {
         return del<void>(`/enterprise/my-access/tokens/${id}`)
+    },
+
+    getMyTokenStats: (startTs: number, endTs: number): Promise<TokenPeriodStats[]> => {
+        return get<TokenPeriodStats[]>('/enterprise/my-access/token-stats', {
+            params: { start_timestamp: String(startTs), end_timestamp: String(endTs) },
+        })
     },
 }

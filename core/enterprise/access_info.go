@@ -477,18 +477,12 @@ type MyStatsResponse struct {
 	Quota *MyQuotaStatus `json:"quota"` // nil if no policy bound
 }
 
-// GetMyStats returns the current user's usage stats and quota status.
-func GetMyStats(c *gin.Context) {
-	feishuUser := GetEnterpriseUser(c)
-	if feishuUser == nil {
-		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
-		return
-	}
-
-	// Parse time range from query params (unix seconds)
+// parseTimestampRange extracts start_timestamp/end_timestamp query params (unix seconds),
+// defaulting to the last 7 days if not provided or invalid.
+func parseTimestampRange(c *gin.Context) (startTs, endTs int64) {
 	now := time.Now()
-	startTs := now.Add(-7 * 24 * time.Hour).Unix()
-	endTs := now.Unix()
+	startTs = now.Add(-7 * 24 * time.Hour).Unix()
+	endTs = now.Unix()
 
 	if v := c.Query("start_timestamp"); v != "" {
 		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
@@ -501,6 +495,19 @@ func GetMyStats(c *gin.Context) {
 			endTs = parsed
 		}
 	}
+
+	return startTs, endTs
+}
+
+// GetMyStats returns the current user's usage stats and quota status.
+func GetMyStats(c *gin.Context) {
+	feishuUser := GetEnterpriseUser(c)
+	if feishuUser == nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		return
+	}
+
+	startTs, endTs := parseTimestampRange(c)
 
 	// Query aggregated usage per model from group_summaries
 	type modelAgg struct {
@@ -773,6 +780,71 @@ func currentPeriodStart(periodType model.EmptyNullString) time.Time {
 	default: // monthly or empty
 		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	}
+}
+
+// TokenPeriodStats holds per-token aggregated stats for a time period.
+type TokenPeriodStats struct {
+	TokenName    string  `json:"token_name"`
+	UsedAmount   float64 `json:"used_amount"`
+	RequestCount int64   `json:"request_count"`
+	TotalTokens  int64   `json:"total_tokens"`
+	SuccessRate  float64 `json:"success_rate"`
+}
+
+// GetMyTokenStats returns per-token usage stats for the current user's group within a time range.
+func GetMyTokenStats(c *gin.Context) {
+	feishuUser := GetEnterpriseUser(c)
+	if feishuUser == nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		return
+	}
+
+	startTs, endTs := parseTimestampRange(c)
+
+	type tokenAgg struct {
+		TokenName    string  `gorm:"column:token_name"`
+		UsedAmount   float64 `gorm:"column:used_amount"`
+		RequestCount int64   `gorm:"column:request_count"`
+		TotalTokens  int64   `gorm:"column:total_tokens"`
+		SuccessCount int64   `gorm:"column:success_count"`
+	}
+
+	var results []tokenAgg
+
+	if err := model.LogDB.
+		Model(&model.GroupSummary{}).
+		Select(
+			"token_name",
+			"SUM(used_amount) as used_amount",
+			"SUM(request_count) as request_count",
+			"SUM(total_tokens) as total_tokens",
+			"SUM(status2xx_count) as success_count",
+		).
+		Where("group_id = ?", feishuUser.GroupID).
+		Where("hour_timestamp >= ? AND hour_timestamp <= ?", startTs, endTs).
+		Group("token_name").
+		Find(&results).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to query token stats: "+err.Error())
+		return
+	}
+
+	stats := make([]TokenPeriodStats, 0, len(results))
+	for _, r := range results {
+		var successRate float64
+		if r.RequestCount > 0 {
+			successRate = float64(r.SuccessCount) / float64(r.RequestCount) * 100
+		}
+
+		stats = append(stats, TokenPeriodStats{
+			TokenName:    r.TokenName,
+			UsedAmount:   r.UsedAmount,
+			RequestCount: r.RequestCount,
+			TotalTokens:  r.TotalTokens,
+			SuccessRate:  successRate,
+		})
+	}
+
+	middleware.SuccessResponse(c, stats)
 }
 
 // DisableMyToken disables (soft-deletes) a token belonging to the current user's group.

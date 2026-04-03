@@ -443,23 +443,13 @@ func EnsureNovitaChannels(autoCreate bool, cfg NovitaConfigResult) (ChannelsInfo
 			continue
 		}
 
-		hasAnthropicEndpoint := false
+		openaiModels = append(openaiModels, mc.Model)
 
 		if eps, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
-			hasAnthropicEndpoint = slices.Contains(eps, "anthropic")
-		}
-
-		if hasAnthropicEndpoint {
-			anthropicModels = append(anthropicModels, mc.Model)
-
-			// Claude models are excluded from the OpenAI channel to avoid
-			// OpenAI→Anthropic double protocol conversion that drops fields.
-			if isClaudeModel(mc.Model) {
-				continue
+			if slices.Contains(eps, "anthropic") {
+				anthropicModels = append(anthropicModels, mc.Model)
 			}
 		}
-
-		openaiModels = append(openaiModels, mc.Model)
 	}
 
 	slices.Sort(anthropicModels)
@@ -635,7 +625,3 @@ func sendProgress(
 	}
 }
 
-// isClaudeModel returns true if the model ID refers to an Anthropic Claude model.
-func isClaudeModel(modelID string) bool {
-	return strings.Contains(strings.ToLower(modelID), "claude")
-}

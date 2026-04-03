@@ -31,6 +31,12 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
+// NativeMode returns true for modes handled without protocol conversion.
+// Gemini requests are converted to OpenAI format via compatible-mode endpoint.
+func (a *Adaptor) NativeMode(m mode.Mode) bool {
+	return m != mode.Gemini && a.SupportMode(m)
+}
+
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
