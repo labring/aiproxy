@@ -181,19 +181,26 @@ func GetLogDetail(logID int) (*RequestDetail, error) {
 }
 
 func GetGroupLogDetail(logID int, group string) (*RequestDetail, error) {
-	if group == "" {
+	return getLogDetail(logID, group, "")
+}
+
+func getLogDetail(logID int, groupID, tokenName string) (*RequestDetail, error) {
+	if groupID == "" {
 		return nil, errors.New("invalid group parameter")
 	}
 
-	var detail RequestDetail
-
-	err := LogDB.
+	tx := LogDB.
 		Model(&RequestDetail{}).
 		Joins("JOIN logs ON logs.id = request_details.log_id").
-		Where("logs.group_id = ?", group).
-		Where("log_id = ?", logID).
-		First(&detail).Error
-	if err != nil {
+		Where("logs.group_id = ?", groupID).
+		Where("log_id = ?", logID)
+
+	if tokenName != "" {
+		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
+
+	var detail RequestDetail
+	if err := tx.First(&detail).Error; err != nil {
 		return nil, err
 	}
 
@@ -1203,4 +1210,137 @@ func GetIPGroups(threshold int, start, end time.Time) (map[string][]string, erro
 	}
 
 	return result, nil
+}
+
+// UserLog is a filtered view of Log for user-facing APIs.
+// Internal fields (channel_id, ip, retry info) are excluded.
+type UserLog struct {
+	RequestAt        time.Time       `json:"request_at"`
+	CreatedAt        time.Time       `json:"created_at"`
+	TTFBMilliseconds ZeroNullInt64   `json:"ttfb_milliseconds,omitempty"`
+	TokenName        string          `json:"token_name,omitempty"`
+	Endpoint         EmptyNullString `json:"endpoint,omitempty"`
+	Content          EmptyNullString `json:"content,omitempty"`
+	Model            string          `json:"model"`
+	RequestID        EmptyNullString `json:"request_id"`
+	UpstreamID       EmptyNullString `json:"upstream_id,omitempty"`
+	ID               int             `json:"id"`
+	Code             int             `json:"code,omitempty"`
+	Mode             int             `json:"mode,omitempty"`
+	Usage            Usage           `json:"usage,omitempty"`
+	UsedAmount       float64         `json:"used_amount,omitempty"`
+	ServiceTier      string          `json:"service_tier,omitempty"`
+	User             EmptyNullString `json:"user,omitempty"`
+	HasDetail        bool            `json:"has_detail"`
+}
+
+func (u *UserLog) MarshalJSON() ([]byte, error) {
+	type Alias UserLog
+
+	a := &struct {
+		*Alias
+		CreatedAt int64 `json:"created_at"`
+		RequestAt int64 `json:"request_at"`
+	}{
+		Alias:     (*Alias)(u),
+		CreatedAt: u.CreatedAt.UnixMilli(),
+		RequestAt: u.RequestAt.UnixMilli(),
+	}
+
+	return sonic.Marshal(a)
+}
+
+func logToUserLog(l *Log) UserLog {
+	return UserLog{
+		ID:               l.ID,
+		RequestID:        l.RequestID,
+		UpstreamID:       l.UpstreamID,
+		RequestAt:        l.RequestAt,
+		CreatedAt:        l.CreatedAt,
+		TTFBMilliseconds: l.TTFBMilliseconds,
+		TokenName:        l.TokenName,
+		Endpoint:         l.Endpoint,
+		Content:          l.Content,
+		Model:            l.Model,
+		Code:             l.Code,
+		Mode:             l.Mode,
+		Usage:            l.Usage,
+		UsedAmount:       l.Amount.UsedAmount,
+		ServiceTier:      l.ServiceTier,
+		User:             l.User,
+		HasDetail:        l.RequestDetail != nil,
+	}
+}
+
+type GetTokenLogsResult struct {
+	Logs    []UserLog `json:"logs"`
+	HasMore bool      `json:"has_more"`
+}
+
+func GetTokenLogs(
+	groupID string,
+	tokenName string,
+	startTime time.Time,
+	endTime time.Time,
+	modelName string,
+	requestID string,
+	codeType CodeType,
+	afterID int,
+	limit int,
+) (*GetTokenLogsResult, error) {
+	if groupID == "" || tokenName == "" {
+		return nil, errors.New("group and token_name are required")
+	}
+
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 50 {
+		limit = 50
+	}
+
+	tx := buildGetLogsQuery(
+		groupID, startTime, endTime, modelName,
+		requestID, "", 0, tokenName, 0,
+		codeType, 0, "", "",
+	)
+
+	if afterID > 0 {
+		tx = tx.Where("id < ?", afterID)
+	}
+
+	var logs []*Log
+
+	err := tx.
+		Preload("RequestDetail", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "log_id")
+		}).
+		Order("created_at DESC, id DESC").
+		Limit(limit + 1).
+		Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	hasMore := len(logs) > limit
+	if hasMore {
+		logs = logs[:limit]
+	}
+
+	userLogs := make([]UserLog, len(logs))
+	for i, l := range logs {
+		userLogs[i] = logToUserLog(l)
+	}
+
+	return &GetTokenLogsResult{
+		Logs:    userLogs,
+		HasMore: hasMore,
+	}, nil
+}
+
+func GetTokenLogDetail(logID int, groupID, tokenName string) (*RequestDetail, error) {
+	if tokenName == "" {
+		return nil, errors.New("token_name is required")
+	}
+
+	return getLogDetail(logID, groupID, tokenName)
 }
