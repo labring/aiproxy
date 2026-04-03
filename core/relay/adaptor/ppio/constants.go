@@ -179,6 +179,11 @@ var ModelList = []model.ModelConfig{
 		Type:  mode.Embeddings,
 		Owner: model.ModelOwnerAlibaba,
 	},
+	{
+		Model: "text-embedding-3-large",
+		Type:  mode.Embeddings,
+		Owner: model.ModelOwnerOpenAI,
+	},
 
 	// Web Search (virtual model for PPIO's standalone web-search API)
 	{
