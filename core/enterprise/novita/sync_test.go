@@ -50,6 +50,38 @@ func TestInferToolChoice(t *testing.T) {
 	}
 }
 
+func TestNovitaResponsesBase(t *testing.T) {
+	cases := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "default Novita base URL",
+			baseURL: "https://api.novita.ai/v3/openai",
+			want:    "https://api.novita.ai/openai/v1",
+		},
+		{
+			name:    "custom base URL with /v3/openai suffix",
+			baseURL: "https://custom.example.com/v3/openai",
+			want:    "https://custom.example.com/openai/v1",
+		},
+		{
+			name:    "base URL without /v3/openai — falls back to default",
+			baseURL: "https://other.example.com/api",
+			want:    "https://api.novita.ai/openai/v1",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := novitaResponsesBase(tc.baseURL); got != tc.want {
+				t.Errorf("novitaResponsesBase(%q) = %q, want %q", tc.baseURL, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBuildConfigFromV2Model_ToolChoiceAndVision(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -182,6 +182,35 @@ func getRandomChannel(
 		}
 	}
 
+	// If no model-specific channels were found, fall back to passthrough channels
+	// (channels with allow_passthrough_unknown=true) that can handle any model.
+	if len(channelMap) == 0 {
+		passthroughIter := func(channels []*model.Channel) {
+			for _, channel := range channels {
+				a, ok := adaptors.GetAdaptor(channel.Type)
+				if !ok {
+					continue
+				}
+
+				if !a.SupportMode(mode) {
+					continue
+				}
+
+				channelMap[channel.ID] = channel
+			}
+		}
+
+		if len(availableSet) != 0 {
+			for _, set := range availableSet {
+				passthroughIter(mc.PassthroughChannelsBySet[set])
+			}
+		} else {
+			for _, channels := range mc.PassthroughChannelsBySet {
+				passthroughIter(channels)
+			}
+		}
+	}
+
 	migratedChannels := make([]*model.Channel, 0, len(channelMap))
 	for _, channel := range channelMap {
 		migratedChannels = append(migratedChannels, channel)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/model"
 	"gorm.io/gorm"
 )
@@ -492,7 +493,7 @@ func ensureNovitaChannelsFromModels(
 	info.Novita.ID = channels[0].ID
 
 	for i := range channels {
-		if strings.Contains(strings.ToLower(channels[i].BaseURL), "anthropic") {
+		if channels[i].Type == model.ChannelTypeAnthropic {
 			channels[i].Models = anthropicModels
 			// Ensure recommended defaults for Novita's Anthropic endpoint:
 			// skip_image_conversion — Novita natively supports URL image sources
@@ -508,6 +509,14 @@ func ensureNovitaChannelsFromModels(
 			}
 		} else {
 			channels[i].Models = openaiModels
+			// Write path_base_map so the passthrough adaptor can route
+			// Responses API requests to the correct base URL.
+			if channels[i].Configs == nil {
+				channels[i].Configs = make(model.ChannelConfigs)
+			}
+			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
+				"/v1/responses": novitaResponsesBase(channels[i].BaseURL),
+			}
 		}
 
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
@@ -537,6 +546,11 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 			Key:     cfg.APIKey,
 			Models:  openaiModels,
 			Status:  model.ChannelStatusEnabled,
+			Configs: model.ChannelConfigs{
+				model.ChannelConfigPathBaseMapKey: map[string]string{
+					"/v1/responses": novitaResponsesBase(openaiBase),
+				},
+			},
 		}
 
 		if err := tx.Create(&openaiCh).Error; err != nil {
@@ -576,6 +590,87 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 	log.Printf("auto-created %d Novita channel(s)", len(created))
 
 	return created, nil
+}
+
+// novitaResponsesBase derives the Responses API base URL from an OpenAI channel's BaseURL.
+// Mirrors the same logic in relay/adaptor/novita so both code paths stay in sync.
+func novitaResponsesBase(channelBaseURL string) string {
+	if r := strings.Replace(channelBaseURL, "/v3/openai", "/openai/v1", 1); r != channelBaseURL {
+		return r
+	}
+
+	return "https://api.novita.ai/openai/v1"
+}
+
+// StartSyncScheduler starts a background goroutine that syncs Novita models daily at 02:15.
+// Offset by 15 minutes from PPIO to avoid simultaneous heavy sync loads.
+// A Feishu webhook notification is sent after each run summarising changes.
+func StartSyncScheduler(ctx context.Context) {
+	go func() {
+		now := time.Now()
+		next := time.Date(now.Year(), now.Month(), now.Day(), 2, 15, 0, 0, now.Location())
+
+		if !next.After(now) {
+			next = next.Add(24 * time.Hour)
+		}
+
+		delay := next.Sub(now)
+		log.Printf("Novita sync scheduler: next run at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+
+		runNovitaDailySync(ctx)
+
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				runNovitaDailySync(ctx)
+			}
+		}
+	}()
+}
+
+// runNovitaDailySync performs one Novita model sync and sends a Feishu notification with the outcome.
+func runNovitaDailySync(ctx context.Context) {
+	log.Printf("Novita auto sync: starting daily model sync")
+
+	result, err := ExecuteSync(ctx, SyncOptions{}, nil)
+	if err != nil {
+		notify.ErrorThrottle(
+			"novitaAutoSyncFailed",
+			24*time.Hour,
+			"Novita 每日模型同步失败",
+			err.Error(),
+		)
+		log.Printf("Novita auto sync failed: %v", err)
+
+		return
+	}
+
+	msg := fmt.Sprintf("新增: %d  更新: %d  删除: %d  耗时: %dms",
+		len(result.Details.ModelsAdded),
+		len(result.Details.ModelsUpdated),
+		len(result.Details.ModelsDeleted),
+		result.DurationMS,
+	)
+
+	if result.Success {
+		notify.Info("Novita 每日模型同步完成", msg)
+	} else {
+		errSummary := strings.Join(result.Errors, "; ")
+		notify.Warn("Novita 每日模型同步部分失败", msg+"\n错误: "+errSummary)
+	}
+
+	log.Printf("Novita auto sync completed: %s", msg)
 }
 
 // RecordSyncHistory records sync history to database.

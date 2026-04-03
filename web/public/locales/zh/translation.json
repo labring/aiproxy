@@ -1463,7 +1463,11 @@
       "configEditor": {
         "visual": "可视化",
         "json": "JSON",
-        "sharedDataHelp": "可视化模式与 JSON 模式编辑的是同一份底层配置数据，不支持的键会被保留。"
+        "sharedDataHelp": "可视化模式与 JSON 模式编辑的是同一份底层配置数据，不支持的键会被保留。",
+        "keyValueKey": "路径前缀",
+        "keyValueValue": "目标 Base URL",
+        "keyValueAddEntry": "添加条目",
+        "keyValueEmpty": "暂无条目"
       },
       "baseUrl": "基础 URL",
       "baseUrlPlaceholder": "输入基础 URL",

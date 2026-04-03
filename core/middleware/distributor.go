@@ -380,33 +380,61 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	findModel := token.FindModel(requestModel)
 
-	if findModel == "" {
-		AbortLogWithMessage(
-			c,
-			http.StatusNotFound,
-			fmt.Sprintf(
-				"The model `%s` does not exist or you do not have access to it.",
-				requestModel,
-			),
-		)
+	caches := GetModelCaches(c)
+	hasPassthrough := caches.HasPassthroughChannels(group.GetAvailableSets())
 
-		return
+	if findModel == "" {
+		// Token whitelist explicitly blocks this model — hard 404.
+		if !token.IsModelAllowedByToken(requestModel) {
+			AbortLogWithMessage(
+				c,
+				http.StatusNotFound,
+				fmt.Sprintf(
+					"The model `%s` does not exist or you do not have access to it.",
+					requestModel,
+				),
+			)
+
+			return
+		}
+
+		// Model not registered in any channel, but a passthrough channel can handle it.
+		if !hasPassthrough {
+			AbortLogWithMessage(
+				c,
+				http.StatusNotFound,
+				fmt.Sprintf(
+					"The model `%s` does not exist or you do not have access to it.",
+					requestModel,
+				),
+			)
+
+			return
+		}
+
+		findModel = requestModel
 	}
 
 	SetLogModelFields(log.Data, findModel)
 
-	mc, ok := GetModelCaches(c).ModelConfig.GetModelConfig(findModel)
+	mc, ok := caches.ModelConfig.GetModelConfig(findModel)
 	if !ok {
-		AbortLogWithMessage(
-			c,
-			http.StatusNotFound,
-			fmt.Sprintf(
-				"The model `%s` does not exist or you do not have access to it.",
-				findModel,
-			),
-		)
+		// No ModelConfig entry, but passthrough channels are available — synthesise a
+		// zero-cost config. Type=Unknown passes CheckRelayMode for any endpoint.
+		if !hasPassthrough {
+			AbortLogWithMessage(
+				c,
+				http.StatusNotFound,
+				fmt.Sprintf(
+					"The model `%s` does not exist or you do not have access to it.",
+					findModel,
+				),
+			)
 
-		return
+			return
+		}
+
+		mc = model.NewDefaultModelConfig(findModel)
 	}
 
 	mc = GetGroupAdjustedModelConfig(group, mc)

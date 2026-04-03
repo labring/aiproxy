@@ -1475,7 +1475,11 @@
       "configEditor": {
         "visual": "Visual",
         "json": "JSON",
-        "sharedDataHelp": "Visual mode and JSON mode edit the same underlying config data. Unsupported keys are preserved."
+        "sharedDataHelp": "Visual mode and JSON mode edit the same underlying config data. Unsupported keys are preserved.",
+        "keyValueKey": "Path Prefix",
+        "keyValueValue": "Target Base URL",
+        "keyValueAddEntry": "Add Entry",
+        "keyValueEmpty": "No entries"
       },
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "Enter base URL",

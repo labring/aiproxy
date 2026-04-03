@@ -93,6 +93,24 @@ func (c *Channel) GetPriority() int32 {
 
 type ChannelConfigs map[string]any
 
+const (
+	// ChannelConfigPathBaseMapKey is the ChannelConfigs key for the path→base-URL routing map.
+	ChannelConfigPathBaseMapKey = "path_base_map"
+	// ChannelConfigAllowPassthroughUnknown is the ChannelConfigs key for the per-channel
+	// flag that lets the channel handle models not registered in ModelConfig.
+	// When true, the channel acts as a catch-all fallback: any model not served by a
+	// specific channel is routed here with a zero-cost synthetic ModelConfig (price=0,
+	// unlimited RPM/TPM, type=Unknown so any endpoint is accepted).
+	ChannelConfigAllowPassthroughUnknown = "allow_passthrough_unknown"
+)
+
+func (c ChannelConfigs) GetBool(key string) bool {
+	v, _ := c[key]
+	b, _ := v.(bool)
+
+	return b
+}
+
 func (c ChannelConfigs) LoadConfig(config any) error {
 	if len(c) == 0 {
 		return nil

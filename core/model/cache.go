@@ -109,6 +109,20 @@ func (t *TokenCache) FindModel(model string) string {
 	return containsModel(model, t.availableSets, t.modelsBySet)
 }
 
+// IsModelAllowedByToken reports whether the token's explicit model whitelist
+// permits this model. Returns true when the token has no whitelist (open access).
+// This is a subset of FindModel: it only checks the token-level access control,
+// not whether any channel currently serves the model.
+func (t *TokenCache) IsModelAllowedByToken(model string) bool {
+	if len(t.Models) == 0 {
+		return true
+	}
+
+	return slices.ContainsFunc(t.Models, func(e string) bool {
+		return strings.EqualFold(e, model)
+	})
+}
+
 func containsModel(model string, sets []string, modelsBySet map[string][]string) string {
 	var findModel string
 	for _, set := range sets {
@@ -963,6 +977,24 @@ type ModelCaches struct {
 	EnabledModel2ChannelsBySet map[string]map[string][]*Channel
 	// map[set]map[model][]channel
 	DisabledModel2ChannelsBySet map[string]map[string][]*Channel
+
+	// PassthroughChannelsBySet holds enabled channels that have
+	// ChannelConfigAllowPassthroughUnknown=true. These are used as a
+	// fallback when no specific channel is registered for a model.
+	// map[set][]*Channel (not keyed by model — they handle any model).
+	PassthroughChannelsBySet map[string][]*Channel
+}
+
+// HasPassthroughChannels reports whether any passthrough channel is available
+// for at least one of the given sets.
+func (mc *ModelCaches) HasPassthroughChannels(sets []string) bool {
+	for _, set := range sets {
+		if len(mc.PassthroughChannelsBySet[set]) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 var modelCaches atomic.Pointer[ModelCaches]
@@ -1012,6 +1044,9 @@ func InitModelConfigAndChannelCache() error {
 	// Build disabled model to channels map by set
 	disabledModel2ChannelsBySet := buildModelToChannelsBySetMap(disabledChannels)
 
+	// Build passthrough channels index (channels with allow_passthrough_unknown=true)
+	passthroughChannelsBySet := buildPassthroughChannelsBySet(enabledChannels)
+
 	// Update global cache atomically
 	modelCaches.Store(&ModelCaches{
 		ModelConfig: modelConfig,
@@ -1022,6 +1057,8 @@ func InitModelConfigAndChannelCache() error {
 
 		EnabledModel2ChannelsBySet:  enabledModel2ChannelsBySet,
 		DisabledModel2ChannelsBySet: disabledModel2ChannelsBySet,
+
+		PassthroughChannelsBySet: passthroughChannelsBySet,
 	})
 
 	return nil
@@ -1258,6 +1295,26 @@ func buildEnabledModelsBySet(
 	}
 
 	return modelsBySet, modelConfigsBySet, modelConfigsMap
+}
+
+// buildPassthroughChannelsBySet collects channels that have
+// ChannelConfigAllowPassthroughUnknown=true into a per-set index.
+// These channels are used as a catch-all when no specific channel
+// is registered for the requested model.
+func buildPassthroughChannelsBySet(channels []*Channel) map[string][]*Channel {
+	result := make(map[string][]*Channel)
+
+	for _, channel := range channels {
+		if !channel.Configs.GetBool(ChannelConfigAllowPassthroughUnknown) {
+			continue
+		}
+
+		for _, set := range channel.GetSets() {
+			result[set] = append(result[set], channel)
+		}
+	}
+
+	return result
 }
 
 func SortModelConfigsFunc(i, j ModelConfig) int {

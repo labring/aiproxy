@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Plus, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     Select,
@@ -89,6 +91,13 @@ const setAtPath = (obj: ConfigObject, path: string[], value: unknown): ConfigObj
     return next
 }
 
+const toKeyValueEntries = (v: unknown): { key: string; value: string }[] => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+        return Object.entries(v as Record<string, string>).map(([k, val]) => ({ key: k, value: val }))
+    }
+    return []
+}
+
 const cleanupEmptyObjects = (value: unknown): unknown => {
     if (Array.isArray(value)) {
         return value.map(cleanupEmptyObjects).filter((item) => item !== undefined)
@@ -114,6 +123,91 @@ const cleanupEmptyObjects = (value: unknown): unknown => {
         })
 
     return Object.fromEntries(entries)
+}
+
+interface KeyValueFieldProps {
+    title: string
+    description?: string
+    currentValue: unknown
+    path: string[]
+    onValueChange: (path: string[], value: unknown) => void
+}
+
+function KeyValueField({ title, description, currentValue, path, onValueChange }: KeyValueFieldProps) {
+    const { t } = useTranslation()
+    const [entries, setEntries] = useState(() => toKeyValueEntries(currentValue))
+
+    const commit = (next: { key: string; value: string }[]) => {
+        const map: Record<string, string> = {}
+        for (const { key, value } of next) {
+            if (key) map[key] = value
+        }
+        onValueChange(path, Object.keys(map).length > 0 ? map : undefined)
+    }
+
+    const updateEntry = (idx: number, field: 'key' | 'value', val: string) => {
+        const next = entries.map((e, i) => (i === idx ? { ...e, [field]: val } : e))
+        setEntries(next)
+        commit(next)
+    }
+
+    const deleteEntry = (idx: number) => {
+        const next = entries.filter((_, i) => i !== idx)
+        setEntries(next)
+        commit(next)
+    }
+
+    const addEntry = () => setEntries((prev) => [...prev, { key: '', value: '' }])
+
+    return (
+        <div className="space-y-2">
+            <Label>{title}</Label>
+            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+            <div className="space-y-2 rounded-lg border p-3">
+                {entries.length === 0 && (
+                    <p className="py-1 text-center text-xs text-muted-foreground">
+                        {t('channel.dialog.configEditor.keyValueEmpty')}
+                    </p>
+                )}
+                {entries.map(({ key, value }, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                        <Input
+                            value={key}
+                            placeholder={t('channel.dialog.configEditor.keyValueKey')}
+                            className="w-[160px] shrink-0 font-mono text-xs"
+                            onChange={(e) => updateEntry(idx, 'key', e.target.value)}
+                        />
+                        <span className="shrink-0 text-muted-foreground">→</span>
+                        <Input
+                            value={value}
+                            placeholder={t('channel.dialog.configEditor.keyValueValue')}
+                            className="min-w-0 flex-1 font-mono text-xs"
+                            onChange={(e) => updateEntry(idx, 'value', e.target.value)}
+                        />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteEntry(idx)}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                ))}
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 w-full"
+                    onClick={addEntry}
+                >
+                    <Plus className="mr-1 h-3 w-3" />
+                    {t('channel.dialog.configEditor.keyValueAddEntry')}
+                </Button>
+            </div>
+        </div>
+    )
 }
 
 interface SchemaFieldProps {
@@ -148,6 +242,19 @@ function SchemaField({ schema, path, rootValue, onValueChange }: SchemaFieldProp
                     />
                 ))}
             </div>
+        )
+    }
+
+    if (schema.type === 'keyValue') {
+        return (
+            <KeyValueField
+                key={JSON.stringify(currentValue)}
+                title={title}
+                description={description}
+                currentValue={currentValue}
+                path={path}
+                onValueChange={onValueChange}
+            />
         )
     }
 

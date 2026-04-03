@@ -4,9 +4,11 @@ package enterprise
 
 import (
 	"context"
+	"sync"
 
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	enterprisenotify "github.com/labring/aiproxy/core/enterprise/notify"
+	"github.com/labring/aiproxy/core/enterprise/novita"
 	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
 	log "github.com/sirupsen/logrus"
@@ -27,15 +29,34 @@ func PostDBInit() {
 	// Load role permissions into memory cache
 	LoadRolePermissions()
 
-	// Ensure PPIO channel model lists match local ModelConfig.
-	// This fixes gaps where models were synced but Channel.Models wasn't updated.
-	if _, err := ppio.EnsurePPIOChannels(false, ppio.PPIOConfigResult{}); err != nil {
-		log.Warnf("PPIO channel refresh on startup: %v", err)
-	}
+	// Refresh PPIO and Novita channel model lists in parallel.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if _, err := ppio.EnsurePPIOChannels(false, ppio.PPIOConfigResult{}); err != nil {
+			log.Warnf("PPIO channel refresh on startup: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if _, err := novita.EnsureNovitaChannels(false, novita.NovitaConfigResult{}); err != nil {
+			log.Warnf("Novita channel refresh on startup: %v", err)
+		}
+	}()
+
+	wg.Wait()
+
+	ctx := context.Background()
 
 	// Start Feishu organization sync scheduler (every 6 hours)
-	ctx := context.Background()
 	feishu.StartSyncScheduler(ctx)
+
+	// Start PPIO and Novita daily model sync schedulers (02:00 and 02:15 respectively)
+	ppio.StartSyncScheduler(ctx)
+	novita.StartSyncScheduler(ctx)
 
 	log.Info("enterprise module post-DB initialized")
 }

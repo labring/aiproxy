@@ -88,6 +88,45 @@ func TestInferToolChoice(t *testing.T) {
 	}
 }
 
+func TestPPIOURLHelpers(t *testing.T) {
+	cases := []struct {
+		name         string
+		baseURL      string
+		wantResp     string
+		wantWebSearch string
+	}{
+		{
+			name:          "default PPIO base URL",
+			baseURL:       "https://api.ppinfra.com/v3/openai",
+			wantResp:      "https://api.ppinfra.com/openai/v1",
+			wantWebSearch: "https://api.ppinfra.com/v3",
+		},
+		{
+			name:          "custom base URL with /v3/openai suffix",
+			baseURL:       "https://custom.example.com/v3/openai",
+			wantResp:      "https://custom.example.com/openai/v1",
+			wantWebSearch: "https://custom.example.com/v3",
+		},
+		{
+			name:          "base URL without /v3/openai — falls back to default",
+			baseURL:       "https://other.example.com/api",
+			wantResp:      "https://api.ppinfra.com/openai/v1",
+			wantWebSearch: "https://api.ppinfra.com/v3",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ppioResponsesBase(tc.baseURL); got != tc.wantResp {
+				t.Errorf("ppioResponsesBase(%q) = %q, want %q", tc.baseURL, got, tc.wantResp)
+			}
+			if got := ppioWebSearchBase(tc.baseURL); got != tc.wantWebSearch {
+				t.Errorf("ppioWebSearchBase(%q) = %q, want %q", tc.baseURL, got, tc.wantWebSearch)
+			}
+		})
+	}
+}
+
 func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 	tests := []struct {
 		name           string
