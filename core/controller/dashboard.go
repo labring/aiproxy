@@ -188,7 +188,7 @@ func fillGaps(
 //	@Success		200				{object}	middleware.APIResponse{data=model.DashboardResponse}
 //	@Router			/api/dashboard/ [get]
 func GetDashboard(c *gin.Context) {
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	timespan := c.Query("timespan")
 	start, end, timeSpan := getDashboardTime(
@@ -255,7 +255,7 @@ func GetGroupDashboard(c *gin.Context) {
 		return
 	}
 
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	timespan := c.Query("timespan")
 	start, end, timeSpan := getDashboardTime(
@@ -440,7 +440,7 @@ func GetGroupDashboardModels(c *gin.Context) {
 func GetTimeSeriesModelData(c *gin.Context) {
 	channelID, _ := strconv.Atoi(c.Query("channel"))
 	modelName := c.Query("model")
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 
@@ -487,7 +487,7 @@ func GetGroupTimeSeriesModelData(c *gin.Context) {
 
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model")
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 
@@ -528,7 +528,7 @@ func GetGroupTimeSeriesModelData(c *gin.Context) {
 func GetTimeSeriesModelDataV3(c *gin.Context) {
 	channelID, _ := strconv.Atoi(c.Query("channel"))
 	modelName := c.Query("model")
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 
@@ -585,7 +585,7 @@ func GetGroupTimeSeriesModelDataV3(c *gin.Context) {
 
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model")
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
 	fields := model.ParseSummaryFields(c.Query("fields"))
 

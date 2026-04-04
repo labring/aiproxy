@@ -973,9 +973,15 @@ function RequestLogsSection() {
     const { t } = useTranslation()
     const [timeRange, setTimeRange] = useState<TimeRange>("7d")
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
+    const [modelFilterInput, setModelFilterInput] = useState("")
     const [modelFilter, setModelFilter] = useState("")
     const [codeType, setCodeType] = useState("all")
     const [detailLog, setDetailLog] = useState<UserLog | null>(null)
+
+    useEffect(() => {
+        const id = setTimeout(() => setModelFilter(modelFilterInput), 400)
+        return () => clearTimeout(id)
+    }, [modelFilterInput])
 
     const { start, end } = useMemo(
         () => computeTimeRangeTs(timeRange, customDateRange),
@@ -1000,7 +1006,9 @@ function RequestLogsSection() {
         initialPageParam: undefined as number | undefined,
         getNextPageParam: (lastPage) => {
             if (!lastPage.has_more) return undefined
-            return lastPage.logs[lastPage.logs.length - 1]?.id
+            const lastId = lastPage.logs[lastPage.logs.length - 1]?.id
+            if (lastId === undefined) return undefined
+            return lastId
         },
     })
 
@@ -1041,8 +1049,8 @@ function RequestLogsSection() {
                         )}
                         <Input
                             placeholder={t("enterprise.myAccess.filterModel" as never)}
-                            value={modelFilter}
-                            onChange={e => setModelFilter(e.target.value)}
+                            value={modelFilterInput}
+                            onChange={e => setModelFilterInput(e.target.value)}
                             className="h-8 w-36 text-xs"
                         />
                         <Select value={codeType} onValueChange={setCodeType}>

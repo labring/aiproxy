@@ -894,7 +894,7 @@ func GetMyLogs(c *gin.Context) {
 		return
 	}
 
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, utils.NoSpanLimit)
 	afterID, _ := strconv.Atoi(c.Query("after_id"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 

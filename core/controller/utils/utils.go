@@ -21,6 +21,9 @@ func ParsePageParams(c *gin.Context) (page, perPage int) {
 
 const (
 	defaultMaxSpan = time.Hour * 24 * 7
+
+	// NoSpanLimit disables the maximum time-range restriction in ParseTimeRange.
+	NoSpanLimit time.Duration = -1
 )
 
 func ParseTimeRange(c *gin.Context, maxSpan time.Duration) (startTime, endTime time.Time) {
