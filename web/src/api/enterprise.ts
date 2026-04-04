@@ -468,6 +468,35 @@ export interface TokenPeriodStats {
     success_rate: number
 }
 
+export interface UserLog {
+    id: number
+    request_at: number
+    created_at: number
+    model: string
+    endpoint: string
+    code: number
+    usage: {
+        prompt_tokens: number
+        completion_tokens: number
+        total_tokens: number
+    }
+    used_amount: number
+    ttfb_ms: number
+    has_detail: boolean
+}
+
+export interface GetMyLogsResult {
+    logs: UserLog[]
+    has_more: boolean
+}
+
+export interface RequestDetail {
+    request_body: string
+    response_body: string
+    request_body_truncated: boolean
+    response_body_truncated: boolean
+}
+
 // Quota Notification Config
 export interface QuotaNotifConfig {
     enabled: boolean
@@ -867,5 +896,27 @@ export const enterpriseApi = {
         return get<TokenPeriodStats[]>('/enterprise/my-access/token-stats', {
             params: { start_timestamp: String(startTs), end_timestamp: String(endTs) },
         })
+    },
+
+    getMyLogs: (params: {
+        start_timestamp?: number
+        end_timestamp?: number
+        model_name?: string
+        code_type?: string
+        after_id?: number
+        limit?: number
+    }): Promise<GetMyLogsResult> => {
+        const query: Record<string, string> = {}
+        if (params.start_timestamp) query.start_timestamp = String(params.start_timestamp)
+        if (params.end_timestamp) query.end_timestamp = String(params.end_timestamp)
+        if (params.model_name) query.model_name = params.model_name
+        if (params.code_type) query.code_type = params.code_type
+        if (params.after_id) query.after_id = String(params.after_id)
+        if (params.limit) query.limit = String(params.limit)
+        return get<GetMyLogsResult>('/enterprise/my-access/logs', { params: query })
+    },
+
+    getMyLogDetail: (logId: number): Promise<RequestDetail> => {
+        return get<RequestDetail>(`/enterprise/my-access/logs/${logId}`)
     },
 }

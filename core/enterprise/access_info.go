@@ -884,3 +884,70 @@ func DisableMyToken(c *gin.Context) {
 
 	middleware.SuccessResponse(c, gin.H{"message": "token disabled"})
 }
+
+// GetMyLogs returns paginated request logs for the current enterprise user's group.
+func GetMyLogs(c *gin.Context) {
+	feishuUser := GetEnterpriseUser(c)
+	if feishuUser == nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		return
+	}
+
+	var startTime, endTime time.Time
+
+	if s := c.Query("start_timestamp"); s != "" {
+		if ts, err := strconv.ParseInt(s, 10, 64); err == nil {
+			startTime = time.Unix(ts, 0)
+		}
+	}
+
+	if e := c.Query("end_timestamp"); e != "" {
+		if ts, err := strconv.ParseInt(e, 10, 64); err == nil {
+			endTime = time.Unix(ts, 0)
+		}
+	}
+
+	afterID, _ := strconv.Atoi(c.Query("after_id"))
+
+	limit, _ := strconv.Atoi(c.Query("limit"))
+
+	result, err := model.GetGroupUserLogs(
+		feishuUser.GroupID,
+		startTime,
+		endTime,
+		c.Query("model_name"),
+		c.Query("request_id"),
+		model.CodeType(c.Query("code_type")),
+		afterID,
+		limit,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to query logs: %v", err))
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetMyLogDetail returns the request/response body for a specific log entry.
+func GetMyLogDetail(c *gin.Context) {
+	feishuUser := GetEnterpriseUser(c)
+	if feishuUser == nil {
+		middleware.ErrorResponse(c, http.StatusForbidden, "forbidden: not an enterprise user")
+		return
+	}
+
+	logID, err := strconv.Atoi(c.Param("log_id"))
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid log_id")
+		return
+	}
+
+	detail, err := model.GetGroupLogDetail(logID, feishuUser.GroupID)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusNotFound, "log not found")
+		return
+	}
+
+	middleware.SuccessResponse(c, detail)
+}

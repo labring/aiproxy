@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     Copy, Eye, EyeOff, Plus, Ban, ChevronDown, ChevronRight, Search,
-    Building2, Globe, Info, ArrowUpDown, ArrowUp, ArrowDown, Settings2,
+    Building2, Globe, Info, ArrowUpDown, ArrowUp, ArrowDown, Settings2, FileText,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +31,8 @@ import {
     type MetricComparison,
     type TokenPeriodStats,
     type ModelUsage,
+    type UserLog,
+    type RequestDetail,
 } from "@/api/enterprise"
 import { computeTimeRangeTs, formatAmount, formatNumber, formatMs, formatRate, type TimeRange } from "@/lib/enterprise"
 
@@ -966,6 +968,239 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
     )
 }
 
+// --- Request Logs Section ---
+function RequestLogsSection() {
+    const { t } = useTranslation()
+    const [timeRange, setTimeRange] = useState<TimeRange>("7d")
+    const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
+    const [modelFilter, setModelFilter] = useState("")
+    const [codeType, setCodeType] = useState("all")
+    const [afterId, setAfterId] = useState<number | undefined>()
+    const [allLogs, setAllLogs] = useState<UserLog[]>([])
+    const [hasMore, setHasMore] = useState(false)
+    const [detailLog, setDetailLog] = useState<UserLog | null>(null)
+
+    const { start, end } = useMemo(
+        () => computeTimeRangeTs(timeRange, customDateRange),
+        [timeRange, customDateRange],
+    )
+
+    // Reset logs when filters change
+    useEffect(() => {
+        setAllLogs([])
+        setAfterId(undefined)
+        setHasMore(false)
+    }, [start, end, modelFilter, codeType])
+
+    const { isLoading, isFetching } = useQuery({
+        queryKey: ["my-logs", start, end, modelFilter, codeType, afterId],
+        queryFn: async () => {
+            const result = await enterpriseApi.getMyLogs({
+                start_timestamp: start,
+                end_timestamp: end,
+                model_name: modelFilter || undefined,
+                code_type: codeType === "all" ? undefined : codeType,
+                after_id: afterId,
+            })
+            setAllLogs(prev => afterId ? [...prev, ...result.logs] : result.logs)
+            setHasMore(result.has_more)
+            return result
+        },
+    })
+
+    const { data: detail, isLoading: detailLoading } = useQuery<RequestDetail>({
+        queryKey: ["my-log-detail", detailLog?.id],
+        queryFn: () => enterpriseApi.getMyLogDetail(detailLog!.id),
+        enabled: !!detailLog?.has_detail,
+    })
+
+    const formatTime = (ts: number) => {
+        const d = new Date(ts * 1000)
+        return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                    <CardTitle className="text-base">{t("enterprise.myAccess.requestLogs" as never)}</CardTitle>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Select value={timeRange} onValueChange={v => setTimeRange(v as TimeRange)}>
+                            <SelectTrigger className="h-8 w-32 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="7d">{t("enterprise.myAccess.last7Days" as never)}</SelectItem>
+                                <SelectItem value="30d">{t("enterprise.myAccess.last30Days" as never)}</SelectItem>
+                                <SelectItem value="month">{t("enterprise.myAccess.thisMonth" as never)}</SelectItem>
+                                <SelectItem value="last_week">{t("enterprise.myAccess.lastWeek" as never)}</SelectItem>
+                                <SelectItem value="last_month">{t("enterprise.myAccess.lastMonth" as never)}</SelectItem>
+                                <SelectItem value="custom">{t("enterprise.myAccess.customRange" as never)}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {timeRange === "custom" && (
+                            <DateRangePicker value={customDateRange} onChange={setCustomDateRange} />
+                        )}
+                        <Input
+                            placeholder={t("enterprise.myAccess.filterModel" as never)}
+                            value={modelFilter}
+                            onChange={e => setModelFilter(e.target.value)}
+                            className="h-8 w-36 text-xs"
+                        />
+                        <Select value={codeType} onValueChange={setCodeType}>
+                            <SelectTrigger className="h-8 w-24 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">{t("enterprise.myAccess.statusAll" as never)}</SelectItem>
+                                <SelectItem value="success">{t("enterprise.myAccess.statusSuccess" as never)}</SelectItem>
+                                <SelectItem value="error">{t("enterprise.myAccess.statusError" as never)}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {isLoading && allLogs.length === 0 ? (
+                    <div className="space-y-2">
+                        {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-10 bg-muted animate-pulse rounded" />)}
+                    </div>
+                ) : allLogs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                        {t("enterprise.myAccess.noLogs" as never)}
+                    </p>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="border rounded-md overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="border-b bg-muted/50">
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logTime" as never)}</th>
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logModel" as never)}</th>
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logEndpoint" as never)}</th>
+                                        <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logStatus" as never)}</th>
+                                        <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logTokens" as never)}</th>
+                                        <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logCost" as never)}</th>
+                                        <th className="px-3 py-2 text-right font-medium">TTFB</th>
+                                        <th className="px-3 py-2 text-center font-medium"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {allLogs.map(log => {
+                                        const epInfo = ENDPOINT_LABELS[log.endpoint]
+                                        const isSuccess = log.code === 200
+                                        return (
+                                            <tr key={log.id} className="border-b last:border-b-0 hover:bg-muted/30">
+                                                <td className="px-3 py-2 tabular-nums text-muted-foreground whitespace-nowrap">
+                                                    {formatTime(log.created_at)}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono max-w-[160px] truncate" title={log.model}>
+                                                    {log.model}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${epInfo?.color || EP_COLORS.misc}`}>
+                                                        {epInfo?.label || log.endpoint}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-right tabular-nums">
+                                                    <span className={isSuccess ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                                        {log.code}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                                                    {formatNumber(log.usage?.total_tokens || 0)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right tabular-nums">
+                                                    {formatAmount(log.used_amount)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                                                    {log.ttfb_ms > 0 ? formatMs(log.ttfb_ms) : "-"}
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                    {log.has_detail && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6"
+                                                            onClick={() => setDetailLog(log)}
+                                                        >
+                                                            <FileText className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {hasMore && (
+                            <div className="flex justify-center">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        const last = allLogs[allLogs.length - 1]
+                                        if (last) setAfterId(last.id)
+                                    }}
+                                    disabled={isFetching}
+                                >
+                                    {isFetching ? t("enterprise.myAccess.loading" as never) : t("enterprise.myAccess.loadMore" as never)}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </CardContent>
+
+            {/* Log Detail Dialog */}
+            <Dialog open={!!detailLog} onOpenChange={() => setDetailLog(null)}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-sm font-mono">{detailLog?.model}</DialogTitle>
+                    </DialogHeader>
+                    {detailLoading ? (
+                        <div className="space-y-2">
+                            <div className="h-32 bg-muted animate-pulse rounded" />
+                            <div className="h-32 bg-muted animate-pulse rounded" />
+                        </div>
+                    ) : detail ? (
+                        <div className="space-y-3">
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    {t("enterprise.myAccess.requestBody" as never)}
+                                    {detail.request_body_truncated && <span className="ml-1 text-amber-500">(truncated)</span>}
+                                </p>
+                                <pre className="bg-muted p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-60">
+                                    {detail.request_body || "-"}
+                                </pre>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    {t("enterprise.myAccess.responseBody" as never)}
+                                    {detail.response_body_truncated && <span className="ml-1 text-amber-500">(truncated)</span>}
+                                </p>
+                                <pre className="bg-muted p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-60">
+                                    {detail.response_body || "-"}
+                                </pre>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                            {t("enterprise.myAccess.noDetail" as never)}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={() => setDetailLog(null)}>
+                            {t("common.close" as never)}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </Card>
+    )
+}
+
 // --- Main Page ---
 export default function MyAccessPage() {
     const { t } = useTranslation()
@@ -1142,6 +1377,9 @@ export default function MyAccessPage() {
 
             {/* Available Models */}
             <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} />
+
+            {/* Request History */}
+            <RequestLogsSection />
 
             {/* Create Key Dialog */}
             <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

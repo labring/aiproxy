@@ -55,6 +55,8 @@ func RegisterRoutes(router *gin.Engine) {
 	enterpriseAuth.POST("/my-access/tokens", CreateMyToken)
 	enterpriseAuth.DELETE("/my-access/tokens/:id", DisableMyToken)
 	enterpriseAuth.GET("/my-access/token-stats", GetMyTokenStats)
+	enterpriseAuth.GET("/my-access/logs", GetMyLogs)
+	enterpriseAuth.GET("/my-access/logs/:log_id", GetMyLogDetail)
 
 	analytics.RegisterRoutes(enterpriseAuth, permMW)
 	quota.RegisterRoutes(enterpriseAuth, permMW)
