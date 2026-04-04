@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/analytics"
 	"github.com/labring/aiproxy/core/enterprise/ppio"
 	"github.com/labring/aiproxy/core/enterprise/quota"
@@ -893,15 +894,15 @@ func GetMyLogs(c *gin.Context) {
 		return
 	}
 
-	startTs, endTs := parseTimestampRange(c)
+	startTime, endTime := utils.ParseTimeRange(c, 0)
 	afterID, _ := strconv.Atoi(c.Query("after_id"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 
 	result, err := model.GetTokenLogs(
 		feishuUser.GroupID,
 		"",
-		time.Unix(startTs, 0),
-		time.Unix(endTs, 0),
+		startTime,
+		endTime,
 		c.Query("model_name"),
 		c.Query("request_id"),
 		model.CodeType(c.Query("code_type")),
