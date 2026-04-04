@@ -1,0 +1,82 @@
+//go:build enterprise
+
+// Package synccommon provides provider-agnostic utilities shared by the PPIO
+// and Novita sync implementations.
+package synccommon
+
+import "github.com/labring/aiproxy/core/model"
+
+// SyncProgressEvent represents a progress event sent via SSE during a model sync.
+// Shared by all provider sync implementations to ensure a consistent wire format.
+type SyncProgressEvent struct {
+	Type     string `json:"type"`              // "progress", "success", "error"
+	Step     string `json:"step"`              // "fetching", "comparing", "syncing", "complete"
+	Message  string `json:"message"`           // Human-readable message
+	Progress int    `json:"progress,omitempty"`
+	Data     any    `json:"data,omitempty"` // Additional data (e.g., SyncResult on success)
+}
+
+// SendProgress delivers a progress event to callback if one is registered.
+// step == "complete" upgrades the event type to "success".
+func SendProgress(
+	callback func(event SyncProgressEvent),
+	step, message string,
+	progress int,
+	data any,
+) {
+	if callback == nil {
+		return
+	}
+
+	eventType := "progress"
+	if step == "complete" {
+		eventType = "success"
+	}
+
+	callback(SyncProgressEvent{
+		Type:     eventType,
+		Step:     step,
+		Message:  message,
+		Progress: progress,
+		Data:     data,
+	})
+}
+
+// InferToolChoice returns true when a model is likely to support tool_choice.
+// Feature-list signals ("tool_use", "function_calling", "tools") take highest
+// priority; failing that, all "chat" models are assumed to support tool calling.
+func InferToolChoice(modelType string, features []string) bool {
+	for _, f := range features {
+		switch f {
+		case "tool_use", "function_calling", "tools":
+			return true
+		}
+	}
+
+	return modelType == "chat"
+}
+
+// ToModelConfigKeys converts map[string]any to map[model.ModelConfigKey]any
+// without a JSON round-trip.
+func ToModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
+	out := make(map[model.ModelConfigKey]any, len(m))
+
+	for k, v := range m {
+		out[model.ModelConfigKey(k)] = v
+	}
+
+	return out
+}
+
+// AdjustTierBounds returns the effective [minTokens, maxTokens] for a tiered-billing
+// tier, bumping minTokens by 1 when it overlaps with prevMax (the previous tier's max).
+//
+// Providers use inclusive boundaries like [0,128000],[128000,∞] but aiproxy requires
+// non-overlapping ranges. Pass prevMax=0 for the first tier (index 0).
+func AdjustTierBounds(minTokens, maxTokens, prevMax int64) (int64, int64) {
+	if minTokens > 0 && prevMax > 0 && minTokens <= prevMax {
+		minTokens = prevMax + 1
+	}
+
+	return minTokens, maxTokens
+}

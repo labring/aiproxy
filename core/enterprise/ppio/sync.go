@@ -14,6 +14,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
@@ -51,19 +52,6 @@ var endpointSlugToMode = map[string]mode.Mode{
 	"audio/transcriptions":   mode.AudioTranscription,
 	"images/generations":     mode.ImagesGenerations,
 	"video/generations/jobs": mode.VideoGenerationsJobs,
-}
-
-// inferToolChoice returns true when the model is likely to support tool_choice.
-// Signal priority: features list ("tool_use" / "function_calling") > model_type "chat".
-func inferToolChoice(modelType string, features []string) bool {
-	for _, f := range features {
-		switch f {
-		case "tool_use", "function_calling", "tools":
-			return true
-		}
-	}
-	// Chat models generally support tool calling.
-	return modelType == "chat"
 }
 
 // inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
@@ -116,7 +104,7 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	// Step 1: Fetch remote models
-	sendProgress(progressCallback, "fetching", "正在获取 PPIO 模型列表...", 10, nil)
+	synccommon.SendProgress(progressCallback, "fetching", "正在获取 PPIO 模型列表...", 10, nil)
 
 	client, err := NewPPIOClient()
 	if err != nil {
@@ -141,11 +129,11 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	if unavailCount > 0 {
-		sendProgress(progressCallback, "filtering",
+		synccommon.SendProgress(progressCallback, "filtering",
 			fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
 	}
 
-	sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
+	synccommon.SendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
 
 	diff, err := ComparePPIOModelsV2(allModels, opts)
 	if err != nil {
@@ -181,12 +169,12 @@ func ExecuteSync( //nolint:cyclop
 	if opts.DryRun {
 		result.Success = true
 		result.DurationMS = time.Since(startTime).Milliseconds()
-		sendProgress(progressCallback, "complete", "预览完成", 100, result)
+		synccommon.SendProgress(progressCallback, "complete", "预览完成", 100, result)
 		return result, nil
 	}
 
 	// Step 3: Execute sync in transaction
-	sendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
+	synccommon.SendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
 
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		return executeSyncTransaction(tx, diff, opts, creator, result, progressCallback)
@@ -196,7 +184,7 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	// Step 4: Ensure channels exist (reads from local DB, not remote list)
-	sendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
+	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
 	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, cfg)
 	if err != nil {
@@ -223,13 +211,13 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	// Step 6: Record sync history (after result.Success is set)
-	sendProgress(progressCallback, "recording", "记录同步历史...", 95, nil)
+	synccommon.SendProgress(progressCallback, "recording", "记录同步历史...", 95, nil)
 
 	if err := RecordSyncHistory(opts, result); err != nil {
 		log.Printf("failed to record sync history: %v", err)
 	}
 
-	sendProgress(progressCallback, "complete", "同步完成", 100, result)
+	synccommon.SendProgress(progressCallback, "complete", "同步完成", 100, result)
 
 	return result, nil
 }
@@ -248,7 +236,7 @@ func executeSyncTransaction(
 
 	for i, modelDiff := range diff.Changes.Add {
 		progress := 50 + (i * 15 / totalAdd)
-		sendProgress(
+		synccommon.SendProgress(
 			progressCallback,
 			"adding",
 			fmt.Sprintf("添加模型 %s (%d/%d)", modelDiff.ModelID, i+1, len(diff.Changes.Add)),
@@ -273,7 +261,7 @@ func executeSyncTransaction(
 
 	for i, modelDiff := range diff.Changes.Update {
 		progress := 65 + (i * 15 / totalUpdate)
-		sendProgress(
+		synccommon.SendProgress(
 			progressCallback,
 			"updating",
 			fmt.Sprintf("更新模型 %s (%d/%d)", modelDiff.ModelID, i+1, len(diff.Changes.Update)),
@@ -299,7 +287,7 @@ func executeSyncTransaction(
 
 		for i, modelDiff := range diff.Changes.Delete {
 			progress := 80 + (i * 5 / totalDelete)
-			sendProgress(
+			synccommon.SendProgress(
 				progressCallback,
 				"deleting",
 				fmt.Sprintf(
@@ -530,34 +518,10 @@ func RecordSyncHistory(opts SyncOptions, result *SyncResult) error {
 	return model.DB.Create(&history).Error
 }
 
-// Helper functions
-
-func sendProgress(
-	callback func(event SyncProgressEvent),
-	step, message string,
-	progress int,
-	data any,
-) {
-	if callback != nil {
-		eventType := "progress"
-		if step == "complete" {
-			eventType = "success"
-		}
-
-		callback(SyncProgressEvent{
-			Type:     eventType,
-			Step:     step,
-			Message:  message,
-			Progress: progress,
-			Data:     data,
-		})
-	}
-}
-
 // V1 model config creation (old public API)
 
 func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
-	configData := toModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
+	configData := synccommon.ToModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 
 	// Check if model already exists (possibly with a different owner)
 	var existing model.ModelConfig
@@ -601,7 +565,7 @@ func updateModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 	}
 
 	existing.Type = inferModeFromPPIO(ppioModel.ModelType, ppioModel.Endpoints)
-	existing.Config = toModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
+	existing.Config = synccommon.ToModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 	existing.Price.InputPrice = model.ZeroNullFloat64(ppioModel.GetInputPricePerToken())
 	existing.Price.OutputPrice = model.ZeroNullFloat64(ppioModel.GetOutputPricePerToken())
 	existing.Price.InputPriceUnit = model.ZeroNullInt64(1)
@@ -613,7 +577,7 @@ func updateModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 // V2 model config creation (management API with tiered & cache pricing)
 
 func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
-	configData := toModelConfigKeys(buildConfigFromPPIOModelV2(m))
+	configData := synccommon.ToModelConfigKeys(buildConfigFromPPIOModelV2(m))
 
 	rpm := int64(60)
 	if m.RPM > 0 {
@@ -667,7 +631,7 @@ func updateModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 
 	existing.Owner = model.ModelOwnerPPIO
 	existing.Type = inferModeFromPPIO(m.ModelType, m.Endpoints)
-	existing.Config = toModelConfigKeys(buildConfigFromPPIOModelV2(m))
+	existing.Config = synccommon.ToModelConfigKeys(buildConfigFromPPIOModelV2(m))
 
 	if m.RPM > 0 {
 		existing.RPM = int64(m.RPM)
@@ -705,8 +669,12 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 	if m.IsTieredBilling && len(m.TieredBillingConfigs) > 0 {
 		conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
 
-		for i, tier := range m.TieredBillingConfigs {
-			minTokens, maxTokens := adjustTierBounds(m.TieredBillingConfigs, i)
+		var prevMax int64
+
+		for _, tier := range m.TieredBillingConfigs {
+			minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
+			prevMax = tier.MaxTokens
+
 			if maxTokens > 0 && minTokens > maxTokens {
 				continue // degenerate tier after boundary adjustment
 			}
@@ -776,7 +744,7 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 
 	// Derive capability flags from model metadata so the admin UI
 	// can display "tool" / "vision" badges on the model table.
-	if inferToolChoice(m.ModelType, m.Features) {
+	if synccommon.InferToolChoice(m.ModelType, m.Features) {
 		cfg[string(model.ModelConfigToolChoiceKey)] = true
 	}
 	if slices.Contains(m.InputModalities, "image") {
@@ -784,34 +752,6 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 	}
 
 	return cfg
-}
-
-
-// toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.
-func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
-	out := make(map[model.ModelConfigKey]any, len(m))
-	for k, v := range m {
-		out[model.ModelConfigKey(k)] = v
-	}
-
-	return out
-}
-
-// adjustTierBounds returns the effective [min, max] for tier i, bumping min by 1
-// when it overlaps with the previous tier's max (PPIO uses inclusive boundaries
-// like [0,128000],[128000,∞] but aiproxy requires non-overlapping ranges).
-func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens int64) {
-	minTokens = tiers[i].MinTokens
-	maxTokens = tiers[i].MaxTokens
-
-	if i > 0 && minTokens > 0 {
-		prevMax := tiers[i-1].MaxTokens
-		if prevMax > 0 && minTokens <= prevMax {
-			minTokens = prevMax + 1
-		}
-	}
-
-	return minTokens, maxTokens
 }
 
 
@@ -838,8 +778,12 @@ func ppioWebSearchBase(channelBaseURL string) string {
 func countEffectiveTiers(tiers []TieredBillingConfig) int {
 	count := 0
 
-	for i := range tiers {
-		minTokens, maxTokens := adjustTierBounds(tiers, i)
+	var prevMax int64
+
+	for _, tier := range tiers {
+		minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
+		prevMax = tier.MaxTokens
+
 		if maxTokens > 0 && minTokens > maxTokens {
 			continue
 		}

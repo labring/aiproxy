@@ -14,6 +14,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"gorm.io/gorm"
 )
@@ -23,16 +24,6 @@ var syncMu sync.Mutex
 
 // ErrSyncInProgress is returned when a sync is already running.
 var ErrSyncInProgress = errors.New("a sync operation is already in progress")
-
-// toModelConfigKeys converts map[string]any to map[ModelConfigKey]any without JSON round-trip.
-func toModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
-	out := make(map[model.ModelConfigKey]any, len(m))
-	for k, v := range m {
-		out[model.ModelConfigKey(k)] = v
-	}
-
-	return out
-}
 
 // ExecuteSync performs the actual sync operation with transaction.
 // Always uses FetchAllModelsMerged (V1+V2 merged into V2 format).
@@ -52,7 +43,7 @@ func ExecuteSync(
 		Summary: SyncSummary{},
 	}
 
-	sendProgress(progressCallback, "fetching", "正在获取海外模型列表...", 10, nil)
+	synccommon.SendProgress(progressCallback, "fetching", "正在获取海外模型列表...", 10, nil)
 
 	client, err := NewNovitaClient()
 	if err != nil {
@@ -74,13 +65,13 @@ func ExecuteSync(
 	}
 
 	if unavailCount > 0 {
-		sendProgress(progressCallback, "filtering",
+		synccommon.SendProgress(progressCallback, "filtering",
 			fmt.Sprintf("已过滤 %d 个不可用模型（status≠1）", unavailCount), 20, nil)
 	}
 
 	exchangeRate := cfg.ExchangeRate
 
-	sendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
+	synccommon.SendProgress(progressCallback, "comparing", "对比本地和远程模型...", 30, nil)
 
 	diff, err := CompareNovitaModelsV2(allModels, opts, exchangeRate)
 	if err != nil {
@@ -97,12 +88,12 @@ func ExecuteSync(
 	if opts.DryRun {
 		result.Success = true
 		result.DurationMS = time.Since(startTime).Milliseconds()
-		sendProgress(progressCallback, "complete", "预览完成", 100, result)
+		synccommon.SendProgress(progressCallback, "complete", "预览完成", 100, result)
 
 		return result, nil
 	}
 
-	sendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
+	synccommon.SendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
 
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		return executeSyncTransaction(tx, diff, opts, modelMap, result, progressCallback, exchangeRate)
@@ -111,7 +102,7 @@ func ExecuteSync(
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	sendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
+	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
 	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, cfg)
 	if err != nil {
@@ -134,13 +125,13 @@ func ExecuteSync(
 		log.Printf("failed to refresh model cache after novita sync: %v", err)
 	}
 
-	sendProgress(progressCallback, "recording", "记录同步历史...", 95, nil)
+	synccommon.SendProgress(progressCallback, "recording", "记录同步历史...", 95, nil)
 
 	if err := RecordSyncHistory(opts, result); err != nil {
 		log.Printf("failed to record novita sync history: %v", err)
 	}
 
-	sendProgress(progressCallback, "complete", "同步完成", 100, result)
+	synccommon.SendProgress(progressCallback, "complete", "同步完成", 100, result)
 
 	return result, nil
 }
@@ -159,7 +150,7 @@ func executeSyncTransaction(
 
 	for i, modelDiff := range diff.Changes.Add {
 		progress := 50 + (i * 15 / totalAdd)
-		sendProgress(
+		synccommon.SendProgress(
 			progressCallback, "adding",
 			fmt.Sprintf("添加模型 %s (%d/%d)", modelDiff.ModelID, i+1, len(diff.Changes.Add)),
 			progress, nil,
@@ -183,7 +174,7 @@ func executeSyncTransaction(
 
 	for i, modelDiff := range diff.Changes.Update {
 		progress := 65 + (i * 15 / totalUpdate)
-		sendProgress(
+		synccommon.SendProgress(
 			progressCallback, "updating",
 			fmt.Sprintf("更新模型 %s (%d/%d)", modelDiff.ModelID, i+1, len(diff.Changes.Update)),
 			progress, nil,
@@ -208,7 +199,7 @@ func executeSyncTransaction(
 
 		for i, modelDiff := range diff.Changes.Delete {
 			progress := 80 + (i * 5 / totalDelete)
-			sendProgress(
+			synccommon.SendProgress(
 				progressCallback, "deleting",
 				fmt.Sprintf("删除模型 %s (%d/%d)", modelDiff.ModelID, i+1, len(diff.Changes.Delete)),
 				progress, nil,
@@ -230,7 +221,7 @@ func executeSyncTransaction(
 // createModelConfigV2 creates a ModelConfig from a V2 Novita model.
 // exchangeRate converts USD prices to CNY before storing.
 func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) error {
-	configData := toModelConfigKeys(buildConfigFromV2Model(m))
+	configData := synccommon.ToModelConfigKeys(buildConfigFromV2Model(m))
 
 	rpm := int64(60)
 	if m.RPM > 0 {
@@ -278,7 +269,7 @@ func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) er
 
 	existing.Owner = model.ModelOwnerNovita
 	existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
-	existing.Config = toModelConfigKeys(buildConfigFromV2Model(m))
+	existing.Config = synccommon.ToModelConfigKeys(buildConfigFromV2Model(m))
 
 	if m.RPM > 0 {
 		existing.RPM = int64(m.RPM)
@@ -314,8 +305,12 @@ func setPriceFromV2Model(price *model.Price, m *NovitaModelV2, exchangeRate floa
 	if m.IsTieredBilling && len(m.TieredBillingConfigs) > 0 {
 		conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
 
-		for i, tier := range m.TieredBillingConfigs {
-			minTokens, maxTokens := adjustTierBounds(m.TieredBillingConfigs, i)
+		var prevMax int64
+
+		for _, tier := range m.TieredBillingConfigs {
+			minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
+			prevMax = tier.MaxTokens
+
 			if maxTokens > 0 && minTokens > maxTokens {
 				continue
 			}
@@ -384,7 +379,7 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 
 	// Derive capability flags from model metadata so the admin UI
 	// can display "tool" / "vision" badges on the model table.
-	if inferToolChoice(m.ModelType, m.Features) {
+	if synccommon.InferToolChoice(m.ModelType, m.Features) {
 		cfg[string(model.ModelConfigToolChoiceKey)] = true
 	}
 	if slices.Contains(m.InputModalities, "image") {
@@ -392,34 +387,6 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 	}
 
 	return cfg
-}
-
-// inferToolChoice returns true when the model is likely to support tool_choice.
-// Signal priority: features list ("tool_use" / "function_calling") > model_type "chat".
-func inferToolChoice(modelType string, features []string) bool {
-	for _, f := range features {
-		switch f {
-		case "tool_use", "function_calling", "tools":
-			return true
-		}
-	}
-	return modelType == "chat"
-}
-
-// adjustTierBounds returns the effective [min, max] for tier i, bumping min by 1
-// when it overlaps with the previous tier's max.
-func adjustTierBounds(tiers []TieredBillingConfig, i int) (minTokens, maxTokens int64) {
-	minTokens = tiers[i].MinTokens
-	maxTokens = tiers[i].MaxTokens
-
-	if i > 0 && minTokens > 0 {
-		prevMax := tiers[i-1].MaxTokens
-		if prevMax > 0 && minTokens <= prevMax {
-			minTokens = prevMax + 1
-		}
-	}
-
-	return minTokens, maxTokens
 }
 
 // EnsureNovitaChannels queries all local ModelConfig entries owned by Novita,
@@ -697,26 +664,4 @@ func RecordSyncHistory(opts SyncOptions, result *SyncResult) error {
 	return model.DB.Create(&history).Error
 }
 
-// sendProgress sends a progress event to the callback if not nil.
-func sendProgress(
-	callback func(event SyncProgressEvent),
-	step, message string,
-	progress int,
-	data any,
-) {
-	if callback != nil {
-		eventType := "progress"
-		if step == "complete" {
-			eventType = "success"
-		}
-
-		callback(SyncProgressEvent{
-			Type:     eventType,
-			Step:     step,
-			Message:  message,
-			Progress: progress,
-			Data:     data,
-		})
-	}
-}
 

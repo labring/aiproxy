@@ -2,7 +2,11 @@
 
 package novita
 
-import "time"
+import (
+	"time"
+
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
+)
 
 // novitaPricePerMDivisor converts Novita's raw price field (万分之一美元/百万token)
 // to USD/token.  raw / novitaPricePerMDivisor = USD/token.
@@ -224,14 +228,8 @@ type SyncResult struct {
 	Channels ChannelsInfo `json:"channels,omitempty"`
 }
 
-// SyncProgressEvent represents a progress event sent via SSE.
-type SyncProgressEvent struct {
-	Type     string `json:"type"`    // "progress", "success", "error"
-	Step     string `json:"step"`    // "fetching", "comparing", "syncing", "complete"
-	Message  string `json:"message"` // Human-readable message
-	Progress int    `json:"progress,omitempty"`
-	Data     any    `json:"data,omitempty"`
-}
+// SyncProgressEvent is an alias for the shared synccommon type.
+type SyncProgressEvent = synccommon.SyncProgressEvent
 
 // DiagnosticResult represents the result of a diagnostic check.
 type DiagnosticResult struct {

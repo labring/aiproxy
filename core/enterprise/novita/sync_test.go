@@ -8,48 +8,6 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
-func TestInferToolChoice(t *testing.T) {
-	tests := []struct {
-		name      string
-		modelType string
-		features  []string
-		want      bool
-	}{
-		{
-			name:      "chat model with no features",
-			modelType: "chat",
-			want:      true,
-		},
-		{
-			name:      "chat model with tool_use",
-			modelType: "chat",
-			features:  []string{"tool_use"},
-			want:      true,
-		},
-		{
-			name:      "embedding model",
-			modelType: "embedding",
-			want:      false,
-		},
-		{
-			name:      "non-chat with function_calling",
-			modelType: "rerank",
-			features:  []string{"function_calling"},
-			want:      true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := inferToolChoice(tt.modelType, tt.features)
-			if got != tt.want {
-				t.Errorf("inferToolChoice(%q, %v) = %v, want %v",
-					tt.modelType, tt.features, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestNovitaResponsesBase(t *testing.T) {
 	cases := []struct {
 		name    string

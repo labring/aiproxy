@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -196,8 +197,12 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exch
 func countEffectiveTiers(tiers []TieredBillingConfig) int {
 	count := 0
 
-	for i := range tiers {
-		minTokens, maxTokens := adjustTierBounds(tiers, i)
+	var prevMax int64
+
+	for _, tier := range tiers {
+		minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
+		prevMax = tier.MaxTokens
+
 		if maxTokens > 0 && minTokens > maxTokens {
 			continue
 		}

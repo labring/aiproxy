@@ -4,6 +4,8 @@ package ppio
 
 import (
 	"time"
+
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
 )
 
 // PPIO model status constants.
@@ -232,14 +234,8 @@ type SyncResult struct {
 	Channels ChannelsInfo `json:"channels,omitempty"`
 }
 
-// SyncProgressEvent represents a progress event sent via SSE
-type SyncProgressEvent struct {
-	Type     string `json:"type"`    // "progress", "success", "error"
-	Step     string `json:"step"`    // "fetching", "comparing", "updating", "complete"
-	Message  string `json:"message"` // Human-readable message
-	Progress int    `json:"progress,omitempty"`
-	Data     any    `json:"data,omitempty"` // Additional data (e.g., SyncResult on success)
-}
+// SyncProgressEvent is an alias for the shared synccommon type.
+type SyncProgressEvent = synccommon.SyncProgressEvent
 
 // DiagnosticResult represents the result of diagnostic check
 type DiagnosticResult struct {
