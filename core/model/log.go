@@ -1288,8 +1288,8 @@ func GetTokenLogs(
 	afterID int,
 	limit int,
 ) (*GetTokenLogsResult, error) {
-	if groupID == "" || tokenName == "" {
-		return nil, errors.New("group and token_name are required")
+	if groupID == "" {
+		return nil, errors.New("group is required")
 	}
 
 	if limit <= 0 {
@@ -1343,65 +1343,4 @@ func GetTokenLogDetail(logID int, groupID, tokenName string) (*RequestDetail, er
 	}
 
 	return getLogDetail(logID, groupID, tokenName)
-}
-
-// GetGroupUserLogs queries logs for an entire group (all tokens) with cursor-based pagination,
-// used by enterprise my-access endpoints where tokenName is unknown.
-func GetGroupUserLogs(
-	groupID string,
-	startTime time.Time,
-	endTime time.Time,
-	modelName string,
-	requestID string,
-	codeType CodeType,
-	afterID int,
-	limit int,
-) (*GetTokenLogsResult, error) {
-	if groupID == "" {
-		return nil, errors.New("group is required")
-	}
-
-	if limit <= 0 {
-		limit = 20
-	} else if limit > 50 {
-		limit = 50
-	}
-
-	tx := buildGetLogsQuery(
-		groupID, startTime, endTime, modelName,
-		requestID, "", 0, "", 0,
-		codeType, 0, "", "",
-	)
-
-	if afterID > 0 {
-		tx = tx.Where("id < ?", afterID)
-	}
-
-	var logs []*Log
-
-	err := tx.
-		Preload("RequestDetail", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id", "log_id")
-		}).
-		Order("created_at DESC, id DESC").
-		Limit(limit + 1).
-		Find(&logs).Error
-	if err != nil {
-		return nil, err
-	}
-
-	hasMore := len(logs) > limit
-	if hasMore {
-		logs = logs[:limit]
-	}
-
-	userLogs := make([]UserLog, len(logs))
-	for i, l := range logs {
-		userLogs[i] = logToUserLog(l)
-	}
-
-	return &GetTokenLogsResult{
-		Logs:    userLogs,
-		HasMore: hasMore,
-	}, nil
 }

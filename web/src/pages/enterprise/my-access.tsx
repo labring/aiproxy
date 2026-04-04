@@ -985,7 +985,6 @@ function RequestLogsSection() {
         [timeRange, customDateRange],
     )
 
-    // Reset logs when filters change
     useEffect(() => {
         setAllLogs([])
         setAfterId(undefined)
@@ -993,16 +992,17 @@ function RequestLogsSection() {
     }, [start, end, modelFilter, codeType])
 
     const { isLoading, isFetching } = useQuery({
-        queryKey: ["my-logs", start, end, modelFilter, codeType, afterId],
-        queryFn: async () => {
+        queryKey: ["my-logs", start, end, modelFilter, codeType, afterId] as const,
+        queryFn: async ({ queryKey }) => {
+            const [, , , , , currentAfterId] = queryKey
             const result = await enterpriseApi.getMyLogs({
                 start_timestamp: start,
                 end_timestamp: end,
                 model_name: modelFilter || undefined,
                 code_type: codeType === "all" ? undefined : codeType,
-                after_id: afterId,
+                after_id: currentAfterId,
             })
-            setAllLogs(prev => afterId ? [...prev, ...result.logs] : result.logs)
+            setAllLogs(prev => currentAfterId ? [...prev, ...result.logs] : result.logs)
             setHasMore(result.has_more)
             return result
         },
@@ -1016,7 +1016,7 @@ function RequestLogsSection() {
 
     const formatTime = (ts: number) => {
         const d = new Date(ts * 1000)
-        return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
     }
 
     return (

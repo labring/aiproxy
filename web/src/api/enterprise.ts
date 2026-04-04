@@ -906,9 +906,7 @@ export const enterpriseApi = {
         after_id?: number
         limit?: number
     }): Promise<GetMyLogsResult> => {
-        const query: Record<string, string> = {}
-        if (params.start_timestamp) query.start_timestamp = String(params.start_timestamp)
-        if (params.end_timestamp) query.end_timestamp = String(params.end_timestamp)
+        const query = buildTimeParams(params.start_timestamp, params.end_timestamp)
         if (params.model_name) query.model_name = params.model_name
         if (params.code_type) query.code_type = params.code_type
         if (params.after_id) query.after_id = String(params.after_id)

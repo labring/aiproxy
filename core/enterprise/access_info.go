@@ -893,28 +893,15 @@ func GetMyLogs(c *gin.Context) {
 		return
 	}
 
-	var startTime, endTime time.Time
-
-	if s := c.Query("start_timestamp"); s != "" {
-		if ts, err := strconv.ParseInt(s, 10, 64); err == nil {
-			startTime = time.Unix(ts, 0)
-		}
-	}
-
-	if e := c.Query("end_timestamp"); e != "" {
-		if ts, err := strconv.ParseInt(e, 10, 64); err == nil {
-			endTime = time.Unix(ts, 0)
-		}
-	}
-
+	startTs, endTs := parseTimestampRange(c)
 	afterID, _ := strconv.Atoi(c.Query("after_id"))
-
 	limit, _ := strconv.Atoi(c.Query("limit"))
 
-	result, err := model.GetGroupUserLogs(
+	result, err := model.GetTokenLogs(
 		feishuUser.GroupID,
-		startTime,
-		endTime,
+		"",
+		time.Unix(startTs, 0),
+		time.Unix(endTs, 0),
 		c.Query("model_name"),
 		c.Query("request_id"),
 		model.CodeType(c.Query("code_type")),
