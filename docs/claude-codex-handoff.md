@@ -216,7 +216,7 @@ Add a user-facing "Request History" section to the enterprise My Access page so 
 - `web/src/pages/enterprise/my-access.tsx` — added `RequestLogsSection` component (time range picker, model filter, status filter, cursor-paginated table, detail dialog)
 - `web/public/locales/zh/translation.json` and `en/translation.json` — 17 new i18n keys under `enterprise.myAccess`
 
-**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`, `7262927`
+**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`, `7262927`, `069425f`
 
 ### 3. Root Cause
 
@@ -238,8 +238,9 @@ Root cause:
 Risk areas:
 - Data isolation: GetMyLogs scopes by feishuUser.GroupID — verify Feishu users cannot query other groups
 - GetTokenLogs unchanged: tokenName guard restored (commit 278248e); relay-dashboard behavior unaffected
-- Timestamp handling: utils.ParseTimeRange defaults to last 7 days when params absent;
-  the relay-dashboard endpoint does NOT have this default — behavior is intentionally different
+- Timestamp handling: utils.ParseTimeRange(c, -1) — no span cap; if both params absent,
+  startTime is zero (no lower bound). Frontend always sends explicit timestamps, so this is safe.
+  relay-dashboard uses ParseTimeRange(c, 0) which caps at 7 days — different by design
 - Cursor pagination: now uses useInfiniteQuery; filter changes create a new query key, old pages are
   discarded by React Query automatically — verify "Load more" still appends correctly
 - has_detail flag: detail button only renders when log.has_detail = true; detail fetch is gated by
@@ -292,4 +293,6 @@ Validation already performed:
   uses dedicated GetGroupUserLogs which explicitly omits tokenName filter
 - Stale-data regression fixed (commit 7262927): RequestLogsSection rewritten with useInfiniteQuery;
   no more state mutations inside queryFn
+- Time range cap bug fixed (commit 069425f): ParseTimeRange(c, -1) — no 7-day clamp on logs endpoint;
+  30-day / last-month / custom ranges now honored end-to-end
 ```
