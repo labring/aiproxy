@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     Copy, Eye, EyeOff, Plus, Ban, ChevronDown, ChevronRight, Search,
     Building2, Globe, Info, ArrowUpDown, ArrowUp, ArrowDown, Settings2, FileText,
@@ -975,9 +975,6 @@ function RequestLogsSection() {
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
     const [modelFilter, setModelFilter] = useState("")
     const [codeType, setCodeType] = useState("all")
-    const [afterId, setAfterId] = useState<number | undefined>()
-    const [allLogs, setAllLogs] = useState<UserLog[]>([])
-    const [hasMore, setHasMore] = useState(false)
     const [detailLog, setDetailLog] = useState<UserLog | null>(null)
 
     const { start, end } = useMemo(
@@ -985,28 +982,29 @@ function RequestLogsSection() {
         [timeRange, customDateRange],
     )
 
-    useEffect(() => {
-        setAllLogs([])
-        setAfterId(undefined)
-        setHasMore(false)
-    }, [start, end, modelFilter, codeType])
-
-    const { isLoading, isFetching } = useQuery({
-        queryKey: ["my-logs", start, end, modelFilter, codeType, afterId] as const,
-        queryFn: async ({ queryKey }) => {
-            const [, , , , , currentAfterId] = queryKey
-            const result = await enterpriseApi.getMyLogs({
-                start_timestamp: start,
-                end_timestamp: end,
-                model_name: modelFilter || undefined,
-                code_type: codeType === "all" ? undefined : codeType,
-                after_id: currentAfterId,
-            })
-            setAllLogs(prev => currentAfterId ? [...prev, ...result.logs] : result.logs)
-            setHasMore(result.has_more)
-            return result
+    const {
+        data,
+        isLoading,
+        isFetchingNextPage,
+        fetchNextPage,
+        hasNextPage,
+    } = useInfiniteQuery({
+        queryKey: ["my-logs", start, end, modelFilter, codeType],
+        queryFn: ({ pageParam }) => enterpriseApi.getMyLogs({
+            start_timestamp: start,
+            end_timestamp: end,
+            model_name: modelFilter || undefined,
+            code_type: codeType === "all" ? undefined : codeType,
+            after_id: pageParam,
+        }),
+        initialPageParam: undefined as number | undefined,
+        getNextPageParam: (lastPage) => {
+            if (!lastPage.has_more) return undefined
+            return lastPage.logs[lastPage.logs.length - 1]?.id
         },
     })
+
+    const allLogs = useMemo(() => data?.pages.flatMap(p => p.logs) ?? [], [data])
 
     const { data: detail, isLoading: detailLoading } = useQuery<RequestDetail>({
         queryKey: ["my-log-detail", detailLog?.id],
@@ -1134,18 +1132,15 @@ function RequestLogsSection() {
                                 </tbody>
                             </table>
                         </div>
-                        {hasMore && (
+                        {hasNextPage && (
                             <div className="flex justify-center">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                        const last = allLogs[allLogs.length - 1]
-                                        if (last) setAfterId(last.id)
-                                    }}
-                                    disabled={isFetching}
+                                    onClick={() => fetchNextPage()}
+                                    disabled={isFetchingNextPage}
                                 >
-                                    {isFetching ? t("enterprise.myAccess.loading" as never) : t("enterprise.myAccess.loadMore" as never)}
+                                    {isFetchingNextPage ? t("enterprise.myAccess.loading" as never) : t("enterprise.myAccess.loadMore" as never)}
                                 </Button>
                             </div>
                         )}
