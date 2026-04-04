@@ -898,9 +898,8 @@ func GetMyLogs(c *gin.Context) {
 	afterID, _ := strconv.Atoi(c.Query("after_id"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 
-	result, err := model.GetTokenLogs(
+	result, err := model.GetGroupUserLogs(
 		feishuUser.GroupID,
-		"",
 		startTime,
 		endTime,
 		c.Query("model_name"),
