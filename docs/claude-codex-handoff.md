@@ -216,7 +216,7 @@ Add a user-facing "Request History" section to the enterprise My Access page so 
 - `web/src/pages/enterprise/my-access.tsx` — added `RequestLogsSection` component (time range picker, model filter, status filter, cursor-paginated table, detail dialog)
 - `web/public/locales/zh/translation.json` and `en/translation.json` — 17 new i18n keys under `enterprise.myAccess`
 
-**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`
+**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`, `7262927`
 
 ### 3. Root Cause
 
@@ -240,8 +240,8 @@ Risk areas:
 - GetTokenLogs unchanged: tokenName guard restored (commit 278248e); relay-dashboard behavior unaffected
 - Timestamp handling: utils.ParseTimeRange defaults to last 7 days when params absent;
   the relay-dashboard endpoint does NOT have this default — behavior is intentionally different
-- Cursor pagination: afterId is managed in frontend state + useEffect; filter changes must correctly
-  reset the cursor and discard stale accumulated logs
+- Cursor pagination: now uses useInfiniteQuery; filter changes create a new query key, old pages are
+  discarded by React Query automatically — verify "Load more" still appends correctly
 - has_detail flag: detail button only renders when log.has_detail = true; detail fetch is gated by
   enabled: !!detailLog?.has_detail — verify behavior when detail storage is disabled globally
 ```
@@ -290,4 +290,6 @@ Validation already performed:
   pass non-empty token.Name from middleware — restored guard is consistent with this
 - Isolation regression fixed (commit 278248e): GetTokenLogs guard restored; enterprise endpoint now
   uses dedicated GetGroupUserLogs which explicitly omits tokenName filter
+- Stale-data regression fixed (commit 7262927): RequestLogsSection rewritten with useInfiniteQuery;
+  no more state mutations inside queryFn
 ```
