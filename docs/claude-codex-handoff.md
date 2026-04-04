@@ -216,7 +216,7 @@ Add a user-facing "Request History" section to the enterprise My Access page so 
 - `web/src/pages/enterprise/my-access.tsx` — added `RequestLogsSection` component (time range picker, model filter, status filter, cursor-paginated table, detail dialog)
 - `web/public/locales/zh/translation.json` and `en/translation.json` — 17 new i18n keys under `enterprise.myAccess`
 
-**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`, `7262927`, `069425f`
+**Commits:** `7a00a11`, `d6114ac`, `393238d`, `278248e`, `7262927`, `069425f`, `4125f9b`
 
 ### 3. Root Cause
 
@@ -283,7 +283,8 @@ Edge cases:
 Validation already performed:
 - go build -tags enterprise ./... passed (no compile errors)
 - pnpm run build passed (no TypeScript errors, chunk size unchanged)
-- Code reviewed by three parallel agents (reuse, quality, efficiency); all findings resolved
+- Code reviewed by three parallel agents (reuse, quality, efficiency) ×3 rounds; all findings resolved
+  - Round 3 fixes (commit 4125f9b): NoSpanLimit constant, modelFilter debounce 400ms, getNextPageParam empty-logs guard
 - UI not browser-verified
 - No integration test run against real DB
 - No enterprise smoke test run
