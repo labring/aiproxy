@@ -54,6 +54,11 @@ const (
 	ChannelTypeZhipuCoding             ChannelType = 52
 	ChannelTypeFake                    ChannelType = 53
 	ChannelTypePPIO                    ChannelType = 54
+	// ChannelTypePPIOMultimodal is for PPIO native multimodal endpoints.
+	// The channel base URL should be "https://api.ppinfra.com" (no path suffix).
+	// Request paths are forwarded verbatim: /v3/{model-id} for sync models,
+	// /v3/async/{model-id} for async models.
+	ChannelTypePPIOMultimodal ChannelType = 55
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -99,4 +104,5 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeZhipuCoding:             "zhipu coding",
 	ChannelTypeFake:                    "fake",
 	ChannelTypePPIO:                    "ppio",
+	ChannelTypePPIOMultimodal:          "ppio multimodal",
 }

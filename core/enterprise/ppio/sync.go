@@ -28,6 +28,9 @@ var syncMu sync.Mutex
 var ErrSyncInProgress = errors.New("a sync operation is already in progress")
 
 // ModelTypeToMode maps PPIO model_type strings to mode.Mode.
+// Multimodal types (image, video, audio) use PPIONative because PPIO serves
+// them on model-ID-embedded paths (/v3/{model-id}) in its own request format,
+// not the standard OpenAI images/video/speech endpoints.
 var ModelTypeToMode = map[string]mode.Mode{
 	"chat":       mode.ChatCompletions,
 	"embedding":  mode.Embeddings,
@@ -35,8 +38,9 @@ var ModelTypeToMode = map[string]mode.Mode{
 	"moderation": mode.Moderations,
 	"tts":        mode.AudioSpeech,
 	"stt":        mode.AudioTranscription,
-	"image":      mode.ImagesGenerations,
-	"video":      mode.VideoGenerationsJobs,
+	"image":      mode.PPIONative,
+	"video":      mode.PPIONative,
+	"audio":      mode.PPIONative,
 }
 
 // endpointSlugToMode maps PPIO endpoint slugs to mode.Mode.
@@ -51,8 +55,8 @@ var endpointSlugToMode = map[string]mode.Mode{
 	"moderations":            mode.Moderations,
 	"audio/speech":           mode.AudioSpeech,
 	"audio/transcriptions":   mode.AudioTranscription,
-	"images/generations":     mode.ImagesGenerations,
-	"video/generations/jobs": mode.VideoGenerationsJobs,
+	"images/generations":     mode.PPIONative,
+	"video/generations/jobs": mode.PPIONative,
 }
 
 // inferModeFromPPIO infers the mode.Mode from PPIO model_type and endpoints.
@@ -338,19 +342,25 @@ func executeSyncTransaction(
 func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
-	if err := model.DB.Select("model", "config").
+	if err := model.DB.Select("model", "type", "config").
 		Where("owner = ?", string(model.ModelOwnerPPIO)).
 		Find(&localModels).Error; err != nil {
 		return ChannelsInfo{}, fmt.Errorf("failed to query local PPIO models: %w", err)
 	}
 
-	var anthropicModels, openaiModels []string
+	var anthropicModels, openaiModels, multimodalModels []string
 
 	for _, mc := range localModels {
 		// Skip models whose stored status indicates they are not available.
 		// This acts as a safety net for models synced before the status filter
 		// was added in ComparePPIOModels/V2.
 		if status, ok := model.GetModelConfigInt(mc.Config, "status"); ok && status != PPIOModelStatusAvailable {
+			continue
+		}
+
+		// PPIONative models (image/video/audio) go to the multimodal channel.
+		if mc.Type == mode.PPIONative {
+			multimodalModels = append(multimodalModels, mc.Model)
 			continue
 		}
 
@@ -365,12 +375,13 @@ func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPa
 
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
+	slices.Sort(multimodalModels)
 
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, multimodalModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
 }
 
 func ensurePPIOChannelsFromModels(
-	anthropicModels, openaiModels []string,
+	anthropicModels, openaiModels, multimodalModels []string,
 	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
@@ -390,7 +401,7 @@ func ensurePPIOChannelsFromModels(
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
 		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
-		created, createErr := createPPIOChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels)
+		created, createErr := createPPIOChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels, multimodalModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -404,8 +415,12 @@ func ensurePPIOChannelsFromModels(
 	info.PPIO.Exists = true
 	info.PPIO.ID = channels[0].ID
 
+	// Track whether a multimodal channel exists so we can create one if needed.
+	hasMultimodal := false
+
 	for i := range channels {
-		if channels[i].Type == model.ChannelTypeAnthropic {
+		switch channels[i].Type {
+		case model.ChannelTypeAnthropic:
 			channels[i].Models = anthropicModels
 			// Ensure recommended defaults for PPIO's Anthropic endpoint:
 			// skip_image_conversion — PPIO natively supports URL image sources
@@ -421,7 +436,19 @@ func ensurePPIOChannelsFromModels(
 				channels[i].Configs["disable_context_management"] = true
 			}
 			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
-		} else {
+
+		case model.ChannelTypePPIOMultimodal:
+			hasMultimodal = true
+			channels[i].Models = multimodalModels
+			if channels[i].Configs == nil {
+				channels[i].Configs = make(model.ChannelConfigs)
+			}
+			// Multimodal channel always allows passthrough for auto-discovery of
+			// new models not yet in the management API.
+			channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = true
+
+		default:
+			// ChannelTypePPIO (OpenAI-compatible)
 			channels[i].Models = openaiModels
 			// Write path_base_map so the passthrough adaptor can route
 			// Responses API and web-search to their respective base URLs
@@ -441,12 +468,31 @@ func ensurePPIOChannelsFromModels(
 		}
 	}
 
+	// If no multimodal channel exists yet, create one now.
+	if !hasMultimodal && autoCreate && cfg.APIKey != "" {
+		mlCh := model.Channel{
+			Name:    "PPIO (Multimodal)",
+			Type:    model.ChannelTypePPIOMultimodal,
+			BaseURL: DefaultPPIOMultimodalBase,
+			Key:     cfg.APIKey,
+			Models:  multimodalModels,
+			Status:  model.ChannelStatusEnabled,
+			Configs: model.ChannelConfigs{
+				model.ChannelConfigAllowPassthroughUnknown: true,
+			},
+		}
+		if err := model.DB.Create(&mlCh).Error; err != nil {
+			log.Printf("PPIO sync: failed to create multimodal channel: %v", err)
+		}
+	}
+
 	return info, nil
 }
 
 // createPPIOChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
-func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+// It always creates a multimodal channel (type=55) for image/video/audio models.
+func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels, multimodalModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultPPIOAPIBase
@@ -499,6 +545,28 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, all
 
 			created = append(created, anthropicCh)
 		}
+
+		// Always create the multimodal channel so auto-discovery can work even
+		// before any multimodal models are synced from the management API.
+		multimodalCh := model.Channel{
+			Name:    "PPIO (Multimodal)",
+			Type:    model.ChannelTypePPIOMultimodal,
+			BaseURL: DefaultPPIOMultimodalBase,
+			Key:     cfg.APIKey,
+			Models:  multimodalModels,
+			Status:  model.ChannelStatusEnabled,
+			Configs: model.ChannelConfigs{
+				// Always allow passthrough so that new models can be discovered on
+				// first use even before they appear in the management API listing.
+				model.ChannelConfigAllowPassthroughUnknown: true,
+			},
+		}
+
+		if err := tx.Create(&multimodalCh).Error; err != nil {
+			return fmt.Errorf("failed to create PPIO multimodal channel: %w", err)
+		}
+
+		created = append(created, multimodalCh)
 
 		return nil
 	})

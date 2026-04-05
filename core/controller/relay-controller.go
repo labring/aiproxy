@@ -52,6 +52,18 @@ type RelayController struct {
 	Handler               RelayHandler
 }
 
+// unknownMode is an alias for mode.Unknown used inside relay() where the
+// function parameter named "mode" shadows the "mode" package import.
+const unknownMode = mode.Unknown
+
+// PassthroughSuccessHook is called in a background goroutine the first time a
+// request for an unregistered (passthrough-unknown) model succeeds. The hook
+// receives the channel ID, channel type, and the original model name.
+// It is intended for auto-discovery: the enterprise PPIO package registers a
+// handler here to look up the model's pricing and create a ModelConfig entry.
+// The hook is nil by default (no-op).
+var PassthroughSuccessHook func(ctx context.Context, channelID int, channelType model.ChannelType, modelName string)
+
 var adaptorStore adaptor.Store = &storeImpl{}
 
 type storeImpl struct{}
@@ -270,6 +282,17 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 
 	// First attempt
 	result, retry := RelayHelper(c, meta, relayController.Handler)
+
+	// Auto-discovery: when a passthrough-unknown model succeeds for the first
+	// time, fire the hook in a background goroutine so the caller receives the
+	// response without waiting for model registration to complete.
+	if result.Error == nil &&
+		meta.ChannelConfigs.GetBool(model.ChannelConfigAllowPassthroughUnknown) &&
+		meta.ModelConfig.Type == unknownMode {
+		if h := PassthroughSuccessHook; h != nil {
+			go h(context.Background(), meta.Channel.ID, meta.Channel.Type, meta.OriginModel)
+		}
+	}
 
 	retryTimes := int(config.GetRetryTimes())
 	if mc.RetryTimes > 0 {

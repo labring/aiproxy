@@ -7,6 +7,16 @@ import (
 )
 
 func SetRelayRouter(router *gin.Engine) {
+	// PPIO native multimodal API — /v3/* paths forward the model ID in the URL.
+	// Supported patterns:
+	//   POST /v3/:model_id           — sync image models (e.g. seedream-5.0-lite)
+	//   POST /v3/async/:model_id     — async image/video/audio models
+	//   GET  /v3/async/task-result   — task result polling
+	//   POST /v3/video/create        — unified video generation endpoint
+	v3Router := router.Group("/v3")
+	v3Router.Use(middleware.IPBlock, middleware.TokenAuth)
+	v3Router.Any("/*path", controller.PPIONative()...)
+
 	// https://platform.openai.com/docs/api-reference/introduction
 	v1Router := router.Group("/v1")
 	v1Router.Use(middleware.IPBlock, middleware.TokenAuth)

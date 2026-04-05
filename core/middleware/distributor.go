@@ -679,6 +679,24 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		modelName, _, _ = strings.Cut(modelName, ":")
 
 		return modelName, nil
+
+	case m == mode.PPIONative:
+		// Model is embedded in the URL path under /v3/:
+		//   /v3/seedream-5.0-lite            → seedream-5.0-lite   (sync)
+		//   /v3/async/jimeng-txt2img-v3.1    → jimeng-txt2img-v3.1 (async)
+		//   /v3/async/task-result (GET)      → ppio/async/task-result
+		//   /v3/video/create                 → ppio/video/create
+		p := strings.TrimPrefix(path, "/v3/")
+		if strings.HasPrefix(p, "async/") {
+			p = strings.TrimPrefix(p, "async/")
+		}
+		// Fixed endpoints that don't correspond to a model ID.
+		if p == "task-result" || p == "video/create" {
+			return "ppio/" + p, nil
+		}
+
+		return p, nil
+
 	default:
 		body, err := common.GetRequestBodyReusable(c.Request)
 		if err != nil {

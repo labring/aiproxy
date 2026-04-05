@@ -33,6 +33,7 @@ import (
 	_ "github.com/labring/aiproxy/core/relay/adaptor/openai"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/openrouter"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/ppio"
+	_ "github.com/labring/aiproxy/core/relay/adaptor/ppioml"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/qianfan"
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/sangforaicp"

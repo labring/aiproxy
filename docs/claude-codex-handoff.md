@@ -300,7 +300,113 @@ Validation already performed:
 
 ---
 
-## Active Handoff — 2026-04-04 (Pure Passthrough + NativeModeChecker)
+## Past Handoff — 2026-04-05 (AllowPassthroughUnknown Sync Toggle)
+
+### 1. Goal
+
+Expose `allow_passthrough_unknown` as a first-class sync option for PPIO and Novita channels, mirroring the `anthropic_pure_passthrough` pattern. The backend routing logic already existed (`model/cache.go:1047`, `controller/relay-channel.go:187`); this change closes the management gap by wiring it through the sync path and adding a frontend toggle with description.
+
+### 2. Scope
+
+**Backend:**
+
+- `core/model/channel.go` — added `ChannelConfigs.SetOrInit(key, override *bool, def bool)` helper (write if non-nil, init to default only if key absent)
+- `core/enterprise/ppio/types.go` — added `AllowPassthroughUnknown *bool` to `SyncOptions`
+- `core/enterprise/ppio/sync.go` — threaded `allowPassthroughUnknown *bool` through `EnsurePPIOChannels` → `ensurePPIOChannelsFromModels` → `createPPIOChannels`; replaced 5-line duplicate `*bool` write-or-init blocks with `SetOrInit` calls
+- `core/enterprise/novita/types.go` — same as ppio/types.go
+- `core/enterprise/novita/sync.go` — same threading pattern; replaced duplicate blocks with `SetOrInit`
+- `core/enterprise/init.go` — startup `Ensure*` calls pass `nil` for new parameter (preserve existing on boot)
+- `core/enterprise/ppio/sync_channels_test.go` — added `allowUnknown` param, assertion for `allow_passthrough_unknown`
+- `core/enterprise/novita/sync_channels_test.go` — same
+
+**Frontend:**
+
+- `web/src/types/ppio.ts` — added `allow_passthrough_unknown?: boolean` to `SyncOptions`
+- `web/src/types/novita.ts` — same
+- `web/src/pages/enterprise/ppio-sync.tsx` — added "透传未注册模型" Switch toggle after `anthropic-pure-passthrough`
+- `web/src/pages/enterprise/novita-sync.tsx` — same
+- `web/public/locales/zh/translation.json` — 2 keys per provider: `allowPassthroughUnknown`, `allowPassthroughUnknownHint`
+- `web/public/locales/en/translation.json` — same
+
+**Commits:** `52f193e` (feat: 同步页新增透传未注册模型开关), `e092703` (refactor: 提取 ChannelConfigs.SetOrInit)
+
+### 3. Root Cause
+
+```text
+Root cause:
+- Symptom: allow_passthrough_unknown had full routing logic in the backend (model cache + channel
+  selector) and a UI config entry in the channel detail page, but no way to set it during the
+  PPIO/Novita sync flow — users had to manually edit channel configs after every sync.
+- Cause: AnthropicPurePassthrough was added as a dedicated sync option but allow_passthrough_unknown
+  was not, leaving a management gap.
+- Fix rationale:
+  - Added AllowPassthroughUnknown *bool to SyncOptions with nil-semantics (nil = preserve, non-nil
+    = override), matching the nil-passthrough pattern already used for anthropicPurePassthrough.
+  - Daily scheduled sync (runPPIO/NovitaDailySync) does not set this field, so it passes nil →
+    never overwrites the admin's choice. Only explicit UI sync triggers the override.
+  - Startup channel refresh also passes nil → existing channel configs preserved on restart.
+  - SetOrInit helper extracted from 4 duplicate 5-line *bool write-or-init patterns.
+```
+
+### 4. Risk Areas
+
+```text
+Risk areas:
+- AnthropicPurePassthrough bool (not *bool): still uses bool zero-value semantics. If a client omits
+  the JSON field, it silently becomes false, which could reset an admin's enabled setting on the next
+  sync. Currently safe because the frontend always sends the current toggle state. Deferred to a
+  future refactor when a 3rd toggle is added and a SyncOptions struct refactor is warranted.
+- SetOrInit is a ChannelConfigs (map) method — map must be initialized before calling. Both sync
+  paths guarantee non-nil configs before calling Set/Init (createPPIOChannels uses literal init,
+  ensurePPIOChannelsFromModels loads from DB + type-asserts). No nil-map panic risk.
+- Parameter count: EnsurePPIOChannels/EnsureNovitaChannels now have 4 positional params. Adding a
+  3rd bool toggle would require changes to signature, 3 internal helpers, 2 callers, and tests.
+```
+
+### 5. Suggested Verification
+
+```text
+Suggested verification:
+
+API (PPIO sync):
+- POST sync with allow_passthrough_unknown=true → verify Channel 3 Configs["allow_passthrough_unknown"]=true
+- POST sync with allow_passthrough_unknown=false → verify Channel 3 Configs["allow_passthrough_unknown"]=false
+- POST sync without allow_passthrough_unknown field → verify existing config value is preserved
+
+Routing behavior (with allow_passthrough_unknown=true on PPIO OpenAI channel):
+- Request model not in channel's Models list → should route to PPIO channel as fallback
+- Request model in another channel's list → should prefer that channel (allow_passthrough_unknown is fallback only)
+
+UI:
+- PPIO sync page → "透传未注册模型 / Passthrough unregistered models" toggle visible
+- Toggle ON → sync → verify channel config updated; toggle OFF → sync → verify reset
+- Novita sync page → same toggle visible and functional
+- Hint text: "当开启后，未在模型列表中的模型请求将兜底路由到此渠道，不计费用" visible on hover/below label
+
+Edge cases:
+- Channel config has no allow_passthrough_unknown key, sync called with nil → key remains absent
+- Channel config has allow_passthrough_unknown=true, startup refresh → key stays true (nil passes through)
+```
+
+### 6. Validation Already Performed
+
+```text
+Validation already performed:
+- go build -tags enterprise -trimpath -ldflags "-s -w" ./... passed (init.go callers updated to 4-param)
+- pnpm run build passed (no TypeScript errors)
+- Three parallel simplify review agents; two findings fixed:
+  - SetOrInit helper extracted (consolidates 4 duplicate write-or-init patterns)
+  - Test callsites updated to pass new allowPassthroughUnknown parameter
+- Unit tests: go test ./enterprise/ppio/... and ./enterprise/novita/... passed in previous session
+- UI not browser-verified beyond visual inspection
+- No integration test against real PPIO/Novita API
+- No enterprise smoke test run
+- Routing behavior (allow_passthrough_unknown=true fallback) not verified end-to-end
+```
+
+---
+
+## Past Handoff — 2026-04-04 (Pure Passthrough + NativeModeChecker)
 
 ### 1. Goal
 

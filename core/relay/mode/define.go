@@ -52,6 +52,8 @@ func (m Mode) String() string {
 		return "Gemini"
 	case WebSearch:
 		return "WebSearch"
+	case PPIONative:
+		return "PPIONative"
 	default:
 		return fmt.Sprintf("Mode(%d)", m)
 	}
@@ -81,4 +83,8 @@ const (
 	ResponsesInputItems
 	Gemini
 	WebSearch
+	// PPIONative is for PPIO multimodal models (image/video/audio) that use
+	// model-ID-embedded URL paths (/v3/{model-id} or /v3/async/{model-id}).
+	// The request/response bodies are forwarded verbatim in PPIO's native format.
+	PPIONative
 )

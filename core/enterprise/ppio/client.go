@@ -17,6 +17,9 @@ import (
 const (
 	DefaultPPIOAPIBase        = "https://api.ppinfra.com/v3/openai"
 	DefaultPPIOAnthropicBase  = "https://api.ppinfra.com/anthropic"
+	// DefaultPPIOMultimodalBase is the base URL for PPIO native multimodal channels
+	// (image, video, audio). The path suffix is provided by the request itself.
+	DefaultPPIOMultimodalBase = "https://api.ppinfra.com"
 	ppioModelsEndpoint        = "https://api.ppinfra.com/v3/openai/models"
 	ppioMgmtModelsEndpoint    = "https://api-server.ppinfra.com/v1/product/model/list"
 	defaultPPIOTimeout        = 30 * time.Second
@@ -145,45 +148,49 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 	return mgmtResp.Data, nil
 }
 
+// multimodalModelTypes lists the PPIO management API model_type values that
+// cover non-chat multimodal models. Each requires its own API request since
+// the default ?visibility=1 query only returns chat-family models.
+var multimodalModelTypes = []string{"embedding", "image", "video", "audio"}
+
 // FetchAllModels fetches the full model catalog (including pa/ closed-source models)
 // via the PPIO management API using the mgmt console token.
 //
 // PPIO's list API only returns chat-type models when queried with ?visibility=1.
-// Non-chat types (e.g. embedding) require a separate ?model_type=<type> request.
-// Currently only embedding models exist in non-chat categories; the function makes
-// one extra request to merge them in.
+// Non-chat types (embedding, image, video, audio) require separate requests.
 func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
 	defer cancel()
 
 	// Fetch chat models (the bulk of the catalog, including pa/ closed-source).
-	chatModels, err := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1")
+	allModels, err := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1")
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch embedding models separately — they are not returned by ?visibility=1.
-	// Use visibility=1 to include pa/ closed-source embedding models alongside public ones.
-	embeddingModels, embErr := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1&model_type=embedding")
-	if embErr != nil {
-		log.Printf("PPIO sync: failed to fetch embedding models (non-fatal): %v", embErr)
-		return chatModels, nil
+	// Build a set of already-fetched model IDs to avoid duplicates.
+	seen := make(map[string]struct{}, len(allModels))
+	for _, m := range allModels {
+		seen[m.ID] = struct{}{}
 	}
 
-	// Merge: skip any embedding model already present in the chat list (shouldn't
-	// happen in practice but guards against API changes).
-	chatSet := make(map[string]struct{}, len(chatModels))
-	for _, m := range chatModels {
-		chatSet[m.ID] = struct{}{}
-	}
+	// Fetch each non-chat type separately and merge.
+	for _, modelType := range multimodalModelTypes {
+		extra, extraErr := c.fetchMgmtModels(ctx, mgmtToken, "?model_type="+modelType)
+		if extraErr != nil {
+			log.Printf("PPIO sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
+			continue
+		}
 
-	for _, m := range embeddingModels {
-		if _, exists := chatSet[m.ID]; !exists {
-			chatModels = append(chatModels, m)
+		for _, m := range extra {
+			if _, exists := seen[m.ID]; !exists {
+				seen[m.ID] = struct{}{}
+				allModels = append(allModels, m)
+			}
 		}
 	}
 
-	return chatModels, nil
+	return allModels, nil
 }
 
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs

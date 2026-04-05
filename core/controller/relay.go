@@ -485,3 +485,12 @@ func WebSearch() []gin.HandlerFunc {
 		NewRelay(mode.WebSearch),
 	}
 }
+
+// PPIONative handles PPIO native multimodal API requests on /v3/* paths.
+// The model name is extracted from the URL path (e.g. /v3/seedream-5.0-lite).
+func PPIONative() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.PPIONative),
+		NewRelay(mode.PPIONative),
+	}
+}

@@ -68,6 +68,7 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 	info, err := ensurePPIOChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
+		[]string{"seedream-5.0-lite"},
 		false,
 		&purePassthrough,
 		&allowUnknown,
@@ -145,16 +146,18 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 		false,
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
+		[]string{"seedream-5.0-lite"},
 	)
 	if err != nil {
 		t.Fatalf("createPPIOChannels returned error: %v", err)
 	}
 
-	if len(created) != 2 {
-		t.Fatalf("expected 2 created channels, got %d", len(created))
+	// OpenAI + Anthropic + Multimodal
+	if len(created) != 3 {
+		t.Fatalf("expected 3 created channels, got %d", len(created))
 	}
 
-	var anthropicFound bool
+	var anthropicFound, multimodalFound bool
 	for _, ch := range created {
 		switch ch.Type {
 		case model.ChannelTypeAnthropic:
@@ -171,10 +174,21 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 			if gotBase := pathBaseMap[ppiorelay.PathPrefixResponses]; gotBase != ppioResponsesBase(DefaultPPIOAPIBase) {
 				t.Fatalf("responses base = %q, want %q", gotBase, ppioResponsesBase(DefaultPPIOAPIBase))
 			}
+		case model.ChannelTypePPIOMultimodal:
+			multimodalFound = true
+			if !ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown) {
+				t.Fatalf("multimodal allow_passthrough_unknown = false, want true")
+			}
+			if ch.BaseURL != DefaultPPIOMultimodalBase {
+				t.Fatalf("multimodal base_url = %q, want %q", ch.BaseURL, DefaultPPIOMultimodalBase)
+			}
 		}
 	}
 
 	if !anthropicFound {
 		t.Fatalf("expected anthropic channel to be created")
+	}
+	if !multimodalFound {
+		t.Fatalf("expected multimodal channel to be created")
 	}
 }
