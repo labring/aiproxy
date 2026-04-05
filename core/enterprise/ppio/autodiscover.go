@@ -6,11 +6,17 @@ import (
 	"context"
 	"log"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
+
+// discoverGroup collapses concurrent auto-discovery calls for the same model
+// into a single execution, preventing redundant DB writes and cache rebuilds.
+var discoverGroup singleflight.Group
 
 func init() {
 	controller.PassthroughSuccessHook = onPassthroughFirstSuccess
@@ -26,6 +32,15 @@ func onPassthroughFirstSuccess(ctx context.Context, _ int, channelType model.Cha
 		return
 	}
 
+	// singleflight collapses concurrent calls for the same model into one
+	// execution, preventing redundant DB writes and cache rebuilds.
+	discoverGroup.Do(modelName, func() (any, error) { //nolint:errcheck
+		doDiscover(ctx, modelName)
+		return nil, nil
+	})
+}
+
+func doDiscover(ctx context.Context, modelName string) {
 	// Guard: skip if the model was already registered between the relay
 	// response and this goroutine being scheduled.
 	var count int64
@@ -88,12 +103,6 @@ func registerPPIONativeModel(modelName string, remoteModel *PPIOModelV2) error {
 	}
 
 	if remoteModel != nil {
-		mc.Type = inferModeFromPPIO(remoteModel.ModelType, remoteModel.Endpoints)
-		if mc.Type != mode.PPIONative {
-			// If the management API classifies this model differently (e.g. as
-			// chat), honour that classification.
-			mc.Type = mode.PPIONative
-		}
 		mc.Config = synccommon.ToModelConfigKeys(buildConfigFromPPIOModelV2(remoteModel))
 		if remoteModel.RPM > 0 {
 			mc.RPM = int64(remoteModel.RPM)

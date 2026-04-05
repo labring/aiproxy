@@ -470,23 +470,30 @@ func ensurePPIOChannelsFromModels(
 
 	// If no multimodal channel exists yet, create one now.
 	if !hasMultimodal && autoCreate && cfg.APIKey != "" {
-		mlCh := model.Channel{
-			Name:    "PPIO (Multimodal)",
-			Type:    model.ChannelTypePPIOMultimodal,
-			BaseURL: DefaultPPIOMultimodalBase,
-			Key:     cfg.APIKey,
-			Models:  multimodalModels,
-			Status:  model.ChannelStatusEnabled,
-			Configs: model.ChannelConfigs{
-				model.ChannelConfigAllowPassthroughUnknown: true,
-			},
-		}
+		mlCh := newPPIOMultimodalChannel(cfg.APIKey, multimodalModels)
 		if err := model.DB.Create(&mlCh).Error; err != nil {
 			log.Printf("PPIO sync: failed to create multimodal channel: %v", err)
 		}
 	}
 
 	return info, nil
+}
+
+// newPPIOMultimodalChannel builds the Channel struct for a PPIO native
+// multimodal channel. Used by both createPPIOChannels (initial creation) and
+// ensurePPIOChannelsFromModels (late creation when existing channels lack one).
+func newPPIOMultimodalChannel(apiKey string, models []string) model.Channel {
+	return model.Channel{
+		Name:    "PPIO (Multimodal)",
+		Type:    model.ChannelTypePPIOMultimodal,
+		BaseURL: DefaultPPIOMultimodalBase,
+		Key:     apiKey,
+		Models:  models,
+		Status:  model.ChannelStatusEnabled,
+		Configs: model.ChannelConfigs{
+			model.ChannelConfigAllowPassthroughUnknown: true,
+		},
+	}
 }
 
 // createPPIOChannels creates the OpenAI-compatible channel and, if there are
@@ -548,19 +555,7 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, all
 
 		// Always create the multimodal channel so auto-discovery can work even
 		// before any multimodal models are synced from the management API.
-		multimodalCh := model.Channel{
-			Name:    "PPIO (Multimodal)",
-			Type:    model.ChannelTypePPIOMultimodal,
-			BaseURL: DefaultPPIOMultimodalBase,
-			Key:     cfg.APIKey,
-			Models:  multimodalModels,
-			Status:  model.ChannelStatusEnabled,
-			Configs: model.ChannelConfigs{
-				// Always allow passthrough so that new models can be discovered on
-				// first use even before they appear in the management API listing.
-				model.ChannelConfigAllowPassthroughUnknown: true,
-			},
-		}
+		multimodalCh := newPPIOMultimodalChannel(cfg.APIKey, multimodalModels)
 
 		if err := tx.Create(&multimodalCh).Error; err != nil {
 			return fmt.Errorf("failed to create PPIO multimodal channel: %w", err)
