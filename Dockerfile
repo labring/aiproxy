@@ -10,6 +10,8 @@ RUN CI=true pnpm install && pnpm run build
 
 FROM golang:1.26-alpine AS builder
 
+ENV GOPROXY=https://goproxy.cn,direct
+
 WORKDIR /aiproxy/core
 
 COPY ./ /aiproxy
