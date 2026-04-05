@@ -153,6 +153,34 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 // the default ?visibility=1 query only returns chat-family models.
 var multimodalModelTypes = []string{"embedding", "image", "video", "audio"}
 
+// ppioKnownNativeModels lists PPIO V3 native multimodal models that are callable
+// via /v3/{model-id} but absent from both the public V1 catalog and the management
+// V2 API. They are merged into FetchAllModelsMerged as a fallback so that sync
+// creates model_config entries for them even when the catalog API doesn't expose
+// them. Pricing defaults to zero and should be configured by an admin if needed.
+var ppioKnownNativeModels = []PPIOModelV2{
+	{
+		ID:               "gemini-3-pro-image-text-to-image",
+		Title:            "Gemini 3 Pro (Text to Image)",
+		ModelType:        "image",
+		Status:           PPIOModelStatusAvailable,
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		Features:         []string{},
+		Tags:             []any{},
+	},
+	{
+		ID:               "gemini-3-pro-image-edit",
+		Title:            "Gemini 3 Pro (Image Edit)",
+		ModelType:        "image",
+		Status:           PPIOModelStatusAvailable,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Features:         []string{},
+		Tags:             []any{},
+	},
+}
+
 // FetchAllModels fetches the full model catalog (including pa/ closed-source models)
 // via the PPIO management API using the mgmt console token.
 //
@@ -212,7 +240,7 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 
 		if v1Err != nil {
 			log.Printf("PPIO sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
-			return v2Models, nil
+			v1Models = nil // treat as empty; fall through to known-model merge
 		}
 	} else {
 		// No mgmt token — V1 is the only source
@@ -229,7 +257,15 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 
 	for _, m := range v1Models {
 		if _, exists := v2Set[m.ID]; !exists {
+			v2Set[m.ID] = struct{}{} // keep set current for known-model dedup below
 			v2Models = append(v2Models, m.ToV2())
+		}
+	}
+
+	// Append known native models absent from all catalog sources.
+	for _, km := range ppioKnownNativeModels {
+		if _, exists := v2Set[km.ID]; !exists {
+			v2Models = append(v2Models, km)
 		}
 	}
 
