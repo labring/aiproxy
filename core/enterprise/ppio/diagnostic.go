@@ -227,6 +227,12 @@ func compareModelConfigs(local *model.ModelConfig, remote *PPIOModel) []string {
 		changes = append(changes, "config updated")
 	}
 
+	// catches responses-only reclassification
+	expectedType := inferModeFromPPIO(remote.ModelType, remote.Endpoints)
+	if local.Type != expectedType {
+		changes = append(changes, fmt.Sprintf("type: %s → %s", local.Type, expectedType))
+	}
+
 	return changes
 }
 
@@ -285,7 +291,7 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *PPIOModelV2) []stri
 		changes = append(changes, "config updated")
 	}
 
-	// Compare Type (mode) — catches responses-only reclassification
+	// catches responses-only reclassification
 	expectedType := inferModeFromPPIO(remote.ModelType, remote.Endpoints)
 	if local.Type != expectedType {
 		changes = append(changes, fmt.Sprintf("type: %s → %s", local.Type, expectedType))

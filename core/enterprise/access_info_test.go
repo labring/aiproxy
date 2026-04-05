@@ -3,595 +3,391 @@
 package enterprise
 
 import (
-	"slices"
-	"strings"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/enterprise/models"
+	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
-	"github.com/labring/aiproxy/core/relay/mode"
 )
 
-// --- getSupportedEndpoints ---
+func setupAccessInfoTestDB(t *testing.T) {
+	t.Helper()
 
-func TestGetSupportedEndpoints_ChatFamily(t *testing.T) {
-	// ChatCompletions, Completions, Anthropic, Gemini → 3 chat-family endpoints (no /responses)
-	chatFamilyModes := []mode.Mode{
-		mode.ChatCompletions,
-		mode.Completions,
-		mode.Anthropic,
-		mode.Gemini,
+	prevDB := model.DB
+	prevLogDB := model.LogDB
+	prevUsingSQLite := common.UsingSQLite
+
+	testDB, err := model.OpenSQLite(filepath.Join(t.TempDir(), "enterprise-access-info.db"))
+	if err != nil {
+		t.Fatalf("failed to open sqlite db: %v", err)
 	}
-	want := endpointsChatFamily
-	for _, m := range chatFamilyModes {
-		got := getSupportedEndpoints(m)
-		if len(got) != len(want) {
-			t.Errorf("mode %s: got %d endpoints, want %d", m, len(got), len(want))
-			continue
-		}
-		for i, ep := range got {
-			if ep != want[i] {
-				t.Errorf("mode %s [%d]: got %q, want %q", m, i, ep, want[i])
-			}
-		}
+
+	model.DB = testDB
+	model.LogDB = testDB
+	common.UsingSQLite = true
+
+	t.Cleanup(func() {
+		model.DB = prevDB
+		model.LogDB = prevLogDB
+		common.UsingSQLite = prevUsingSQLite
+	})
+
+	if err := testDB.AutoMigrate(&model.Log{}, &model.RequestDetail{}, &models.FeishuUser{}); err != nil {
+		t.Fatalf("failed to migrate test tables: %v", err)
 	}
 }
 
-func TestGetSupportedEndpoints_ResponsesOnly(t *testing.T) {
-	got := getSupportedEndpoints(mode.Responses)
-	want := endpointsResponsesOnly
-	if len(got) != len(want) {
-		t.Errorf("Responses: got %d endpoints %v, want %d", len(got), got, len(want))
+func makeEnterpriseContext(t *testing.T, rawQuery string, enterpriseUser *models.FeishuUser) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	reqURL := "/api/enterprise/my-access/logs"
+	if rawQuery != "" {
+		reqURL += "?" + rawQuery
 	}
-	if len(got) > 0 && got[0] != "POST /v1/responses" {
-		t.Errorf("Responses: got %v, want [POST /v1/responses]", got)
+
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+	c.Request = req
+	if enterpriseUser != nil {
+		c.Set(CtxEnterpriseUser, enterpriseUser)
 	}
+
+	return c, recorder
 }
 
-func TestGetSupportedEndpoints_Embeddings(t *testing.T) {
-	got := getSupportedEndpoints(mode.Embeddings)
-	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
-		t.Errorf("Embeddings: got %v", got)
+func makeDetailContext(t *testing.T, logID string, enterpriseUser *models.FeishuUser) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(http.MethodGet, "/api/enterprise/my-access/logs/"+logID, nil)
+	c.Request = req
+	c.Params = gin.Params{{Key: "log_id", Value: logID}}
+	if enterpriseUser != nil {
+		c.Set(CtxEnterpriseUser, enterpriseUser)
 	}
+
+	return c, recorder
 }
 
-func TestGetSupportedEndpoints_Moderations(t *testing.T) {
-	got := getSupportedEndpoints(mode.Moderations)
-	if len(got) != 1 || got[0] != "POST /v1/moderations" {
-		t.Errorf("Moderations: got %v", got)
-	}
-}
+func createLog(t *testing.T, l model.Log, detail *model.RequestDetail) model.Log {
+	t.Helper()
 
-func TestGetSupportedEndpoints_Images(t *testing.T) {
-	for _, m := range []mode.Mode{mode.ImagesGenerations, mode.ImagesEdits} {
-		got := getSupportedEndpoints(m)
-		if len(got) != 2 {
-			t.Errorf("mode %s: expected 2 image endpoints, got %v", m, got)
-		}
+	if err := model.LogDB.Create(&l).Error; err != nil {
+		t.Fatalf("failed to create log %d: %v", l.ID, err)
 	}
-}
 
-func TestGetSupportedEndpoints_AudioSpeech(t *testing.T) {
-	got := getSupportedEndpoints(mode.AudioSpeech)
-	if len(got) != 1 || got[0] != "POST /v1/audio/speech" {
-		t.Errorf("AudioSpeech: got %v", got)
-	}
-}
-
-func TestGetSupportedEndpoints_AudioTranscription(t *testing.T) {
-	got := getSupportedEndpoints(mode.AudioTranscription)
-	if len(got) != 1 || got[0] != "POST /v1/audio/transcriptions" {
-		t.Errorf("AudioTranscription: got %v", got)
-	}
-}
-
-func TestGetSupportedEndpoints_AudioTranslation(t *testing.T) {
-	got := getSupportedEndpoints(mode.AudioTranslation)
-	if len(got) != 1 || got[0] != "POST /v1/audio/translations" {
-		t.Errorf("AudioTranslation: got %v", got)
-	}
-}
-
-func TestGetSupportedEndpoints_Rerank(t *testing.T) {
-	got := getSupportedEndpoints(mode.Rerank)
-	if len(got) != 1 || got[0] != "POST /v1/rerank" {
-		t.Errorf("Rerank: got %v", got)
-	}
-}
-
-func TestGetSupportedEndpoints_ParsePdf(t *testing.T) {
-	got := getSupportedEndpoints(mode.ParsePdf)
-	if len(got) != 1 || got[0] != "POST /v1/parse/pdf" {
-		t.Errorf("ParsePdf: got %v", got)
-	}
-}
-
-func TestGetSupportedEndpoints_Video(t *testing.T) {
-	videoModes := []mode.Mode{
-		mode.VideoGenerationsJobs,
-		mode.VideoGenerationsGetJobs,
-		mode.VideoGenerationsContent,
-	}
-	for _, m := range videoModes {
-		got := getSupportedEndpoints(m)
-		if len(got) != 2 {
-			t.Errorf("mode %s: expected 2 video endpoints, got %v", m, got)
+	if detail != nil {
+		detail.LogID = l.ID
+		if err := model.LogDB.Create(detail).Error; err != nil {
+			t.Fatalf("failed to create request detail for log %d: %v", l.ID, err)
 		}
 	}
+
+	return l
 }
 
-func TestGetSupportedEndpoints_Unknown(t *testing.T) {
-	got := getSupportedEndpoints(mode.Unknown)
-	if got != nil {
-		t.Errorf("Unknown mode: expected nil, got %v", got)
-	}
+type testUserLog struct {
+	ID        int    `json:"id"`
+	Model     string `json:"model"`
+	RequestID string `json:"request_id"`
+	Code      int    `json:"code"`
+	HasDetail bool   `json:"has_detail"`
 }
 
-func TestGetSupportedEndpoints_UnknownHigh(t *testing.T) {
-	// Arbitrary unrecognized mode value should return nil, not panic.
-	got := getSupportedEndpoints(mode.Mode(999))
-	if got != nil {
-		t.Errorf("mode 999: expected nil, got %v", got)
-	}
+type testGetTokenLogsResult struct {
+	Logs    []testUserLog `json:"logs"`
+	HasMore bool          `json:"has_more"`
 }
 
-// --- getModelSupportedEndpoints ---
+func decodeAPIResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder) middleware.APIResponse {
+	t.Helper()
 
-// makeModelConfig builds a minimal ModelConfig for testing.
-func makeModelConfig(t mode.Mode, endpoints []string) model.ModelConfig {
-	mc := model.ModelConfig{
-		Model: "test-model",
-		Type:  t,
+	var resp middleware.APIResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode API response: %v\nbody=%s", err, recorder.Body.String())
 	}
-	if len(endpoints) > 0 {
-		mc.Config = map[model.ModelConfigKey]any{
-			"endpoints": endpoints,
-		}
-	}
-	return mc
+
+	return resp
 }
 
-// makeModelConfigWithAnySlice simulates JSON-deserialized config where endpoints
-// arrive as []any (strings unmarshalled via interface{}).
-func makeModelConfigWithAnySlice(t mode.Mode, endpoints []string) model.ModelConfig {
-	mc := model.ModelConfig{
-		Model: "test-model",
-		Type:  t,
+func decodeData[T any](t *testing.T, recorder *httptest.ResponseRecorder) T {
+	t.Helper()
+
+	var envelope struct {
+		Data    T      `json:"data"`
+		Message string `json:"message"`
+		Success bool   `json:"success"`
 	}
-	raw := make([]any, len(endpoints))
-	for i, ep := range endpoints {
-		raw[i] = ep
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("failed to decode response data: %v\nbody=%s", err, recorder.Body.String())
 	}
-	mc.Config = map[model.ModelConfigKey]any{
-		"endpoints": raw,
-	}
-	return mc
+
+	return envelope.Data
 }
 
-// TestGetModelSupportedEndpoints_PPIOChatOnly verifies that a model with only
-// "chat/completions" slug returns the chat family (3 endpoints, no /v1/responses).
-func TestGetModelSupportedEndpoints_PPIOChatOnly(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("chat-only: expected chat family (%d), got %v", len(endpointsChatFamily), got)
+func TestGetMyLogs_RequiresEnterpriseUser(t *testing.T) {
+	setupAccessInfoTestDB(t)
+
+	c, recorder := makeEnterpriseContext(t, "", nil)
+	GetMyLogs(c)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
 	}
-	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("chat-only: /v1/responses must not appear")
+
+	resp := decodeAPIResponse[any](t, recorder)
+	if resp.Success {
+		t.Fatalf("expected success=false, got true")
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOAnthropicOnly verifies that a model with
-// only "anthropic" slug returns the chat family — all 3 protocol-conversion
-// endpoints, but NOT /v1/responses.
-func TestGetModelSupportedEndpoints_PPIOAnthropicOnly(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"anthropic"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Fatalf("anthropic-only: expected chat family (%d), got %v", len(endpointsChatFamily), got)
+func TestGetMyLogs_HonorsThirtyDayRangeAndGroupIsolation(t *testing.T) {
+	setupAccessInfoTestDB(t)
+
+	now := time.Now()
+	user := &models.FeishuUser{OpenID: "ou_test", GroupID: "group-a", Status: 1}
+
+	insideWindow := createLog(t, model.Log{
+		ID:        101,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "claude-sonnet-4-20250514",
+		RequestID: "req-inside",
+		Code:      200,
+		CreatedAt: now.Add(-20 * 24 * time.Hour),
+		RequestAt: now.Add(-20 * 24 * time.Hour),
+	}, &model.RequestDetail{RequestBody: `{"ok":true}`, ResponseBody: `{"id":"resp_1"}`})
+
+	createLog(t, model.Log{
+		ID:        102,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "claude-sonnet-4-20250514",
+		RequestID: "req-outside",
+		Code:      200,
+		CreatedAt: now.Add(-40 * 24 * time.Hour),
+		RequestAt: now.Add(-40 * 24 * time.Hour),
+	}, nil)
+
+	createLog(t, model.Log{
+		ID:        103,
+		GroupID:   "group-b",
+		TokenName: "token-b",
+		Model:     "claude-sonnet-4-20250514",
+		RequestID: "req-other-group",
+		Code:      200,
+		CreatedAt: now.Add(-10 * 24 * time.Hour),
+		RequestAt: now.Add(-10 * 24 * time.Hour),
+	}, nil)
+
+	query := url.Values{}
+	query.Set("start_timestamp", strconv.FormatInt(time.Now().Add(-30*24*time.Hour).Unix(), 10))
+	query.Set("end_timestamp", strconv.FormatInt(time.Now().Unix(), 10))
+
+	c, recorder := makeEnterpriseContext(t, query.Encode(), user)
+	GetMyLogs(c)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
-	if !slices.Contains(got, "POST /v1/messages") {
-		t.Errorf("anthropic-only: POST /v1/messages not in result %v", got)
+
+	result := decodeData[testGetTokenLogsResult](t, recorder)
+	if result.HasMore {
+		t.Fatalf("expected has_more=false, got true")
 	}
-	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("anthropic-only: /v1/responses must not appear")
+
+	if len(result.Logs) != 1 {
+		t.Fatalf("expected 1 log in 30-day range for the current group, got %d", len(result.Logs))
+	}
+
+	if result.Logs[0].ID != insideWindow.ID {
+		t.Fatalf("expected log id %d, got %d", insideWindow.ID, result.Logs[0].ID)
+	}
+
+	if !result.Logs[0].HasDetail {
+		t.Fatalf("expected has_detail=true for seeded request detail")
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOMulti verifies a model with both
-// "chat/completions" and "anthropic" slugs returns the chat family (no /v1/responses).
-func TestGetModelSupportedEndpoints_PPIOMulti(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "anthropic"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("multi: expected chat family (%d), got %v", len(endpointsChatFamily), got)
+func TestGetMyLogs_AcceptsMillisecondTimestampsAndFiltersCodeType(t *testing.T) {
+	setupAccessInfoTestDB(t)
+
+	now := time.Now()
+	user := &models.FeishuUser{OpenID: "ou_test", GroupID: "group-a", Status: 1}
+
+	createLog(t, model.Log{
+		ID:        201,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "deepseek-v3",
+		RequestID: "req-2xx",
+		Code:      200,
+		CreatedAt: now.Add(-48 * time.Hour),
+		RequestAt: now.Add(-48 * time.Hour),
+	}, nil)
+
+	wanted := createLog(t, model.Log{
+		ID:        202,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "deepseek-v3",
+		RequestID: "req-5xx",
+		Code:      502,
+		CreatedAt: now.Add(-24 * time.Hour),
+		RequestAt: now.Add(-24 * time.Hour),
+	}, nil)
+
+	query := url.Values{}
+	query.Set("start_timestamp", strconv.FormatInt(time.Now().Add(-7*24*time.Hour).UnixMilli(), 10))
+	query.Set("end_timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	query.Set("code_type", string(model.CodeTypeError))
+
+	c, recorder := makeEnterpriseContext(t, query.Encode(), user)
+	GetMyLogs(c)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
-	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("multi: /v1/responses must not appear")
+
+	result := decodeData[testGetTokenLogsResult](t, recorder)
+	if len(result.Logs) != 1 {
+		t.Fatalf("expected exactly one 5xx log, got %d", len(result.Logs))
+	}
+
+	if result.Logs[0].ID != wanted.ID {
+		t.Fatalf("expected 5xx log id %d, got %d", wanted.ID, result.Logs[0].ID)
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOEmbeddings verifies embedding-only models.
-func TestGetModelSupportedEndpoints_PPIOEmbeddings(t *testing.T) {
-	mc := makeModelConfig(mode.Embeddings, []string{"embeddings"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
-		t.Errorf("embeddings: got %v", got)
+func TestGetMyLogs_PaginatesWithAfterID(t *testing.T) {
+	setupAccessInfoTestDB(t)
+
+	now := time.Now()
+	user := &models.FeishuUser{OpenID: "ou_test", GroupID: "group-a", Status: 1}
+
+	first := createLog(t, model.Log{
+		ID:        301,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "model-1",
+		RequestID: "req-301",
+		Code:      200,
+		CreatedAt: now.Add(-1 * time.Hour),
+		RequestAt: now.Add(-1 * time.Hour),
+	}, nil)
+
+	second := createLog(t, model.Log{
+		ID:        300,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "model-2",
+		RequestID: "req-300",
+		Code:      200,
+		CreatedAt: now.Add(-2 * time.Hour),
+		RequestAt: now.Add(-2 * time.Hour),
+	}, nil)
+
+	createLog(t, model.Log{
+		ID:        299,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "model-3",
+		RequestID: "req-299",
+		Code:      200,
+		CreatedAt: now.Add(-3 * time.Hour),
+		RequestAt: now.Add(-3 * time.Hour),
+	}, nil)
+
+	query := url.Values{}
+	query.Set("start_timestamp", strconv.FormatInt(time.Now().Add(-7*24*time.Hour).Unix(), 10))
+	query.Set("end_timestamp", strconv.FormatInt(time.Now().Unix(), 10))
+	query.Set("limit", "1")
+	query.Set("after_id", "301")
+
+	c, recorder := makeEnterpriseContext(t, query.Encode(), user)
+	GetMyLogs(c)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	result := decodeData[testGetTokenLogsResult](t, recorder)
+	if len(result.Logs) != 1 {
+		t.Fatalf("expected one paginated result, got %d", len(result.Logs))
+	}
+
+	if result.Logs[0].ID != second.ID {
+		t.Fatalf("expected paginated log id %d, got %d", second.ID, result.Logs[0].ID)
+	}
+
+	if !result.HasMore {
+		t.Fatalf("expected has_more=true when more older logs remain")
+	}
+
+	if result.Logs[0].ID == first.ID {
+		t.Fatalf("after_id filter did not skip the newest log")
 	}
 }
 
-// TestGetModelSupportedEndpoints_PPIOResponses verifies that a model with only the
-// "responses" slug returns ONLY the responses endpoint (not expanded to chat family).
-func TestGetModelSupportedEndpoints_PPIOResponses(t *testing.T) {
-	mc := makeModelConfig(mode.Responses, []string{"responses"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/responses" {
-		t.Errorf("responses-only: expected [POST /v1/responses], got %v", got)
-	}
-}
+func TestGetMyLogDetail_EnforcesGroupIsolation(t *testing.T) {
+	setupAccessInfoTestDB(t)
 
-// TestGetModelSupportedEndpoints_ChatPlusResponses verifies that a model with both
-// chat and responses slugs returns all 4 endpoints.
-func TestGetModelSupportedEndpoints_ChatPlusResponses(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "responses"})
-	got := getModelSupportedEndpoints(mc)
-	// 3 chat-family + 1 responses = 4
-	wantLen := len(endpointsChatFamily) + 1
-	if len(got) != wantLen {
-		t.Errorf("chat+responses: expected %d, got %v", wantLen, got)
-	}
-	if !slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("chat+responses: /v1/responses must appear")
-	}
-	if !slices.Contains(got, "POST /v1/chat/completions") {
-		t.Errorf("chat+responses: /v1/chat/completions must appear")
-	}
-}
+	user := &models.FeishuUser{OpenID: "ou_test", GroupID: "group-a", Status: 1}
 
-// TestGetModelSupportedEndpoints_PPIOModerations verifies moderations models.
-func TestGetModelSupportedEndpoints_PPIOModerations(t *testing.T) {
-	mc := makeModelConfig(mode.Moderations, []string{"moderations"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/moderations" {
-		t.Errorf("moderations: got %v", got)
-	}
-}
+	owned := createLog(t, model.Log{
+		ID:        401,
+		GroupID:   "group-a",
+		TokenName: "token-a",
+		Model:     "claude",
+		RequestID: "req-owned",
+		Code:      200,
+		CreatedAt: time.Now(),
+		RequestAt: time.Now(),
+	}, &model.RequestDetail{RequestBody: `{"prompt":"hello"}`, ResponseBody: `{"text":"world"}`})
 
-// TestGetModelSupportedEndpoints_PPIORerank verifies rerank models.
-func TestGetModelSupportedEndpoints_PPIORerank(t *testing.T) {
-	mc := makeModelConfig(mode.Rerank, []string{"rerank"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/rerank" {
-		t.Errorf("rerank: got %v", got)
-	}
-}
+	createLog(t, model.Log{
+		ID:        402,
+		GroupID:   "group-b",
+		TokenName: "token-b",
+		Model:     "claude",
+		RequestID: "req-other",
+		Code:      200,
+		CreatedAt: time.Now(),
+		RequestAt: time.Now(),
+	}, &model.RequestDetail{RequestBody: `{"prompt":"other"}`, ResponseBody: `{"text":"group"}`})
 
-// TestGetModelSupportedEndpoints_MixedChatAndNonChat verifies that a model with
-// chat-base slugs AND non-chat slugs expands chat-base to full family + keeps non-chat.
-func TestGetModelSupportedEndpoints_MixedChatAndNonChat(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{"chat/completions", "embeddings"})
-	got := getModelSupportedEndpoints(mc)
-	// 3 chat-family + 1 embeddings = 4
-	wantPaths := map[string]bool{
-		"POST /v1/chat/completions": true,
-		"POST /v1/completions":      true,
-		"POST /v1/messages":         true,
-		"POST /v1/embeddings":       true,
-	}
-	if len(got) != len(wantPaths) {
-		t.Fatalf("mixed chat+non-chat: expected %d paths, got %v", len(wantPaths), got)
-	}
-	for _, ep := range got {
-		if !wantPaths[ep] {
-			t.Errorf("mixed chat+non-chat: unexpected path %q", ep)
-		}
-	}
-	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("mixed chat+non-chat: /v1/responses must not appear")
-	}
-}
+	c, recorder := makeDetailContext(t, "401", user)
+	GetMyLogDetail(c)
 
-// TestGetModelSupportedEndpoints_UnknownSlugFallback verifies that an unrecognised
-// slug falls back through model_type → mc.Type inference.
-func TestGetModelSupportedEndpoints_UnknownSlugFallback(t *testing.T) {
-	// No model_type in Config → falls back to mc.Type = ChatCompletions → 3 paths
-	mc := makeModelConfig(mode.ChatCompletions, []string{"unknown-future-slug"})
-	got := getModelSupportedEndpoints(mc)
-	want := endpointsChatFamily
-	if len(got) != len(want) {
-		t.Errorf("unknown slug fallback: got %v, want %v", got, want)
-	}
-}
-
-// TestGetModelSupportedEndpoints_EmptyConfig falls back to type inference when
-// Config is nil.
-func TestGetModelSupportedEndpoints_EmptyConfig(t *testing.T) {
-	mc := model.ModelConfig{
-		Model: "gpt-4o",
-		Type:  mode.ChatCompletions,
-	}
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("nil config: got %v, want %d endpoints", got, len(endpointsChatFamily))
-	}
-}
-
-// TestGetModelSupportedEndpoints_EmptyEndpointsSlice falls back to type inference
-// when Config["endpoints"] is an empty slice.
-func TestGetModelSupportedEndpoints_EmptyEndpointsSlice(t *testing.T) {
-	mc := makeModelConfig(mode.ChatCompletions, []string{})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Errorf("empty slice fallback: got %v", got)
-	}
-}
-
-// TestGetModelSupportedEndpoints_AnySliceDeserialization verifies that endpoints
-// stored as []any (from JSON decode via interface{}) are handled correctly.
-func TestGetModelSupportedEndpoints_AnySliceDeserialization(t *testing.T) {
-	mc := makeModelConfigWithAnySlice(mode.ChatCompletions, []string{"chat/completions", "anthropic"})
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != len(endpointsChatFamily) {
-		t.Fatalf("[]any deserialization: expected chat family (%d), got %v", len(endpointsChatFamily), got)
-	}
-	if slices.Contains(got, "POST /v1/responses") {
-		t.Errorf("[]any deserialization: /v1/responses must not appear")
-	}
-}
-
-// TestGetModelSupportedEndpoints_FallbackEmbedding verifies type-based fallback
-// for a non-synced embedding model (no Config).
-func TestGetModelSupportedEndpoints_FallbackEmbedding(t *testing.T) {
-	mc := model.ModelConfig{
-		Model: "text-embedding-3-small",
-		Type:  mode.Embeddings,
-	}
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
-		t.Errorf("fallback embedding: got %v", got)
-	}
-}
-
-// TestGetModelSupportedEndpoints_FallbackImage verifies type-based fallback for
-// image generation models.
-func TestGetModelSupportedEndpoints_FallbackImage(t *testing.T) {
-	mc := model.ModelConfig{
-		Model: "dall-e-3",
-		Type:  mode.ImagesGenerations,
-	}
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 2 {
-		t.Errorf("fallback image: got %v", got)
-	}
-}
-
-// TestGetModelSupportedEndpoints_FallbackAudio verifies audio model fallback.
-func TestGetModelSupportedEndpoints_FallbackAudio(t *testing.T) {
-	cases := []struct {
-		modelType mode.Mode
-		wantPath  string
-	}{
-		{mode.AudioSpeech, "POST /v1/audio/speech"},
-		{mode.AudioTranscription, "POST /v1/audio/transcriptions"},
-		{mode.AudioTranslation, "POST /v1/audio/translations"},
-	}
-	for _, tc := range cases {
-		mc := model.ModelConfig{Type: tc.modelType}
-		got := getModelSupportedEndpoints(mc)
-		if len(got) != 1 || got[0] != tc.wantPath {
-			t.Errorf("audio %s: got %v, want [%s]", tc.modelType, got, tc.wantPath)
-		}
-	}
-}
-
-// TestGetModelSupportedEndpoints_VideoFallback verifies video endpoint inference.
-func TestGetModelSupportedEndpoints_VideoFallback(t *testing.T) {
-	for _, m := range []mode.Mode{mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent} {
-		mc := model.ModelConfig{Type: m}
-		got := getModelSupportedEndpoints(mc)
-		if len(got) != 2 {
-			t.Errorf("video mode %s: expected 2 endpoints, got %v", m, got)
-		}
-	}
-}
-
-// TestGetModelSupportedEndpoints_AllKnownSlugs verifies every slug in endpointSlugToPath
-// maps to at least one valid path and never panics.
-func TestGetModelSupportedEndpoints_AllKnownSlugs(t *testing.T) {
-	// Chat-base slugs that trigger protocol-conversion expansion
-	chatBaseSlugs := map[string]bool{
-		"chat/completions": true,
-		"completions":      true,
-		"anthropic":        true,
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
 
-	for slug, path := range endpointSlugToPath {
-		if path == "" {
-			t.Errorf("slug %q maps to empty path", slug)
-		}
-		mc := makeModelConfig(mode.ChatCompletions, []string{slug})
-		got := getModelSupportedEndpoints(mc)
-		if len(got) == 0 {
-			t.Errorf("slug %q: got empty result", slug)
-			continue
-		}
+	detail := decodeData[model.RequestDetail](t, recorder)
+	if detail.LogID != owned.ID {
+		t.Fatalf("expected detail log id %d, got %d", owned.ID, detail.LogID)
+	}
 
-		switch {
-		case chatBaseSlugs[slug]:
-			// Chat-base slugs expand to 3 chat-family endpoints
-			if len(got) != len(endpointsChatFamily) {
-				t.Errorf("slug %q (chat-base): expected %d, got %v", slug, len(endpointsChatFamily), got)
-			}
-			if slices.Contains(got, "POST /v1/responses") {
-				t.Errorf("slug %q: /v1/responses must not appear for chat-base slug", slug)
-			}
-		case slug == "responses":
-			// Responses slug alone → only /v1/responses
-			if len(got) != 1 || got[0] != "POST /v1/responses" {
-				t.Errorf("slug %q: expected [POST /v1/responses], got %v", slug, got)
-			}
-		default:
-			// Non-chat slugs map directly
-			if len(got) != 1 || got[0] != path {
-				t.Errorf("slug %q (non-chat): got %v, want [%s]", slug, got, path)
-			}
-		}
+	if detail.RequestBody != `{"prompt":"hello"}` {
+		t.Fatalf("unexpected request body: %s", detail.RequestBody)
 	}
-}
 
-// TestGetModelSupportedEndpoints_NoDuplicates verifies that no slug mapping
-// results in duplicate endpoint paths.
-func TestGetModelSupportedEndpoints_NoDuplicates(t *testing.T) {
-	allSlugs := make([]string, 0, len(endpointSlugToPath))
-	for slug := range endpointSlugToPath {
-		allSlugs = append(allSlugs, slug)
-	}
-	mc := makeModelConfig(mode.ChatCompletions, allSlugs)
-	got := getModelSupportedEndpoints(mc)
-	seen := make(map[string]bool, len(got))
-	for _, ep := range got {
-		if seen[ep] {
-			t.Errorf("duplicate endpoint %q in result %v", ep, got)
-		}
-		seen[ep] = true
-	}
-}
+	c2, recorder2 := makeDetailContext(t, "402", user)
+	GetMyLogDetail(c2)
 
-// TestGetModelSupportedEndpoints_ChatFamilyContents verifies the exact content and
-// order of the chat-family endpoint list (no truncation, no empty strings).
-func TestGetModelSupportedEndpoints_ChatFamilyContents(t *testing.T) {
-	mc := model.ModelConfig{Type: mode.ChatCompletions}
-	got := getModelSupportedEndpoints(mc)
-	expected := []string{
-		"POST /v1/chat/completions",
-		"POST /v1/completions",
-		"POST /v1/messages",
-	}
-	if len(got) != len(expected) {
-		t.Fatalf("chat family: got %d endpoints, want %d: %v", len(got), len(expected), got)
-	}
-	for i, ep := range got {
-		if ep == "" {
-			t.Errorf("chat family [%d]: empty string in endpoint list", i)
-		}
-		if ep != expected[i] {
-			t.Errorf("chat family [%d]: got %q, want %q", i, ep, expected[i])
-		}
-	}
-}
-
-// TestGetModelSupportedEndpoints_NoNilOrEmptyInAnyPath ensures none of the
-// type-based endpoint slices contain empty strings.
-func TestGetModelSupportedEndpoints_NoNilOrEmptyInAnyPath(t *testing.T) {
-	allModes := []mode.Mode{
-		mode.ChatCompletions, mode.Completions, mode.Embeddings, mode.Moderations,
-		mode.ImagesGenerations, mode.ImagesEdits, mode.AudioSpeech,
-		mode.AudioTranscription, mode.AudioTranslation, mode.Rerank, mode.ParsePdf,
-		mode.Anthropic, mode.Gemini, mode.Responses,
-		mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent,
-	}
-	for _, m := range allModes {
-		endpoints := getSupportedEndpoints(m)
-		if len(endpoints) == 0 {
-			t.Errorf("mode %s: no endpoints returned (expected at least one)", m)
-		}
-		for i, ep := range endpoints {
-			if ep == "" {
-				t.Errorf("mode %s [%d]: empty endpoint string", m, i)
-			}
-		}
-	}
-}
-
-// TestGetModelSupportedEndpoints_ModelTypeFallback verifies that Config["model_type"]
-// is used as a reliable fallback when Config["endpoints"] is absent or has unknown slugs.
-func TestGetModelSupportedEndpoints_ModelTypeFallback(t *testing.T) {
-	cases := []struct {
-		name      string
-		modelType string // Config["model_type"]
-		mcType    mode.Mode
-		wantLen   int
-		wantFirst string
-	}{
-		{
-			name:      "embedding model with stale mc.Type=1",
-			modelType: "embedding",
-			mcType:    mode.ChatCompletions, // stale
-			wantLen:   1,
-			wantFirst: "POST /v1/embeddings",
-		},
-		{
-			name:      "rerank model with stale mc.Type=1",
-			modelType: "rerank",
-			mcType:    mode.ChatCompletions, // stale
-			wantLen:   1,
-			wantFirst: "POST /v1/rerank",
-		},
-		{
-			name:      "moderation model with stale mc.Type",
-			modelType: "moderation",
-			mcType:    mode.ChatCompletions,
-			wantLen:   1,
-			wantFirst: "POST /v1/moderations",
-		},
-		{
-			name:      "chat model — model_type agrees with mc.Type",
-			modelType: "chat",
-			mcType:    mode.ChatCompletions,
-			wantLen:   len(endpointsChatFamily),
-		},
-	}
-	for _, tc := range cases {
-		mc := model.ModelConfig{
-			Model: "test-" + tc.name,
-			Type:  tc.mcType,
-			Config: map[model.ModelConfigKey]any{
-				"model_type": tc.modelType,
-				// no "endpoints" key — forces fallback path
-			},
-		}
-		got := getModelSupportedEndpoints(mc)
-		if len(got) != tc.wantLen {
-			t.Errorf("%s: got %d endpoints %v, want %d", tc.name, len(got), got, tc.wantLen)
-			continue
-		}
-		if tc.wantFirst != "" && (len(got) == 0 || got[0] != tc.wantFirst) {
-			t.Errorf("%s: got[0]=%q, want %q", tc.name, got[0], tc.wantFirst)
-		}
-	}
-}
-
-// TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug verifies that when
-// Config["endpoints"] has only unknown slugs AND Config["model_type"] is present,
-// the model_type takes precedence over mc.Type for the fallback.
-func TestGetModelSupportedEndpoints_ModelTypeFallbackUnknownSlug(t *testing.T) {
-	mc := model.ModelConfig{
-		Model: "bge-m3",
-		Type:  mode.ChatCompletions, // stale pre-fix value
-		Config: map[model.ModelConfigKey]any{
-			"endpoints":  []string{"future-unknown-slug"},
-			"model_type": "embedding",
-		},
-	}
-	got := getModelSupportedEndpoints(mc)
-	if len(got) != 1 || got[0] != "POST /v1/embeddings" {
-		t.Errorf("unknown slug + model_type fallback: got %v, want [POST /v1/embeddings]", got)
-	}
-}
-
-// TestEndpointSlugToPath_PathFormat verifies all mapped paths follow "METHOD /path" format.
-func TestEndpointSlugToPath_PathFormat(t *testing.T) {
-	validMethods := map[string]bool{"GET": true, "POST": true, "PUT": true, "DELETE": true, "PATCH": true}
-	for slug, path := range endpointSlugToPath {
-		method, apiPath, ok := strings.Cut(path, " ")
-		if !ok {
-			t.Errorf("slug %q: path %q has no space separating method from path", slug, path)
-			continue
-		}
-		if !validMethods[method] {
-			t.Errorf("slug %q: method %q is not a valid HTTP method", slug, method)
-		}
-		if !strings.HasPrefix(apiPath, "/") {
-			t.Errorf("slug %q: API path %q must start with /", slug, apiPath)
-		}
+	if recorder2.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d body=%s", recorder2.Code, http.StatusNotFound, recorder2.Body.String())
 	}
 }

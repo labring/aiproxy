@@ -16,6 +16,7 @@ import (
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
+	ppiorelay "github.com/labring/aiproxy/core/relay/adaptor/ppio"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
 )
@@ -186,7 +187,7 @@ func ExecuteSync( //nolint:cyclop
 	// Step 4: Ensure channels exist (reads from local DB, not remote list)
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, cfg)
+	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -325,7 +326,12 @@ func executeSyncTransaction(
 // partitions them by endpoint compatibility, and writes the lists into the
 // corresponding PPIO channels. When autoCreate is true and no PPIO channels
 // exist, it creates them automatically using the API key from cfg.
-func EnsurePPIOChannels(autoCreate bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
+//
+// anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
+// channel. Pass nil to preserve the existing setting (only initializing the key
+// to false if absent). Pass a non-nil pointer to always write the given value,
+// which is appropriate when the user has explicitly specified the preference.
+func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -356,12 +362,12 @@ func EnsurePPIOChannels(autoCreate bool, cfg PPIOConfigResult) (ChannelsInfo, er
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, cfg)
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, cfg)
 }
 
 func ensurePPIOChannelsFromModels(
 	anthropicModels, openaiModels []string,
-	autoCreate bool, cfg PPIOConfigResult,
+	autoCreate bool, anthropicPurePassthrough *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -378,7 +384,8 @@ func ensurePPIOChannelsFromModels(
 			return info, nil
 		}
 
-		created, createErr := createPPIOChannels(cfg, anthropicModels, openaiModels)
+		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
+		created, createErr := createPPIOChannels(cfg, purePassthrough, anthropicModels, openaiModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -398,6 +405,7 @@ func ensurePPIOChannelsFromModels(
 			// Ensure recommended defaults for PPIO's Anthropic endpoint:
 			// skip_image_conversion — PPIO natively supports URL image sources
 			// disable_context_management — PPIO rejects the beta field with 400
+			// pure_passthrough — forward requests verbatim without body transformation
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -406,6 +414,11 @@ func ensurePPIOChannelsFromModels(
 			}
 			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
 				channels[i].Configs["disable_context_management"] = true
+			}
+			if anthropicPurePassthrough != nil {
+				channels[i].Configs["pure_passthrough"] = *anthropicPurePassthrough
+			} else if _, ok := channels[i].Configs["pure_passthrough"]; !ok {
+				channels[i].Configs["pure_passthrough"] = false
 			}
 		} else {
 			channels[i].Models = openaiModels
@@ -416,8 +429,8 @@ func ensurePPIOChannelsFromModels(
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
 			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
-				"/v1/responses":  ppioResponsesBase(channels[i].BaseURL),
-				"/v1/web-search": ppioWebSearchBase(channels[i].BaseURL),
+				ppiorelay.PathPrefixResponses: ppioResponsesBase(channels[i].BaseURL),
+				ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(channels[i].BaseURL),
 			}
 		}
 
@@ -431,7 +444,7 @@ func ensurePPIOChannelsFromModels(
 
 // createPPIOChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
-func createPPIOChannels(cfg PPIOConfigResult, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultPPIOAPIBase
@@ -449,8 +462,8 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicModels, openaiModels []st
 			Status:  model.ChannelStatusEnabled,
 			Configs: model.ChannelConfigs{
 				model.ChannelConfigPathBaseMapKey: map[string]string{
-					"/v1/responses":  ppioResponsesBase(openaiBase),
-					"/v1/web-search": ppioWebSearchBase(openaiBase),
+					ppiorelay.PathPrefixResponses: ppioResponsesBase(openaiBase),
+					ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(openaiBase),
 				},
 			},
 		}
@@ -473,6 +486,7 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicModels, openaiModels []st
 				Configs: model.ChannelConfigs{
 					"skip_image_conversion":      true,
 					"disable_context_management": true,
+					"pure_passthrough":           anthropicPurePassthrough,
 				},
 			}
 
@@ -685,8 +699,8 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 					InputTokenMax: maxTokens,
 				},
 				Price: model.Price{
-					InputPrice:     model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
-					InputPriceUnit: model.ZeroNullInt64(1),
+					InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
+					InputPriceUnit:  model.ZeroNullInt64(1),
 					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
 					OutputPriceUnit: model.ZeroNullInt64(1),
 				},
@@ -754,24 +768,12 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 	return cfg
 }
 
-
-// ppioResponsesBase derives the Responses API base URL from an OpenAI channel's BaseURL.
-// Mirrors the same logic in relay/adaptor/ppio so both code paths stay in sync.
 func ppioResponsesBase(channelBaseURL string) string {
-	if r := strings.Replace(channelBaseURL, "/v3/openai", "/openai/v1", 1); r != channelBaseURL {
-		return r
-	}
-
-	return "https://api.ppinfra.com/openai/v1"
+	return ppiorelay.ResponsesBase(channelBaseURL)
 }
 
-// ppioWebSearchBase derives the web-search base URL from an OpenAI channel's BaseURL.
 func ppioWebSearchBase(channelBaseURL string) string {
-	if r := strings.Replace(channelBaseURL, "/v3/openai", "/v3", 1); r != channelBaseURL {
-		return r
-	}
-
-	return "https://api.ppinfra.com/v3"
+	return ppiorelay.WebSearchBase(channelBaseURL)
 }
 
 // countEffectiveTiers returns the number of non-degenerate tiers after boundary adjustment.
@@ -835,7 +837,7 @@ func StartSyncScheduler(ctx context.Context) {
 func runPPIODailySync(ctx context.Context) {
 	log.Printf("PPIO auto sync: starting daily model sync")
 
-	result, err := ExecuteSync(ctx, SyncOptions{}, nil)
+	result, err := ExecuteSync(ctx, SyncOptions{AnthropicPurePassthrough: true}, nil)
 	if err != nil {
 		notify.ErrorThrottle(
 			"ppioAutoSyncFailed",

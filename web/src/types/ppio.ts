@@ -55,6 +55,7 @@ export interface SyncOptions {
   changes_confirmed: boolean
   dry_run?: boolean
   delete_unmatched_model?: boolean
+  anthropic_pure_passthrough?: boolean
 }
 
 export interface SyncResult {

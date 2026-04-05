@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/passthrough"
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -203,6 +204,24 @@ func (a *Adaptor) ConvertRequest(
 			Body: bytes.NewReader(data2),
 		}, nil
 	case mode.Anthropic:
+		cfg := Config{}
+		if err := meta.ChannelConfigs.LoadConfig(&cfg); err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+
+		if cfg.PurePassthrough {
+			header := http.Header{}
+			if ct := req.Header.Get("Content-Type"); ct != "" {
+				header.Set("Content-Type", ct)
+			}
+
+			if cl := req.Header.Get("Content-Length"); cl != "" {
+				header.Set("Content-Length", cl)
+			}
+
+			return adaptor.ConvertResult{Header: header, Body: req.Body}, nil
+		}
+
 		return ConvertRequest(meta, req)
 	case mode.Gemini:
 		return ConvertGeminiRequest(meta, req)
@@ -233,9 +252,15 @@ func (a *Adaptor) DoResponse(
 		}
 		return OpenAIHandler(meta, c, resp)
 	case mode.Anthropic:
+		cfg := Config{}
+		if err := meta.ChannelConfigs.LoadConfig(&cfg); err == nil && cfg.PurePassthrough {
+			return passthrough.DoAnthropicPassthrough(meta, c, resp)
+		}
+
 		if utils.IsStreamResponse(resp) {
 			return StreamHandler(meta, c, resp)
 		}
+
 		return Handler(meta, c, resp)
 	case mode.Gemini:
 		if utils.IsStreamResponse(resp) {
@@ -290,6 +315,11 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 					"type":        "boolean",
 					"title":       "Strip Cache Control TTL",
 					"description": "Remove cache_control.ttl from the request. Enable this for upstreams that do not support the prompt-caching-scope beta.",
+				},
+				"pure_passthrough": map[string]any{
+					"type":        "boolean",
+					"title":       "Pure Passthrough (Anthropic Protocol)",
+					"description": "Forward Anthropic-protocol requests verbatim without any body transformation. Only authentication headers are replaced. Usage is captured via SSE scanning.",
 				},
 			},
 		},

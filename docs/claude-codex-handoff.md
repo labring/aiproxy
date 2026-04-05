@@ -196,7 +196,7 @@ Review this change using systematic-debugging for root-cause consistency, api-te
 
 ---
 
-## Active Handoff — 2026-04-04
+## Past Handoff — 2026-04-04 (Request History)
 
 ### 1. Goal
 
@@ -296,4 +296,179 @@ Validation already performed:
   no more state mutations inside queryFn
 - Time range cap bug fixed (commit 069425f): ParseTimeRange(c, -1) — no 7-day clamp on logs endpoint;
   30-day / last-month / custom ranges now honored end-to-end
+```
+
+---
+
+## Active Handoff — 2026-04-04 (Pure Passthrough + NativeModeChecker)
+
+### 1. Goal
+
+Implement full pure passthrough for PPIO and Novita Anthropic channels: the gateway forwards the raw client request verbatim (only replacing auth headers), captures token usage via dual-buffer SSE scanning, and exposes the feature as a per-channel config toggle synced from the admin UI. Also fix a `server_overload` error on non-Claude models caused by aiproxy injecting a `max_tokens` value beyond PPIO's internal cap.
+
+### 2. Scope
+
+**Core relay — passthrough layer:**
+
+- `core/relay/adaptor/passthrough/anthropic_passthrough.go` — **new**: `headBuffer` (captures first 2 KB), `DoAnthropicPassthrough` (dual-buffer pipe, drain-on-disconnect, merge usage), `mergeAnthropicSSEUsage` (tail base + head fills zero fields)
+- `core/relay/adaptor/passthrough/usage.go` — refactored: shared `extractUsageFromBytes(data, firstOccurrence)` backing `extractUsageFromTail` and new `extractUsageFromHead`
+- `core/relay/adaptor/passthrough/adaptor.go` — extracted `forwardResponseHeaders` helper (was duplicated inline); `getPathBaseMap` renamed to `GetPathBaseMap` (exported for ppio adaptor)
+
+**Core relay — anthropic adaptor:**
+
+- `core/relay/adaptor/anthropic/config.go` — added `PurePassthrough bool \`json:"pure_passthrough"\``
+- `core/relay/adaptor/anthropic/adaptor.go` — `ConvertRequest` (mode.Anthropic): if `PurePassthrough`, forward raw body + client content headers; `DoResponse` (mode.Anthropic): if `PurePassthrough`, call `DoAnthropicPassthrough`; `Metadata()`: added `pure_passthrough` schema entry
+
+**Core relay — PPIO adaptor:**
+
+- `core/relay/adaptor/ppio/adaptor.go` — exported `PathPrefixResponses` / `PathPrefixWebSearch` constants; refactored `GetRequestURL` to consult `GetPathBaseMap` first then fall back to string-replace (removed the early-return on key presence); added `mode.Anthropic`/`mode.Gemini` case routing to `/chat/completions`
+
+**Core relay — channel selection:**
+
+- `core/controller/relay-channel.go` — `filterChannels`: builds a `native` slice alongside `filtered`; returns `native` when non-empty, using the already-fetched adaptor to avoid a second registry lookup (channels with `NativeMode(mode)=true` are preferred)
+
+**Enterprise sync:**
+
+- `core/enterprise/ppio/types.go` — added `AnthropicPurePassthrough bool` to `SyncOptions`
+- `core/enterprise/ppio/sync.go` — threads `*bool anthropicPurePassthrough` through `EnsurePPIOChannels` → `ensurePPIOChannelsFromModels` → `createPPIOChannels`; Anthropic channel update block writes `pure_passthrough` (always if non-nil, default false if key absent); `runPPIODailySync` uses `SyncOptions{AnthropicPurePassthrough: true}`; `buildConfigFromPPIOModelV2` caps `max_output_tokens` at 32000 for non-Claude models on the `anthropic` endpoint
+- `core/enterprise/novita/types.go` — same as ppio types
+- `core/enterprise/novita/sync.go` — same threading pattern; `runNovitaDailySync` uses `SyncOptions{AnthropicPurePassthrough: true}`
+- `core/enterprise/init.go` — passes `nil` for `anthropicPurePassthrough` on startup (preserves existing channel flag)
+
+**Frontend:**
+
+- `web/src/types/ppio.ts` — added `anthropic_pure_passthrough?: boolean` to `SyncOptions`
+- `web/src/types/novita.ts` — same
+- `web/src/pages/enterprise/ppio-sync.tsx` — added "Anthropic 渠道纯透传" Switch toggle in sync config card; default state `true`
+- `web/src/pages/enterprise/novita-sync.tsx` — same
+- `web/public/locales/zh/translation.json` — 2 keys per provider section: `anthropicPurePassthrough`, `anthropicPurePassthroughHint`
+- `web/public/locales/en/translation.json` — same
+
+**Bug fixes (same session):**
+
+- `web/src/api/enterprise.ts` — `used_amount?: number` (optional); fixes crash on undefined in `formatAmount`
+- `web/src/pages/enterprise/my-access.tsx` — `formatAmount(log.used_amount ?? 0)` null-coalescing
+
+### 3. Root Cause
+
+```text
+Root cause — pure passthrough:
+- Symptom: PPIO Anthropic channel (type=14, anthropic.Adaptor) was performing full protocol
+  conversion: injecting max_tokens, transforming body AST, parsing structured SSE for usage.
+  This caused subtle incompatibilities (max_tokens exceeding PPIO's internal cap, context_management
+  fields rejected by PPIO with 400, image URL conversion adding latency).
+- Design intent: PPIO/Novita channels should act as authenticated reverse proxies — only auth
+  headers replaced, everything else forwarded verbatim. "Pure passthrough" is now opt-in per channel.
+- Why per-channel flag (not per-adaptor type): Channel 4 stays type=14 (ChannelTypeAnthropic) so
+  NativeModeChecker routes Anthropic requests to it preferentially. Changing to type=54 (PPIO) would
+  make both channels non-native for Anthropic mode, causing random channel selection between the
+  OpenAI and Anthropic endpoints.
+
+Root cause — max_tokens server_overload (xiaomimimo/mimo-v2-pro):
+- Symptom: requests to mimo-v2-pro via Anthropic protocol returned server_overload.
+- Cause: aiproxy synced max_output_tokens=131072 from PPIO catalog; PPIO's Anthropic proxy
+  internally caps non-Claude models at 32000 and rejects higher values with server_overload.
+- Fix: buildConfigFromPPIOModelV2 caps max_output_tokens at 32000 for models with "anthropic"
+  endpoint that are not Claude models (name does not contain "claude").
+
+Root cause — NativeModeChecker:
+- Symptom: Anthropic protocol requests could be routed to the OpenAI channel (type=54) which
+  requires Anthropic→OpenAI conversion, defeating passthrough intent.
+- Fix: filterChannels now tracks a "native" slice and returns it when non-empty, so channels where
+  NativeMode(mode)=true are always preferred over protocol-converting channels.
+```
+
+### 4. Risk Areas
+
+```text
+Risk areas:
+
+1. Usage capture accuracy (SSE dual-buffer):
+   - headBuffer captures only the first 2 KB. If message_start SSE event is larger (unlikely
+     but possible with long system prompt echo), input_tokens is missed (falls back to 0).
+   - ringBuffer captures the last 4 KB. If message_delta (output_tokens) is emitted early and
+     the remaining stream exceeds 4 KB, output_tokens is missed.
+   - Non-streaming: entire body must fit in 4 KB tail buffer, otherwise usage is zero.
+
+2. Scheduled sync resets pure_passthrough to true:
+   - runPPIODailySync and runNovitaDailySync always pass AnthropicPurePassthrough: true.
+   - If admin disables pure_passthrough via UI and a scheduled sync runs, the flag is reset to true.
+   - Mitigation: admin can re-disable after sync; scheduled syncs run once per day.
+
+3. Startup channel refresh preserves existing flag:
+   - init.go passes nil, so EnsurePPIOChannels only initializes pure_passthrough=false if the key
+     is absent. Existing channels already having the key are unaffected.
+
+4. DoResponse config load error handling:
+   - LoadConfig error in DoResponse is silently ignored (falls through to standard handler).
+   - This means a corrupt channel config causes silent fallback to conversion mode, not an error.
+
+5. NativeModeChecker preference is all-or-nothing:
+   - If the native channel is degraded/rate-limited but the non-native channel is healthy,
+     the selector still prefers the native channel (until its error rate exceeds maxRetryErrorRate).
+
+6. PPIO GetRequestURL Anthropic/Gemini case:
+   - mode.Anthropic and mode.Gemini requests now route to BaseURL+/chat/completions on the PPIO
+     OpenAI channel. This assumes the OpenAI channel is always selected for these modes when
+     PurePassthrough=false on the Anthropic channel — verify with disabled Anthropic channel.
+```
+
+### 5. Suggested Verification
+
+```text
+Suggested verification:
+
+API (PPIO Anthropic channel, pure_passthrough=true):
+- POST /v1/messages with streaming=true → verify SSE events pass through verbatim (no re-encoding)
+- POST /v1/messages with streaming=false → verify JSON response is unmodified
+- POST /v1/messages with cache_control in body → verify cache fields pass through
+- POST /v1/messages without max_tokens → expect upstream error (not gateway error — gateway must
+  NOT inject max_tokens in pure passthrough mode)
+- POST /v1/messages with anthropic-beta header → verify header forwarded to upstream
+- After request: check logs table for input_tokens and output_tokens (both non-zero)
+
+API (pure_passthrough=false, conversion mode):
+- POST /v1/messages (Anthropic protocol) → should still convert correctly via anthropic.Adaptor
+- POST /v1/chat/completions (OpenAI protocol on Anthropic model) → should convert to messages format
+
+PPIO sync:
+- Run sync with anthropic_pure_passthrough=true → verify Channel 4 Configs["pure_passthrough"]=true
+- Run sync with anthropic_pure_passthrough=false → verify Channel 4 Configs["pure_passthrough"]=false
+- Verify scheduled sync (runPPIODailySync) preserves pure_passthrough=true
+
+NativeModeChecker:
+- Anthropic protocol request → verify it routes to Channel 4 (type=14), not Channel 3 (type=54)
+- OpenAI protocol request → verify it routes to Channel 3 (type=54)
+
+UI:
+- PPIO sync page → "Anthropic 渠道纯透传" toggle visible, default ON
+- Toggle OFF → sync → verify channel config updated
+- Novita sync page → same
+
+Edge cases:
+- Client sends max_tokens > 32000 to non-Claude model with pure_passthrough=true → upstream error
+  (gateway should not interfere)
+- Client sends max_tokens > 32000 to non-Claude model with pure_passthrough=false → gateway
+  should clamp at 32000 (via ModelConfig max_output_tokens) or pass through
+- Streaming request disconnects mid-stream → drain goroutine should capture tail usage correctly
+```
+
+### 6. Validation Already Performed
+
+```text
+Validation already performed:
+- go build -tags enterprise -trimpath -ldflags "-s -w" ./... passed (no compile errors)
+- pnpm run build passed (no TypeScript errors)
+- Three parallel simplify review agents; two findings fixed:
+  - headBuffer pre-allocation: make([]byte, 0, size) avoids 6 growth cycles per stream
+  - forwardResponseHeaders extracted as package helper (was duplicated in adaptor.go + anthropic_passthrough.go)
+- Double LoadConfig in ConvertRequest not fixed: ~5μs overhead on seconds-long LLM call; fix
+  requires refactoring ConvertRequestBodyToBytes signature — judged not worth the churn
+- Server restarted; basic /api/status health check passed
+- UI not browser-verified beyond visual inspection
+- No real Anthropic SSE trace captured against PPIO endpoint
+- No integration test against live PPIO/Novita API
+- No enterprise smoke test run
+- DB for Channel 4 not yet updated — user must run a sync from the admin UI to apply
+  pure_passthrough=true to the existing channel config
 ```

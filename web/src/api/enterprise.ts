@@ -480,7 +480,7 @@ export interface UserLog {
         completion_tokens: number
         total_tokens: number
     }
-    used_amount: number
+    used_amount?: number
     ttfb_ms: number
     has_detail: boolean
 }

@@ -10,9 +10,9 @@ import (
 
 func TestPPIOURLHelpers(t *testing.T) {
 	cases := []struct {
-		name         string
-		baseURL      string
-		wantResp     string
+		name          string
+		baseURL       string
+		wantResp      string
 		wantWebSearch string
 	}{
 		{
@@ -53,6 +53,7 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 		model          PPIOModelV2
 		wantToolChoice bool
 		wantVision     bool
+		wantMaxOutput  int64
 	}{
 		{
 			name: "Claude chat model with image input",
@@ -61,9 +62,12 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 				ModelType:       "chat",
 				Features:        []string{"tool_use", "streaming"},
 				InputModalities: []string{"text", "image"},
+				Endpoints:       []string{"anthropic"},
+				MaxOutputTokens: 64000,
 			},
 			wantToolChoice: true,
 			wantVision:     true,
+			wantMaxOutput:  64000,
 		},
 		{
 			name: "Chat model text only",
@@ -72,9 +76,11 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 				ModelType:       "chat",
 				Features:        []string{},
 				InputModalities: []string{"text"},
+				MaxOutputTokens: 8192,
 			},
 			wantToolChoice: true,
 			wantVision:     false,
+			wantMaxOutput:  8192,
 		},
 		{
 			name: "Embedding model",
@@ -83,9 +89,11 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 				ModelType:       "embedding",
 				Features:        []string{},
 				InputModalities: []string{"text"},
+				MaxOutputTokens: 2048,
 			},
 			wantToolChoice: false,
 			wantVision:     false,
+			wantMaxOutput:  2048,
 		},
 		{
 			name: "Image generation model",
@@ -94,9 +102,11 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 				ModelType:       "image",
 				Features:        []string{},
 				InputModalities: []string{"text"},
+				MaxOutputTokens: 1024,
 			},
 			wantToolChoice: false,
 			wantVision:     false,
+			wantMaxOutput:  1024,
 		},
 		{
 			name: "Chat model with image modality but no tool features",
@@ -105,9 +115,39 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 				ModelType:       "chat",
 				Features:        []string{"streaming"},
 				InputModalities: []string{"text", "image"},
+				MaxOutputTokens: 4096,
 			},
 			wantToolChoice: true,
 			wantVision:     true,
+			wantMaxOutput:  4096,
+		},
+		{
+			name: "Anthropic-compatible mimo-v2-pro keeps upstream max output tokens",
+			model: PPIOModelV2{
+				ID:              "xiaomimimo/mimo-v2-pro",
+				ModelType:       "chat",
+				Features:        []string{"streaming"},
+				InputModalities: []string{"text"},
+				Endpoints:       []string{"anthropic"},
+				MaxOutputTokens: 131072,
+			},
+			wantToolChoice: true,
+			wantVision:     false,
+			wantMaxOutput:  131072,
+		},
+		{
+			name: "Other anthropic non-Claude models keep upstream max output tokens",
+			model: PPIOModelV2{
+				ID:              "deepseek-r1",
+				ModelType:       "chat",
+				Features:        []string{"streaming"},
+				InputModalities: []string{"text"},
+				Endpoints:       []string{"anthropic"},
+				MaxOutputTokens: 131072,
+			},
+			wantToolChoice: true,
+			wantVision:     false,
+			wantMaxOutput:  131072,
 		},
 	}
 
@@ -123,6 +163,11 @@ func TestBuildConfigFromPPIOModelV2_ToolChoiceAndVision(t *testing.T) {
 			gotVision, _ := cfg[string(model.ModelConfigVisionKey)].(bool)
 			if gotVision != tt.wantVision {
 				t.Errorf("vision = %v, want %v", gotVision, tt.wantVision)
+			}
+
+			gotMaxOutput, _ := cfg["max_output_tokens"].(int64)
+			if gotMaxOutput != tt.wantMaxOutput {
+				t.Errorf("max_output_tokens = %v, want %v", gotMaxOutput, tt.wantMaxOutput)
 			}
 		})
 	}

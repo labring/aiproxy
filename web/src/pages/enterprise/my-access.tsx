@@ -1117,7 +1117,7 @@ function RequestLogsSection() {
                                                     {formatNumber(log.usage?.total_tokens || 0)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right tabular-nums">
-                                                    {formatAmount(log.used_amount)}
+                                                    {formatAmount(log.used_amount ?? 0)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                                                     {log.ttfb_ms > 0 ? formatMs(log.ttfb_ms) : "-"}

@@ -104,7 +104,7 @@ func ExecuteSync(
 
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, cfg)
+	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
@@ -393,7 +393,11 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 // partitions them by endpoint compatibility, and writes the lists into the
 // corresponding Novita channels. When autoCreate is true and no Novita channels
 // exist, it creates them automatically using the API key from cfg.
-func EnsureNovitaChannels(autoCreate bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
+//
+// anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
+// channel. Pass nil to preserve the existing setting (only initializing the key
+// to false if absent). Pass a non-nil pointer to always write the given value.
+func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -423,12 +427,12 @@ func EnsureNovitaChannels(autoCreate bool, cfg NovitaConfigResult) (ChannelsInfo
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, cfg)
+	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, cfg)
 }
 
 func ensureNovitaChannelsFromModels(
 	anthropicModels, openaiModels []string,
-	autoCreate bool, cfg NovitaConfigResult,
+	autoCreate bool, anthropicPurePassthrough *bool, cfg NovitaConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -445,7 +449,8 @@ func ensureNovitaChannelsFromModels(
 			return info, nil
 		}
 
-		created, createErr := createNovitaChannels(cfg, anthropicModels, openaiModels)
+		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
+		created, createErr := createNovitaChannels(cfg, purePassthrough, anthropicModels, openaiModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -465,6 +470,7 @@ func ensureNovitaChannelsFromModels(
 			// Ensure recommended defaults for Novita's Anthropic endpoint:
 			// skip_image_conversion — Novita natively supports URL image sources
 			// disable_context_management — Novita rejects the beta field with 400
+			// pure_passthrough — forward requests verbatim without body transformation
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -473,6 +479,11 @@ func ensureNovitaChannelsFromModels(
 			}
 			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
 				channels[i].Configs["disable_context_management"] = true
+			}
+			if anthropicPurePassthrough != nil {
+				channels[i].Configs["pure_passthrough"] = *anthropicPurePassthrough
+			} else if _, ok := channels[i].Configs["pure_passthrough"]; !ok {
+				channels[i].Configs["pure_passthrough"] = false
 			}
 		} else {
 			channels[i].Models = openaiModels
@@ -497,7 +508,7 @@ func ensureNovitaChannelsFromModels(
 // createNovitaChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
 // Both channels share the same API key from the Novita config.
-func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultNovitaAPIBase
@@ -538,6 +549,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicModels, openaiModels 
 				Configs: model.ChannelConfigs{
 					"skip_image_conversion":      true,
 					"disable_context_management": true,
+					"pure_passthrough":            anthropicPurePassthrough,
 				},
 			}
 
@@ -610,7 +622,7 @@ func StartSyncScheduler(ctx context.Context) {
 func runNovitaDailySync(ctx context.Context) {
 	log.Printf("Novita auto sync: starting daily model sync")
 
-	result, err := ExecuteSync(ctx, SyncOptions{}, nil)
+	result, err := ExecuteSync(ctx, SyncOptions{AnthropicPurePassthrough: true}, nil)
 	if err != nil {
 		notify.ErrorThrottle(
 			"novitaAutoSyncFailed",

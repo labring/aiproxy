@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/labring/aiproxy/core/model"
 )
 
 // ─── flushCopy tests ─────────────────────────────────────────────────────────
@@ -74,7 +76,7 @@ func TestRingBuffer_OverflowKeepsLastN(t *testing.T) {
 func TestRingBuffer_MultipleWrites(t *testing.T) {
 	rb := newRingBuffer(8)
 	rb.Write([]byte("12345678")) // fills exactly
-	rb.Write([]byte("abcd"))    // wraps around, overwrites "1234"
+	rb.Write([]byte("abcd"))     // wraps around, overwrites "1234"
 
 	got := string(rb.Bytes()) // should be "5678abcd"
 	if got != "5678abcd" {
@@ -169,6 +171,23 @@ func TestExtractUsage_Anthropic_Stream(t *testing.T) {
 	}
 }
 
+func TestExtractUsage_Anthropic_StreamHead(t *testing.T) {
+	payload := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"usage\":{\"input_tokens\":14,\"cache_read_input_tokens\":5,\"cache_creation\":{\"ephemeral_5m_input_tokens\":3,\"ephemeral_1h_input_tokens\":2}}}}\n\n"
+
+	u := extractUsageFromHead([]byte(payload))
+	if int64(u.InputTokens) != 14 {
+		t.Errorf("InputTokens: want 14, got %d", u.InputTokens)
+	}
+
+	if int64(u.CachedTokens) != 5 {
+		t.Errorf("CachedTokens: want 5, got %d", u.CachedTokens)
+	}
+
+	if int64(u.CacheCreationTokens) != 5 {
+		t.Errorf("CacheCreationTokens: want 5, got %d", u.CacheCreationTokens)
+	}
+}
+
 // Anthropic non-streaming: usage is top-level.
 func TestExtractUsage_Anthropic_NonStream(t *testing.T) {
 	payload := `{"id":"msg_1","usage":{"input_tokens":14,"output_tokens":12,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}`
@@ -214,6 +233,53 @@ func TestExtractUsage_Missing(t *testing.T) {
 	u := extractUsageFromTail([]byte(`data: {"choices":[]}`))
 	if int64(u.InputTokens) != 0 || int64(u.OutputTokens) != 0 {
 		t.Errorf("expected zero usage, got %+v", u)
+	}
+}
+
+func TestMergeAnthropicSSEUsage_HeadFillsMissingFields(t *testing.T) {
+	head := model.Usage{
+		InputTokens:         14,
+		CachedTokens:        5,
+		CacheCreationTokens: 3,
+	}
+	tail := model.Usage{
+		OutputTokens: 12,
+	}
+
+	got := mergeAnthropicSSEUsage(head, tail)
+	if int64(got.InputTokens) != 14 {
+		t.Errorf("InputTokens: want 14, got %d", got.InputTokens)
+	}
+
+	if int64(got.OutputTokens) != 12 {
+		t.Errorf("OutputTokens: want 12, got %d", got.OutputTokens)
+	}
+
+	if int64(got.CachedTokens) != 5 {
+		t.Errorf("CachedTokens: want 5, got %d", got.CachedTokens)
+	}
+
+	if int64(got.CacheCreationTokens) != 3 {
+		t.Errorf("CacheCreationTokens: want 3, got %d", got.CacheCreationTokens)
+	}
+}
+
+func TestMergeAnthropicSSEUsage_TailWinsWhenComplete(t *testing.T) {
+	head := model.Usage{
+		InputTokens:         14,
+		CachedTokens:        5,
+		CacheCreationTokens: 3,
+	}
+	tail := model.Usage{
+		InputTokens:         20,
+		OutputTokens:        12,
+		CachedTokens:        9,
+		CacheCreationTokens: 7,
+	}
+
+	got := mergeAnthropicSSEUsage(head, tail)
+	if got != tail {
+		t.Errorf("expected tail usage to remain unchanged, got %+v want %+v", got, tail)
 	}
 }
 

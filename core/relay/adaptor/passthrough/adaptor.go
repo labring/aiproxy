@@ -49,6 +49,20 @@ var hopByHopHeaders = map[string]bool{
 	"Upgrade":             true,
 }
 
+// forwardResponseHeaders copies upstream response headers to the Gin context,
+// skipping hop-by-hop headers that must not be forwarded by a reverse proxy.
+func forwardResponseHeaders(c *gin.Context, header http.Header) {
+	for k, vs := range header {
+		if hopByHopHeaders[k] {
+			continue
+		}
+
+		for _, v := range vs {
+			c.Header(k, v)
+		}
+	}
+}
+
 // clientHeadersToForward lists request headers from the client that should be
 // forwarded verbatim to the upstream. Authorization is excluded because
 // SetupRequestHeader replaces it with the channel key.
@@ -158,7 +172,7 @@ func (a *Adaptor) GetRequestURL(
 	clientPath := c.Request.URL.Path
 
 	// path_base_map overrides the base URL for specific path prefixes.
-	if pbm := getPathBaseMap(m.ChannelConfigs); len(pbm) > 0 {
+	if pbm := GetPathBaseMap(m.ChannelConfigs); len(pbm) > 0 {
 		if base, suffix, ok := matchPathBaseMap(pbm, clientPath); ok {
 			u, err := url.JoinPath(base, suffix)
 			if err != nil {
@@ -206,17 +220,7 @@ func (a *Adaptor) DoResponse(
 		return adaptor.DoResponseResult{}, errorFromResponse(m, resp)
 	}
 
-	// Forward upstream response headers, skipping hop-by-hop headers.
-	for k, vs := range resp.Header {
-		if hopByHopHeaders[k] {
-			continue
-		}
-
-		for _, v := range vs {
-			c.Header(k, v)
-		}
-	}
-
+	forwardResponseHeaders(c, resp.Header)
 	c.Status(resp.StatusCode)
 
 	// Ring buffer captures the last tailBufSize bytes for usage extraction.
@@ -262,10 +266,10 @@ func stripV1Prefix(path string) string {
 	return path
 }
 
-// getPathBaseMap extracts the path_base_map entry from channel configs.
+// GetPathBaseMap extracts the path_base_map entry from channel configs.
 // The stored value may be map[string]string (typed) or map[string]interface{}
 // (after JSON round-trip through GORM's fastjson serialiser).
-func getPathBaseMap(configs model.ChannelConfigs) map[string]string {
+func GetPathBaseMap(configs model.ChannelConfigs) map[string]string {
 	v, ok := configs[model.ChannelConfigPathBaseMapKey]
 	if !ok || v == nil {
 		return nil

@@ -20,16 +20,35 @@ import (
 // that intermediate usage chunks (e.g. message_start in Anthropic streaming) do
 // not shadow the final, complete usage figure.
 func extractUsageFromTail(tail []byte) model.Usage {
+	return extractUsageFromBytes(tail, false)
+}
+
+// extractUsageFromHead scans data for the first "usage" JSON object.
+// Used to capture input_tokens from Anthropic SSE message_start events,
+// which appear at the beginning of a streaming response.
+func extractUsageFromHead(head []byte) model.Usage {
+	return extractUsageFromBytes(head, true)
+}
+
+// extractUsageFromBytes locates a "usage" JSON object in data.
+// firstOccurrence=true returns the first match; false returns the last.
+func extractUsageFromBytes(data []byte, firstOccurrence bool) model.Usage {
 	usageKey := []byte(`"usage"`)
 
-	// Find the last occurrence of "usage" in the tail.
-	idx := bytes.LastIndex(tail, usageKey)
+	var idx int
+	if firstOccurrence {
+		idx = bytes.Index(data, usageKey)
+	} else {
+		idx = bytes.LastIndex(data, usageKey)
+	}
+
 	if idx < 0 {
 		return model.Usage{}
 	}
 
-	// Advance past the key to the colon.
-	after := tail[idx+len(usageKey):]
+	after := data[idx+len(usageKey):]
+
+	// Advance past the colon.
 	colon := bytes.IndexByte(after, ':')
 	if colon < 0 {
 		return model.Usage{}
@@ -70,10 +89,8 @@ func extractUsageFromTail(tail []byte) model.Usage {
 		return model.Usage{}
 	}
 
-	usageJSON := after[:end+1]
-
 	var raw rawUsage
-	if err := sonic.Unmarshal(usageJSON, &raw); err != nil {
+	if err := sonic.Unmarshal(after[:end+1], &raw); err != nil {
 		return model.Usage{}
 	}
 

@@ -15,4 +15,9 @@ type Config struct {
 	// The ttl field is part of the prompt-caching-scope beta. Set this to
 	// true for upstreams that do not support cache TTL customization.
 	StripCacheTTL bool `json:"strip_cache_ttl"`
+	// PurePassthrough when true bypasses all request/response conversion for
+	// Anthropic-protocol requests. The client body is forwarded verbatim;
+	// only authentication headers are replaced. Usage is captured via
+	// dual-buffer SSE scanning instead of structured parsing.
+	PurePassthrough bool `json:"pure_passthrough"`
 }

@@ -208,10 +208,11 @@ type ChannelInfo struct {
 
 // SyncOptions represents options for a sync operation.
 type SyncOptions struct {
-	AutoCreateChannels   bool `json:"auto_create_channels"`
-	ChangesConfirmed     bool `json:"changes_confirmed"`
-	DryRun               bool `json:"dry_run,omitempty"`
-	DeleteUnmatchedModel bool `json:"delete_unmatched_model"`
+	AutoCreateChannels       bool `json:"auto_create_channels"`
+	ChangesConfirmed         bool `json:"changes_confirmed"`
+	DryRun                   bool `json:"dry_run,omitempty"`
+	DeleteUnmatchedModel     bool `json:"delete_unmatched_model"`
+	AnthropicPurePassthrough bool `json:"anthropic_pure_passthrough"` // Enable pure passthrough for Anthropic channel
 }
 
 // SyncResult represents the result of a sync operation.

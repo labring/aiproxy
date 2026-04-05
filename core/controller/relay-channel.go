@@ -12,6 +12,7 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -490,7 +491,9 @@ func filterChannels(
 	maxErrorRate float64,
 	ignoreChannel ...map[int64]struct{},
 ) []*model.Channel {
-	filtered := make([]*model.Channel, 0)
+	filtered := make([]*model.Channel, 0, len(channels))
+	native := make([]*model.Channel, 0, len(channels))
+
 	for _, channel := range channels {
 		if channel.Status != model.ChannelStatusEnabled {
 			continue
@@ -533,6 +536,19 @@ func filterChannels(
 		}
 
 		filtered = append(filtered, channel)
+
+		// Track native channels using the already-fetched adaptor to avoid a
+		// second registry lookup. Adaptors without NativeModeChecker are treated
+		// as native for all modes they support (per the interface contract).
+		checker, ok := a.(adaptor.NativeModeChecker)
+		if !ok || checker.NativeMode(mode) {
+			native = append(native, channel)
+		}
+	}
+
+	// Prefer native channels (no protocol conversion) when available.
+	if len(native) > 0 {
+		return native
 	}
 
 	return filtered

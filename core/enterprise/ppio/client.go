@@ -104,13 +104,10 @@ func (c *PPIOClient) FetchModels(ctx context.Context) ([]PPIOModel, error) {
 	return modelsResp.Data, nil
 }
 
-// FetchAllModels fetches the full model catalog (including pa/ closed-source models)
-// via the PPIO management API using the mgmt console token.
-func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
-	url := ppioMgmtModelsEndpoint + "?visibility=1"
-
-	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
-	defer cancel()
+// fetchMgmtModels calls the PPIO management model-list API with the given query
+// string and returns the parsed model slice.
+func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query string) ([]PPIOModelV2, error) {
+	url := ppioMgmtModelsEndpoint + query
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -146,6 +143,47 @@ func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PP
 	}
 
 	return mgmtResp.Data, nil
+}
+
+// FetchAllModels fetches the full model catalog (including pa/ closed-source models)
+// via the PPIO management API using the mgmt console token.
+//
+// PPIO's list API only returns chat-type models when queried with ?visibility=1.
+// Non-chat types (e.g. embedding) require a separate ?model_type=<type> request.
+// Currently only embedding models exist in non-chat categories; the function makes
+// one extra request to merge them in.
+func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
+	defer cancel()
+
+	// Fetch chat models (the bulk of the catalog, including pa/ closed-source).
+	chatModels, err := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1")
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch embedding models separately — they are not returned by ?visibility=1.
+	// Use visibility=1 to include pa/ closed-source embedding models alongside public ones.
+	embeddingModels, embErr := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1&model_type=embedding")
+	if embErr != nil {
+		log.Printf("PPIO sync: failed to fetch embedding models (non-fatal): %v", embErr)
+		return chatModels, nil
+	}
+
+	// Merge: skip any embedding model already present in the chat list (shouldn't
+	// happen in practice but guards against API changes).
+	chatSet := make(map[string]struct{}, len(chatModels))
+	for _, m := range chatModels {
+		chatSet[m.ID] = struct{}{}
+	}
+
+	for _, m := range embeddingModels {
+		if _, exists := chatSet[m.ID]; !exists {
+			chatModels = append(chatModels, m)
+		}
+	}
+
+	return chatModels, nil
 }
 
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs

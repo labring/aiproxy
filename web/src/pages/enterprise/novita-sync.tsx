@@ -97,7 +97,8 @@ export default function NovitaSyncPage() {
   const [syncOpts, setSyncOpts] = useState<SyncOptions>({
     auto_create_channels: true,
     changes_confirmed: false,
-    delete_unmatched_model: false
+    delete_unmatched_model: false,
+    anthropic_pure_passthrough: true
   })
 
   const baseURLGroups = useMemo(() => {
@@ -770,6 +771,18 @@ export default function NovitaSyncPage() {
               id="delete-unmatched"
               checked={syncOpts.delete_unmatched_model || false}
               onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, delete_unmatched_model: checked })}
+              disabled={!canManage}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="anthropic-pure-passthrough">{t('enterprise.novita.anthropicPurePassthrough')}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{t('enterprise.novita.anthropicPurePassthroughHint')}</p>
+            </div>
+            <Switch
+              id="anthropic-pure-passthrough"
+              checked={syncOpts.anthropic_pure_passthrough ?? true}
+              onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, anthropic_pure_passthrough: checked })}
               disabled={!canManage}
             />
           </div>
