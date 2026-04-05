@@ -406,6 +406,153 @@ Validation already performed:
 
 ---
 
+## Past Handoff — 2026-04-05 (PPIO 多模态原生透传 + 自动发现注册)
+
+### 1. Goal
+
+Add support for PPIO's non-OpenAI multimodal endpoints (image/video/audio) by introducing a new channel type (`ChannelTypePPIOMultimodal = 55`) and relay mode (`PPIONative`). Requests to `/v3/*` are forwarded verbatim using a new `ppioml` passthrough adaptor. When a previously-unseen model succeeds for the first time, a background goroutine fetches its pricing from the PPIO management API and auto-registers a `ModelConfig` entry.
+
+### 2. Scope
+
+**Core relay:**
+
+- `core/relay/mode/define.go` — added `PPIONative` mode constant
+- `core/model/chtype.go` — added `ChannelTypePPIOMultimodal ChannelType = 55`
+- `core/relay/adaptor/ppioml/adaptor.go` — **new**: embeds `passthrough.Adaptor`; `SupportMode` and `NativeMode` return `true` only for `PPIONative`; `DefaultBaseURL = "https://api.ppinfra.com"`
+- `core/relay/adaptors/register.go` — blank import for `ppioml`
+- `core/middleware/distributor.go` — `getRequestModel` case for `PPIONative`: extracts model from URL path (`/v3/{model}` or `/v3/async/{model}`)
+- `core/router/relay.go` — `/v3/*` route group with `IPBlock + TokenAuth + PPIONative()` handlers
+- `core/controller/relay.go` — `PPIONative()` returns `[]gin.HandlerFunc{NewDistribute(PPIONative), NewRelay(PPIONative)}`
+- `core/controller/relay-controller.go` — `const unknownMode = mode.Unknown` alias (avoids parameter shadowing); `PassthroughSuccessHook` package-level var; hook invocation in `relay()` after first successful unknown-model request
+
+**Enterprise — PPIO:**
+
+- `core/enterprise/ppio/client.go` — `DefaultPPIOMultimodalBase = "https://api.ppinfra.com"`; `FetchAllModels` extended to fetch `embedding/image/video/audio` types via separate management API calls
+- `core/enterprise/ppio/sync.go` — `ModelTypeToMode`: `"image"/"video"/"audio"` → `PPIONative`; `EnsurePPIOChannels`/`ensurePPIOChannelsFromModels`/`createPPIOChannels`: added `multimodalModels []string` param and `ChannelTypePPIOMultimodal` create/update branch; new multimodal channel always sets `allow_passthrough_unknown=true`
+- `core/enterprise/ppio/autodiscover.go` — **new**: `init()` sets `PassthroughSuccessHook`; `onPassthroughFirstSuccess` guards against duplicate registration, fetches management API pricing, calls `registerPPIONativeModel`
+- `core/enterprise/ppio/sync_channels_test.go` — updated to pass `multimodalModels`; added `ChannelTypePPIOMultimodal` assertion; expected created channels 2 → 3
+
+**Commits:** `b84a43e`
+
+### 3. Root Cause
+
+```text
+Root cause:
+- Symptom: PPIO multimodal models (Seedream image generation, Wan/Kling/Minimax video, etc.)
+  are not OpenAI-compatible — each has its own request/response schema. Attempting to route
+  them through the existing PPIO OpenAI channel (type=54) either fails with body-conversion
+  errors or silently corrupts the request.
+- Cause: aiproxy only supported OpenAI-compatible and Anthropic-compatible relay modes; PPIO
+  multimodal uses URL-embedded model IDs (/v3/{model-id}) and proprietary JSON schemas.
+- Fix rationale:
+  - New ChannelTypePPIOMultimodal (type=55) uses a pure passthrough adaptor: zero body
+    transformation, auth header replacement only. The passthrough.Adaptor.GetRequestURL
+    strips "/v1" but is a no-op for "/v3/" paths, so BaseURL + path resolves correctly
+    without any custom URL logic.
+  - SupportMode(PPIONative)=true only for type=55 ensures the channel routing system
+    never sends PPIONative requests to the OpenAI or Anthropic channels (and vice versa).
+  - Auto-discovery via PassthroughSuccessHook decouples model registration from sync:
+    new PPIO multimodal models work immediately after first request; pricing is fetched
+    asynchronously without blocking the response.
+
+unknownMode alias:
+- relay() function parameter "mode mode.Mode" shadowed the mode package import inside the
+  function body, causing "mode.Unknown undefined" compile error. Fixed by hoisting
+  const unknownMode = mode.Unknown at package level.
+```
+
+### 4. Risk Areas
+
+```text
+Risk areas:
+
+1. URL path extraction correctness:
+   - getRequestModel PPIONative case: /v3/async/task-result → "ppio/task-result",
+     /v3/video/create → "ppio/video/create". These are synthetic model names used for
+     rate-limiting; they have no ModelConfig and are always "unknown". The allow_passthrough_unknown
+     flag on the multimodal channel must remain true, or task-result and video/create requests
+     will be rejected with 404 (model not found).
+
+2. Auto-discovery race condition:
+   - Guard checks model.DB count=0 before registering. If two requests for the same new model
+     succeed simultaneously, both goroutines may see count=0 and both call DB.Save(&mc) with
+     the same model name. GORM Save on a non-primary-key model field is an upsert only if the
+     record has a PK set — without PK, this creates two rows. This is benign (first DB.Save
+     wins at the cache layer) but wastes one row.
+
+3. PassthroughSuccessHook fires for ALL unknown-model passthrough channels:
+   - The hook checks channel type == ChannelTypePPIOMultimodal and returns early otherwise.
+     However, if another channel type also sets allow_passthrough_unknown=true, any unknown
+     model success will call the hook with a non-PPIO type, which is silently ignored — no
+     auto-discovery for non-PPIO multimodal channels.
+
+4. Management API pricing fetch is best-effort:
+   - If FetchAllModels fails (token missing, network error), registerPPIONativeModel is called
+     with remoteModel=nil → zero-cost ModelConfig with mode.PPIONative. This means the model
+     is usable but billing is incorrect until a manual sync corrects the price.
+
+5. FetchAllModels loop is sequential:
+   - Fetches chat + 4 extra types (embedding, image, video, audio) sequentially, each with its
+     own HTTP round-trip. Adds ~4 × latency to autodiscover path and to sync. Not a correctness
+     risk, but autodiscover latency could be 10–20 s with slow management API.
+
+6. Multimodal channel not updated by Novita sync:
+   - Only the PPIO sync creates/updates ChannelTypePPIOMultimodal. If Novita adds native
+     multimodal endpoints in the future, a parallel change would be required.
+```
+
+### 5. Suggested Verification
+
+```text
+Suggested verification:
+
+API (PPIO multimodal channel, ChannelTypePPIOMultimodal=55):
+- POST /v3/seedream-5.0-lite with valid API key and PPIO-native body → 200, image URL in response
+- POST /v3/async/wan-wan-2.1-t2v with valid body → 200, task_id in response
+- GET /v3/async/task-result?task_id=<id> → 200, task status in response
+- POST /v3/seedream-5.0-lite without auth → 401
+- POST /v3/seedream-5.0-lite with quota-exceeded group → 403
+
+Auto-discovery:
+- Request an unregistered PPIO multimodal model (e.g. a new seedream version not yet in ModelConfig)
+- Verify request succeeds (passthrough)
+- After ~1-2 s: query GET /api/model-config?model=<name> → should return a newly registered entry
+- Verify model_type = PPIONative (mode = "PPIONative") in the registered config
+
+PPIO sync (with PPIO management token configured):
+- Run sync → verify three channels created: OpenAI (type=54), Anthropic (type=14), Multimodal (type=55)
+- Verify multimodal channel BaseURL = "https://api.ppinfra.com"
+- Verify multimodal channel Configs["allow_passthrough_unknown"] = true
+- Verify multimodal channel Models includes image/video model IDs (e.g. seedream-5.0-lite, wan-*)
+
+Channel routing:
+- POST /v3/seedream-5.0-lite → must route only to type=55, never to type=54 or type=14
+- POST /v1/chat/completions with a chat model → must NOT route to type=55
+- POST /v1/messages (Anthropic) → must route to type=14, not type=55
+
+Edge cases:
+- Disable type=55 channel → POST /v3/seedream-5.0-lite → should 503 (no eligible channel)
+- /v3/async/task-result requests with missing task_id → upstream 400 or 422 passed through
+- Very long model name in URL (/v3/<256-char-slug>) → getRequestModel truncates or rejects
+```
+
+### 6. Validation Already Performed
+
+```text
+Validation already performed:
+- go build -tags enterprise -trimpath -ldflags "-s -w" ./... passed
+- go test -tags enterprise ./enterprise/ppio/... passed (all 4 test functions including new
+  multimodal channel assertions: TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs,
+  TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap)
+- pnpm run build NOT run (no frontend changes in this commit)
+- UI: no changes; PPIO sync page does not yet show multimodal channel status indicator
+- No live PPIO API test: multimodal endpoints not called against real ppinfra.com
+- No auto-discovery end-to-end test: requires PPIO management token + unseeded model
+- No load test on /v3/* route registration
+```
+
+---
+
 ## Past Handoff — 2026-04-04 (Pure Passthrough + NativeModeChecker)
 
 ### 1. Goal
