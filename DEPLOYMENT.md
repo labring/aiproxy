@@ -958,120 +958,96 @@ gunzip -c /data/backup/pg_log_20260323.sql.gz | docker exec -i aiproxy-postgres 
 
 > **[易错点] 如果生产环境启用了 `LOG_SQL_DSN` 分离日志库，必须同时备份两个数据库，否则恢复时会丢失请求日志和审计数据。**
 
-### 10.4 更新升级
+### 10.4 更新升级（零停机 Docker 部署）
 
-> **[易错点] 更新时必须重新编译前端（因为 `VITE_API_BASE_URL` 是构建时写入的），否则前端会调用错误的 API 地址。**
+> **推荐方式：** 使用 `scripts/deploy.sh`（默认零停机模式）。Docker 多阶段构建自动完成前端编译 + Swagger 生成 + enterprise 标签编译，消除手动构建的易错点。
 
-#### 标准更新流程
+#### 工作原理
 
-```bash
-# ============================================================
-# 第 1 步：拉取代码（服务不中断，0 影响）
-# ============================================================
-# 目录归属给 aiproxy 用户，需临时切回 ppuser 操作 git
-sudo chown -R ppuser:ppuser /data/aiproxy
-cd /data/aiproxy && git pull
-
-# ============================================================
-# 第 2 步：编译前端（服务不中断，~15 秒）
-# ============================================================
-cd /data/aiproxy/web
-echo 'VITE_API_BASE_URL=https://ai.paigod.work/api' > .env.production
-pnpm install && pnpm run build
-
-# ============================================================
-# 第 3 步：嵌入前端 + 编译后端（服务不中断，~30 秒）
-# [P0 易错点#21] npm 输出到 web/dist/，但 go:embed 读取
-# core/public/dist/，必须同步！否则 Go 二进制嵌入旧前端。
-# ============================================================
-cd /data/aiproxy
-rsync -a --delete web/dist/ core/public/dist/
-cd core
-export PATH=$PATH:/usr/local/go/bin GOPROXY=https://goproxy.cn,direct
-go build -tags enterprise -trimpath -ldflags "-s -w" -o /data/aiproxy/aiproxy
-
-# ============================================================
-# 第 4 步：重启服务（唯一中断窗口，~2-3 秒）
-# ============================================================
-sudo chown -R aiproxy:aiproxy /data/aiproxy
-sudo chmod 755 /data/aiproxy
-sudo systemctl restart aiproxy
-
-# 验证
-curl -s http://127.0.0.1:3000/api/status
-sudo journalctl -u aiproxy -n 20 --no-pager
+```
+Phase 1: Docker 构建新镜像（旧容器持续服务，0 影响）
+Phase 2: 新容器启动在备用端口（如 :3001），健康检查 + smoke test
+Phase 3: Nginx upstream 切换到新端口 → nginx reload（零断连，SSE 不中断）
+Phase 4: 旧容器收到 SIGTERM → graceful drain（最长等 600s，在途请求自然完成）
+Phase 5: 更新状态文件，清理旧容器
 ```
 
-#### 仅后端更新（快速部署，确认无前端变更时使用）
+端口交替策略：每次部署在 3000/3001 之间交替，通过 `/data/aiproxy/.active-port` 跟踪。
 
-> ⚠️ **判断是否有前端变更：** `git diff HEAD~1 --stat | grep "web/src/"` — 如果有输出，说明包含前端改动，**必须走标准更新流程**，不能用此快捷方式。忽略此步是常见事故原因（易错点 #21）。
-
-当变更**仅**涉及后端 Go 代码时，可跳过前端编译：
+#### 标准部署命令
 
 ```bash
-# 1. 拉取代码
-cd /data/aiproxy
-sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main
+# 完整部署（拉代码 + 构建 + 零停机切换 + smoke test）
+ADMIN_KEY=xxx bash scripts/deploy.sh
 
-# 2. 编译后端
-cd /data/aiproxy/core
-sudo env "PATH=/usr/local/go/bin:$PATH" "GOPATH=/home/ppuser/go" "GOCACHE=/tmp/go-cache" \
-  go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
+# 跳过 git pull（部署当前代码）
+ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull
 
-# 3. 停止服务 → 复制二进制 → 启动服务
-#    [易错点#19] go build 输出到 /data/aiproxy/core/aiproxy，
-#    但 systemd ExecStart 指向 /data/aiproxy/aiproxy，
-#    必须先停服务再复制，否则 "Text file busy" 错误。
-sudo systemctl stop aiproxy
-sudo cp /data/aiproxy/core/aiproxy /data/aiproxy/aiproxy
-sudo chown aiproxy:aiproxy /data/aiproxy/aiproxy
-sudo systemctl start aiproxy
+# 仅构建镜像（不切换流量）
+bash scripts/deploy.sh --build-only
 
-# 4. 验证
-sudo systemctl status aiproxy
-curl -s http://127.0.0.1:3000/api/status
+# 紧急回滚（使用上次部署前的镜像）
+ADMIN_KEY=xxx bash scripts/deploy.sh --rollback
 ```
 
 #### 用户影响评估
 
 | 阶段 | 耗时 | 服务影响 |
 |------|------|---------|
-| git pull | ~3 秒 | 无，服务持续运行 |
-| 前端编译 | ~15 秒 | 无，服务持续运行 |
-| 后端编译 | ~30 秒 | 无，服务持续运行 |
-| **systemctl restart** | **~2-3 秒** | **服务中断** |
+| Docker build（前端 + Go） | ~2-5 分钟 | 无，旧容器持续服务 |
+| Canary 启动 + 健康检查 | ~10-30 秒 | 无，旧容器持续服务 |
+| **Nginx reload** | **~0 秒** | **无中断，已有连接继续走旧 worker** |
+| 旧容器 drain | 0-600 秒 | 无，在途 SSE 流自然完成 |
 
-> **总影响：约 2-3 秒断线。** 正在进行的 API 请求和 SSE 流式响应会被中断，新请求短暂拒绝。服务启动后自动恢复，大部分 AI 客户端（Cursor、ChatBox 等）有自动重试机制，用户基本无感。
->
-> **建议更新时间：** 工作日午休（12:00-13:00）或非工作时间，避开使用高峰。
+> **总影响：0 秒服务中断。** 正在进行的 SSE 流式响应通过 Nginx 旧 worker 继续完成，新请求由 Nginx 新 worker 路由到新容器。用户完全无感。
 
 #### 快速回滚
 
-如果更新后发现问题，可快速回滚到上一版本：
-
 ```bash
-# 回退到上一个 commit
-sudo chown -R ppuser:ppuser /data/aiproxy
-cd /data/aiproxy && git log --oneline -5   # 确认要回退到的版本
-git checkout <上一个commit-hash>
+# 方式一：脚本回滚（推荐，使用上次部署前自动保存的镜像）
+ADMIN_KEY=xxx bash scripts/deploy.sh --rollback
 
-# 重新编译（同上述第 2-4 步）
-cd web && pnpm run build
-cd .. && rsync -a --delete web/dist/ core/public/dist/
-cd core && go build -tags enterprise -trimpath -ldflags "-s -w" -o /data/aiproxy/aiproxy
-sudo chown -R aiproxy:aiproxy /data/aiproxy
-sudo chmod 755 /data/aiproxy
-sudo systemctl restart aiproxy
+# 方式二：手动回滚
+# 1. 查看可用镜像
+docker images | grep aiproxy
+
+# 2. 用 rollback 镜像启动容器，切换 Nginx（脚本会自动处理）
 ```
 
-#### 未来零停机升级方案（按需）
+> 每次部署前脚本自动执行 `docker tag aiproxy:local aiproxy:rollback`，保留上一版镜像。回滚无需重新编译，秒级恢复。
 
-当前单机架构重启时有 2-3 秒中断。如业务增长后需要零停机：
+#### Legacy 模式（兜底）
 
-| 方案 | 停机时间 | 额外成本 | 复杂度 |
-|------|---------|---------|--------|
-| **双进程热切换** | < 0.5 秒 | 无 | 中等（新二进制用临时端口启动，Nginx upstream 切换后关闭旧进程） |
-| **双 CVM + CLB 滚动更新** | 0 秒 | 服务器成本翻倍 | 低（CLB 摘流量 → 更新 → 挂回，逐台操作） |
+如果 Nginx upstream 配置尚未部署，可使用 legacy 模式（直接容器替换，5-10 秒中断）：
+
+```bash
+ADMIN_KEY=xxx bash scripts/deploy.sh --legacy
+```
+
+#### 服务器一次性初始化（首次启用零停机部署时执行）
+
+```bash
+# 1. 部署 Nginx upstream 配置
+sudo cp deploy/nginx/aiproxy-upstream.conf /etc/nginx/conf.d/
+sudo cp deploy/nginx/ai.paigod.work.conf /etc/nginx/sites-available/
+sudo cp deploy/nginx/apiproxy.paigod.work.conf /etc/nginx/sites-available/
+sudo ln -sf /etc/nginx/sites-available/ai.paigod.work.conf /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/apiproxy.paigod.work.conf /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# 2. 验证 Nginx 配置
+sudo nginx -t
+
+# 3. 初始化状态文件
+echo 3000 | sudo tee /data/aiproxy/.active-port
+
+# 4. 重载 Nginx
+sudo systemctl reload nginx
+
+# 5. 验证
+curl -s http://localhost:80/api/status
+curl -s http://localhost:81/v1/models -H "Authorization: Bearer sk-xxx"
+```
 
 ---
 
@@ -1373,30 +1349,32 @@ sudo systemctl status aiproxy --no-pager
 
 ## 十三、易错点汇总
 
+> **Docker 部署消除的易错点** 标记为 ~~删除线~~，表示使用 `scripts/deploy.sh` Docker 构建后不再可能发生。
+
 | # | 优先级 | 位置 | 易错描述 | 后果 |
 |---|--------|------|---------|------|
 | 1 | P0 | CLB 健康检查 | 81 端口健康检查未改为 TCP，沿用默认 HTTP 打 `/` | `/` 返回 403，CLB 持续判后端不健康，线上 502 |
-| 2 | P1 | systemd | `ReadWritePaths` 未包含 `/tmp` | `/v1/audio/transcriptions` 写临时文件失败，返回 500 |
-| 3 | P1 | systemd | `User=root` 运行 | 服务被攻破直接获得 root 权限，安全加固形同虚设 |
-| 4 | P1 | 备份 | 启用 `LOG_SQL_DSN` 后只备份主库 | 恢复时丢失请求日志和审计数据 |
-| 5 | P2 | 前端部署 | 更新时用 `cp -r` 而非 `rsync --delete` | 旧资源文件残留，升级后出现静态资源错配 |
+| ~~5~~ | ~~P2~~ | ~~前端部署~~ | ~~更新时用 `cp -r` 而非 `rsync --delete`~~ | ~~Docker 构建自动处理，不再需要手动同步~~ |
 | 6 | P2 | CLB 监听器 | 两个转发规则后端端口搞反（ai→81, apiproxy→80） | 管理后台暴露公网，或 API 端口不通 |
 | 7 | P2 | DNS 解析 | 域名直接指向 CVM 公网 IP 而非 CLB VIP | SSL 不生效，直连 HTTP 暴露端口 |
-| 8 | P2 | 前端编译 | 忘记设置 `VITE_API_BASE_URL`，使用了默认的 `localhost:3000` | 前端页面加载后调不通后端 API，所有操作失败 |
-| 9 | P2 | 后端编译 | 忘记 `-tags enterprise` | 飞书登录、企业分析等路由不存在，返回 404，无报错 |
+| ~~8~~ | ~~P2~~ | ~~前端编译~~ | ~~忘记设置 `VITE_API_BASE_URL`~~ | ~~Docker 构建内置前端编译，不再手动设置~~ |
+| ~~9~~ | ~~P2~~ | ~~后端编译~~ | ~~忘记 `-tags enterprise`~~ | ~~Dockerfile 硬编码 `-tags enterprise`，不可能遗漏~~ |
 | 10 | P2 | 环境变量 | `FEISHU_REDIRECT_URI` 或 `FEISHU_FRONTEND_URL` 写成了 `apiproxy.paigod.work` | OAuth 回调指向公网域名，被 Nginx 403 拦截，登录失败 |
 | 11 | P2 | 飞书平台 | 开放平台的重定向 URL 与 `.env` 中的 `FEISHU_REDIRECT_URI` 不一致 | 飞书报"重定向 URI 不匹配"错误 |
 | 12 | P2 | Nginx | `apiproxy.paigod.work` 的 `location /` 兜底规则缺失 | 公网可访问管理后台和 Swagger，安全漏洞 |
 | 13 | P2 | Nginx | 没有删除 `/etc/nginx/sites-enabled/default` | default server 可能拦截请求，导致两个域名都 404 |
 | 14 | P2 | 安全组 | CVM 安全组把 80/81 开放给 0.0.0.0/0 | 可绕过 CLB 直连 CVM，绕过 SSL 和 CLB 安全策略 |
-| 18 | P1 | 环境变量 | 未设置 `ENTERPRISE_BASE_URL` | 「我的接入」页面显示内网地址 `ai.paigod.work/v1`，用户在公网无法使用 |
-| 19 | P0 | 部署 | `go build` 输出到 `core/aiproxy`，但 systemd 运行 `/data/aiproxy/aiproxy`，重启未复制二进制 | 重启后仍运行旧版本，新代码不生效，且无任何报错 |
-| 20 | P1 | 部署 | 服务运行时直接 `cp` 覆盖二进制 | 报 "Text file busy"，必须先 `systemctl stop` 再复制 |
-| 21 | P0 | 前端部署 | `npm run build` 输出到 `web/dist/`，但 `go:embed` 嵌入的是 `core/public/dist/`，编译前未同步 | 前端代码不生效，Go 二进制仍嵌入旧版前端，新功能（如 JWT 登录）在浏览器中不可用，且无任何报错 |
 | 15 | P3 | docker-compose | PostgreSQL/Redis 密码中包含特殊字符（`@`, `#`, `%`） | 连接串解析失败，AI Proxy 启动报数据库连接错误 |
 | 16 | P1 | Channel 配置 | PPIO 默认域名已迁移至 `api.ppinfra.com`，旧域名 `api.ppio.com` 不可用 | Channel base_url 使用旧域名，所有 PPIO 请求返回 404 |
 | 17 | P1 | Channel 配置 | Anthropic 通道（base_url 含 `/anthropic`）中包含非 Claude 模型 | 非 Claude 模型被随机路由到 Anthropic 通道，拼接 `/chat/completions` 后 URL 不兼容，约 50% 请求 404 |
+| 18 | P1 | 环境变量 | 未设置 `ENTERPRISE_BASE_URL` | 「我的接入」页面显示内网地址 `ai.paigod.work/v1`，用户在公网无法使用 |
+| ~~19~~ | ~~P0~~ | ~~部署~~ | ~~`go build` 输出路径 vs systemd 运行路径不一致~~ | ~~Docker 容器内路径固定，不再需要复制二进制~~ |
+| ~~20~~ | ~~P1~~ | ~~部署~~ | ~~运行时 `cp` 覆盖二进制报 "Text file busy"~~ | ~~Docker 容器替换，不涉及文件覆盖~~ |
+| ~~21~~ | ~~P0~~ | ~~前端部署~~ | ~~`go:embed` 目录未同步~~ | ~~Dockerfile `COPY --from` 自动完成，不可能遗漏~~ |
 | 22 | P0 | Nginx / CLB 超时 | Nginx `proxy_read_timeout` 或 CLB 后端超时 < 900s | Claude Code 等使用 extended thinking 的工具报 504 Gateway Time-out（stgw），以及连锁错误 `Cannot read properties of undefined (reading 'trim')`。详见 §3.6 和 §7.1 |
+| 23 | P1 | 零停机部署 | Nginx 未安装 `aiproxy-upstream.conf`，`proxy_pass` 仍硬编码 `127.0.0.1:3000` | 零停机部署脚本无法切换流量，部署失败。需先执行 §10.4 的一次性初始化 |
+| 24 | P2 | 零停机部署 | `/data/aiproxy/.active-port` 状态文件内容与实际运行端口不一致 | 下次部署会尝试在已占用的端口启动 canary，启动失败 |
+| 4 | P1 | 备份 | 启用 `LOG_SQL_DSN` 后只备份主库 | 恢复时丢失请求日志和审计数据 |
 
 ---
 

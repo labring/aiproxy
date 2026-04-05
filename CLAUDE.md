@@ -78,12 +78,12 @@ docker build -t aiproxy .
 docker compose up -d pgsql redis  # Start PostgreSQL + Redis
 ```
 
-### Production Deployment (Docker, Recommended)
+### Production Deployment (Zero-Downtime Docker)
 
 **Standard deployment method — always use `scripts/deploy.sh`:**
 
 ```bash
-# Full deploy: git pull → docker build → restart → smoke test
+# Full deploy: git pull → docker build → canary → nginx switch → drain old
 ADMIN_KEY=xxx bash scripts/deploy.sh
 
 # Skip git pull (deploy current code)
@@ -92,8 +92,12 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull
 # Build only (no restart)
 bash scripts/deploy.sh --build-only
 
-# Restart only (use existing image)
-ADMIN_KEY=xxx bash scripts/deploy.sh --restart-only
+# Emergency rollback (uses auto-saved previous image)
+ADMIN_KEY=xxx bash scripts/deploy.sh --rollback
+
+# Legacy mode (direct container restart, 5-10s downtime — fallback only)
+ADMIN_KEY=xxx bash scripts/deploy.sh --legacy
+ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
 ```
 
 **Why Docker is the mandated deployment method:**
@@ -101,10 +105,13 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --restart-only
 - Multi-stage build always rebuilds frontend fresh — no stale assets
 - Swagger docs regenerated in build — API docs always current
 - Post-build verification checks enterprise symbols + frontend embedding
-- Smoke tests verify the running service after restart
-- Actual service downtime: ~5-10 seconds (build happens while old container is running)
+- Smoke tests verify the canary before switching traffic
+- **Zero-downtime**: Nginx upstream switching preserves in-flight SSE connections
+- **Instant rollback**: Previous image auto-tagged as `aiproxy:rollback`
 
 **NEVER deploy via bare `go build` on the server.** Always use `deploy.sh` or `docker build`.
+
+**Nginx configs are in `deploy/nginx/`** — see DEPLOYMENT.md §10.4 for server setup.
 
 ### MCP Servers
 

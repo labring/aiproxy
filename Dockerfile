@@ -39,4 +39,7 @@ ENV FFMPEG_ENABLED=true
 
 EXPOSE 3000
 
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
+  CMD curl -f http://localhost:3000/api/status || exit 1
+
 ENTRYPOINT ["aiproxy"]

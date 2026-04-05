@@ -2,21 +2,24 @@
 #
 # Production deployment script — the ONLY way to deploy to production.
 #
-# This script ensures a complete, verified deployment every time:
-#   1. Pull latest code
-#   2. Build Docker image (frontend + swagger + enterprise Go binary)
-#   3. Restart service with zero-downtime strategy
-#   4. Run smoke tests to verify deployment
+# Default mode: zero-downtime deployment via Docker + Nginx upstream switching.
+# Legacy mode:  direct container restart (5-10s downtime, no Nginx switching).
 #
-# Usage:
-#   bash scripts/deploy.sh                    # Full deploy (pull + build + restart + verify)
-#   bash scripts/deploy.sh --build-only       # Build image without restarting
-#   bash scripts/deploy.sh --restart-only     # Restart with existing image (skip build)
-#   bash scripts/deploy.sh --no-pull          # Build from current code without git pull
+# Zero-downtime deploy (default):
+#   ADMIN_KEY=xxx bash scripts/deploy.sh                    # Full deploy
+#   ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull          # Skip git pull
+#   bash scripts/deploy.sh --build-only                     # Build image only
+#   ADMIN_KEY=xxx bash scripts/deploy.sh --rollback         # Emergency rollback
+#
+# Legacy deploy (direct container restart, requires --legacy flag):
+#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy           # Full legacy deploy
+#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --no-pull
+#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
 #
 # Prerequisites:
 #   - Docker + Docker Compose installed
 #   - ADMIN_KEY env var set (for smoke tests)
+#   - (Zero-downtime only) Nginx with deploy/nginx/aiproxy-upstream.conf installed
 #
 # Environment:
 #   ADMIN_KEY         — Required for smoke tests
@@ -30,10 +33,33 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${ROOT_DIR}"
 
+# ── Check for legacy mode ─────────────────────────────────────
+LEGACY=0
+PASSTHROUGH_ARGS=()
+
+for arg in "$@"; do
+  if [[ "${arg}" == "--legacy" ]]; then
+    LEGACY=1
+  else
+    PASSTHROUGH_ARGS+=("${arg}")
+  fi
+done
+
+# ── Zero-downtime mode (default) ──────────────────────────────
+if [[ "${LEGACY}" == "0" ]]; then
+  exec bash "${SCRIPT_DIR}/zero-downtime-deploy.sh" "${PASSTHROUGH_ARGS[@]+"${PASSTHROUGH_ARGS[@]}"}"
+fi
+
+# ══════════════════════════════════════════════════════════════
+# LEGACY MODE — direct container restart (original behavior)
+# ══════════════════════════════════════════════════════════════
+
 # ── Flags ──────────────────────────────────────────────────────
 BUILD_ONLY=0
 RESTART_ONLY=0
 NO_PULL=0
+
+set -- "${PASSTHROUGH_ARGS[@]+"${PASSTHROUGH_ARGS[@]}"}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,7 +67,7 @@ while [[ $# -gt 0 ]]; do
     --restart-only) RESTART_ONLY=1; shift ;;
     --no-pull)      NO_PULL=1;      shift ;;
     -h|--help)
-      head -25 "$0" | tail -20
+      head -30 "$0" | tail -28
       exit 0
       ;;
     *)
@@ -70,8 +96,10 @@ fi
 
 echo ""
 info "=========================================="
-info "AI Proxy Production Deployment"
+info "AI Proxy Production Deployment (Legacy Mode)"
 info "=========================================="
+warn "Using legacy mode — 5-10s service interruption expected."
+warn "For zero-downtime: run without --legacy flag."
 echo ""
 
 DEPLOY_START=$(date +%s)
@@ -195,10 +223,10 @@ DEPLOY_DURATION=$((DEPLOY_END - DEPLOY_START))
 
 echo ""
 info "=========================================="
-pass "Deployment complete (${DEPLOY_DURATION}s)"
+pass "Legacy deployment complete (${DEPLOY_DURATION}s)"
 info "=========================================="
 info "Verify: curl http://localhost:3000/api/status"
 info "Logs:   docker logs -f aiproxy"
 info "Rollback: docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down aiproxy"
-info "          然后切换到之前的 git commit 重新运行 deploy.sh"
+info "          然后切换到之前的 git commit 重新运行 deploy.sh --legacy"
 echo ""
