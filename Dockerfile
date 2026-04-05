@@ -6,7 +6,7 @@ COPY ./web/ ./
 
 RUN npm install -g pnpm
 
-RUN pnpm install && pnpm run build
+RUN CI=true pnpm install && pnpm run build
 
 FROM golang:1.26-alpine AS builder
 
