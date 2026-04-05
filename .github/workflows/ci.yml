@@ -38,14 +38,14 @@ jobs:
       - name: Go test
         working-directory: core
         run: |
-          go test -v -timeout 30s -count=1 ./...
+          go test -tags enterprise -v -timeout 30s -count=1 ./...
 
       - name: Run Linter
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: core
-          args: --color=always --path-mode=abs
+          args: --color=always --path-mode=abs --build-tags=enterprise
 
       - name: Run Fix Linter
         uses: golangci/golangci-lint-action@v9

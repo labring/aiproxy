@@ -81,12 +81,30 @@
 - [x] 消耗排行榜路由整合（consumption-ranking）
 - [x] 新增字段兼容：Channel.ProxyURL、ModelConfig body storage limits
 
+### 第 10 阶段：请求历史 + 纯透传 + NativeModeChecker（commits 7a00a11–e092703）
+
+- [x] 用户侧请求历史 API（`GET /api/enterprise/my-access/logs`，cursor 分页，模型/状态筛选）
+- [x] 请求详情接口（`GET /api/enterprise/my-access/logs/:log_id`）
+- [x] My Access 页面新增 RequestLogsSection（useInfiniteQuery、时间范围选择器、详情弹窗）
+- [x] Anthropic 纯透传：`pure_passthrough` per-channel 配置 + 双缓冲 SSE 用量抓取
+- [x] `passthrough/anthropic_passthrough.go` headBuffer (2KB) + ringBuffer (4KB) 双路捕获
+- [x] `passthrough/usage.go` 提取 `extractUsageFromBytes` 共享函数
+- [x] NativeModeChecker：`filterChannels` 优先返回 native 渠道（Anthropic 请求→ type=14，不走转换）
+- [x] PPIO adaptor `GetRequestURL` 修复：Anthropic/Gemini mode 路由到 `/chat/completions`
+- [x] PPIO/Novita 同步页新增"Anthropic 渠道纯透传"开关 + i18n
+- [x] `ChannelConfigs.SetOrInit` 辅助方法（消除 4 处重复 `*bool` 写入模式）
+- [x] PPIO/Novita `SyncOptions` 新增 `AllowPassthroughUnknown *bool`（nil = 保留现有值）
+- [x] 同步页新增"透传未注册模型"开关 + 提示文案 + i18n（中/英）
+- [x] `buildConfigFromPPIOModelV2` 对非 Claude 模型限制 `max_output_tokens ≤ 32000`
+
 ## 待开发功能 📋
 
-### 第 10 阶段：集成与优化
+### 第 11 阶段：集成与优化
 - [ ] 前端嵌入 Go 二进制（`cp -r web/dist/ core/public/dist/`）
 - [ ] 飞书 REDIRECT_URI 配置说明文档
 - [ ] 前端图表懒加载（ECharts React.lazy + IntersectionObserver）
+- [ ] `AnthropicPurePassthrough` 从 `bool` 改为 `*bool`（消除零值隐式重置风险）
+- [ ] `EnsurePPIOChannels` / `EnsureNovitaChannels` 参数重构（4 参 → SyncChannelOpts struct）
 
 ## 前端页面清单
 

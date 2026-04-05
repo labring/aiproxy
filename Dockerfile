@@ -18,7 +18,7 @@ COPY --from=frontend-builder /aiproxy/web/dist/ /aiproxy/core/public/dist/
 
 RUN sh scripts/swag.sh
 
-RUN go build -trimpath -ldflags "-s -w" -o aiproxy
+RUN go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
 
 FROM alpine:latest
 

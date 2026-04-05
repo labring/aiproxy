@@ -15,27 +15,40 @@ This is a **Go workspace** with three modules (`go.work`):
 - **`mcp-servers/`** — MCP (Model Context Protocol) server implementations
 - **`openapi-mcp/`** — OpenAPI-to-MCP converter
 - **`core/enterprise/`** — Enterprise module (build tag `enterprise`): Feishu SSO, analytics, quota, notifications
-- **`enterprise/`** — Enterprise documentation (progress, architecture, frontend plan)
+- **`enterprise/docs/`** — Enterprise documentation (progress, architecture)
+- **`.githooks/`** — Git hooks (pre-commit: build tag check, sensitive info detection, doc sync reminders)
 
 ## Build & Development Commands
+
+### Full Build (Recommended)
+
+```bash
+# One-click: frontend → swagger → go build -tags enterprise → post-build verification
+bash scripts/build.sh
+
+# Options:
+bash scripts/build.sh -o /path/to/output    # custom output path
+SKIP_FRONTEND=1 bash scripts/build.sh       # skip frontend rebuild
+SKIP_SWAGGER=1 bash scripts/build.sh        # skip swagger regeneration
+```
 
 ### Backend (Go)
 
 ```bash
-# Build (from core/)
-cd core && go build -trimpath -ldflags "-s -w" -o aiproxy
+# Build with enterprise tag (ALWAYS use -tags enterprise for this project)
+cd core && go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy
 
-# Run tests
-cd core && go test -v -timeout 30s -count=1 ./...
+# Run tests (with enterprise tag)
+cd core && go test -tags enterprise -v -timeout 30s -count=1 ./...
 
 # Run a single test
-cd core && go test -v -timeout 30s -count=1 -run TestFunctionName ./path/to/package/...
+cd core && go test -tags enterprise -v -timeout 30s -count=1 -run TestFunctionName ./path/to/package/...
 
 # Lint (uses golangci-lint v2 with config at .golangci.yml)
-cd core && golangci-lint run --path-mode=abs
+cd core && golangci-lint run --path-mode=abs --build-tags=enterprise
 
 # Lint with auto-fix
-cd core && golangci-lint run --path-mode=abs --fix
+cd core && golangci-lint run --path-mode=abs --fix --build-tags=enterprise
 
 # Lint all modules via workspace script
 bash scripts/golangci-lint-fix.sh
@@ -57,7 +70,7 @@ pnpm run lint     # ESLint
 ### Docker
 
 ```bash
-# Full build (frontend + backend)
+# Full build (frontend + backend, includes enterprise)
 docker build -t aiproxy .
 # Exposes port 3000, frontend is embedded into the Go binary via core/public/dist/
 
@@ -65,12 +78,33 @@ docker build -t aiproxy .
 docker compose up -d pgsql redis  # Start PostgreSQL + Redis
 ```
 
-**Note:** Docker build embeds frontend into binary:
+### Production Deployment (Docker, Recommended)
+
+**Standard deployment method — always use `scripts/deploy.sh`:**
+
 ```bash
-cd web && pnpm install && pnpm run build
-cp -r dist ../core/public/dist/  # Embedded into binary at /
-cd ../core && go build
+# Full deploy: git pull → docker build → restart → smoke test
+ADMIN_KEY=xxx bash scripts/deploy.sh
+
+# Skip git pull (deploy current code)
+ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull
+
+# Build only (no restart)
+bash scripts/deploy.sh --build-only
+
+# Restart only (use existing image)
+ADMIN_KEY=xxx bash scripts/deploy.sh --restart-only
 ```
+
+**Why Docker is the mandated deployment method:**
+- Dockerfile hardcodes `-tags enterprise` — enterprise module cannot be accidentally omitted
+- Multi-stage build always rebuilds frontend fresh — no stale assets
+- Swagger docs regenerated in build — API docs always current
+- Post-build verification checks enterprise symbols + frontend embedding
+- Smoke tests verify the running service after restart
+- Actual service downtime: ~5-10 seconds (build happens while old container is running)
+
+**NEVER deploy via bare `go build` on the server.** Always use `deploy.sh` or `docker build`.
 
 ### MCP Servers
 
@@ -271,9 +305,10 @@ Located in `core/enterprise/` with dedicated frontend pages in `web/src/pages/en
 - `/enterprise/custom-report` — Custom reports (dimension/measure selector, pivot table, charts, templates, CSV export)
 
 **Critical Build Requirements:**
-- All `core/enterprise/*.go` files MUST have `//go:build enterprise` as the first line
+- All `core/enterprise/*.go` files MUST have `//go:build enterprise` as the first line (enforced by pre-commit hook)
 - Frontend pages use `EnterpriseLayout` (purple gradient sidebar)
 - Data queries: `model.LogDB` for GroupSummary, `model.DB` for FeishuUser/QuotaTier
+- `/api/status` returns `isEnterprise: true` when built with enterprise tag (see `core/controller/misc_enterprise.go`)
 
 **Environment Variables:**
 - `FEISHU_APP_ID`, `FEISHU_APP_SECRET` — Feishu app credentials
@@ -295,15 +330,45 @@ Located in `core/enterprise/` with dedicated frontend pages in `web/src/pages/en
 - **Testing**: 修改代码后运行相关测试验证
 - **Compliance**: 系统组件、依赖环境、第三方库等，均需要评估商业应用的合规性（许可证兼容性、安全性、长期维护性）
 
+## Git Hooks
+
+Git hooks are in `.githooks/` (activated via `git config core.hooksPath .githooks`).
+
+**Setup (run once after clone):**
+```bash
+bash scripts/setup-hooks.sh
+```
+
+**Pre-commit checks:**
+1. **Enterprise build tag** (BLOCKING) — `core/enterprise/*.go` must have `//go:build enterprise` as first line
+2. **Sensitive info detection** (BLOCKING) — Blocks hardcoded API keys (`sk-` 20+ chars), passwords, internal IPs
+3. **Documentation sync** (non-blocking) — Reminds when code changes may require doc updates
+
+**Code → Document mapping:**
+- `core/router/`, `core/middleware/`, `core/relay/`, `core/model/`, `web/src/` → `CLAUDE.md`
+- `core/enterprise/` → `enterprise/docs/progress.md`
+- `Dockerfile`, `docker-compose.yaml` → `DEPLOYMENT.md`
+- `core/common/config/` → `config.md`
+- `web/src/pages/enterprise/`, `core/enterprise/auth|feishu|quota/`, `core/router/relay.go`, `core/model/chtype.go` → `USER-GUIDE.md`
+
 ## Quick Commands
 
 ```bash
+# 一键完整构建（本地开发）
+bash scripts/build.sh
+
 # 一键启动开发环境
-docker compose up -d pgsql redis && cd core && go run .
+docker compose up -d pgsql redis && cd core && go run -tags enterprise .
 
 # 快速测试
-cd core && go test -v -run TestXxx ./...
+cd core && go test -tags enterprise -v -run TestXxx ./...
 
 # 提交前检查
-cd core && golangci-lint run --fix && go test ./...
+cd core && golangci-lint run --fix --build-tags=enterprise && go test -tags enterprise ./...
+
+# 生产部署（唯一标准方式）
+ADMIN_KEY=xxx bash scripts/deploy.sh
+
+# 部署后验证
+ADMIN_KEY=xxx bash scripts/smoke-test.sh https://your-server
 ```

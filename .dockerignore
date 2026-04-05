@@ -1,0 +1,32 @@
+.git
+.github
+.claude
+.codex
+.vscode
+
+enterprise/docs
+scripts/*.go
+scripts/*.log
+scripts/*.db
+
+# Keep scripts/*.sh — swag.sh is needed by Dockerfile
+
+# Only exclude top-level and doc .md files (NOT core/**/*.md — some are go:embed sources)
+/*.md
+enterprise/**/*.md
+mcp-servers/**/*.md
+openapi-mcp/**/*.md
+
+**/*.log
+**/*.db
+**/*.bak
+
+core/aiproxy
+core/aiproxy-enterprise
+core/aiproxy-dev
+core/aiproxy-new
+core/aiproxy_local
+core/.env.*
+
+*.db
+*.log

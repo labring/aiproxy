@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: check whether staged code changes require documentation updates.
+#
+# Mapping:
+#   Code area changed            → Document that may need updating
+#   ─────────────────────────────────────────────────────────────
+#   core/router/                 → CLAUDE.md (Architecture / Request Flow)
+#   core/middleware/             → CLAUDE.md (Architecture / Request Flow)
+#   core/relay/adaptor/          → CLAUDE.md (Multi-Provider Adaptor System)
+#   core/relay/plugin/           → CLAUDE.md (Plugin System)
+#   core/model/                  → CLAUDE.md (Data Model)
+#   core/enterprise/             → enterprise/docs/progress.md, CLAUDE.md (Enterprise Module)
+#   web/src/                     → CLAUDE.md (Frontend Architecture)
+#   Dockerfile                   → DEPLOYMENT.md
+#   docker-compose.yaml          → DEPLOYMENT.md
+#   core/common/config/          → config.md
+#   core/controller/misc.go      → config.md (if env vars / options change)
+#
+#   User-facing features (USER-GUIDE.md):
+#   web/src/pages/enterprise/     → USER-GUIDE.md (my-access, dashboard, ranking pages)
+#   core/enterprise/auth.go       → USER-GUIDE.md (login flow changes)
+#   core/enterprise/feishu/       → USER-GUIDE.md (Feishu OAuth changes)
+#   core/enterprise/quota/        → USER-GUIDE.md (quota behavior changes)
+#   core/router/relay.go          → USER-GUIDE.md (new API endpoints users call)
+#   core/relay/plugin/web-search/ → USER-GUIDE.md (web search feature)
+#   core/model/chtype.go          → USER-GUIDE.md (new providers / channel types)
+
+set -euo pipefail
+
+# Only check staged files (code changes)
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+if [[ -z "${STAGED}" ]]; then
+  exit 0
+fi
+
+# All staged files including docs (for suppression check)
+ALL_STAGED=$(git diff --cached --name-only 2>/dev/null || true)
+
+BLOCK=0
+WARNINGS=()
+
+check_area() {
+  local pattern="$1"
+  local doc="$2"
+  local area="$3"
+
+  if echo "${STAGED}" | grep -qE "${pattern}"; then
+    # If the doc itself is also staged (modified), no warning needed
+    if ! echo "${ALL_STAGED}" | grep -qF "${doc}"; then
+      WARNINGS+=("  ${area}  →  ${doc}")
+    fi
+  fi
+}
+
+# ── Core architecture ──
+check_area '^core/router/'              'CLAUDE.md'                      'core/router/'
+check_area '^core/middleware/'           'CLAUDE.md'                      'core/middleware/'
+check_area '^core/relay/adaptor/'        'CLAUDE.md'                      'core/relay/adaptor/'
+check_area '^core/relay/plugin/'         'CLAUDE.md'                      'core/relay/plugin/'
+check_area '^core/model/'               'CLAUDE.md'                      'core/model/'
+
+# ── Enterprise ──
+check_area '^core/enterprise/'          'enterprise/docs/progress.md'    'core/enterprise/'
+
+# ── Frontend ──
+check_area '^web/src/'                  'CLAUDE.md'                      'web/src/'
+
+# ── Deployment ──
+check_area '^Dockerfile'                'DEPLOYMENT.md'                  'Dockerfile'
+check_area '^docker-compose'            'DEPLOYMENT.md'                  'docker-compose.yaml'
+
+# ── Configuration ──
+check_area '^core/common/config/'       'config.md'                      'core/common/config/'
+
+# ── User-facing features (USER-GUIDE.md) ──
+check_area '^web/src/pages/enterprise/' 'USER-GUIDE.md'                  'web/src/pages/enterprise/'
+check_area '^core/enterprise/auth\.go'  'USER-GUIDE.md'                  'core/enterprise/auth.go'
+check_area '^core/enterprise/feishu/'   'USER-GUIDE.md'                  'core/enterprise/feishu/'
+check_area '^core/enterprise/quota/'    'USER-GUIDE.md'                  'core/enterprise/quota/'
+check_area '^core/router/relay\.go'     'USER-GUIDE.md'                  'core/router/relay.go'
+check_area '^core/relay/plugin/web-search/' 'USER-GUIDE.md'              'core/relay/plugin/web-search/'
+check_area '^core/model/chtype\.go'     'USER-GUIDE.md'                  'core/model/chtype.go'
+
+# ═══════════════════════════════════════════════════════════════
+# Check 2: Enterprise build tag enforcement (BLOCKING)
+# All .go files in core/enterprise/ must start with //go:build enterprise
+# ═══════════════════════════════════════════════════════════════
+ENTERPRISE_ERRORS=()
+
+ENTERPRISE_GO=$(echo "${STAGED}" | grep -E '^core/enterprise/.*\.go$' || true)
+if [[ -n "${ENTERPRISE_GO}" ]]; then
+  while IFS= read -r gofile; do
+    [[ -z "${gofile}" ]] && continue
+    # Skip test helpers that might legitimately not need the tag
+    # (all enterprise .go files need it per project rules)
+    first_line=$(head -1 "${gofile}" 2>/dev/null || true)
+    if [[ "${first_line}" != "//go:build enterprise" ]]; then
+      ENTERPRISE_ERRORS+=("${gofile}")
+    fi
+  done <<< "${ENTERPRISE_GO}"
+fi
+
+if [[ ${#ENTERPRISE_ERRORS[@]} -gt 0 ]]; then
+  echo ""
+  echo "┌─────────────────────────────────────────────────────┐"
+  echo "│  ERROR: enterprise build tag 缺失（阻止提交）          │"
+  echo "├─────────────────────────────────────────────────────┤"
+  for f in "${ENTERPRISE_ERRORS[@]}"; do
+    echo "│  ${f}"
+  done
+  echo "├─────────────────────────────────────────────────────┤"
+  echo "│  首行必须为: //go:build enterprise                    │"
+  echo "└─────────────────────────────────────────────────────┘"
+  echo ""
+  BLOCK=1
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# Check 3: Sensitive information leak detection (BLOCKING)
+# Prevent hardcoded API keys, passwords, internal URLs, etc.
+# ═══════════════════════════════════════════════════════════════
+SECRETS_ERRORS=()
+
+# Only scan text files that are staged (skip binaries, images, etc.)
+SCANNABLE=$(echo "${STAGED}" | grep -E '\.(go|ts|tsx|js|jsx|json|yaml|yml|sh|md|env|sql|toml|cfg|conf|ini)$' || true)
+
+if [[ -n "${SCANNABLE}" ]]; then
+  while IFS= read -r file; do
+    [[ -z "${file}" ]] && continue
+    [[ ! -f "${file}" ]] && continue
+
+    # Get only the staged content (not working tree)
+    DIFF_CONTENT=$(git diff --cached -U0 -- "${file}" 2>/dev/null | grep '^+' | grep -v '^+++' || true)
+    [[ -z "${DIFF_CONTENT}" ]] && continue
+
+    # Pattern 1: Hardcoded API keys (sk-xxx, key-xxx with 20+ chars)
+    if echo "${DIFF_CONTENT}" | grep -qE '(sk-|key-)[A-Za-z0-9]{20,}'; then
+      # Allow obvious placeholders
+      if ! echo "${DIFF_CONTENT}" | grep -qE '(sk-xxxx|sk-your|sk-\.\.\.|sk-\*|placeholder|example|REDACTED)'; then
+        SECRETS_ERRORS+=("${file}: 可能包含硬编码 API Key")
+      fi
+    fi
+
+    # Pattern 2: password/secret/token assignments with literal values
+    if echo "${DIFF_CONTENT}" | grep -iE '(password|secret|token)\s*[:=]\s*"[^"]{8,}"' | grep -qvE '(os\.Getenv|env\.|config\.|placeholder|example|xxx|your-)'; then
+      SECRETS_ERRORS+=("${file}: 可能包含硬编码密码/密钥")
+    fi
+
+    # Pattern 3: Private IP / internal hostnames in non-doc files
+    if echo "${file}" | grep -qvE '\.(md|txt)$'; then
+      if echo "${DIFF_CONTENT}" | grep -qE '(192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)'; then
+        if ! echo "${DIFF_CONTENT}" | grep -qE '(example|placeholder|0\.0\.0\.0|127\.0\.0\.1|localhost)'; then
+          SECRETS_ERRORS+=("${file}: 可能包含内网 IP 地址")
+        fi
+      fi
+    fi
+
+  done <<< "${SCANNABLE}"
+fi
+
+if [[ ${#SECRETS_ERRORS[@]} -gt 0 ]]; then
+  echo ""
+  echo "┌─────────────────────────────────────────────────────┐"
+  echo "│  WARNING: 检测到可能的敏感信息（阻止提交）              │"
+  echo "├─────────────────────────────────────────────────────┤"
+  for e in "${SECRETS_ERRORS[@]}"; do
+    echo "│  ${e}"
+  done
+  echo "├─────────────────────────────────────────────────────┤"
+  echo "│  如果确认安全，使用 git commit --no-verify 跳过      │"
+  echo "└─────────────────────────────────────────────────────┘"
+  echo ""
+  BLOCK=1
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# Check 1: Documentation sync reminders (NON-BLOCKING)
+# ═══════════════════════════════════════════════════════════════
+if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+  echo ""
+  echo "┌─────────────────────────────────────────────────────┐"
+  echo "│  doc-check: 以下文档可能需要同步更新                     │"
+  echo "├─────────────────────────────────────────────────────┤"
+  for w in "${WARNINGS[@]}"; do
+    echo "│  ${w}"
+  done
+  echo "└─────────────────────────────────────────────────────┘"
+  echo ""
+  echo "如果文档无需更新，可忽略此提醒（不会阻止 commit）。"
+  echo ""
+fi
+
+exit ${BLOCK}

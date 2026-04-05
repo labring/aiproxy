@@ -1,0 +1,28 @@
+# Production override — builds from local source instead of pulling upstream image.
+#
+# Usage (via deploy.sh, NOT manually):
+#   bash scripts/deploy.sh
+#
+# Or manually:
+#   docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d --build aiproxy
+
+services:
+  aiproxy:
+    image: aiproxy:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Override these via .env file or environment
+      - ADMIN_KEY=${ADMIN_KEY:-aiproxy}
+      - SQL_DSN=${SQL_DSN:-postgres://postgres:aiproxy@pgsql:5432/aiproxy}
+      - REDIS=${REDIS:-redis://redis}
+      - LOG_DETAIL_STORAGE_HOURS=${LOG_DETAIL_STORAGE_HOURS:-1}
+      - TZ=Asia/Shanghai
+      # Enterprise (Feishu SSO)
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_REDIRECT_URI=${FEISHU_REDIRECT_URI:-}
+      - FEISHU_FRONTEND_URL=${FEISHU_FRONTEND_URL:-}
+      - FEISHU_ALLOWED_TENANTS=${FEISHU_ALLOWED_TENANTS:-}
+      - FEISHU_WEBHOOK=${FEISHU_WEBHOOK:-}

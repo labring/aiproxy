@@ -87,6 +87,11 @@ echo ""
 info "=== Health Check ==="
 check_http "GET /api/status" "${BASE_URL}/api/status"
 
+# 1b. Enterprise build verification
+check_json_field "Enterprise build tag present in /api/status" \
+  "${BASE_URL}/api/status" \
+  "d['data']['isEnterprise'] == True"
+
 # 2. Model list (admin)
 info "=== Admin API ==="
 check_http "GET /api/models (admin)" \

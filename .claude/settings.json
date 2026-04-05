@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "if [[ \"$CLAUDE_FILE_PATH\" == *.go ]]; then gofmt -w \"$CLAUDE_FILE_PATH\" 2>/dev/null; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_FILE_PATH\" == */core/enterprise/*.go ]]; then first=$(head -1 \"$CLAUDE_FILE_PATH\" 2>/dev/null); if [[ \"$first\" != '//go:build enterprise' ]]; then echo \"ERROR: $CLAUDE_FILE_PATH 首行必须为 //go:build enterprise\" >&2; exit 1; fi; fi"
           }
         ]
       }

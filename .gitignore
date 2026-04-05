@@ -9,6 +9,9 @@ core/aiproxy
 core/aiproxy-enterprise
 core/aiproxy-dev
 core/aiproxy-new
+core/aiproxy_local
+core/aiproxy_linux
+core/aiproxy-linux*
 core/aiproxy.log
 
 # Database files
@@ -59,3 +62,6 @@ enterprise/docs/
 
 # Test notification temp dir
 core/test-notif/
+
+# Playwright test artifacts
+.playwright-cli/

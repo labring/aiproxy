@@ -1421,3 +1421,4 @@ sudo systemctl status aiproxy --no-pager
 | `LOG_DETAIL_STORAGE_HOURS` | 否 | 不限 | 日志详情保留时长（小时） |
 | `DEBUG` | 否 | `false` | 调试模式 |
 | `TZ` | 否 | UTC | 时区 |
+

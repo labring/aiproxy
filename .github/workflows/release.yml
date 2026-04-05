@@ -94,10 +94,21 @@ jobs:
 
       - name: Build
         working-directory: core
+        env:
+          GOOS: ${{ matrix.targets.GOOS }}
+          GOARCH: ${{ matrix.targets.GOARCH }}
         run: |
-          export GOOS=${{ matrix.targets.GOOS }}
-          export GOARCH=${{ matrix.targets.GOARCH }}
-          go build -trimpath -ldflags "-s -w" -o aiproxy-${{ matrix.targets.GOOS }}-${{ matrix.targets.GOARCH }}${{ matrix.targets.EXT }}
+          go build -tags enterprise -trimpath -ldflags "-s -w" -o aiproxy-${GOOS}-${GOARCH}${{ matrix.targets.EXT }}
+
+      - name: Verify enterprise build
+        if: ${{ matrix.targets.GOOS == 'linux' && matrix.targets.GOARCH == 'amd64' }}
+        working-directory: core
+        run: |
+          BINARY="aiproxy-linux-amd64"
+          go tool nm "${BINARY}" | grep -q 'enterprise/analytics' || { echo "ERROR: enterprise/analytics missing"; exit 1; }
+          go tool nm "${BINARY}" | grep -q 'enterprise/feishu' || { echo "ERROR: enterprise/feishu missing"; exit 1; }
+          strings "${BINARY}" | grep -q '</html>' || { echo "ERROR: frontend not embedded"; exit 1; }
+          echo "Build verification passed"
 
       - name: Get release meta
         id: release_meta
