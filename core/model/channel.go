@@ -111,6 +111,17 @@ func (c ChannelConfigs) GetBool(key string) bool {
 	return b
 }
 
+// SetOrInit writes override's value to key when override is non-nil (explicit
+// caller choice). When override is nil it only initialises the key to def if
+// the key is not already present, preserving any existing value.
+func (c ChannelConfigs) SetOrInit(key string, override *bool, def bool) {
+	if override != nil {
+		c[key] = *override
+	} else if _, ok := c[key]; !ok {
+		c[key] = def
+	}
+}
+
 func (c ChannelConfigs) LoadConfig(config any) error {
 	if len(c) == 0 {
 		return nil

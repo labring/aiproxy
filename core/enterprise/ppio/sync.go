@@ -420,11 +420,7 @@ func ensurePPIOChannelsFromModels(
 			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
 				channels[i].Configs["disable_context_management"] = true
 			}
-			if anthropicPurePassthrough != nil {
-				channels[i].Configs["pure_passthrough"] = *anthropicPurePassthrough
-			} else if _, ok := channels[i].Configs["pure_passthrough"]; !ok {
-				channels[i].Configs["pure_passthrough"] = false
-			}
+			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
 		} else {
 			channels[i].Models = openaiModels
 			// Write path_base_map so the passthrough adaptor can route
@@ -437,13 +433,7 @@ func ensurePPIOChannelsFromModels(
 				ppiorelay.PathPrefixResponses: ppioResponsesBase(channels[i].BaseURL),
 				ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(channels[i].BaseURL),
 			}
-			// allow_passthrough_unknown — controls whether requests for models
-			// not in the model list are forwarded to this channel as a fallback.
-			if allowPassthroughUnknown != nil {
-				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = *allowPassthroughUnknown
-			} else if _, ok := channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown]; !ok {
-				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = false
-			}
+			channels[i].Configs.SetOrInit(model.ChannelConfigAllowPassthroughUnknown, allowPassthroughUnknown, false)
 		}
 
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
