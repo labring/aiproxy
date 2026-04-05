@@ -67,6 +67,7 @@ var (
 	endpointsRerank      = []string{"POST /v1/rerank"}
 	endpointsParsePdf    = []string{"POST /v1/parse/pdf"}
 	endpointsVideo       = []string{"POST /v1/video/generations/jobs", "GET /v1/video/generations/jobs/{id}"}
+	endpointsPPIONative  = []string{"POST /v3/{model}", "POST /v3/async/{model}", "GET /v3/async/task-result"}
 )
 
 // endpointSlugToPath maps provider endpoint slugs (from ModelConfig.Config["endpoints"])
@@ -164,6 +165,8 @@ func modeToTypeName(m mode.Mode) string {
 		return "moderation"
 	case mode.ParsePdf:
 		return "parse_pdf"
+	case mode.PPIONative:
+		return "multimodal"
 	default:
 		return "other"
 	}
@@ -193,6 +196,8 @@ func getSupportedEndpoints(modelType mode.Mode) []string {
 		return endpointsParsePdf
 	case mode.VideoGenerationsJobs, mode.VideoGenerationsGetJobs, mode.VideoGenerationsContent:
 		return endpointsVideo
+	case mode.PPIONative:
+		return endpointsPPIONative
 	default:
 		return nil
 	}

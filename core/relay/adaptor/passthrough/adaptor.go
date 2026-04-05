@@ -170,25 +170,24 @@ func (a *Adaptor) GetRequestURL(
 	c *gin.Context,
 ) (adaptor.RequestURL, error) {
 	clientPath := c.Request.URL.Path
+	base := m.Channel.BaseURL
+	suffix := stripV1Prefix(clientPath)
 
 	// path_base_map overrides the base URL for specific path prefixes.
 	if pbm := GetPathBaseMap(m.ChannelConfigs); len(pbm) > 0 {
-		if base, suffix, ok := matchPathBaseMap(pbm, clientPath); ok {
-			u, err := url.JoinPath(base, suffix)
-			if err != nil {
-				return adaptor.RequestURL{}, err
-			}
-
-			return adaptor.RequestURL{Method: c.Request.Method, URL: u}, nil
+		if b, s, ok := matchPathBaseMap(pbm, clientPath); ok {
+			base, suffix = b, s
 		}
 	}
 
-	// Default: strip /v1 prefix, append remaining path to BaseURL.
-	suffix := stripV1Prefix(clientPath)
-
-	u, err := url.JoinPath(m.Channel.BaseURL, suffix)
+	u, err := url.JoinPath(base, suffix)
 	if err != nil {
 		return adaptor.RequestURL{}, err
+	}
+
+	// Preserve query parameters (e.g. ?task_id=abc123 for async task polling).
+	if q := c.Request.URL.RawQuery; q != "" {
+		u += "?" + q
 	}
 
 	return adaptor.RequestURL{Method: c.Request.Method, URL: u}, nil

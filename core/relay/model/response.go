@@ -19,6 +19,7 @@ type InputContentType = string
 const (
 	InputContentTypeInputText  InputContentType = "input_text"
 	InputContentTypeOutputText InputContentType = "output_text"
+	InputContentTypeInputImage InputContentType = "input_image"
 )
 
 // OutputContentType represents the type of output content
@@ -185,6 +186,9 @@ type OutputItem struct {
 type InputContent struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
+	// Fields for input_image type (Responses API format: image_url is a plain string)
+	ImageURL string `json:"image_url,omitempty"`
+	Detail   string `json:"detail,omitempty"`
 	// Fields for function_call type
 	ID        string `json:"id,omitempty"`
 	Name      string `json:"name,omitempty"`

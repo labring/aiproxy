@@ -911,22 +911,50 @@ func ConvertMessagesToInputItems(messages []relaymodel.Message) []relaymodel.Inp
 		case []relaymodel.MessageContent:
 			// Array of MessageContent (from Claude conversion)
 			for _, part := range content {
-				if part.Type == relaymodel.ContentTypeText && part.Text != "" {
-					inputItem.Content = append(inputItem.Content, relaymodel.InputContent{
-						Type: contentType,
-						Text: part.Text,
-					})
+				switch part.Type {
+				case relaymodel.ContentTypeText:
+					if part.Text != "" {
+						inputItem.Content = append(inputItem.Content, relaymodel.InputContent{
+							Type: contentType,
+							Text: part.Text,
+						})
+					}
+				case relaymodel.ContentTypeImageURL:
+					if part.ImageURL != nil && part.ImageURL.URL != "" {
+						inputItem.Content = append(inputItem.Content, relaymodel.InputContent{
+							Type:     relaymodel.InputContentTypeInputImage,
+							ImageURL: part.ImageURL.URL,
+							Detail:   part.ImageURL.Detail,
+						})
+					}
 				}
 			}
 		case []any:
 			// Array of content parts (multimodal)
 			for _, part := range content {
-				if partMap, ok := part.(map[string]any); ok {
-					if partType, ok := partMap["type"].(string); ok && partType == "text" {
-						if text, ok := partMap["text"].(string); ok {
+				partMap, ok := part.(map[string]any)
+				if !ok {
+					continue
+				}
+
+				partType, _ := partMap["type"].(string)
+				switch partType {
+				case relaymodel.ContentTypeText:
+					if text, ok := partMap["text"].(string); ok && text != "" {
+						inputItem.Content = append(inputItem.Content, relaymodel.InputContent{
+							Type: contentType,
+							Text: text,
+						})
+					}
+				case relaymodel.ContentTypeImageURL:
+					// Chat API: image_url is a nested object {"url": "...", "detail": "..."}
+					if imgObj, ok := partMap["image_url"].(map[string]any); ok {
+						if imgURL, ok := imgObj["url"].(string); ok && imgURL != "" {
+							detail, _ := imgObj["detail"].(string)
 							inputItem.Content = append(inputItem.Content, relaymodel.InputContent{
-								Type: contentType,
-								Text: text,
+								Type:     relaymodel.InputContentTypeInputImage,
+								ImageURL: imgURL,
+								Detail:   detail,
 							})
 						}
 					}
