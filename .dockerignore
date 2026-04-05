@@ -14,7 +14,6 @@ scripts/*.db
 # Only exclude top-level and doc .md files (NOT core/**/*.md — some are go:embed sources)
 /*.md
 enterprise/**/*.md
-mcp-servers/**/*.md
 openapi-mcp/**/*.md
 
 **/*.log
