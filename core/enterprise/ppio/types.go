@@ -219,6 +219,7 @@ type SyncOptions struct {
 	DryRun                   bool `json:"dry_run,omitempty"`          // Preview only, don't execute
 	DeleteUnmatchedModel     bool `json:"delete_unmatched_model"`     // Delete local models not in PPIO
 	AnthropicPurePassthrough bool `json:"anthropic_pure_passthrough"` // Enable pure passthrough for Anthropic channel
+	AllowPassthroughUnknown *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
 }
 
 // SyncResult represents the result of a sync operation

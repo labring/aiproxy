@@ -786,6 +786,18 @@ export default function NovitaSyncPage() {
               disabled={!canManage}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="allow-passthrough-unknown">{t('enterprise.novita.allowPassthroughUnknown')}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{t('enterprise.novita.allowPassthroughUnknownHint')}</p>
+            </div>
+            <Switch
+              id="allow-passthrough-unknown"
+              checked={syncOpts.allow_passthrough_unknown ?? false}
+              onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, allow_passthrough_unknown: checked })}
+              disabled={!canManage}
+            />
+          </div>
         </CardContent>
       </Card>
 

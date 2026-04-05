@@ -64,11 +64,13 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 	}
 
 	purePassthrough := true
+	allowUnknown := true
 	info, err := ensurePPIOChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
 		false,
 		&purePassthrough,
+		&allowUnknown,
 		PPIOConfigResult{},
 	)
 	if err != nil {
@@ -107,6 +109,10 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 			if gotBase := pathBaseMap[ppiorelay.PathPrefixWebSearch]; gotBase != ppioWebSearchBase(DefaultPPIOAPIBase) {
 				t.Fatalf("web search base = %#v, want %q", gotBase, ppioWebSearchBase(DefaultPPIOAPIBase))
 			}
+
+			if gotAllow := ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown); !gotAllow {
+				t.Fatalf("allow_passthrough_unknown = false, want true")
+			}
 		case model.ChannelTypeAnthropic:
 			if len(ch.Models) != 1 || ch.Models[0] != "claude-sonnet-4-20250514" {
 				t.Fatalf("anthropic channel models = %#v, want claude-sonnet-4-20250514", ch.Models)
@@ -136,6 +142,7 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 			APIBase: DefaultPPIOAPIBase,
 		},
 		true,
+		false,
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
 	)

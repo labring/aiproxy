@@ -729,6 +729,18 @@ export default function PPIOSyncPage() {
               disabled={!canManage}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="allow-passthrough-unknown">{t('enterprise.ppio.allowPassthroughUnknown')}</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">{t('enterprise.ppio.allowPassthroughUnknownHint')}</p>
+            </div>
+            <Switch
+              id="allow-passthrough-unknown"
+              checked={syncOpts.allow_passthrough_unknown ?? false}
+              onCheckedChange={(checked) => setSyncOpts({ ...syncOpts, allow_passthrough_unknown: checked })}
+              disabled={!canManage}
+            />
+          </div>
         </CardContent>
       </Card>
 

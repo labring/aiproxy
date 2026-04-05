@@ -212,7 +212,8 @@ type SyncOptions struct {
 	ChangesConfirmed         bool `json:"changes_confirmed"`
 	DryRun                   bool `json:"dry_run,omitempty"`
 	DeleteUnmatchedModel     bool `json:"delete_unmatched_model"`
-	AnthropicPurePassthrough bool `json:"anthropic_pure_passthrough"` // Enable pure passthrough for Anthropic channel
+	AnthropicPurePassthrough bool  `json:"anthropic_pure_passthrough"`          // Enable pure passthrough for Anthropic channel
+	AllowPassthroughUnknown *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
 }
 
 // SyncResult represents the result of a sync operation.

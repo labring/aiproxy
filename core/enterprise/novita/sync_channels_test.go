@@ -60,11 +60,13 @@ func TestEnsureNovitaChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 	}
 
 	purePassthrough := true
+	allowUnknown := true
 	info, err := ensureNovitaChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
 		false,
 		&purePassthrough,
+		&allowUnknown,
 		NovitaConfigResult{},
 	)
 	if err != nil {
@@ -94,6 +96,10 @@ func TestEnsureNovitaChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 
 			if gotBase := pathBaseMap["/v1/responses"]; gotBase != novitaResponsesBase(DefaultNovitaAPIBase) {
 				t.Fatalf("responses base = %#v, want %q", gotBase, novitaResponsesBase(DefaultNovitaAPIBase))
+			}
+
+			if gotAllow := ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown); !gotAllow {
+				t.Fatalf("allow_passthrough_unknown = false, want true")
 			}
 		case model.ChannelTypeAnthropic:
 			if gotPure := ch.Configs.GetBool("pure_passthrough"); !gotPure {

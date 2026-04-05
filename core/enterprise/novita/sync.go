@@ -104,7 +104,7 @@ func ExecuteSync(
 
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, cfg)
+	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
@@ -397,7 +397,11 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
 // to false if absent). Pass a non-nil pointer to always write the given value.
-func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
+//
+// allowPassthroughUnknown controls the allow_passthrough_unknown config on the
+// OpenAI channel. When true, requests for models not in the model list are
+// forwarded to this channel as a fallback (billed at zero cost).
+func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -427,12 +431,12 @@ func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg N
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, cfg)
+	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
 }
 
 func ensureNovitaChannelsFromModels(
 	anthropicModels, openaiModels []string,
-	autoCreate bool, anthropicPurePassthrough *bool, cfg NovitaConfigResult,
+	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -450,7 +454,8 @@ func ensureNovitaChannelsFromModels(
 		}
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
-		created, createErr := createNovitaChannels(cfg, purePassthrough, anthropicModels, openaiModels)
+		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
+		created, createErr := createNovitaChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -495,6 +500,13 @@ func ensureNovitaChannelsFromModels(
 			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
 				"/v1/responses": novitaResponsesBase(channels[i].BaseURL),
 			}
+			// allow_passthrough_unknown — controls whether requests for models
+			// not in the model list are forwarded to this channel as a fallback.
+			if allowPassthroughUnknown != nil {
+				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = *allowPassthroughUnknown
+			} else if _, ok := channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown]; !ok {
+				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = false
+			}
 		}
 
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
@@ -508,7 +520,7 @@ func ensureNovitaChannelsFromModels(
 // createNovitaChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
 // Both channels share the same API key from the Novita config.
-func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultNovitaAPIBase
@@ -528,6 +540,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 				model.ChannelConfigPathBaseMapKey: map[string]string{
 					"/v1/responses": novitaResponsesBase(openaiBase),
 				},
+				model.ChannelConfigAllowPassthroughUnknown: allowPassthroughUnknown,
 			},
 		}
 

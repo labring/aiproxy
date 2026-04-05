@@ -187,7 +187,7 @@ func ExecuteSync( //nolint:cyclop
 	// Step 4: Ensure channels exist (reads from local DB, not remote list)
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, cfg)
+	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -331,7 +331,11 @@ func executeSyncTransaction(
 // channel. Pass nil to preserve the existing setting (only initializing the key
 // to false if absent). Pass a non-nil pointer to always write the given value,
 // which is appropriate when the user has explicitly specified the preference.
-func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
+//
+// allowPassthroughUnknown controls the allow_passthrough_unknown config on the
+// OpenAI channel. When true, requests for models not in the model list are
+// forwarded to this channel as a fallback (billed at zero cost).
+func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
 	if err := model.DB.Select("model", "config").
@@ -362,12 +366,12 @@ func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, cfg PPI
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
 
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, cfg)
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
 }
 
 func ensurePPIOChannelsFromModels(
 	anthropicModels, openaiModels []string,
-	autoCreate bool, anthropicPurePassthrough *bool, cfg PPIOConfigResult,
+	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -385,7 +389,8 @@ func ensurePPIOChannelsFromModels(
 		}
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
-		created, createErr := createPPIOChannels(cfg, purePassthrough, anthropicModels, openaiModels)
+		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
+		created, createErr := createPPIOChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -432,6 +437,13 @@ func ensurePPIOChannelsFromModels(
 				ppiorelay.PathPrefixResponses: ppioResponsesBase(channels[i].BaseURL),
 				ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(channels[i].BaseURL),
 			}
+			// allow_passthrough_unknown — controls whether requests for models
+			// not in the model list are forwarded to this channel as a fallback.
+			if allowPassthroughUnknown != nil {
+				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = *allowPassthroughUnknown
+			} else if _, ok := channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown]; !ok {
+				channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = false
+			}
 		}
 
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
@@ -444,7 +456,7 @@ func ensurePPIOChannelsFromModels(
 
 // createPPIOChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
-func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultPPIOAPIBase
@@ -465,6 +477,7 @@ func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, ant
 					ppiorelay.PathPrefixResponses: ppioResponsesBase(openaiBase),
 					ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(openaiBase),
 				},
+				model.ChannelConfigAllowPassthroughUnknown: allowPassthroughUnknown,
 			},
 		}
 
