@@ -32,9 +32,7 @@ func onPassthroughFirstSuccess(ctx context.Context, _ int, channelType model.Cha
 		return
 	}
 
-	// singleflight collapses concurrent calls for the same model into one
-	// execution, preventing redundant DB writes and cache rebuilds.
-	discoverGroup.Do(modelName, func() (any, error) { //nolint:errcheck
+	_, _, _ = discoverGroup.Do(modelName, func() (any, error) {
 		doDiscover(ctx, modelName)
 		return nil, nil
 	})

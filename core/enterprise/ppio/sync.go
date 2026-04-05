@@ -480,8 +480,8 @@ func ensurePPIOChannelsFromModels(
 }
 
 // newPPIOMultimodalChannel builds the Channel struct for a PPIO native
-// multimodal channel. Used by both createPPIOChannels (initial creation) and
-// ensurePPIOChannelsFromModels (late creation when existing channels lack one).
+// multimodal channel, extracted to avoid duplicating the literal across
+// the initial-create and late-create paths.
 func newPPIOMultimodalChannel(apiKey string, models []string) model.Channel {
 	return model.Channel{
 		Name:    "PPIO (Multimodal)",
