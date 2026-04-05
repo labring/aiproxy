@@ -16,9 +16,12 @@
 #   ADMIN_KEY=xxx bash scripts/zero-downtime-deploy.sh --rollback     # Emergency rollback
 #
 # Prerequisites:
-#   - Docker + Docker Compose V2
-#   - Nginx with deploy/nginx/aiproxy-upstream.conf installed
+#   - Docker installed
+#   - Nginx with /etc/nginx/conf.d/aiproxy-upstream.conf installed
 #   - ADMIN_KEY env var (for smoke tests)
+#
+# Network: Uses --network host so containers can reach DB/Redis on 127.0.0.1.
+# The LISTEN env var controls which port the binary listens on.
 #
 # State file: /data/aiproxy/.active-port (tracks which port is currently serving)
 
@@ -31,18 +34,12 @@ cd "${ROOT_DIR}"
 
 # ── Configuration ─────────────────────────────────────────────
 STATE_FILE="/data/aiproxy/.active-port"
+ENV_FILE_PATH="/data/aiproxy/.env"
 UPSTREAM_CONF="/etc/nginx/conf.d/aiproxy-upstream.conf"
 LOCK_FILE="/tmp/aiproxy-deploy.lock"
 DRAIN_TIMEOUT=600
 HEALTH_TIMEOUT=90
 STABILIZE_WAIT=10
-
-COMPOSE_CMD="docker compose -f docker-compose.yaml -f docker-compose.prod.yaml"
-
-# Determine the Docker Compose network name.
-# Compose names it "<project>_default" where project = directory basename.
-COMPOSE_PROJECT="$(basename "${ROOT_DIR}")"
-COMPOSE_NETWORK="${COMPOSE_PROJECT}_default"
 
 # ── Flags ─────────────────────────────────────────────────────
 BUILD_ONLY=0
@@ -88,14 +85,25 @@ get_canary_port() {
   fi
 }
 
-# Find the running container on a given host port.
+# Find the running aiproxy Docker container listening on a given port.
+# With --network host, containers don't show port mappings in docker ps.
+# We find them by matching the LISTEN env var or container name pattern.
 find_container_on_port() {
   local port="$1"
-  # Use docker ps with port filter. The format "0.0.0.0:PORT->3000/tcp" matches.
-  docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
-    | grep -E "0\.0\.0\.0:${port}->" \
-    | head -1 \
-    | cut -f1
+  # Check for containers with LISTEN env set to this port
+  for cid in $(docker ps -q --filter "ancestor=aiproxy:local" --filter "ancestor=aiproxy:rollback" 2>/dev/null); do
+    local listen_val
+    listen_val=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$cid" 2>/dev/null | grep "^LISTEN=" | head -1 | cut -d= -f2-)
+    if [[ "${listen_val}" == "0.0.0.0:${port}" ]]; then
+      docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's|^/||'
+      return
+    fi
+  done
+  # Fallback: check named containers
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^aiproxy-active$'; then
+    echo "aiproxy-active"
+    return
+  fi
 }
 
 write_upstream() {
@@ -111,21 +119,20 @@ upstream aiproxy_backend {
 EOF
 }
 
-# Extract environment variables from compose config into a docker env-file.
-# Returns the path to a temporary file suitable for `docker run --env-file`.
-build_env_file() {
-  local env_file
-  env_file=$(mktemp /tmp/aiproxy-deploy-env.XXXXXX)
-  ${COMPOSE_CMD} config --format json 2>/dev/null \
-    | python3 -c "
-import sys, json
-cfg = json.load(sys.stdin)
-svc = cfg.get('services', {}).get('aiproxy', {})
-for k, v in svc.get('environment', {}).items():
-    if v is not None:
-        print(f'{k}={v}')
-" > "${env_file}" 2>/dev/null || true
-  echo "${env_file}"
+# Start a container with --network host and LISTEN env var override.
+# Args: container_name image_tag port
+start_container() {
+  local name="$1"
+  local image="$2"
+  local port="$3"
+
+  docker run -d \
+    --name "${name}" \
+    --network host \
+    --restart unless-stopped \
+    --env-file "${ENV_FILE_PATH}" \
+    -e "LISTEN=0.0.0.0:${port}" \
+    "${image}"
 }
 
 # ── Cleanup trap ──────────────────────────────────────────────
@@ -161,9 +168,6 @@ cleanup_on_failure() {
     pass "Canary container removed"
   fi
 
-  # Clean up temp env file
-  rm -f /tmp/aiproxy-deploy-env.* 2>/dev/null || true
-
   warn "Old service is still running — no traffic impact."
 }
 
@@ -173,11 +177,14 @@ trap cleanup_on_failure EXIT
 if ! command -v docker >/dev/null 2>&1; then
   fail "docker not found"
 fi
-if ! docker compose version >/dev/null 2>&1; then
-  fail "docker compose V2 not found"
-fi
-if ! command -v nginx >/dev/null 2>&1 && ! sudo command -v nginx >/dev/null 2>&1; then
+if ! command -v nginx >/dev/null 2>&1 && ! sudo which nginx >/dev/null 2>&1; then
   fail "nginx not found"
+fi
+if [[ ! -f "${ENV_FILE_PATH}" ]]; then
+  fail "Environment file not found: ${ENV_FILE_PATH}"
+fi
+if [[ ! -f "${UPSTREAM_CONF}" ]]; then
+  fail "Nginx upstream conf not found: ${UPSTREAM_CONF} — run the one-time setup first (see DEPLOYMENT.md §10.4)"
 fi
 
 echo ""
@@ -213,18 +220,7 @@ if [[ "${ROLLBACK}" == "1" ]]; then
   fi
 
   info "Starting rollback container on port ${CANARY_PORT}..."
-  ENV_FILE=$(build_env_file)
-
-  docker run -d \
-    --name aiproxy-canary \
-    --network "${COMPOSE_NETWORK}" \
-    --restart unless-stopped \
-    -p "${CANARY_PORT}:3000" \
-    --env-file "${ENV_FILE}" \
-    aiproxy:rollback
-
-  rm -f "${ENV_FILE}"
-
+  start_container "aiproxy-canary" "aiproxy:rollback" "${CANARY_PORT}"
   CANARY_STARTED=1
 
   info "Waiting for rollback container health check..."
@@ -274,13 +270,9 @@ fi
 # ══════════════════════════════════════════════════════════════
 info "Phase 0/5: Pre-flight checks..."
 
-# Ensure infra is running
-${COMPOSE_CMD} up -d pgsql redis 2>/dev/null
-sleep 2
-
-# Verify compose network exists
-if ! docker network inspect "${COMPOSE_NETWORK}" >/dev/null 2>&1; then
-  fail "Docker network '${COMPOSE_NETWORK}' not found. Run 'docker compose up -d pgsql redis' first."
+# Verify the canary port is not already occupied
+if curl -sf "http://localhost:${CANARY_PORT}/api/status" >/dev/null 2>&1; then
+  fail "Port ${CANARY_PORT} is already in use — check for leftover containers or processes"
 fi
 
 # Clean up any leftover canary from a previous failed deploy
@@ -331,7 +323,7 @@ fi
 
 # Step 1c: Build new image
 info "Building Docker image..."
-${COMPOSE_CMD} build --no-cache aiproxy
+docker build -t aiproxy:local --no-cache .
 pass "Docker image built: aiproxy:local"
 
 # Step 1d: Verify image
@@ -366,17 +358,7 @@ fi
 # ══════════════════════════════════════════════════════════════
 info "Phase 2/5: Starting canary on port ${CANARY_PORT}..."
 
-ENV_FILE=$(build_env_file)
-
-docker run -d \
-  --name aiproxy-canary \
-  --network "${COMPOSE_NETWORK}" \
-  --restart unless-stopped \
-  -p "${CANARY_PORT}:3000" \
-  --env-file "${ENV_FILE}" \
-  aiproxy:local
-
-rm -f "${ENV_FILE}"
+start_container "aiproxy-canary" "aiproxy:local" "${CANARY_PORT}"
 
 CANARY_STARTED=1
 pass "Canary container started"
@@ -457,9 +439,9 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
-# PHASE 4: Drain Old Container
+# PHASE 4: Drain Old
 # ══════════════════════════════════════════════════════════════
-info "Phase 4/5: Draining old container (timeout: ${DRAIN_TIMEOUT}s)..."
+info "Phase 4/5: Draining old service..."
 
 OLD_CONTAINER=$(find_container_on_port "${ACTIVE_PORT}")
 if [[ -n "${OLD_CONTAINER}" ]]; then
@@ -468,7 +450,16 @@ if [[ -n "${OLD_CONTAINER}" ]]; then
   docker rm "${OLD_CONTAINER}" 2>/dev/null || true
   pass "Old container drained and removed"
 else
-  warn "No container found on port ${ACTIVE_PORT} — skipping drain"
+  # First deployment: old service might be systemd, not Docker
+  if systemctl is-active aiproxy >/dev/null 2>&1; then
+    warn "Old service is systemd (aiproxy.service), not Docker."
+    warn "Stopping systemd service..."
+    sudo systemctl stop aiproxy
+    sudo systemctl disable aiproxy 2>/dev/null || true
+    pass "Systemd service stopped and disabled"
+  else
+    warn "No old container or systemd service found on port ${ACTIVE_PORT} — skipping drain"
+  fi
 fi
 
 # ══════════════════════════════════════════════════════════════
