@@ -788,7 +788,8 @@
       "actions": "Actions",
       "policyFilter": "Policy Filter",
       "filterByPolicy": "Filter by Policy",
-      "columns": "Columns"
+      "columns": "Columns",
+      "quotaUsage": "Quota Usage"
     },
     "quota": {
       "title": "Quota Policy Management",
@@ -915,6 +916,13 @@
       "varPeriodQuota": "Period quota amount",
       "varPeriodType": "Period type (day/week/month)",
       "varTierThreshold": "Trigger threshold percentage",
+      "varAdminThreshold": "Admin alert threshold percentage",
+      "adminAlertSection": "Admin Alerts (Webhook Group Notification)",
+      "adminAlertEnable": "Enable Admin Alerts",
+      "adminAlertEnableDesc": "Notify admins via Feishu Webhook when a member's usage reaches the configured threshold",
+      "adminAlertThresholdLabel": "Admin Alert Configuration",
+      "adminAlertThresholdDesc": "Alert threshold (notify admins when member usage reaches this percentage)",
+      "tierAdmin": "Admin Alert",
       "save": "Save Configuration",
       "saved": "Notification config saved",
       "noAlerts": "No alert records",

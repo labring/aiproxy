@@ -63,9 +63,12 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup, mw *FeishuMi
 // FeishuUserWithDepartment extends FeishuUser with department path information
 type FeishuUserWithDepartment struct {
 	models.FeishuUser
-	DepartmentPath  *DepartmentPath `json:"department_path"`
-	EffectivePolicy *string         `json:"effective_policy,omitempty"`
-	PolicySource    *string         `json:"policy_source,omitempty"` // "user" or "department"
+	DepartmentPath    *DepartmentPath `json:"department_path"`
+	EffectivePolicy   *string         `json:"effective_policy,omitempty"`
+	PolicySource      *string         `json:"policy_source,omitempty"`  // "user" or "department"
+	QuotaUsagePercent *float64        `json:"quota_usage_percent,omitempty"` // 0.0-1.0+, nil if no quota
+	PeriodQuota       *float64        `json:"period_quota,omitempty"`
+	PeriodUsed        *float64        `json:"period_used,omitempty"`
 }
 
 // GetFeishuUsers returns a paginated list of Feishu users with department information.
@@ -147,15 +150,16 @@ func GetFeishuUsers(c *gin.Context) {
 
 	// Validate sort_by field to prevent SQL injection
 	validSortFields := map[string]bool{
-		"id":              true,
-		"name":            true,
-		"role":            true,
-		"department_id":   true,
-		"level1_dept_name": true,
-		"level2_dept_name": true,
-		"group_id":        true,
-		"created_at":      true,
-		"email":           true,
+		"id":                  true,
+		"name":                true,
+		"role":                true,
+		"department_id":       true,
+		"level1_dept_name":    true,
+		"level2_dept_name":    true,
+		"group_id":            true,
+		"created_at":          true,
+		"email":               true,
+		"quota_usage_percent": true,
 	}
 	if !validSortFields[sortBy] {
 		sortBy = "id"
@@ -166,7 +170,20 @@ func GetFeishuUsers(c *gin.Context) {
 		order = "desc"
 	}
 
+	// Special handling for quota_usage_percent sorting via subquery JOIN
 	orderClause := sortBy + " " + order
+	if sortBy == "quota_usage_percent" {
+		joinSQL := "LEFT JOIN (" +
+			"SELECT group_id AS _qg, " +
+			"CASE WHEN MAX(period_quota) > 0 " +
+			"THEN (SUM(used_amount) - SUM(period_last_update_amount)) / MAX(period_quota) " +
+			"ELSE 0 END AS _usage_pct " +
+			"FROM tokens WHERE status = ? GROUP BY group_id" +
+			") _qt ON feishu_users.group_id = _qt._qg"
+		tx = tx.Joins(joinSQL, model.TokenStatusEnabled)
+		orderClause = "_qt._usage_pct " + order
+	}
+
 	if err := tx.Order(orderClause).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -179,6 +196,9 @@ func GetFeishuUsers(c *gin.Context) {
 
 	// Batch resolve effective quota policies
 	userPolicyMap, deptPolicyMap := batchResolveEffectivePolicies(users)
+
+	// Batch resolve quota usage percentages
+	quotaUsageMap := batchResolveQuotaUsage(users)
 
 	usersWithDept := make([]FeishuUserWithDepartment, len(users))
 	for i, user := range users {
@@ -224,6 +244,13 @@ func GetFeishuUsers(c *gin.Context) {
 			DepartmentPath: deptPath,
 		}
 
+		// Resolve quota usage
+		if qi, ok := quotaUsageMap[user.GroupID]; ok {
+			entry.QuotaUsagePercent = &qi.UsagePercent
+			entry.PeriodQuota = &qi.PeriodQuota
+			entry.PeriodUsed = &qi.PeriodUsed
+		}
+
 		// Resolve effective policy
 		if up, ok := userPolicyMap[user.OpenID]; ok {
 			entry.EffectivePolicy = &up
@@ -253,6 +280,68 @@ func GetFeishuUsers(c *gin.Context) {
 		"users": usersWithDept,
 		"total": total,
 	})
+}
+
+// quotaUsageInfo holds computed quota usage for a group.
+type quotaUsageInfo struct {
+	UsagePercent float64
+	PeriodQuota  float64
+	PeriodUsed   float64
+}
+
+// batchResolveQuotaUsage computes the current quota period usage for each group.
+// It sums all enabled tokens in each group: usage = SUM(used_amount) - SUM(period_last_update_amount),
+// and uses MAX(period_quota) as the group's effective period quota.
+func batchResolveQuotaUsage(users []models.FeishuUser) map[string]*quotaUsageInfo {
+	result := make(map[string]*quotaUsageInfo)
+	if len(users) == 0 {
+		return result
+	}
+
+	groupIDs := make([]string, 0, len(users))
+	seen := make(map[string]bool)
+	for _, u := range users {
+		if u.GroupID != "" && !seen[u.GroupID] {
+			seen[u.GroupID] = true
+			groupIDs = append(groupIDs, u.GroupID)
+		}
+	}
+
+	if len(groupIDs) == 0 {
+		return result
+	}
+
+	type groupAgg struct {
+		GroupID       string  `gorm:"column:group_id"`
+		TotalUsed     float64 `gorm:"column:total_used"`
+		TotalBaseline float64 `gorm:"column:total_baseline"`
+		PeriodQuota   float64 `gorm:"column:period_quota"`
+	}
+
+	var aggs []groupAgg
+	model.DB.Model(&model.Token{}).
+		Select("group_id, SUM(used_amount) as total_used, SUM(period_last_update_amount) as total_baseline, MAX(period_quota) as period_quota").
+		Where("group_id IN ? AND status = ?", groupIDs, model.TokenStatusEnabled).
+		Group("group_id").
+		Find(&aggs)
+
+	for _, a := range aggs {
+		if a.PeriodQuota <= 0 {
+			continue
+		}
+		used := a.TotalUsed - a.TotalBaseline
+		if used < 0 {
+			used = 0
+		}
+		pct := used / a.PeriodQuota
+		result[a.GroupID] = &quotaUsageInfo{
+			UsagePercent: pct,
+			PeriodQuota:  a.PeriodQuota,
+			PeriodUsed:   used,
+		}
+	}
+
+	return result
 }
 
 // batchResolveEffectivePolicies returns two maps:

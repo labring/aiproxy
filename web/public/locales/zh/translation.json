@@ -883,7 +883,8 @@
       "actions": "操作",
       "policyFilter": "策略筛选",
       "filterByPolicy": "按生效策略筛选",
-      "columns": "显示列"
+      "columns": "显示列",
+      "quotaUsage": "额度使用"
     },
     "notifications": {
       "title": "通知与告警",
@@ -904,6 +905,13 @@
       "varPeriodQuota": "周期额度金额",
       "varPeriodType": "周期类型（日/周/月）",
       "varTierThreshold": "触发阈值百分比",
+      "varAdminThreshold": "管理员告警阈值百分比",
+      "adminAlertSection": "管理员告警（Webhook 群通知）",
+      "adminAlertEnable": "启用管理员告警",
+      "adminAlertEnableDesc": "当成员额度用量达到指定阈值时，通过飞书 Webhook 群通知管理员",
+      "adminAlertThresholdLabel": "管理员告警配置",
+      "adminAlertThresholdDesc": "告警阈值（成员用量达到此百分比时通知管理员）",
+      "tierAdmin": "管理员告警",
       "save": "保存配置",
       "saved": "通知配置已保存",
       "noAlerts": "暂无告警记录",

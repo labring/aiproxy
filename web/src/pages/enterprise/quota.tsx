@@ -1030,7 +1030,7 @@ function notifPeriodTypeLabel(tp: string): string {
     return tp === "daily" ? "日" : tp === "weekly" ? "周" : "月"
 }
 
-const DEFAULT_NOTIF_CONFIG = {
+const DEFAULT_NOTIF_CONFIG: QuotaNotifConfig = {
     enabled: false,
     tier2_title: "AI 用量提醒",
     tier2_body: "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入二级限速，RPM/TPM 有所降低，请注意控制用量。",
@@ -1038,6 +1038,10 @@ const DEFAULT_NOTIF_CONFIG = {
     tier3_body: "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入三级限速，请控制用量以避免服务中断。",
     exhaust_title: "AI 用量已耗尽",
     exhaust_body: "您好 {name}，您本{period_type}的 AI 用量已耗尽（周期额度 {period_quota}），所有请求将被拒绝，请联系管理员或等待下一周期重置。",
+    admin_alert_enabled: false,
+    admin_alert_threshold: 0.8,
+    admin_alert_title: "成员额度用量告警",
+    admin_alert_body: "{name} 本{period_type}的 AI 用量已达 {usage_pct}（告警阈值 {admin_threshold}，周期额度 {period_quota}），请关注。",
 }
 
 function NotifConfigTab({ canManage }: { canManage: boolean }) {

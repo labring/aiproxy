@@ -118,6 +118,69 @@ function NotifConfigTab() {
                 </Card>
             ))}
 
+            {/* Separator */}
+            <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3">{t("enterprise.notifications.adminAlertSection")}</h3>
+            </div>
+
+            {/* Admin alert enable toggle */}
+            <Card>
+                <CardContent className="pt-4 pb-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <Label className="text-base font-medium">{t("enterprise.notifications.adminAlertEnable")}</Label>
+                            <p className="text-sm text-muted-foreground mt-0.5">{t("enterprise.notifications.adminAlertEnableDesc")}</p>
+                        </div>
+                        <Switch
+                            checked={cfg.admin_alert_enabled}
+                            onCheckedChange={(v) => updateField("admin_alert_enabled", v)}
+                            disabled={!canManage}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Admin alert threshold */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-sm text-orange-600">{t("enterprise.notifications.adminAlertThresholdLabel")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div>
+                        <Label>{t("enterprise.notifications.adminAlertThresholdDesc")}</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                            <Input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={Math.round((cfg.admin_alert_threshold ?? 0.8) * 100)}
+                                onChange={(e) => updateField("admin_alert_threshold", Number(e.target.value) / 100)}
+                                className="w-24"
+                                disabled={!canManage}
+                            />
+                            <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <Label>{t("enterprise.notifications.templateTitle")}</Label>
+                        <Input
+                            value={cfg.admin_alert_title}
+                            onChange={(e) => updateField("admin_alert_title", e.target.value)}
+                            disabled={!canManage}
+                        />
+                    </div>
+                    <div>
+                        <Label>{t("enterprise.notifications.templateBody")}</Label>
+                        <Textarea
+                            value={cfg.admin_alert_body}
+                            onChange={(e) => updateField("admin_alert_body", e.target.value)}
+                            rows={3}
+                            disabled={!canManage}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Variable reference */}
             <Card>
                 <CardContent className="pt-4 pb-4">
@@ -131,6 +194,7 @@ function NotifConfigTab() {
                         <code>{"{period_quota}"}</code><span>{t("enterprise.notifications.varPeriodQuota")}</span>
                         <code>{"{period_type}"}</code><span>{t("enterprise.notifications.varPeriodType")}</span>
                         <code>{"{tier_threshold}"}</code><span>{t("enterprise.notifications.varTierThreshold")}</span>
+                        <code>{"{admin_threshold}"}</code><span>{t("enterprise.notifications.varAdminThreshold")}</span>
                     </div>
                 </CardContent>
             </Card>
@@ -171,6 +235,7 @@ function AlertHistoryTab() {
 
     const tierBadge = (tier: number) => {
         const configs: Record<number, { label: string; className: string }> = {
+            0: { label: t("enterprise.notifications.tierAdmin"), className: "bg-purple-100 text-purple-800" },
             2: { label: t("enterprise.notifications.tierLevel2"), className: "bg-orange-100 text-orange-800" },
             3: { label: t("enterprise.notifications.tierLevel3"), className: "bg-red-100 text-red-800" },
             4: { label: t("enterprise.notifications.tierExhaust"), className: "bg-red-200 text-red-900" },
@@ -218,6 +283,7 @@ function AlertHistoryTab() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">{t("enterprise.notifications.allTiers")}</SelectItem>
+                        <SelectItem value="0">{t("enterprise.notifications.tierAdmin")}</SelectItem>
                         <SelectItem value="2">{t("enterprise.notifications.tierLevel2")}</SelectItem>
                         <SelectItem value="3">{t("enterprise.notifications.tierLevel3")}</SelectItem>
                         <SelectItem value="4">{t("enterprise.notifications.tierExhaust")}</SelectItem>

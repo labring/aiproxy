@@ -102,6 +102,9 @@ export interface FeishuUser {
     department_path?: DepartmentPath
     effective_policy?: string
     policy_source?: 'user' | 'department'
+    quota_usage_percent?: number
+    period_quota?: number
+    period_used?: number
 }
 
 export interface FeishuUsersResponse {
@@ -506,6 +509,10 @@ export interface QuotaNotifConfig {
     tier3_body: string
     exhaust_title: string
     exhaust_body: string
+    admin_alert_enabled: boolean
+    admin_alert_threshold: number
+    admin_alert_title: string
+    admin_alert_body: string
 }
 
 export interface QuotaNotifConfigResponse extends QuotaNotifConfig {

@@ -28,17 +28,27 @@ type NotifConfig struct {
 	Tier3Body    string `json:"tier3_body"`
 	ExhaustTitle string `json:"exhaust_title"`
 	ExhaustBody  string `json:"exhaust_body"`
+
+	// Admin webhook alert: notify admin group when any user reaches a threshold
+	AdminAlertEnabled   bool    `json:"admin_alert_enabled"`
+	AdminAlertThreshold float64 `json:"admin_alert_threshold"` // 0.0-1.0, e.g. 0.8 = 80%
+	AdminAlertTitle     string  `json:"admin_alert_title"`
+	AdminAlertBody      string  `json:"admin_alert_body"`
 }
 
 // DefaultNotifConfig is the default Chinese notification template.
 var DefaultNotifConfig = NotifConfig{
-	Enabled:      false,
-	Tier2Title:   "AI 用量提醒",
-	Tier2Body:    "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入二级限速，RPM/TPM 有所降低，请注意控制用量。",
-	Tier3Title:   "AI 用量紧张提醒",
-	Tier3Body:    "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入三级限速，请控制用量以避免服务中断。",
-	ExhaustTitle: "AI 用量已耗尽",
-	ExhaustBody:  "您好 {name}，您本{period_type}的 AI 用量已耗尽（周期额度 {period_quota}），所有请求将被拒绝，请联系管理员或等待下一周期重置。",
+	Enabled:             false,
+	Tier2Title:          "AI 用量提醒",
+	Tier2Body:           "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入二级限速，RPM/TPM 有所降低，请注意控制用量。",
+	Tier3Title:          "AI 用量紧张提醒",
+	Tier3Body:           "您好 {name}，您本{period_type}的 AI 用量已达 {usage_pct}（阈值 {tier_threshold}，周期额度 {period_quota}），已进入三级限速，请控制用量以避免服务中断。",
+	ExhaustTitle:        "AI 用量已耗尽",
+	ExhaustBody:         "您好 {name}，您本{period_type}的 AI 用量已耗尽（周期额度 {period_quota}），所有请求将被拒绝，请联系管理员或等待下一周期重置。",
+	AdminAlertEnabled:   false,
+	AdminAlertThreshold: 0.8,
+	AdminAlertTitle:     "成员额度用量告警",
+	AdminAlertBody:      "{name} 本{period_type}的 AI 用量已达 {usage_pct}（告警阈值 {admin_threshold}，周期额度 {period_quota}），请关注。",
 }
 
 // cachedNotifConfig holds the in-memory config to avoid a DB read on every
@@ -216,5 +226,67 @@ func periodTypeLabel(periodType string) string {
 		return "周"
 	default:
 		return "月"
+	}
+}
+
+// adminNotifDedupKey returns the dedup key for admin webhook alerts.
+func adminNotifDedupKey(openID, periodType string) string {
+	return fmt.Sprintf("enterprise:quota_admin_alert:%s:%s", openID, periodKey(periodType))
+}
+
+// MaybeNotifyAdmin sends a webhook group notification to admins when a user's
+// usage ratio exceeds the configured admin alert threshold.
+// Deduplication: each user triggers at most one admin alert per quota period.
+// This function must be called in a goroutine.
+func MaybeNotifyAdmin(
+	openID, userName, periodType string,
+	usageRatio float64,
+	periodQuota float64,
+) {
+	cfg := GetNotifConfig()
+	if !cfg.AdminAlertEnabled || cfg.AdminAlertThreshold <= 0 {
+		return
+	}
+
+	if usageRatio < cfg.AdminAlertThreshold {
+		return
+	}
+
+	n := enterprisenotify.GetEnterpriseNotifier()
+	if n == nil {
+		return
+	}
+
+	if !trylock.Lock(adminNotifDedupKey(openID, periodType), periodTTL(periodType)) {
+		return
+	}
+
+	vars := map[string]string{
+		"name":            userName,
+		"usage_pct":       fmt.Sprintf("%.1f%%", usageRatio*100),
+		"period_quota":    fmt.Sprintf("¥%.2f", periodQuota),
+		"period_type":     periodTypeLabel(periodType),
+		"admin_threshold": fmt.Sprintf("%.0f%%", cfg.AdminAlertThreshold*100),
+	}
+
+	title := RenderTemplate(cfg.AdminAlertTitle, vars)
+	body := RenderTemplate(cfg.AdminAlertBody, vars)
+
+	// Send via webhook (group notification), not P2P
+	n.Notify(notify.LevelWarn, title, body)
+
+	record := models.QuotaAlertHistory{
+		OpenID:      openID,
+		UserName:    userName,
+		Tier:        0, // 0 = admin alert (not a user tier notification)
+		UsageRatio:  usageRatio,
+		PeriodQuota: periodQuota,
+		PeriodType:  periodType,
+		Title:       title,
+		Body:        body,
+		Status:      "sent",
+	}
+	if err := model.DB.Create(&record).Error; err != nil {
+		log.WithError(err).Warn("failed to record admin quota alert history")
 	}
 }

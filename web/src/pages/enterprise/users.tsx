@@ -41,6 +41,7 @@ const COLUMN_KEYS: Array<{ key: string; labelKey: string; alwaysVisible?: boolea
     { key: "department_id", labelKey: "enterprise.users.department", defaultVisible: true },
     { key: "group_id", labelKey: "enterprise.users.group", defaultVisible: false },
     { key: "effective_policy", labelKey: "enterprise.quota.effectivePolicy", defaultVisible: true },
+    { key: "quota_usage_percent", labelKey: "enterprise.users.quotaUsage", defaultVisible: true },
     { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
     { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
 ]
@@ -567,6 +568,35 @@ export default function UsersPage() {
                             ({source === "user" ? t("enterprise.quota.personalOverride") : t("enterprise.quota.deptPolicy")})
                         </span>
                     </Badge>
+                )
+            },
+        },
+        {
+            id: "quota_usage_percent",
+            header: () => (
+                <div
+                    className="font-medium flex items-center cursor-pointer hover:text-primary"
+                    onClick={() => handleSort("quota_usage_percent")}
+                >
+                    {t("enterprise.users.quotaUsage")}
+                    {renderSortIcon("quota_usage_percent")}
+                </div>
+            ),
+            cell: ({ row }) => {
+                const pct = row.original.quota_usage_percent
+                if (pct == null) {
+                    return <span className="text-muted-foreground">-</span>
+                }
+                const percent = Math.min(pct * 100, 100)
+                const display = (pct * 100).toFixed(1)
+                const color = pct >= 0.9 ? "bg-red-500" : pct >= 0.7 ? "bg-orange-500" : "bg-green-500"
+                return (
+                    <div className="flex items-center gap-2 min-w-[100px]">
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${percent}%` }} />
+                        </div>
+                        <span className="text-xs tabular-nums w-12 text-right">{display}%</span>
+                    </div>
                 )
             },
         },

@@ -54,6 +54,14 @@ func CheckQuotaTier(
 					tierThreshold(policy, tier),
 				)
 			}
+			// Admin webhook alert: independent threshold, checked on every request
+			go MaybeNotifyAdmin(
+				feishuUser.OpenID,
+				feishuUser.Name,
+				token.PeriodType,
+				usageRatio,
+				token.PeriodQuota,
+			)
 
 			return effModel, rpmMul, tpmMul, blocked
 		}
@@ -122,7 +130,6 @@ func tierThreshold(policy *models.QuotaPolicy, tier int) float64 {
 
 // applyPolicyTiers applies the tiered policy logic based on usage ratio.
 func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, requestModel string) (string, float64, float64, bool) {
-
 	// If token has no PeriodQuota but the policy does, the token was never synced
 	// (e.g. user-created key). Use the policy's quota directly for enforcement,
 	// and trigger a one-shot async sync to fix the token record.
