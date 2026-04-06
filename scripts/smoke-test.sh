@@ -94,8 +94,8 @@ check_json_field "Enterprise build tag present in /api/status" \
 
 # 2. Model list (admin)
 info "=== Admin API ==="
-check_http "GET /api/models (admin)" \
-  "${BASE_URL}/api/models/" \
+check_http "GET /api/models/enabled (admin)" \
+  "${BASE_URL}/api/models/enabled" \
   200 \
   -H "Authorization: Bearer ${ADMIN_KEY}"
 
@@ -133,8 +133,8 @@ fi
 
 # 6. Feishu OAuth login link reachability
 info "=== Feishu OAuth ==="
-check_http "GET /api/auth/feishu/login (redirect)" \
-  "${BASE_URL}/api/auth/feishu/login" \
+check_http "GET /api/enterprise/auth/feishu/login (redirect)" \
+  "${BASE_URL}/api/enterprise/auth/feishu/login" \
   302
 
 # 7. Enterprise analytics API (admin)
