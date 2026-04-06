@@ -994,7 +994,7 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --rollback
 
 | 阶段 | 耗时 | 服务影响 |
 |------|------|---------|
-| Docker build（前端 + Go） | ~2-5 分钟 | 无，旧容器持续服务 |
+| Docker build（前端 + Go） | ~10-15 分钟（`--no-cache`） | 无，旧容器持续服务 |
 | Canary 启动 + 健康检查 | ~10-30 秒 | 无，旧容器持续服务 |
 | **Nginx reload** | **~0 秒** | **无中断，已有连接继续走旧 worker** |
 | 旧容器 drain | 0-600 秒 | 无，在途 SSE 流自然完成 |
@@ -1027,24 +1027,33 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --legacy
 #### 服务器一次性初始化（首次启用零停机部署时执行）
 
 ```bash
-# 1. 部署 Nginx upstream 配置
+# 1. 部署 Nginx upstream 配置文件
 sudo cp deploy/nginx/aiproxy-upstream.conf /etc/nginx/conf.d/
-sudo cp deploy/nginx/ai.paigod.work.conf /etc/nginx/sites-available/
-sudo cp deploy/nginx/apiproxy.paigod.work.conf /etc/nginx/sites-available/
-sudo ln -sf /etc/nginx/sites-available/ai.paigod.work.conf /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/apiproxy.paigod.work.conf /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
 
-# 2. 验证 Nginx 配置
+# 2. 修改现有站点配置：proxy_pass 改为使用 upstream 名称
+#    （不要直接替换站点配置文件 — 生产环境可能有额外的自定义规则）
+sudo sed -i 's|proxy_pass http://127\.0\.0\.1:3000|proxy_pass http://aiproxy_backend|g' \
+  /etc/nginx/sites-available/ai.paigod.work \
+  /etc/nginx/sites-available/apiproxy.paigod.work
+
+# 3.（推荐）将超时从 300s 升级到 900s（支持 extended thinking）
+sudo sed -i 's|proxy_send_timeout 300s|proxy_send_timeout 900s|g' \
+  /etc/nginx/sites-available/ai.paigod.work \
+  /etc/nginx/sites-available/apiproxy.paigod.work
+sudo sed -i 's|proxy_read_timeout 300s|proxy_read_timeout 900s|g' \
+  /etc/nginx/sites-available/ai.paigod.work \
+  /etc/nginx/sites-available/apiproxy.paigod.work
+
+# 4. 验证 Nginx 配置
 sudo nginx -t
 
-# 3. 初始化状态文件
+# 5. 初始化状态文件（当前服务运行在哪个端口就写哪个）
 echo 3000 | sudo tee /data/aiproxy/.active-port
 
-# 4. 重载 Nginx
-sudo systemctl reload nginx
+# 6. 重载 Nginx
+sudo nginx -s reload
 
-# 5. 验证
+# 7. 验证服务正常（切换到 upstream 后应无感知）
 curl -s http://localhost:80/api/status
 curl -s http://localhost:81/v1/models -H "Authorization: Bearer sk-xxx"
 ```
@@ -1062,10 +1071,10 @@ curl -s http://localhost:81/v1/models -H "Authorization: Bearer sk-xxx"
 | **服务器** | `1.13.81.31`（CVM 公网 IP） |
 | **登录用户** | `ppuser`（SSH 密钥认证，有 sudo 权限） |
 | **SSH 私钥** | `/home/ppuser/.ssh/id_ed25519`（服务器上，用于 git 操作） |
-| **AI Proxy 服务用户** | `aiproxy`（nologin，仅运行服务） |
+| **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（零停机部署），镜像 `aiproxy:local` |
 | **代码路径** | `/data/aiproxy` |
-| **服务二进制路径** | `/data/aiproxy/aiproxy`（systemd ExecStart 指向此处） |
-| **编译输出路径** | `/data/aiproxy/core/aiproxy`（go build 默认输出） |
+| **环境变量文件** | `/data/aiproxy/.env` |
+| **活跃端口状态文件** | `/data/aiproxy/.active-port`（当前值 3001） |
 | **Systemd 服务名** | `aiproxy.service` |
 | **Admin Key** | 见 `/data/aiproxy/.env` 中的 `ADMIN_KEY` |
 | **PostgreSQL** | Docker 容器 `aiproxy-postgres`，用户 `aiproxy`，库 `aiproxy`，端口 `5432` |
@@ -1374,6 +1383,9 @@ sudo systemctl status aiproxy --no-pager
 | 22 | P0 | Nginx / CLB 超时 | Nginx `proxy_read_timeout` 或 CLB 后端超时 < 900s | Claude Code 等使用 extended thinking 的工具报 504 Gateway Time-out（stgw），以及连锁错误 `Cannot read properties of undefined (reading 'trim')`。详见 §3.6 和 §7.1 |
 | 23 | P1 | 零停机部署 | Nginx 未安装 `aiproxy-upstream.conf`，`proxy_pass` 仍硬编码 `127.0.0.1:3000` | 零停机部署脚本无法切换流量，部署失败。需先执行 §10.4 的一次性初始化 |
 | 24 | P2 | 零停机部署 | `/data/aiproxy/.active-port` 状态文件内容与实际运行端口不一致 | 下次部署会尝试在已占用的端口启动 canary，启动失败 |
+| 25 | P1 | Docker 构建 | `.dockerignore` 排除了 `mcp-servers/**/*.md` | `go:embed` 找不到 `README.md` / `README.cn.md`，`go build` 失败。MCP server 的 `init.go` 用 `go:embed` 嵌入这些文件 |
+| 26 | P2 | Docker 构建 | Dockerfile 中 `pnpm install` 未设置 `CI=true` | pnpm 在无 TTY 的 Docker build 环境中检测到需要删除 `node_modules` 时会中止，报 `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` |
+| 27 | P2 | Docker 构建 | Go builder 阶段未设置 `GOPROXY` 国内镜像 | 生产服务器位于国内，无法访问 `proxy.golang.org`，`go install swag` 和 `go build` 依赖下载超时。需 `ENV GOPROXY=https://goproxy.cn,direct` |
 | 4 | P1 | 备份 | 启用 `LOG_SQL_DSN` 后只备份主库 | 恢复时丢失请求日志和审计数据 |
 
 ---

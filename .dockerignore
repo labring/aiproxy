@@ -11,7 +11,9 @@ scripts/*.db
 
 # Keep scripts/*.sh — swag.sh is needed by Dockerfile
 
-# Only exclude top-level and doc .md files (NOT core/**/*.md — some are go:embed sources)
+# Only exclude top-level and doc .md files.
+# DO NOT exclude core/**/*.md or mcp-servers/**/*.md — they are go:embed sources.
+# mcp-servers/*/init.go embeds README.md and README.cn.md at build time.
 /*.md
 enterprise/**/*.md
 openapi-mcp/**/*.md

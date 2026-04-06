@@ -6,10 +6,12 @@ COPY ./web/ ./
 
 RUN npm install -g pnpm
 
+# CI=true: pnpm in non-TTY (Docker build) requires this to skip interactive prompts
 RUN CI=true pnpm install && pnpm run build
 
 FROM golang:1.26-alpine AS builder
 
+# goproxy.cn: production server is in mainland China, cannot reach proxy.golang.org
 ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /aiproxy/core
