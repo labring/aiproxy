@@ -491,8 +491,10 @@ func filterChannels(
 	maxErrorRate float64,
 	ignoreChannel ...map[int64]struct{},
 ) []*model.Channel {
-	filtered := make([]*model.Channel, 0, len(channels))
-	native := make([]*model.Channel, 0, len(channels))
+	// Phase 1: basic eligibility + native/non-native partition.
+	// Error rate filtering is deferred so that a high-error native channel is
+	// never silently replaced by a healthy non-native (conversion) channel.
+	var native, nonNative []*model.Channel
 
 	for _, channel := range channels {
 		if channel.Status != model.ChannelStatusEnabled {
@@ -500,23 +502,11 @@ func filterChannels(
 		}
 
 		a, ok := adaptors.GetAdaptor(channel.Type)
-		if !ok {
-			continue
-		}
-
-		if !a.SupportMode(mode) {
+		if !ok || !a.SupportMode(mode) {
 			continue
 		}
 
 		chid := int64(channel.ID)
-
-		if maxErrorRate != 0 {
-			// Filter out channels with error rate higher than threshold
-			// This avoids amplifying attacks and retrying with bad channels
-			if errorRate, ok := errorRates[chid]; ok && errorRate > maxErrorRate {
-				continue
-			}
-		}
 
 		needIgnore := false
 
@@ -535,21 +525,71 @@ func filterChannels(
 			continue
 		}
 
-		filtered = append(filtered, channel)
-
-		// Track native channels using the already-fetched adaptor to avoid a
-		// second registry lookup. Adaptors without NativeModeChecker are treated
-		// as native for all modes they support (per the interface contract).
-		checker, ok := a.(adaptor.NativeModeChecker)
-		if !ok || checker.NativeMode(mode) {
+		checker, isChecker := a.(adaptor.NativeModeChecker)
+		if !isChecker || checker.NativeMode(mode) {
 			native = append(native, channel)
+		} else {
+			nonNative = append(nonNative, channel)
 		}
 	}
 
-	// Prefer native channels (no protocol conversion) when available.
+	// Phase 2: prefer native channels, apply error-rate filter within.
 	if len(native) > 0 {
+		if maxErrorRate != 0 {
+			if healthy := filterByErrorRate(native, errorRates, maxErrorRate); len(healthy) > 0 {
+				return healthy
+			}
+		} else {
+			return native
+		}
+
+		// All native channels exceed the error threshold, but protocol
+		// conversion is a worse failure mode than retrying a flaky upstream.
 		return native
 	}
 
-	return filtered
+	// Phase 3: no native channels — fall back to non-native with error-rate filter.
+	if len(nonNative) > 0 && maxErrorRate != 0 {
+		if healthy := filterByErrorRate(nonNative, errorRates, maxErrorRate); len(healthy) > 0 {
+			return healthy
+		}
+	}
+
+	return nonNative
+}
+
+// filterByErrorRate returns channels whose error rate is at or below the threshold.
+// Returns the input slice unchanged when no channel exceeds the threshold.
+func filterByErrorRate(
+	channels []*model.Channel,
+	errorRates map[int64]float64,
+	maxErrorRate float64,
+) []*model.Channel {
+	// Fast path: find first channel that needs filtering.
+	firstBad := -1
+
+	for i, ch := range channels {
+		if rate, ok := errorRates[int64(ch.ID)]; ok && rate > maxErrorRate {
+			firstBad = i
+
+			break
+		}
+	}
+
+	if firstBad < 0 {
+		return channels
+	}
+
+	result := make([]*model.Channel, firstBad, len(channels))
+	copy(result, channels[:firstBad])
+
+	for _, ch := range channels[firstBad+1:] {
+		if rate, ok := errorRates[int64(ch.ID)]; ok && rate > maxErrorRate {
+			continue
+		}
+
+		result = append(result, ch)
+	}
+
+	return result
 }
