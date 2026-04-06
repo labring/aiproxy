@@ -80,3 +80,69 @@ func TestIsModelBlockedAtTier(t *testing.T) {
 		})
 	}
 }
+
+func TestIsModelBlockedByPrice(t *testing.T) {
+	tests := []struct {
+		name        string
+		policy      QuotaPolicy
+		tier        int
+		inputPrice  float64
+		outputPrice float64
+		blocked     bool
+	}{
+		// Both thresholds zero → never blocks
+		{"both zero", QuotaPolicy{}, 2, 1.0, 1.0, false},
+
+		// Tier 1 never blocks
+		{"tier1 ignored", QuotaPolicy{Tier2PriceInputThreshold: 0.01}, 1, 1.0, 1.0, false},
+
+		// Single dimension: input only
+		{"input only, match", QuotaPolicy{Tier2PriceInputThreshold: 0.05}, 2, 0.06, 0, true},
+		{"input only, no match", QuotaPolicy{Tier2PriceInputThreshold: 0.05}, 2, 0.04, 0, false},
+		{"input only, exact", QuotaPolicy{Tier2PriceInputThreshold: 0.05}, 2, 0.05, 0, true},
+
+		// Single dimension: output only
+		{"output only, match", QuotaPolicy{Tier3PriceOutputThreshold: 0.10}, 3, 0, 0.15, true},
+		{"output only, no match", QuotaPolicy{Tier3PriceOutputThreshold: 0.10}, 3, 0, 0.05, false},
+
+		// Both dimensions, OR condition
+		{"or: both match", QuotaPolicy{
+			Tier2PriceInputThreshold: 0.05, Tier2PriceOutputThreshold: 0.10, Tier2PriceCondition: "or",
+		}, 2, 0.06, 0.15, true},
+		{"or: only input match", QuotaPolicy{
+			Tier2PriceInputThreshold: 0.05, Tier2PriceOutputThreshold: 0.10, Tier2PriceCondition: "or",
+		}, 2, 0.06, 0.05, true},
+		{"or: only output match", QuotaPolicy{
+			Tier2PriceInputThreshold: 0.05, Tier2PriceOutputThreshold: 0.10, Tier2PriceCondition: "or",
+		}, 2, 0.01, 0.15, true},
+		{"or: neither match", QuotaPolicy{
+			Tier2PriceInputThreshold: 0.05, Tier2PriceOutputThreshold: 0.10, Tier2PriceCondition: "or",
+		}, 2, 0.01, 0.05, false},
+
+		// Both dimensions, AND condition
+		{"and: both match", QuotaPolicy{
+			Tier3PriceInputThreshold: 0.05, Tier3PriceOutputThreshold: 0.10, Tier3PriceCondition: "and",
+		}, 3, 0.06, 0.15, true},
+		{"and: only input match", QuotaPolicy{
+			Tier3PriceInputThreshold: 0.05, Tier3PriceOutputThreshold: 0.10, Tier3PriceCondition: "and",
+		}, 3, 0.06, 0.05, false},
+		{"and: only output match", QuotaPolicy{
+			Tier3PriceInputThreshold: 0.05, Tier3PriceOutputThreshold: 0.10, Tier3PriceCondition: "and",
+		}, 3, 0.01, 0.15, false},
+
+		// Default condition (empty string → treated as "or")
+		{"default cond is or", QuotaPolicy{
+			Tier2PriceInputThreshold: 0.05, Tier2PriceOutputThreshold: 0.10,
+		}, 2, 0.06, 0.05, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.policy.IsModelBlockedByPrice(tt.tier, tt.inputPrice, tt.outputPrice)
+			if got != tt.blocked {
+				t.Errorf("IsModelBlockedByPrice(%d, %.2f, %.2f) = %v, want %v",
+					tt.tier, tt.inputPrice, tt.outputPrice, got, tt.blocked)
+			}
+		})
+	}
+}

@@ -81,6 +81,12 @@ const defaultPolicy: QuotaPolicyInput = {
     block_at_tier3: false,
     tier2_blocked_models: "",
     tier3_blocked_models: "",
+    tier2_price_input_threshold: 0,
+    tier2_price_output_threshold: 0,
+    tier2_price_condition: "or",
+    tier3_price_input_threshold: 0,
+    tier3_price_output_threshold: 0,
+    tier3_price_condition: "or",
     period_quota: 0,
     period_type: 3,
 }
@@ -136,6 +142,68 @@ function MultiplierInput({
             disabled={disabled}
             className={className}
         />
+    )
+}
+
+function PriceBlockingRule({
+    inputThreshold,
+    outputThreshold,
+    condition,
+    onInputChange,
+    onOutputChange,
+    onConditionChange,
+}: {
+    inputThreshold: number
+    outputThreshold: number
+    condition: string
+    onInputChange: (v: number) => void
+    onOutputChange: (v: number) => void
+    onConditionChange: (v: string) => void
+}) {
+    const { t } = useTranslation()
+    return (
+        <div className="border-t pt-3 mt-1">
+            <Label className="text-xs font-medium">{t("enterprise.quota.priceBlockingRule")}</Label>
+            <p className="text-xs text-muted-foreground mb-2">{t("enterprise.quota.priceBlockingHint")}</p>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                <div>
+                    <Label className="text-xs">Input (¥/1K)</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        step={0.001}
+                        value={inputThreshold || ""}
+                        onChange={(e) => onInputChange(Number(e.target.value))}
+                        placeholder="0"
+                        className="h-8 text-xs"
+                    />
+                </div>
+                <Select
+                    value={condition || "or"}
+                    onValueChange={onConditionChange}
+                >
+                    <SelectTrigger className="w-16 h-8 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="and">{t("enterprise.quota.priceConditionAnd")}</SelectItem>
+                        <SelectItem value="or">{t("enterprise.quota.priceConditionOr")}</SelectItem>
+                    </SelectContent>
+                </Select>
+                <div>
+                    <Label className="text-xs">Output (¥/1K)</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        step={0.001}
+                        value={outputThreshold || ""}
+                        onChange={(e) => onOutputChange(Number(e.target.value))}
+                        placeholder="0"
+                        className="h-8 text-xs"
+                    />
+                </div>
+            </div>
+        </div>
     )
 }
 
@@ -261,38 +329,39 @@ function PolicyForm({
             {/* Tier Multipliers */}
             <div className="space-y-4">
                 <h4 className="font-medium">{t("enterprise.quota.tierMultipliers")}</h4>
-                <div className="grid grid-cols-3 gap-4">
-                    {/* Tier 1 */}
-                    <Card className="p-4 border-green-200 bg-green-50/50 dark:bg-green-950/20">
-                        <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3">
-                            {t("enterprise.quota.tier1")}
-                        </h5>
-                        <div className="space-y-3">
-                            <div>
-                                <Label className="text-xs">RPM</Label>
-                                <MultiplierInput
-                                    value={policy.tier1_rpm_multiplier}
-                                    onChange={(val) => onChange({ ...policy, tier1_rpm_multiplier: val })}
-                                    className="h-8"
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs">TPM</Label>
-                                <MultiplierInput
-                                    value={policy.tier1_tpm_multiplier}
-                                    onChange={(val) => onChange({ ...policy, tier1_tpm_multiplier: val })}
-                                    className="h-8"
-                                />
-                            </div>
-                        </div>
-                    </Card>
 
-                    {/* Tier 2 */}
-                    <Card className="p-4 border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20">
-                        <h5 className="text-sm font-medium text-yellow-700 dark:text-yellow-400 mb-3">
-                            {t("enterprise.quota.tier2")}
-                        </h5>
-                        <div className="space-y-3">
+                {/* Tier 1 — compact horizontal row */}
+                <Card className="p-4 border-green-200 bg-green-50/50 dark:bg-green-950/20">
+                    <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3">
+                        {t("enterprise.quota.tier1")}
+                    </h5>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label className="text-xs">RPM</Label>
+                            <MultiplierInput
+                                value={policy.tier1_rpm_multiplier}
+                                onChange={(val) => onChange({ ...policy, tier1_rpm_multiplier: val })}
+                                className="h-8"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs">TPM</Label>
+                            <MultiplierInput
+                                value={policy.tier1_tpm_multiplier}
+                                onChange={(val) => onChange({ ...policy, tier1_tpm_multiplier: val })}
+                                className="h-8"
+                            />
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Tier 2 */}
+                <Card className="p-4 border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20">
+                    <h5 className="text-sm font-medium text-yellow-700 dark:text-yellow-400 mb-3">
+                        {t("enterprise.quota.tier2")}
+                    </h5>
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label className="text-xs">RPM</Label>
                                 <MultiplierInput
@@ -309,28 +378,38 @@ function PolicyForm({
                                     className="h-8"
                                 />
                             </div>
-                            <div>
-                                <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
-                                <Textarea
-                                    value={policy.tier2_blocked_models ? (() => { try { return JSON.parse(policy.tier2_blocked_models).join("\n") } catch { return policy.tier2_blocked_models } })() : ""}
-                                    onChange={(e) => {
-                                        const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
-                                        onChange({ ...policy, tier2_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
-                                    }}
-                                    placeholder={t("enterprise.quota.blockedModelsHint")}
-                                    rows={2}
-                                    className="text-xs"
-                                />
-                            </div>
                         </div>
-                    </Card>
+                        <div>
+                            <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
+                            <Textarea
+                                value={policy.tier2_blocked_models ? (() => { try { return JSON.parse(policy.tier2_blocked_models).join("\n") } catch { return policy.tier2_blocked_models } })() : ""}
+                                onChange={(e) => {
+                                    const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
+                                    onChange({ ...policy, tier2_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
+                                }}
+                                placeholder={t("enterprise.quota.blockedModelsHint")}
+                                rows={2}
+                                className="text-xs"
+                            />
+                        </div>
+                        <PriceBlockingRule
+                            inputThreshold={policy.tier2_price_input_threshold}
+                            outputThreshold={policy.tier2_price_output_threshold}
+                            condition={policy.tier2_price_condition}
+                            onInputChange={(v) => onChange({ ...policy, tier2_price_input_threshold: v })}
+                            onOutputChange={(v) => onChange({ ...policy, tier2_price_output_threshold: v })}
+                            onConditionChange={(v) => onChange({ ...policy, tier2_price_condition: v as "and" | "or" })}
+                        />
+                    </div>
+                </Card>
 
-                    {/* Tier 3 */}
-                    <Card className="p-4 border-red-200 bg-red-50/50 dark:bg-red-950/20">
-                        <h5 className="text-sm font-medium text-red-700 dark:text-red-400 mb-3">
-                            {t("enterprise.quota.tier3")}
-                        </h5>
-                        <div className="space-y-3">
+                {/* Tier 3 */}
+                <Card className="p-4 border-red-200 bg-red-50/50 dark:bg-red-950/20">
+                    <h5 className="text-sm font-medium text-red-700 dark:text-red-400 mb-3">
+                        {t("enterprise.quota.tier3")}
+                    </h5>
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label className="text-xs">RPM</Label>
                                 <MultiplierInput
@@ -349,22 +428,30 @@ function PolicyForm({
                                     className="h-8"
                                 />
                             </div>
-                            <div>
-                                <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
-                                <Textarea
-                                    value={policy.tier3_blocked_models ? (() => { try { return JSON.parse(policy.tier3_blocked_models).join("\n") } catch { return policy.tier3_blocked_models } })() : ""}
-                                    onChange={(e) => {
-                                        const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
-                                        onChange({ ...policy, tier3_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
-                                    }}
-                                    placeholder={t("enterprise.quota.blockedModelsHint")}
-                                    rows={2}
-                                    className="text-xs"
-                                />
-                            </div>
                         </div>
-                    </Card>
-                </div>
+                        <div>
+                            <Label className="text-xs">{t("enterprise.quota.blockedModels")}</Label>
+                            <Textarea
+                                value={policy.tier3_blocked_models ? (() => { try { return JSON.parse(policy.tier3_blocked_models).join("\n") } catch { return policy.tier3_blocked_models } })() : ""}
+                                onChange={(e) => {
+                                    const lines = e.target.value.split("\n").map(s => s.trim()).filter(Boolean)
+                                    onChange({ ...policy, tier3_blocked_models: lines.length > 0 ? JSON.stringify(lines) : "" })
+                                }}
+                                placeholder={t("enterprise.quota.blockedModelsHint")}
+                                rows={2}
+                                className="text-xs"
+                            />
+                        </div>
+                        <PriceBlockingRule
+                            inputThreshold={policy.tier3_price_input_threshold}
+                            outputThreshold={policy.tier3_price_output_threshold}
+                            condition={policy.tier3_price_condition}
+                            onInputChange={(v) => onChange({ ...policy, tier3_price_input_threshold: v })}
+                            onOutputChange={(v) => onChange({ ...policy, tier3_price_output_threshold: v })}
+                            onConditionChange={(v) => onChange({ ...policy, tier3_price_condition: v as "and" | "or" })}
+                        />
+                    </div>
+                </Card>
             </div>
 
             {/* Block at Tier 3 */}
@@ -1326,6 +1413,12 @@ export default function QuotaPoliciesPage() {
             block_at_tier3: policy.block_at_tier3,
             tier2_blocked_models: policy.tier2_blocked_models || "",
             tier3_blocked_models: policy.tier3_blocked_models || "",
+            tier2_price_input_threshold: policy.tier2_price_input_threshold || 0,
+            tier2_price_output_threshold: policy.tier2_price_output_threshold || 0,
+            tier2_price_condition: policy.tier2_price_condition || "or",
+            tier3_price_input_threshold: policy.tier3_price_input_threshold || 0,
+            tier3_price_output_threshold: policy.tier3_price_output_threshold || 0,
+            tier3_price_condition: policy.tier3_price_condition || "or",
             period_quota: policy.period_quota,
             period_type: policy.period_type,
         })
@@ -1505,7 +1598,7 @@ export default function QuotaPoliciesPage() {
                     setFormData(defaultPolicy)
                 }
             }}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editingPolicy ? t("enterprise.quota.editPolicy") : t("enterprise.quota.createPolicy")}

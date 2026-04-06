@@ -19,6 +19,12 @@ export interface QuotaPolicy {
     block_at_tier3: boolean
     tier2_blocked_models: string
     tier3_blocked_models: string
+    tier2_price_input_threshold: number
+    tier2_price_output_threshold: number
+    tier2_price_condition: "and" | "or"
+    tier3_price_input_threshold: number
+    tier3_price_output_threshold: number
+    tier3_price_condition: "and" | "or"
     period_quota: number
     period_type: number // 1=daily, 2=weekly, 3=monthly
 }

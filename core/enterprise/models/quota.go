@@ -50,6 +50,16 @@ type QuotaPolicy struct {
 	Tier2BlockedModels string `json:"tier2_blocked_models" gorm:"size:1024;default:''"`
 	Tier3BlockedModels string `json:"tier3_blocked_models" gorm:"size:1024;default:''"`
 
+	// Price-based model blocking: block models whose input/output price (¥/1K tokens)
+	// exceeds the threshold. Condition controls how thresholds combine ("and"/"or").
+	// Threshold 0 = that dimension disabled. Both 0 = rule inactive.
+	Tier2PriceInputThreshold  float64 `json:"tier2_price_input_threshold"  gorm:"default:0"`
+	Tier2PriceOutputThreshold float64 `json:"tier2_price_output_threshold" gorm:"default:0"`
+	Tier2PriceCondition       string  `json:"tier2_price_condition"        gorm:"size:4;default:'or'"`
+	Tier3PriceInputThreshold  float64 `json:"tier3_price_input_threshold"  gorm:"default:0"`
+	Tier3PriceOutputThreshold float64 `json:"tier3_price_output_threshold" gorm:"default:0"`
+	Tier3PriceCondition       string  `json:"tier3_price_condition"        gorm:"size:4;default:'or'"`
+
 	// Amount limit fields — synced to Token.PeriodQuota/PeriodType when binding
 	PeriodQuota float64 `json:"period_quota" gorm:"default:0"` // 0 = no limit, unit: currency
 	PeriodType  int     `json:"period_type"  gorm:"default:3"` // 1=daily, 2=weekly, 3=monthly
@@ -103,6 +113,50 @@ func (p *QuotaPolicy) IsModelBlockedAtTier(tier int, model string) bool {
 	}
 
 	return false
+}
+
+// IsModelBlockedByPrice checks whether a model should be blocked at the given
+// tier based on its input/output price (¥/1K tokens).
+func (p *QuotaPolicy) IsModelBlockedByPrice(tier int, inputPrice, outputPrice float64) bool {
+	var inThresh, outThresh float64
+	var cond string
+
+	switch tier {
+	case 2:
+		inThresh = p.Tier2PriceInputThreshold
+		outThresh = p.Tier2PriceOutputThreshold
+		cond = p.Tier2PriceCondition
+	case 3:
+		inThresh = p.Tier3PriceInputThreshold
+		outThresh = p.Tier3PriceOutputThreshold
+		cond = p.Tier3PriceCondition
+	default:
+		return false
+	}
+
+	inActive := inThresh > 0
+	outActive := outThresh > 0
+
+	if !inActive && !outActive {
+		return false
+	}
+
+	inMatch := inActive && inputPrice >= inThresh
+	outMatch := outActive && outputPrice >= outThresh
+
+	// Single dimension active — only check that one
+	if !inActive {
+		return outMatch
+	}
+	if !outActive {
+		return inMatch
+	}
+
+	// Both dimensions active — apply condition
+	if cond == "and" {
+		return inMatch && outMatch
+	}
+	return inMatch || outMatch // default "or"
 }
 
 // GroupQuotaPolicy binds a QuotaPolicy to a Group.
