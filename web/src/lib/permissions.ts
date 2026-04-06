@@ -34,9 +34,9 @@ export function useMyPermissions() {
 
 export function useHasPermission(key: PermissionKey): boolean {
     const enterpriseUser = useAuthStore(s => s.enterpriseUser)
+    const { data } = useMyPermissions()
     // Admin Key login (no enterpriseUser) → full permissions
     if (!enterpriseUser) return true
-    const { data } = useMyPermissions()
     if (!data) return false
     return data.permissions.includes(key)
 }

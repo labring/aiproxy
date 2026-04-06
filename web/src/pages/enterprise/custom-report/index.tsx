@@ -12,6 +12,7 @@ import {
     Maximize2,
     X,
 } from "lucide-react"
+import { useHasPermission } from "@/lib/permissions"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -147,6 +148,8 @@ export default function EnterpriseCustomReport() {
             setReportData({ ...reportData, rows: sorted })
         }
     }
+
+    const canExport = useHasPermission('export_manage')
 
     // CSV export
     const handleExportCsv = () => {
@@ -342,10 +345,12 @@ export default function EnterpriseCustomReport() {
                                     )}
 
                                     {/* Export */}
-                                    <Button variant="outline" size="sm" onClick={handleExportCsv}>
-                                        <Download className="w-4 h-4 mr-1.5" />
-                                        {t("enterprise.customReport.exportCsv")}
-                                    </Button>
+                                    {canExport && (
+                                        <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                                            <Download className="w-4 h-4 mr-1.5" />
+                                            {t("enterprise.customReport.exportCsv")}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
 

@@ -108,7 +108,7 @@ export function useRoutes(): RouteObject[] {
                 children: [
                     {
                         path: ROUTES.ENTERPRISE,
-                        element: lazyLoad(EnterpriseDashboard),
+                        element: <RequirePermission permission="dashboard_view" fallback={ROUTES.ENTERPRISE_MY_ACCESS}>{lazyLoad(EnterpriseDashboard)}</RequirePermission>,
                     },
                     {
                         path: ROUTES.ENTERPRISE_RANKING,

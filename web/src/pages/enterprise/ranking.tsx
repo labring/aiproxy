@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
     Download, ArrowUpDown, ArrowUp, ArrowDown, Settings2, Trophy,
 } from "lucide-react"
+import { useHasPermission } from "@/lib/permissions"
 import { DateRange } from "react-day-picker"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -318,6 +319,8 @@ export default function EnterpriseRanking() {
         })
     }, [sortField])
 
+    const canExport = useHasPermission('export_manage')
+
     const handleExport = async () => {
         try {
             await enterpriseApi.exportReport(start, end, departmentFilter, limit)
@@ -362,10 +365,12 @@ export default function EnterpriseRanking() {
                     </Badge>
                 </div>
 
-                <Button variant="outline" size="sm" onClick={handleExport}>
-                    <Download className="w-4 h-4 mr-1.5" />
-                    {t("enterprise.ranking.export")}
-                </Button>
+                {canExport && (
+                    <Button variant="outline" size="sm" onClick={handleExport}>
+                        <Download className="w-4 h-4 mr-1.5" />
+                        {t("enterprise.ranking.export")}
+                    </Button>
+                )}
             </div>
 
             {/* Toolbar */}
