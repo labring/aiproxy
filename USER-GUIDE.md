@@ -387,9 +387,13 @@ claude
 
 ## 四、Web Search（实时搜索）
 
-平台提供了独立的实时网页搜索接口，AI 工具（Claude Code、OpenClaw 等）可以将其配置为 tool / skill，让模型在回答时主动检索最新信息。
+平台提供两种 Web Search 能力：**独立搜索接口**和**对话内联搜索插件**。
 
-### 接口信息
+### 4.1 独立搜索接口（`/v1/web-search`）
+
+直接调用搜索 API，返回原始搜索结果。适合 AI 工具作为 tool / skill 调用，或自行解析搜索结果。
+
+#### 接口信息
 
 | 项目 | 值 |
 |------|---|
@@ -397,7 +401,7 @@ claude
 | **虚拟模型** | `ppio-web-search`（请求体中必须包含此字段） |
 | **认证** | 与其他接口相同，`Authorization: Bearer sk-xxxx` |
 
-### 请求示例
+#### 请求示例
 
 ```bash
 curl -X POST https://apiproxy.paigod.work/v1/web-search \
@@ -410,7 +414,7 @@ curl -X POST https://apiproxy.paigod.work/v1/web-search \
   }'
 ```
 
-### 请求参数
+#### 请求参数
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -420,13 +424,15 @@ curl -X POST https://apiproxy.paigod.work/v1/web-search \
 | `freshness` | string | 否 | 时效过滤：`24h`、`7d`、`30d` |
 | `summary` | bool | 否 | 是否返回摘要（默认 false） |
 
-### 响应格式
+#### 响应格式
 
 返回标准搜索结果结构（Bing Search 兼容格式），包含 `webPages`、`images`、`videos` 等字段。
 
-### 在 Claude Code 中使用
+#### 超时说明
 
-在 Claude Code 的 MCP 配置或 skill 中将 Web Search 配置为一个 tool，让模型在需要实时信息时自动调用：
+独立搜索接口的超时为 **15 分钟**（系统默认值）。搜索引擎执行层有内置的 **30 秒**硬超时保护，正常响应时间在 200ms~1s 之间。
+
+#### 在 Claude Code 中使用
 
 **方式一：通过 `.claude/commands/` 创建 skill**
 
@@ -455,7 +461,7 @@ curl -s -X POST https://apiproxy.paigod.work/v1/web-search \
 header 用 Authorization: Bearer $ANTHROPIC_API_KEY
 ```
 
-### 在 OpenClaw 中使用
+#### 在 OpenClaw 中使用
 
 在 OpenClaw 的搜索 skill 配置中，将搜索端点设置为：
 
@@ -466,11 +472,188 @@ Header: Authorization: Bearer sk-xxxxxxxxxxxx
 Body:   {"model": "ppio-web-search", "query": "{{query}}", "count": 5}
 ```
 
+### 4.2 对话内联搜索（Web Search Plugin）
+
+在普通 Chat Completions 请求中嵌入搜索能力。模型先搜索互联网，再结合搜索结果回答问题，无需额外调用搜索接口。
+
+> 此功能需要**管理员**在模型配置中启用 web-search 插件。如需使用，请联系管理员。
+
+#### 使用方法
+
+在 Chat Completions 请求中添加 `web_search_options` 字段即可触发搜索：
+
+```bash
+curl -X POST https://apiproxy.paigod.work/v1/chat/completions \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "pa/claude-sonnet-4-6",
+    "messages": [
+      {"role": "user", "content": "2026年上海车展有哪些新车发布？"}
+    ],
+    "web_search_options": {
+      "enable": true,
+      "search_context_size": "medium"
+    }
+  }'
+```
+
+#### `web_search_options` 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `enable` | bool | 否 | 是否启用搜索，设为 `false` 可临时关闭 |
+| `search_context_size` | string | 否 | 搜索深度：`low`（1 条查询）、`medium`（3 条，默认）、`high`（5 条） |
+
+#### 搜索深度说明
+
+| 深度 | 搜索查询数 | 适用场景 | 延迟影响 |
+|------|-----------|---------|---------|
+| `low` | 1 | 简单事实查询（"今天天气"） | 最小，约增加 1~2 秒 |
+| `medium` | 3 | 一般信息检索（默认推荐） | 中等，约增加 2~5 秒 |
+| `high` | 5 | 复杂分析（"对比分析最新技术趋势"） | 较大，约增加 3~8 秒 |
+
+#### 两种搜索模式对比
+
+| 特性 | 独立搜索接口 (`/v1/web-search`) | 对话内联搜索 (`web_search_options`) |
+|------|------|------|
+| 返回内容 | 原始搜索结果（JSON） | 模型综合搜索结果后的回答 |
+| 调用方式 | 独立 HTTP 请求 | Chat Completions 请求中附带参数 |
+| 适用场景 | AI Agent tool、自建搜索流程 | 对话中需要实时信息 |
+| 是否需要额外处理 | 需要自行解析和组织结果 | 模型自动整合，可带引用标注 |
+| 计费 | 仅搜索（当前免费） | 搜索（免费）+ 模型调用（正常计费） |
+
 > 💡 Web Search 使用与其他模型相同的 API Key 和认证方式，无需额外申请。搜索接口当前不计费。
 
 ---
 
-## 五、推荐模型
+## 五、Embedding（文本向量化）
+
+平台提供文本向量化（Embedding）接口，用于将文本转换为数值向量。适用于语义搜索、知识库构建、文本聚类、RAG（检索增强生成）等场景。
+
+### 接口信息
+
+| 项目 | 值 |
+|------|---|
+| **端点** | `POST https://apiproxy.paigod.work/v1/embeddings` |
+| **认证** | `Authorization: Bearer sk-xxxx` |
+| **协议** | OpenAI Embeddings 兼容 |
+
+### 可用模型
+
+| 模型 | 模型 ID | 最大上下文 | 特点 |
+|------|--------|-----------|------|
+| **Qwen3 Embedding 8B** | `qwen/qwen3-embedding-8b` | 32K tokens | 多语言、高质量，推荐通用场景 |
+| **Qwen3 Embedding 0.6B** | `qwen/qwen3-embedding-0.6b` | 32K tokens | 轻量快速，适合低延迟场景 |
+| **BGE-M3** | `baai/bge-m3` | 8K tokens | 支持 100+ 语言，密集/稀疏/多向量三模式检索 |
+
+### 请求示例
+
+```bash
+curl -X POST https://apiproxy.paigod.work/v1/embeddings \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen/qwen3-embedding-8b",
+    "input": "AI Proxy 是一个生产级 AI 网关"
+  }'
+```
+
+**批量请求（推荐）：** 一次发送多条文本，比逐条请求更高效：
+
+```bash
+curl -X POST https://apiproxy.paigod.work/v1/embeddings \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen/qwen3-embedding-8b",
+    "input": [
+      "第一段文本",
+      "第二段文本",
+      "第三段文本"
+    ]
+  }'
+```
+
+### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model` | string | 是 | 模型 ID（见上方模型列表） |
+| `input` | string 或 string[] | 是 | 待向量化的文本，支持单条字符串或字符串数组 |
+| `encoding_format` | string | 否 | 返回格式：`float`（默认）或 `base64` |
+
+### 响应格式
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.0158, 0.0162, -0.0033, ...],
+      "index": 0
+    }
+  ],
+  "model": "qwen/qwen3-embedding-8b",
+  "usage": {
+    "prompt_tokens": 12,
+    "total_tokens": 12
+  }
+}
+```
+
+### Python SDK 示例
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://apiproxy.paigod.work/v1",
+    api_key="sk-xxxxxxxxxxxx",
+)
+
+# 单条文本
+response = client.embeddings.create(
+    model="qwen/qwen3-embedding-8b",
+    input="AI Proxy 是一个生产级 AI 网关",
+)
+vector = response.data[0].embedding
+print(f"向量维度: {len(vector)}")
+
+# 批量文本
+response = client.embeddings.create(
+    model="qwen/qwen3-embedding-8b",
+    input=["文本一", "文本二", "文本三"],
+)
+for item in response.data:
+    print(f"[{item.index}] 维度: {len(item.embedding)}")
+```
+
+### 超时与性能
+
+| 指标 | 值 |
+|------|---|
+| 正常响应时间 | 150ms ~ 500ms |
+| 请求超时 | 60 秒（已针对上游偶发排队优化，默认 30s 调高至 60s） |
+| RPM 限制 | 模型不同，`qwen3-embedding-8b` 为 6000 RPM |
+
+> 💡 如果遇到 408 超时错误，通常是上游推理服务临时排队导致，稍等片刻重试即可。批量请求时建议添加重试逻辑（指数退避）。
+
+### 常见使用场景
+
+| 场景 | 说明 | 推荐模型 |
+|------|------|---------|
+| **RAG 知识库** | 将文档切片后向量化存入向量数据库，查询时检索相关片段 | `qwen/qwen3-embedding-8b` |
+| **语义搜索** | 用向量相似度替代关键词匹配，提升搜索准确度 | `qwen/qwen3-embedding-8b` |
+| **文本聚类** | 对大量文本做向量聚类，发现主题分布 | `baai/bge-m3` |
+| **低延迟场景** | 实时推荐、在线分类等对延迟敏感的场景 | `qwen/qwen3-embedding-0.6b` |
+
+> 💡 Embedding 模型**不能用于对话**，它们只输出数值向量，不生成文字回答。在模型列表中它们只有 "Embeddings" 端点标签。
+
+---
+
+## 六、推荐模型
 
 以下是平台上最新、最值得使用的模型，覆盖日常办公、编程、创作等主要场景。
 
@@ -604,7 +787,7 @@ Body:   {"model": "ppio-web-search", "query": "{{query}}", "count": 5}
 
 ---
 
-## 六、常见问题
+## 七、常见问题
 
 ### 连接不上 / 报错 401
 
@@ -706,7 +889,7 @@ API Error: Cannot read properties of undefined (reading 'trim')
 
 ---
 
-## 七、获取帮助
+## 八、获取帮助
 
 - **管理后台：** [https://ai.paigod.work](https://ai.paigod.work)（内网）
 - **飞书登录：** [https://ai.paigod.work/api/enterprise/auth/feishu/login](https://ai.paigod.work/api/enterprise/auth/feishu/login)（内网，可分享给同事）
