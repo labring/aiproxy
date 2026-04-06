@@ -111,6 +111,26 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
 
 **NEVER deploy via bare `go build` on the server.** Always use `deploy.sh` or `docker build`.
 
+**Server access & operations:**
+```bash
+# SSH login (key auth, sudo for privileged ops)
+ssh ppuser@1.13.81.31
+
+# Git pull on server (requires SSH key passthrough)
+cd /data/aiproxy
+sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main
+
+# Deploy (on server)
+ADMIN_KEY=xxx sudo bash scripts/deploy.sh
+
+# View logs (Docker, NOT journalctl)
+sudo docker logs -f aiproxy-active
+
+# Check running state
+sudo docker ps | grep aiproxy
+cat /data/aiproxy/.active-port
+```
+
 **Nginx configs are in `deploy/nginx/`** — see DEPLOYMENT.md §10.4 for server setup.
 
 ### MCP Servers
