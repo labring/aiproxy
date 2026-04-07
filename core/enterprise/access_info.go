@@ -637,45 +637,42 @@ func GetMyStats(c *gin.Context) {
 
 	usageStats.Comparisons = computeComparisons(feishuUser.DepartmentID, startTs, endTs)
 
-	// Query quota status — use group_summaries for accurate period usage instead of
-	// token snapshot deltas, which lose precision due to lazy period resets.
+	// Query quota status — use policy as the authoritative source for PeriodQuota/PeriodType
+	// instead of the token's denormalized copy, which may lag behind due to async sync.
+	// Period usage is computed from group_summaries for accuracy (avoids lazy period reset drift).
 	var quotaStatus *MyQuotaStatus
 
-	if feishuUser.TokenID > 0 {
-		var token model.Token
-		if err := model.DB.Where("id = ?", feishuUser.TokenID).First(&token).Error; err == nil && token.PeriodQuota > 0 {
-			policy, _ := quota.GetPolicyForUser(c.Request.Context(), feishuUser.OpenID)
-			if policy != nil {
-				periodStart := currentPeriodStart(token.PeriodType)
+	policy, _ := quota.GetPolicyForUser(c.Request.Context(), feishuUser.OpenID)
+	if policy != nil && policy.PeriodQuota > 0 {
+		periodType := quota.PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
+		periodStart := currentPeriodStart(model.EmptyNullString(periodType))
 
-				var periodUsed float64
-				if err := model.LogDB.
-					Model(&model.GroupSummary{}).
-					Select("COALESCE(SUM(used_amount), 0)").
-					Where("group_id = ?", feishuUser.GroupID).
-					Where("hour_timestamp >= ?", periodStart.Unix()).
-					Scan(&periodUsed).Error; err != nil {
-					periodUsed = 0
-				}
+		var periodUsed float64
+		if err := model.LogDB.
+			Model(&model.GroupSummary{}).
+			Select("COALESCE(SUM(used_amount), 0)").
+			Where("group_id = ?", feishuUser.GroupID).
+			Where("hour_timestamp >= ?", periodStart.Unix()).
+			Scan(&periodUsed).Error; err != nil {
+			periodUsed = 0
+		}
 
-				usageRatio := periodUsed / token.PeriodQuota
+		usageRatio := periodUsed / policy.PeriodQuota
 
-				blocked := policy.BlockAtTier3 && usageRatio >= 1.0
-				currentTier := quota.ComputeTier(policy, usageRatio, blocked)
+		blocked := policy.BlockAtTier3 && usageRatio >= 1.0
+		currentTier := quota.ComputeTier(policy, usageRatio, blocked)
 
-				quotaStatus = &MyQuotaStatus{
-					PeriodQuota:  token.PeriodQuota,
-					PeriodUsed:   periodUsed,
-					PeriodType:   string(token.PeriodType),
-					PeriodStart:  periodStart.Unix(),
-					PolicyName:   policy.Name,
-					PolicyID:     policy.ID,
-					CurrentTier:  currentTier,
-					Tier1Ratio:   policy.Tier1Ratio,
-					Tier2Ratio:   policy.Tier2Ratio,
-					BlockAtTier3: policy.BlockAtTier3,
-				}
-			}
+		quotaStatus = &MyQuotaStatus{
+			PeriodQuota:  policy.PeriodQuota,
+			PeriodUsed:   periodUsed,
+			PeriodType:   periodType,
+			PeriodStart:  periodStart.Unix(),
+			PolicyName:   policy.Name,
+			PolicyID:     policy.ID,
+			CurrentTier:  currentTier,
+			Tier1Ratio:   policy.Tier1Ratio,
+			Tier2Ratio:   policy.Tier2Ratio,
+			BlockAtTier3: policy.BlockAtTier3,
 		}
 	}
 

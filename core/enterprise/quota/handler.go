@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/controller/utils"
@@ -23,8 +24,9 @@ import (
 
 const maxSyncConcurrency = 10
 
-// policyPeriodTypeToTokenPeriodType converts QuotaPolicy int period type to Token string period type.
-func policyPeriodTypeToTokenPeriodType(pt int) string {
+// PolicyPeriodTypeToTokenPeriodType converts a policy PeriodType int (1/2/3) to
+// a token PeriodType string ("daily"/"weekly"/"monthly").
+func PolicyPeriodTypeToTokenPeriodType(pt int) string {
 	switch pt {
 	case models.PeriodTypeDaily:
 		return model.PeriodTypeDaily
@@ -65,15 +67,27 @@ func withGroupTokens(openID string, fn func(tokenID int)) {
 }
 
 // syncPolicyToToken updates ALL tokens in the user's group with PeriodQuota/PeriodType from the given policy.
+// When PeriodType changes, it proactively snapshots UsedAmount to PeriodLastUpdateAmount
+// so the new period starts fresh (instead of waiting for lazy reset on next relay request).
 func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
+	newPeriodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
+
 	withGroupTokens(openID, func(tokenID int) {
 		periodQuota := policy.PeriodQuota
-		periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
-
-		if _, err := model.UpdateToken(tokenID, model.UpdateTokenRequest{
+		req := model.UpdateTokenRequest{
 			PeriodQuota: &periodQuota,
-			PeriodType:  &periodType,
-		}); err != nil {
+			PeriodType:  &newPeriodType,
+		}
+
+		// Detect PeriodType change: snapshot usage for clean period boundary
+		currentToken, err := model.GetTokenByID(tokenID)
+		if err == nil && string(currentToken.PeriodType) != newPeriodType {
+			now := time.Now().UnixMilli()
+			req.PeriodLastUpdateTime = &now
+			req.PeriodLastUpdateAmount = &currentToken.UsedAmount
+		}
+
+		if _, err := model.UpdateToken(tokenID, req); err != nil {
 			log.Errorf("sync policy to token for user %s (token %d): %v", openID, tokenID, err)
 		}
 	})
@@ -519,7 +533,7 @@ func BindPolicyToUser(c *gin.Context) {
 	}
 
 	if policy.PeriodQuota > 0 {
-		go syncPolicyToToken(req.OpenID, &policy)
+		syncPolicyToToken(req.OpenID, &policy)
 	}
 
 	middleware.SuccessResponse(c, binding)
@@ -577,15 +591,13 @@ func UnbindPolicyFromUser(c *gin.Context) {
 	}
 
 	// Try falling back to department policy, otherwise clear
-	go func() {
-		ctx := context.Background()
-		policy, err := GetPolicyForUser(ctx, openID)
-		if err == nil && policy != nil && policy.PeriodQuota > 0 {
-			syncPolicyToToken(openID, policy)
-		} else {
-			clearUserToken(openID)
-		}
-	}()
+	ctx := context.Background()
+	policy, err := GetPolicyForUser(ctx, openID)
+	if err == nil && policy != nil && policy.PeriodQuota > 0 {
+		syncPolicyToToken(openID, policy)
+	} else {
+		clearUserToken(openID)
+	}
 
 	middleware.SuccessResponse(c, nil)
 }

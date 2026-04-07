@@ -181,7 +181,7 @@ func GetFeishuUsers(c *gin.Context) {
 			"FROM tokens WHERE status = ? GROUP BY group_id" +
 			") _qt ON feishu_users.group_id = _qt._qg"
 		tx = tx.Joins(joinSQL, model.TokenStatusEnabled)
-		orderClause = "_qt._usage_pct " + order
+		orderClause = "COALESCE(_qt._usage_pct, -1) " + order
 	}
 
 	if err := tx.Order(orderClause).Limit(limit).Offset(offset).Find(&users).Error; err != nil {

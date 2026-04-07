@@ -138,7 +138,7 @@ func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, reques
 			go func() {
 				defer pendingSyncs.Delete(token.ID)
 				periodQuota := policy.PeriodQuota
-				periodType := policyPeriodTypeToTokenPeriodType(policy.PeriodType)
+				periodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
 				if _, err := model.UpdateToken(token.ID, model.UpdateTokenRequest{
 					PeriodQuota: &periodQuota,
 					PeriodType:  &periodType,

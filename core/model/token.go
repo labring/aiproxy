@@ -717,10 +717,11 @@ type UpdateTokenRequest struct {
 	Models  *[]string `json:"models"`
 	Status  int       `json:"status"`
 	// Quota system
-	Quota                *float64 `json:"quota"`
-	PeriodQuota          *float64 `json:"period_quota"`
-	PeriodType           *string  `json:"period_type"`
-	PeriodLastUpdateTime *int64   `json:"period_last_update_time"`
+	Quota                  *float64 `json:"quota"`
+	PeriodQuota            *float64 `json:"period_quota"`
+	PeriodType             *string  `json:"period_type"`
+	PeriodLastUpdateTime   *int64   `json:"period_last_update_time"`
+	PeriodLastUpdateAmount *float64 `json:"period_last_update_amount"`
 }
 
 func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
@@ -785,6 +786,12 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.PeriodLastUpdateTime = time.UnixMilli(*update.PeriodLastUpdateTime)
 
 		selects = append(selects, "period_last_update_time")
+	}
+
+	if update.PeriodLastUpdateAmount != nil {
+		token.PeriodLastUpdateAmount = *update.PeriodLastUpdateAmount
+
+		selects = append(selects, "period_last_update_amount")
 	}
 
 	if update.Subnets != nil {
@@ -888,6 +895,12 @@ func UpdateGroupToken(
 		token.PeriodLastUpdateTime = time.UnixMilli(*update.PeriodLastUpdateTime)
 
 		selects = append(selects, "period_last_update_time")
+	}
+
+	if update.PeriodLastUpdateAmount != nil {
+		token.PeriodLastUpdateAmount = *update.PeriodLastUpdateAmount
+
+		selects = append(selects, "period_last_update_amount")
 	}
 
 	if update.Subnets != nil {
