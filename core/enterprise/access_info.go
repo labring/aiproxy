@@ -275,13 +275,15 @@ func GetMyAccess(c *gin.Context) {
 		}
 	}
 
+	var groupSets []string
 	if enabledToken != nil {
 		// Build a TokenCache with group context so Range() can resolve available models
 		tokenCache := enabledToken.ToTokenCache()
 
 		group, err := model.CacheGetGroup(groupID)
 		if err == nil {
-			tokenCache.SetAvailableSets(group.GetAvailableSets())
+			groupSets = group.GetAvailableSets()
+			tokenCache.SetAvailableSets(groupSets)
 			tokenCache.SetModelsBySet(modelCaches.EnabledModelsBySet)
 
 			tokenCache.Range(func(modelName string) bool {
@@ -291,11 +293,30 @@ func GetMyAccess(c *gin.Context) {
 		}
 	}
 
+	if len(groupSets) == 0 {
+		groupSets = []string{model.ChannelDefaultSet}
+	}
+
 	// Load group-level overrides
 	groupModelConfigs, _ := model.GetGroupModelConfigs(groupID)
 	gmcMap := make(map[string]model.GroupModelConfig, len(groupModelConfigs))
 	for _, gmc := range groupModelConfigs {
 		gmcMap[gmc.Model] = gmc
+	}
+
+	modelProvider := make(map[string]string, len(availableModels))
+	for _, set := range groupSets {
+		chMap := modelCaches.EnabledModel2ChannelsBySet[set]
+		for _, modelName := range availableModels {
+			if _, exists := modelProvider[modelName]; exists {
+				continue
+			}
+
+			if chs, ok := chMap[modelName]; ok && len(chs) > 0 {
+				// Channels are already sorted by priority (highest first)
+				modelProvider[modelName] = chs[0].Type.String()
+			}
+		}
 	}
 
 	ownerModels := make(map[string][]ModelAccessInfo)
@@ -333,7 +354,12 @@ func GetMyAccess(c *gin.Context) {
 			}
 		}
 
-		owner := string(mc.Owner)
+		// Group by the enabled channel's provider, not the static ModelConfig.Owner.
+		owner := modelProvider[modelName]
+		if owner == "" {
+			owner = string(mc.Owner)
+		}
+
 		if owner == "" {
 			owner = "other"
 		}
