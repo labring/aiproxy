@@ -108,15 +108,16 @@ ssh ppuser@1.13.81.31 "sudo <command>"
 | **CVM 内网 IP** | `10.206.0.10` |
 | **操作系统** | Ubuntu 22.04.5 LTS |
 | **登录用户** | `ppuser`（sudo 权限，密钥认证） |
-| **AI Proxy 服务端口** | `3000`（仅监听本地，不直接暴露） |
-| **Nginx 端口 80** | 反代至 `127.0.0.1:3000` — 内网管理后台 |
-| **Nginx 端口 81** | 反代至 `127.0.0.1:3000` — 公网 AI API（白名单路径） |
+| **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（零停机部署，端口交替 3000/3001） |
+| **AI Proxy 服务端口** | 当前活跃端口见 `/data/aiproxy/.active-port`（仅监听本地，不直接暴露） |
+| **Nginx 端口 80** | 反代至 `upstream aiproxy_backend` — 内网管理后台 |
+| **Nginx 端口 81** | 反代至 `upstream aiproxy_backend` — 公网 AI API（白名单路径） |
 | **PostgreSQL** | Docker 容器，`127.0.0.1:5432` |
 | **Redis** | Docker 容器，`127.0.0.1:6379` |
 | **代码部署方式** | GitHub SSH Deploy Key，仓库 `mashoushan1989/aiproxy` |
 | **代码路径** | `/data/aiproxy` |
-| **二进制路径** | `/data/aiproxy/aiproxy` |
-| **Systemd 服务** | `aiproxy.service`（User=aiproxy） |
+| **Docker 镜像** | `aiproxy:local`（当前），`aiproxy:rollback`（上一版） |
+| **部署脚本** | `scripts/deploy.sh`（默认零停机，`--legacy` 走旧模式） |
 | **数据库备份** | 每日 03:00 自动备份至 `/data/backup/`，保留 30 天 |
 
 ---
@@ -521,6 +522,8 @@ TZ=Asia/Shanghai
 
 ### 6.4 创建专用系统用户
 
+> **[Legacy] 以下 §6.4–6.5 为 Systemd 裸机部署方式，已被 Docker 零停机部署（§10.4）取代。仅供首次从 Systemd 迁移到 Docker 时参考，新部署请直接使用 `scripts/deploy.sh`。**
+
 > **[安全] 不要用 root 运行 AI Proxy。该服务处理外部请求、文件上传、MCP、第三方模型调用，一旦被攻破直接获得 root 权限。**
 
 ```bash
@@ -584,10 +587,13 @@ curl http://127.0.0.1:3000/api/status
 
 ### 7.1 内网域名配置（端口 80）：`ai.paigod.work`
 
-创建 `/etc/nginx/sites-available/ai.paigod.work`：
+> **前置条件：** 需先安装 `deploy/nginx/aiproxy-upstream.conf` 到 `/etc/nginx/conf.d/`，定义 `upstream aiproxy_backend`。详见 §10.4 一次性初始化。
+
+创建 `/etc/nginx/sites-available/ai.paigod.work`（或直接使用 `deploy/nginx/ai.paigod.work.conf`）：
 
 ```nginx
 # 内网管理后台 — CLB(443) → CVM(80)，开放全部路径
+# 需要 /etc/nginx/conf.d/aiproxy-upstream.conf（定义 upstream aiproxy_backend）
 server {
     listen 80;
     server_name ai.paigod.work;
@@ -610,8 +616,9 @@ server {
     # deny all;
 
     # 反向代理到 AI Proxy — 全部路径
+    # [重要] 使用 upstream 名称（非硬编码端口），支持零停机部署端口切换
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -638,10 +645,11 @@ server {
 
 ### 7.2 公网域名配置（端口 81）：`apiproxy.paigod.work`
 
-创建 `/etc/nginx/sites-available/apiproxy.paigod.work`：
+创建 `/etc/nginx/sites-available/apiproxy.paigod.work`（或直接使用 `deploy/nginx/apiproxy.paigod.work.conf`）：
 
 ```nginx
 # 公网 AI API — CLB(443) → CVM(81)，仅开放白名单路径
+# 需要 /etc/nginx/conf.d/aiproxy-upstream.conf（定义 upstream aiproxy_backend）
 server {
     listen 81;
     server_name apiproxy.paigod.work;
@@ -676,36 +684,37 @@ server {
     # ============================================================
     # 白名单路径：仅开放 AI API 和 MCP 相关端点
     # 这些端点都有 Token 认证保护（middleware.TokenAuth / MCPAuth）
+    # [重要] 使用 upstream 名称（非硬编码端口），支持零停机部署端口切换
     # ============================================================
 
     # OpenAI 兼容 API（/v1/chat/completions, /v1/models, /v1/responses 等）
     location /v1/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # Gemini 兼容 API
     location /v1beta/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # MCP 协议端点
     location /mcp/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # MCP SSE 端点
     location = /sse {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # MCP Streamable 端点
     location = /mcp {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # MCP Message 端点
     location = /message {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://aiproxy_backend;
     }
 
     # ============================================================
@@ -909,8 +918,11 @@ RPM/TPM 在 **模型配置（ModelConfig）** 中按模型维度设置：
 ### 10.1 日志查看
 
 ```bash
-# AI Proxy 日志
-sudo journalctl -u aiproxy -f
+# AI Proxy 日志（Docker 零停机部署）
+sudo docker logs -f aiproxy-active
+
+# AI Proxy 日志（Legacy Systemd 部署）
+# sudo journalctl -u aiproxy -f
 
 # Nginx 访问日志
 sudo tail -f /var/log/nginx/access.log
@@ -1071,11 +1083,11 @@ curl -s http://localhost:81/v1/models -H "Authorization: Bearer sk-xxx"
 | **服务器** | `1.13.81.31`（CVM 公网 IP） |
 | **登录用户** | `ppuser`（SSH 密钥认证，有 sudo 权限） |
 | **SSH 私钥** | `/home/ppuser/.ssh/id_ed25519`（服务器上，用于 git 操作） |
-| **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（零停机部署），镜像 `aiproxy:local` |
+| **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（零停机部署，端口交替 3000/3001），镜像 `aiproxy:local` |
 | **代码路径** | `/data/aiproxy` |
 | **环境变量文件** | `/data/aiproxy/.env` |
 | **活跃端口状态文件** | `/data/aiproxy/.active-port`（当前值 3001） |
-| **Systemd 服务名** | `aiproxy.service` |
+| **部署脚本** | `scripts/deploy.sh`（默认零停机，`--legacy` 走旧模式） |
 | **Admin Key** | 见 `/data/aiproxy/.env` 中的 `ADMIN_KEY` |
 | **PostgreSQL** | Docker 容器 `aiproxy-postgres`，用户 `aiproxy`，库 `aiproxy`，端口 `5432` |
 | **Redis** | Docker 容器 `aiproxy-redis`，端口 `6379` |
@@ -1104,6 +1116,8 @@ sudo git log --oneline -5
 ```
 
 ### 11.4 前端编译（有前端改动时）
+
+> **[Legacy] §11.4–11.6 为手动裸机编译部署流程。当前推荐使用 `ADMIN_KEY=xxx bash scripts/deploy.sh`（Docker 零停机部署），Dockerfile 自动完成前端编译、Swagger 生成、Go 构建和前端嵌入，无需手动操作。以下仅供无 Docker 环境的紧急场景参考。**
 
 > **[P0 易错点#21]** 前端编译输出到 `web/dist/`，但 Go 的 `go:embed` 读取的是 `core/public/dist/`。**编译前端后必须同步到 embed 目录**，否则 Go 二进制嵌入的仍是旧版前端，新功能在浏览器中不可用且无任何报错。
 
@@ -1193,14 +1207,18 @@ sudo docker exec -it aiproxy-redis redis-cli
 ### 11.8 日志排查
 
 ```bash
-# 实时查看 AI Proxy 日志
-sudo journalctl -u aiproxy -f
+# 实时查看 AI Proxy 日志（Docker 零停机部署）
+sudo docker logs -f aiproxy-active
 
 # 查看最近 100 行日志
-sudo journalctl -u aiproxy -n 100 --no-pager
+sudo docker logs --tail 100 aiproxy-active
 
 # 按时间查看日志
-sudo journalctl -u aiproxy --since "2026-03-25 14:00" --until "2026-03-25 15:00"
+sudo docker logs --since "2026-03-25T14:00:00" --until "2026-03-25T15:00:00" aiproxy-active
+
+# Legacy Systemd 部署日志（如仍使用）
+# sudo journalctl -u aiproxy -f
+# sudo journalctl -u aiproxy -n 100 --no-pager
 
 # Nginx 日志
 sudo tail -f /var/log/nginx/access.log
@@ -1214,18 +1232,31 @@ sudo docker logs -f aiproxy-redis
 ### 11.9 服务管理
 
 ```bash
-# 启动/停止/重启
-sudo systemctl start aiproxy
-sudo systemctl stop aiproxy
-sudo systemctl restart aiproxy
+# === Docker 零停机部署（当前标准） ===
 
-# 查看状态
-sudo systemctl status aiproxy
+# 查看运行状态
+sudo docker ps | grep aiproxy
+cat /data/aiproxy/.active-port
 
-# 查看服务配置
-sudo systemctl cat aiproxy
+# 查看日志
+sudo docker logs -f aiproxy-active
 
-# Docker 容器管理
+# 重新部署（零停机）
+cd /data/aiproxy && ADMIN_KEY=xxx sudo bash scripts/deploy.sh --no-pull
+
+# 紧急回滚
+cd /data/aiproxy && ADMIN_KEY=xxx sudo bash scripts/deploy.sh --rollback
+
+# 手动停止（会中断服务！）
+sudo docker stop aiproxy-active
+
+# === Legacy Systemd 部署 ===
+# sudo systemctl start aiproxy
+# sudo systemctl stop aiproxy
+# sudo systemctl restart aiproxy
+# sudo systemctl status aiproxy
+
+# === 基础设施容器管理 ===
 sudo docker compose -f /data/docker-compose.yml ps
 sudo docker compose -f /data/docker-compose.yml restart postgres
 sudo docker compose -f /data/docker-compose.yml restart redis
@@ -1233,9 +1264,31 @@ sudo docker compose -f /data/docker-compose.yml restart redis
 
 ### 11.10 完整快速部署流程（一键 Copy）
 
+#### 方案 0：Docker 零停机部署（推荐）
+
+> **标准部署方式。** 自动完成 git pull → Docker 构建（前端 + Swagger + Go） → canary 健康检查 → Nginx 切换 → 旧容器优雅退出。全程零中断。
+
+```bash
+# === 登录服务器 ===
+ssh ppuser@1.13.81.31
+
+# === 一键部署 ===
+cd /data/aiproxy && ADMIN_KEY=xxx sudo bash scripts/deploy.sh
+
+# === 跳过 git pull（部署当前代码） ===
+# cd /data/aiproxy && ADMIN_KEY=xxx sudo bash scripts/deploy.sh --no-pull
+
+# === 紧急回滚 ===
+# cd /data/aiproxy && ADMIN_KEY=xxx sudo bash scripts/deploy.sh --rollback
+```
+
+---
+
+> **以下方案 A/B 为 Legacy 裸机部署方式（需停机 5-10 秒），仅供无 Docker 环境的紧急场景。新部署请使用方案 0。**
+
 > **先判断变更范围再选方案：** `git log --oneline origin/main..main` 查看待部署 commit，`git diff origin/main --stat | grep "web/src/"` 判断是否含前端改动。
 
-#### 方案 A：含前端改动（完整部署，约 1.5 分钟）
+#### 方案 A（Legacy）：含前端改动（完整部署，约 1.5 分钟）
 
 ```bash
 # === 登录服务器 ===
@@ -1257,7 +1310,7 @@ echo "=== 部署完成 ===" && \
 sudo systemctl status aiproxy --no-pager
 ```
 
-#### 方案 B：仅后端改动（快速部署，约 1 分钟）
+#### 方案 B（Legacy）：仅后端改动（快速部署，约 1 分钟）
 
 > ⚠️ **确认无前端改动后才能用此方案！** 否则会导致易错点 #21：前端代码不生效。
 

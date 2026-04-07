@@ -100,7 +100,7 @@
 ## 待开发功能 📋
 
 ### 第 11 阶段：集成与优化
-- [ ] 前端嵌入 Go 二进制（`cp -r web/dist/ core/public/dist/`）
+- [x] 前端嵌入 Go 二进制 — Docker 构建自动完成（`COPY --from=frontend-builder`），本地开发用 `rsync -a --delete web/dist/ core/public/dist/`
 - [ ] 飞书 REDIRECT_URI 配置说明文档
 - [ ] 前端图表懒加载（ECharts React.lazy + IntersectionObserver）
 - [ ] `AnthropicPurePassthrough` 从 `bool` 改为 `*bool`（消除零值隐式重置风险）
