@@ -122,6 +122,9 @@ type rawUsage struct {
 	// Anthropic: prompt cache creation breakdown (nested object form)
 	// e.g. "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0}
 	CacheCreation *cacheCreation `json:"cache_creation,omitempty"`
+
+	// Tavily format: per-request billing credits (e.g. basic search=1, advanced=2)
+	Credits model.ZeroNullInt64 `json:"credits,omitempty"`
 }
 
 type completionTokensDetails struct {
@@ -195,6 +198,9 @@ func (r *rawUsage) toModelUsage() model.Usage {
 	} else if total := r.CacheCreation.total(); total > 0 {
 		u.CacheCreationTokens = model.ZeroNullInt64(total)
 	}
+
+	// Tavily credits → WebSearchCount for per-request billing.
+	u.WebSearchCount = r.Credits
 
 	return u
 }

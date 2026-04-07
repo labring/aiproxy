@@ -15,6 +15,30 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
+// DoResponse delegates to the passthrough adaptor for full zero-copy relay.
+//
+// For Tavily models the upstream response contains "usage":{"credits":N} which
+// extractUsageFromTail now maps to WebSearchCount automatically.
+// For ppio-web-search the upstream carries no usage at all, so we fall back to
+// counting 1 per successful request.
+func (a *Adaptor) DoResponse(
+	m *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	result, err := a.Adaptor.DoResponse(m, store, c, resp)
+	if err != nil {
+		return result, err
+	}
+
+	if m.Mode == mode.WebSearch && result.Usage.WebSearchCount == 0 {
+		result.Usage.WebSearchCount = 1
+	}
+
+	return result, nil
+}
+
 func init() {
 	registry.Register(model.ChannelTypePPIO, &Adaptor{})
 }
