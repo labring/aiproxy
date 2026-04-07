@@ -175,8 +175,10 @@ func TestExtractUsage_Anthropic_StreamHead(t *testing.T) {
 	payload := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"usage\":{\"input_tokens\":14,\"cache_read_input_tokens\":5,\"cache_creation\":{\"ephemeral_5m_input_tokens\":3,\"ephemeral_1h_input_tokens\":2}}}}\n\n"
 
 	u := extractUsageFromHead([]byte(payload))
-	if int64(u.InputTokens) != 14 {
-		t.Errorf("InputTokens: want 14, got %d", u.InputTokens)
+	// InputTokens = input_tokens(14) + cache_read(5) + cache_creation_nested(3+2=5) = 24
+	// Anthropic's input_tokens excludes cached tokens; toModelUsage() adds them back.
+	if int64(u.InputTokens) != 24 {
+		t.Errorf("InputTokens: want 24, got %d", u.InputTokens)
 	}
 
 	if int64(u.CachedTokens) != 5 {

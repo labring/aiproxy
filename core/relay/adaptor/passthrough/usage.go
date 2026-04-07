@@ -151,6 +151,15 @@ func (cc *cacheCreation) total() int64 {
 	return int64(cc.Ephemeral5mInputTokens) + int64(cc.Ephemeral1hInputTokens)
 }
 
+// cacheCreationTotal returns the total cache-creation token count,
+// preferring the flat Anthropic field over the nested object sum.
+func (r *rawUsage) cacheCreationTotal() model.ZeroNullInt64 {
+	if r.CacheCreationInputTokens > 0 {
+		return r.CacheCreationInputTokens
+	}
+	return model.ZeroNullInt64(r.CacheCreation.total())
+}
+
 func (r *rawUsage) toModelUsage() model.Usage {
 	u := model.Usage{}
 
@@ -158,7 +167,11 @@ func (r *rawUsage) toModelUsage() model.Usage {
 	if r.PromptTokens > 0 {
 		u.InputTokens = r.PromptTokens
 	} else if r.InputTokens > 0 {
-		u.InputTokens = r.InputTokens
+		// Anthropic's input_tokens excludes cached tokens, but model.Usage.InputTokens
+		// must represent the total input (matching OpenAI's prompt_tokens semantics).
+		// Add cache_read and cache_creation tokens to align the semantics.
+		// See ClaudeUsage.ToOpenAIUsage() in relay/model/claude.go for the same logic.
+		u.InputTokens = r.InputTokens + r.CacheReadInputTokens + r.cacheCreationTotal()
 	}
 
 	// Output tokens.
@@ -193,10 +206,9 @@ func (r *rawUsage) toModelUsage() model.Usage {
 
 	// Cache-creation tokens: prefer the flat Anthropic top-level field, then
 	// fall back to the nested cacheCreation object (sum of ephemeral tiers).
-	if r.CacheCreationInputTokens > 0 {
-		u.CacheCreationTokens = r.CacheCreationInputTokens
-	} else if total := r.CacheCreation.total(); total > 0 {
-		u.CacheCreationTokens = model.ZeroNullInt64(total)
+	// Skip if already set from OpenAI prompt_tokens_details above.
+	if u.CacheCreationTokens == 0 {
+		u.CacheCreationTokens = r.cacheCreationTotal()
 	}
 
 	// Tavily credits → WebSearchCount for per-request billing.
