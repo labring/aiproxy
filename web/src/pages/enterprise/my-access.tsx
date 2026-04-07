@@ -1021,7 +1021,7 @@ function RequestLogsSection() {
     })
 
     const formatTime = (ts: number) => {
-        const d = new Date(ts * 1000)
+        const d = new Date(ts)
         return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
     }
 
