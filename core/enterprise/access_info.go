@@ -68,6 +68,7 @@ var (
 	endpointsParsePdf    = []string{"POST /v1/parse/pdf"}
 	endpointsVideo       = []string{"POST /v1/video/generations/jobs", "GET /v1/video/generations/jobs/{id}"}
 	endpointsPPIONative  = []string{"POST /v3/{model}", "POST /v3/async/{model}", "GET /v3/async/task-result"}
+	endpointsWebSearch   = []string{"POST /v1/web-search"}
 )
 
 // endpointSlugToPath maps provider endpoint slugs (from ModelConfig.Config["endpoints"])
@@ -167,6 +168,8 @@ func modeToTypeName(m mode.Mode) string {
 		return "parse_pdf"
 	case mode.PPIONative:
 		return "multimodal"
+	case mode.WebSearch:
+		return "web_search"
 	default:
 		return "other"
 	}
@@ -198,6 +201,8 @@ func getSupportedEndpoints(modelType mode.Mode) []string {
 		return endpointsVideo
 	case mode.PPIONative:
 		return endpointsPPIONative
+	case mode.WebSearch:
+		return endpointsWebSearch
 	default:
 		return nil
 	}

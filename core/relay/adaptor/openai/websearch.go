@@ -8,6 +8,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 )
@@ -66,5 +67,8 @@ func WebSearchHandler(
 
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return adaptor.DoResponseResult{}, nil
+	// Count each successful web-search request as 1 for WebSearchPrice billing.
+	return adaptor.DoResponseResult{
+		Usage: model.Usage{WebSearchCount: 1},
+	}, nil
 }

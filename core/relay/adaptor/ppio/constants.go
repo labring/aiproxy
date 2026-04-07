@@ -7,6 +7,13 @@ import (
 
 // https://ppinfra.com/docs/model/llm.md
 
+const (
+	// ModelPPIOWebSearch is the virtual model for PPIO's standalone web-search API.
+	ModelPPIOWebSearch = "ppio-web-search"
+	// ModelPPIOTavilySearch is the virtual model for PPIO's Tavily search API.
+	ModelPPIOTavilySearch = "ppio-tavily-search"
+)
+
 var ModelList = []model.ModelConfig{
 	// DeepSeek models
 	{
@@ -199,7 +206,14 @@ var ModelList = []model.ModelConfig{
 
 	// Web Search (virtual model for PPIO's standalone web-search API)
 	{
-		Model: "ppio-web-search",
+		Model: ModelPPIOWebSearch,
+		Type:  mode.WebSearch,
+		Owner: model.ModelOwnerPPIO,
+	},
+
+	// Tavily Search (virtual model for PPIO's Tavily search API)
+	{
+		Model: ModelPPIOTavilySearch,
 		Type:  mode.WebSearch,
 		Owner: model.ModelOwnerPPIO,
 	},

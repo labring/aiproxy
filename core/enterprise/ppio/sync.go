@@ -41,6 +41,7 @@ var ModelTypeToMode = map[string]mode.Mode{
 	"image":      mode.PPIONative,
 	"video":      mode.PPIONative,
 	"audio":      mode.PPIONative,
+	"web_search": mode.WebSearch,
 }
 
 // endpointSlugToMode maps PPIO endpoint slugs to mode.Mode.

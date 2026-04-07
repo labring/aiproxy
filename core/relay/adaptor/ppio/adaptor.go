@@ -95,7 +95,13 @@ func (a *Adaptor) GetRequestURL(
 			wb = WebSearchBase(m.Channel.BaseURL)
 		}
 
-		u, err := url.JoinPath(wb, "/web-search")
+		// Route by model name: tavily uses a different upstream path.
+		pathSuffix := "/web-search"
+		if m.ActualModel == ModelPPIOTavilySearch {
+			pathSuffix = "/tavily/search"
+		}
+
+		u, err := url.JoinPath(wb, pathSuffix)
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}

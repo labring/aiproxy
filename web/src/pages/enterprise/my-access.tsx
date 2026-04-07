@@ -64,6 +64,7 @@ const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
     "POST /v1/parse/pdf": { label: "Parse PDF", color: EP_COLORS.misc },
     "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video },
     "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
+    "POST /v1/web-search": { label: "Web Search", color: EP_COLORS.misc },
 }
 
 // Translate a server-side type_name (e.g. "chat") via i18n keys "enterprise.myAccess.typeName_chat".
