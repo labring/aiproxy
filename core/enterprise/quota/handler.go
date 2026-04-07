@@ -81,7 +81,7 @@ func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
 
 		// Detect PeriodType change: snapshot usage for clean period boundary
 		currentToken, err := model.GetTokenByID(tokenID)
-		if err == nil && string(currentToken.PeriodType) != newPeriodType {
+		if err == nil && currentToken.PeriodType != model.EmptyNullString(newPeriodType) {
 			now := time.Now().UnixMilli()
 			req.PeriodLastUpdateTime = &now
 			req.PeriodLastUpdateAmount = &currentToken.UsedAmount
@@ -591,8 +591,7 @@ func UnbindPolicyFromUser(c *gin.Context) {
 	}
 
 	// Try falling back to department policy, otherwise clear
-	ctx := context.Background()
-	policy, err := GetPolicyForUser(ctx, openID)
+	policy, err := GetPolicyForUser(c.Request.Context(), openID)
 	if err == nil && policy != nil && policy.PeriodQuota > 0 {
 		syncPolicyToToken(openID, policy)
 	} else {
