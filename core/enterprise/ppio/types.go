@@ -278,3 +278,116 @@ type ModelCoverageResult struct {
 	Covered   int                 `json:"covered"`
 	Uncovered []ModelCoverageItem `json:"uncovered"`
 }
+
+// ── Multimodal API types ──────────────────────────────────────────────────
+
+// multimodalPriceDivisor converts the batch-price API's basePrice0 field
+// to 元/次.  basePrice0 / multimodalPriceDivisor = ¥/request.
+// Verified: seedream-4.5 = 2500 → ¥0.025/张, wan2.6-t2v 720P 5s = 30000 → ¥0.30/次.
+const multimodalPriceDivisor = 100_000
+
+// PPIOMultimodalModel represents a model from the multimodal-model/list API
+// (api-server.ppio.com/v1/product/multimodal-model/list).
+type PPIOMultimodalModel struct {
+	FusionConfig PPIOMMFusionConfig `json:"fusionConfig"`
+	ModelConfig  PPIOMMModelConfig  `json:"modelConfig"`
+}
+
+// PPIOMMFusionConfig holds display metadata for a multimodal model.
+type PPIOMMFusionConfig struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Series      string `json:"series"`
+	Description string `json:"description"`
+}
+
+// PPIOMMModelConfig holds billing and routing config for a multimodal model.
+type PPIOMMModelConfig struct {
+	Config      PPIOMMConfigDetail `json:"config"`
+	SKUMappings []PPIOSKUMapping   `json:"skuMappings"`
+}
+
+// PPIOMMConfigDetail holds the inner config block (category, billing type).
+type PPIOMMConfigDetail struct {
+	Category string `json:"category"` // "video_gen", "image_gen", "audio_gen"
+}
+
+// PPIOSKUMapping maps a SKU code to its CEL matching expression.
+// CELExpr is stored for future precise billing but not evaluated in the current implementation.
+type PPIOSKUMapping struct {
+	SKUCode string `json:"skuCode"`
+	CELExpr string `json:"celExpr"`
+}
+
+// PPIOMultimodalListResponse is the response from the multimodal-model/list API.
+type PPIOMultimodalListResponse struct {
+	Configs []PPIOMultimodalModel `json:"configs"`
+	Total   int                   `json:"total"`
+}
+
+// PPIOBatchPriceRequest is the request body for the batch-price API.
+type PPIOBatchPriceRequest struct {
+	BusinessType string   `json:"businessType"`
+	ProductIDs   []string `json:"productIds"`
+}
+
+// PPIOBatchPriceResponse is the response from the batch-price API.
+type PPIOBatchPriceResponse struct {
+	Products []PPIOProductPrice `json:"products"`
+}
+
+// PPIOProductPrice represents a single product's pricing from the batch-price API.
+type PPIOProductPrice struct {
+	ProductID       string `json:"productId"`
+	ProductCategory string `json:"productCategory"`
+	BasePrice0      string `json:"basePrice0"` // string; parse to int64
+}
+
+// collectSKUCodes returns all SKU codes from a multimodal model's SKU mappings.
+func (m *PPIOMultimodalModel) collectSKUCodes() []string {
+	codes := make([]string, len(m.ModelConfig.SKUMappings))
+	for i, s := range m.ModelConfig.SKUMappings {
+		codes[i] = s.SKUCode
+	}
+
+	return codes
+}
+
+// minSKUPrice returns the minimum non-zero price across all of this model's SKUs.
+// skuPrices maps skuCode → raw basePrice0 value from the batch-price API.
+// Returns price in 元/次 (raw / multimodalPriceDivisor).
+func (m *PPIOMultimodalModel) minSKUPrice(skuPrices map[string]int64) float64 {
+	var minRaw int64
+
+	for _, sku := range m.ModelConfig.SKUMappings {
+		raw, ok := skuPrices[sku.SKUCode]
+		if !ok || raw <= 0 {
+			continue
+		}
+
+		if minRaw == 0 || raw < minRaw {
+			minRaw = raw
+		}
+	}
+
+	if minRaw == 0 {
+		return 0
+	}
+
+	return float64(minRaw) / multimodalPriceDivisor
+}
+
+// multimodalCategoryToModelType maps the multimodal API's category field to
+// the PPIO model_type strings used by ModelTypeToMode (sync.go).
+func multimodalCategoryToModelType(category string) string {
+	switch category {
+	case "image_gen":
+		return "image"
+	case "video_gen":
+		return "video"
+	case "audio_gen":
+		return "audio"
+	default:
+		return "video" // safe default for unknown multimodal categories
+	}
+}

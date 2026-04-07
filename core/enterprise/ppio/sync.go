@@ -188,6 +188,25 @@ func ExecuteSync( //nolint:cyclop
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
+	// Step 3.5: Sync multimodal models from the dedicated console API.
+	// This is an independent pipeline from the V1+V2 chat model sync above.
+	if cfg.MgmtToken != "" {
+		synccommon.SendProgress(progressCallback, "multimodal", "同步多模态模型（图像/视频/音频）...", 75, nil)
+
+		mmAdded, mmUpdated, mmErr := syncMultimodalModels(ctx, client, cfg.MgmtToken)
+		if mmErr != nil {
+			log.Printf("PPIO sync: multimodal sync failed (non-fatal): %v", mmErr)
+			result.Errors = append(result.Errors, fmt.Sprintf("multimodal sync: %v", mmErr))
+		} else {
+			result.Summary.ToAdd += mmAdded
+			result.Summary.ToUpdate += mmUpdated
+
+			if mmAdded > 0 || mmUpdated > 0 {
+				log.Printf("PPIO sync: multimodal models added=%d updated=%d", mmAdded, mmUpdated)
+			}
+		}
+	}
+
 	// Step 4: Ensure channels exist (reads from local DB, not remote list)
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
@@ -324,6 +343,111 @@ func executeSyncTransaction(
 	}
 
 	return nil
+}
+
+// syncMultimodalModels fetches multimodal models (image/video/audio) from
+// the PPIO console API and their SKU-based pricing from the batch-price API,
+// then creates or updates ModelConfig entries with PerRequestPrice set to the
+// minimum SKU price for each model.
+//
+// This is an independent pipeline from the V1+V2 chat model sync because:
+//   - Multimodal models use SKU-based pricing, not per-token pricing
+//   - The data comes from different API endpoints (api-server.ppio.com)
+//   - The V2 management API (api-server.ppinfra.com) does not return multimodal models
+func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken string) (added, updated int, err error) {
+	// Fetch multimodal model catalog
+	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
+	if err != nil {
+		return 0, 0, fmt.Errorf("fetch multimodal models: %w", err)
+	}
+
+	if len(mmModels) == 0 {
+		return 0, 0, nil
+	}
+
+	// Collect all SKU codes for batch price lookup
+	var allSKUs []string
+	for i := range mmModels {
+		allSKUs = append(allSKUs, mmModels[i].collectSKUCodes()...)
+	}
+
+	// Fetch batch pricing
+	skuPrices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, allSKUs)
+	if priceErr != nil {
+		log.Printf("PPIO sync: multimodal price fetch failed (non-fatal, using zero prices): %v", priceErr)
+
+		skuPrices = make(map[string]int64)
+	}
+
+	// Create/update ModelConfig for each multimodal model
+	for i := range mmModels {
+		mm := &mmModels[i]
+		modelName := mm.FusionConfig.Name
+
+		if modelName == "" {
+			continue
+		}
+
+		minPrice := mm.minSKUPrice(skuPrices)
+		modelType := multimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+
+		rawConfig := map[string]any{
+			"model_type":   modelType,
+			"category":     mm.ModelConfig.Config.Category,
+			"display_name": mm.FusionConfig.DisplayName,
+			"description":  mm.FusionConfig.Description,
+		}
+
+		if mm.FusionConfig.Series != "" {
+			rawConfig["series"] = mm.FusionConfig.Series
+		}
+
+		configData := synccommon.ToModelConfigKeys(rawConfig)
+
+		var existing model.ModelConfig
+		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
+			// Update existing — only overwrite PPIO-managed fields
+			existing.Owner = model.ModelOwnerPPIO
+			existing.Type = inferModeFromPPIO(modelType, nil)
+			existing.Config = configData
+
+			if minPrice > 0 {
+				existing.Price.PerRequestPrice = model.ZeroNullFloat64(minPrice)
+			}
+
+			if txErr := model.DB.Save(&existing).Error; txErr != nil {
+				log.Printf("PPIO sync: failed to update multimodal model %s: %v", modelName, txErr)
+
+				continue
+			}
+
+			updated++
+		} else {
+			// Create new
+			mc := model.ModelConfig{
+				Model:  modelName,
+				Owner:  model.ModelOwnerPPIO,
+				Type:   inferModeFromPPIO(modelType, nil),
+				RPM:    60,
+				TPM:    1000000,
+				Config: configData,
+			}
+
+			if minPrice > 0 {
+				mc.Price.PerRequestPrice = model.ZeroNullFloat64(minPrice)
+			}
+
+			if txErr := model.DB.Create(&mc).Error; txErr != nil {
+				log.Printf("PPIO sync: failed to create multimodal model %s: %v", modelName, txErr)
+
+				continue
+			}
+
+			added++
+		}
+	}
+
+	return added, updated, nil
 }
 
 // EnsurePPIOChannels queries all local ModelConfig entries owned by PPIO,

@@ -3,6 +3,7 @@
 package ppio
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -153,33 +155,6 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 // the default ?visibility=1 query only returns chat-family models.
 var multimodalModelTypes = []string{"embedding", "image", "video", "audio"}
 
-// ppioKnownNativeModels lists PPIO V3 native multimodal models that are callable
-// via /v3/{model-id} but absent from both the public V1 catalog and the management
-// V2 API. They are merged into FetchAllModelsMerged as a fallback so that sync
-// creates model_config entries for them even when the catalog API doesn't expose
-// them. Pricing defaults to zero and should be configured by an admin if needed.
-var ppioKnownNativeModels = []PPIOModelV2{
-	{
-		ID:               "gemini-3-pro-image-text-to-image",
-		Title:            "Gemini 3 Pro (Text to Image)",
-		ModelType:        "image",
-		Status:           PPIOModelStatusAvailable,
-		InputModalities:  []string{"text"},
-		OutputModalities: []string{"image"},
-		Features:         []string{},
-		Tags:             []any{},
-	},
-	{
-		ID:               "gemini-3-pro-image-edit",
-		Title:            "Gemini 3 Pro (Image Edit)",
-		ModelType:        "image",
-		Status:           PPIOModelStatusAvailable,
-		InputModalities:  []string{"text", "image"},
-		OutputModalities: []string{"image"},
-		Features:         []string{},
-		Tags:             []any{},
-	},
-}
 
 // FetchAllModels fetches the full model catalog (including pa/ closed-source models)
 // via the PPIO management API using the mgmt console token.
@@ -257,17 +232,118 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 
 	for _, m := range v1Models {
 		if _, exists := v2Set[m.ID]; !exists {
-			v2Set[m.ID] = struct{}{} // keep set current for known-model dedup below
+			v2Set[m.ID] = struct{}{} // keep set current for dedup
 			v2Models = append(v2Models, m.ToV2())
 		}
 	}
 
-	// Append known native models absent from all catalog sources.
-	for _, km := range ppioKnownNativeModels {
-		if _, exists := v2Set[km.ID]; !exists {
-			v2Models = append(v2Models, km)
+	return v2Models, nil
+}
+
+// ── Multimodal API (api-server.ppio.com) ──────────────────────────────────
+
+const (
+	ppioMultimodalModelsEndpoint = "https://api-server.ppio.com/v1/product/multimodal-model/list"
+	ppioBatchPriceEndpoint       = "https://api-server.ppio.com/v1/product/batch-price"
+)
+
+// FetchMultimodalModels fetches all multimodal models (image/video/audio) from
+// the PPIO console API. Requires the mgmt console token for authentication.
+func (c *PPIOClient) FetchMultimodalModels(ctx context.Context, mgmtToken string) ([]PPIOMultimodalModel, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ppioMultimodalModelsEndpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+mgmtToken)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch multimodal models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("multimodal API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var listResp PPIOMultimodalListResponse
+	if err := json.Unmarshal(body, &listResp); err != nil {
+		return nil, fmt.Errorf("failed to parse multimodal response: %w", err)
+	}
+
+	return listResp.Configs, nil
+}
+
+// FetchMultimodalPrices fetches batch SKU pricing for the given SKU codes.
+// Returns a map of skuCode → raw basePrice0 value (divide by multimodalPriceDivisor for 元/次).
+func (c *PPIOClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string, skuCodes []string) (map[string]int64, error) {
+	if len(skuCodes) == 0 {
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
+	defer cancel()
+
+	reqBody := PPIOBatchPriceRequest{
+		BusinessType: "model_api",
+		ProductIDs:   skuCodes,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal batch-price request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ppioBatchPriceEndpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+mgmtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch batch prices: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("batch-price API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var priceResp PPIOBatchPriceResponse
+	if err := json.Unmarshal(body, &priceResp); err != nil {
+		return nil, fmt.Errorf("failed to parse batch-price response: %w", err)
+	}
+
+	result := make(map[string]int64, len(priceResp.Products))
+	for _, p := range priceResp.Products {
+		if p.BasePrice0 == "" || p.BasePrice0 == "0" {
+			continue
+		}
+
+		raw, err := strconv.ParseInt(p.BasePrice0, 10, 64)
+		if err == nil && raw > 0 {
+			result[p.ProductID] = raw
 		}
 	}
 
-	return v2Models, nil
+	return result, nil
 }

@@ -4,7 +4,9 @@ package ppio
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"slices"
 
 	"golang.org/x/sync/singleflight"
 
@@ -53,39 +55,115 @@ func doDiscover(ctx context.Context, modelName string) {
 		return
 	}
 
-	// Try to fetch pricing from the management API.
-	var remoteModel *PPIOModelV2
+	// Try to fetch pricing from the multimodal console API first (covers
+	// image/video/audio models that the V2 management API doesn't return).
+	var perRequestPrice float64
 
 	client, clientErr := NewPPIOClient()
 	if clientErr == nil {
 		cfg := GetPPIOConfig()
 		if cfg.MgmtToken != "" {
-			all, fetchErr := client.FetchAllModels(ctx, cfg.MgmtToken)
-			if fetchErr == nil {
-				for i := range all {
-					if all[i].ID == modelName {
-						remoteModel = &all[i]
-						break
+			perRequestPrice = discoverMultimodalPrice(ctx, client, cfg.MgmtToken, modelName)
+
+			// Fallback: try V2 management API for token-based pricing
+			if perRequestPrice == 0 {
+				if remoteModel := discoverV2Model(ctx, client, cfg.MgmtToken, modelName); remoteModel != nil {
+					if err := registerPPIONativeModel(modelName, remoteModel); err != nil {
+						log.Printf("ppio autodiscover: failed to register %s: %v", modelName, err)
+						return
 					}
+
+					finalizeDiscovery(modelName, "V2 API")
+
+					return
 				}
-			} else {
-				log.Printf("ppio autodiscover: FetchAllModels failed (non-fatal): %v", fetchErr)
 			}
 		}
 	} else {
 		log.Printf("ppio autodiscover: client creation failed (non-fatal): %v", clientErr)
 	}
 
-	if err := registerPPIONativeModel(modelName, remoteModel); err != nil {
+	// Register with per-request pricing (or zero if no pricing found)
+	mc := model.ModelConfig{
+		Model: modelName,
+		Owner: model.ModelOwnerPPIO,
+		Type:  mode.PPIONative,
+		RPM:   60,
+		TPM:   1000000,
+	}
+
+	if perRequestPrice > 0 {
+		mc.Price.PerRequestPrice = model.ZeroNullFloat64(perRequestPrice)
+	}
+
+	if err := model.DB.Save(&mc).Error; err != nil {
 		log.Printf("ppio autodiscover: failed to register %s: %v", modelName, err)
 		return
 	}
+
+	finalizeDiscovery(modelName, fmt.Sprintf("per_request_price=%.4f", perRequestPrice))
+}
+
+// finalizeDiscovery adds the model to the multimodal channel and refreshes the
+// cache. Called after successful model registration in doDiscover.
+func finalizeDiscovery(modelName, source string) {
+	addModelToMultimodalChannel(modelName)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
 		log.Printf("ppio autodiscover: cache refresh failed after registering %s: %v", modelName, err)
 	}
 
-	log.Printf("ppio autodiscover: registered model %s", modelName)
+	log.Printf("ppio autodiscover: registered model %s (%s)", modelName, source)
+}
+
+// discoverMultimodalPrice fetches the multimodal model catalog and returns the
+// minimum SKU price for the given model. Returns 0 if the model is not found or
+// pricing is unavailable.
+func discoverMultimodalPrice(ctx context.Context, client *PPIOClient, mgmtToken, modelName string) float64 {
+	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
+	if err != nil {
+		log.Printf("ppio autodiscover: FetchMultimodalModels failed (non-fatal): %v", err)
+		return 0
+	}
+
+	for i := range mmModels {
+		if mmModels[i].FusionConfig.Name != modelName {
+			continue
+		}
+
+		skuCodes := mmModels[i].collectSKUCodes()
+		if len(skuCodes) == 0 {
+			return 0
+		}
+
+		prices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, skuCodes)
+		if priceErr != nil {
+			log.Printf("ppio autodiscover: FetchMultimodalPrices failed (non-fatal): %v", priceErr)
+			return 0
+		}
+
+		return mmModels[i].minSKUPrice(prices)
+	}
+
+	return 0
+}
+
+// discoverV2Model searches the V2 management API for a model by name.
+// Returns nil if not found.
+func discoverV2Model(ctx context.Context, client *PPIOClient, mgmtToken, modelName string) *PPIOModelV2 {
+	all, err := client.FetchAllModels(ctx, mgmtToken)
+	if err != nil {
+		log.Printf("ppio autodiscover: FetchAllModels failed (non-fatal): %v", err)
+		return nil
+	}
+
+	for i := range all {
+		if all[i].ID == modelName {
+			return &all[i]
+		}
+	}
+
+	return nil
 }
 
 // registerPPIONativeModel creates a ModelConfig entry for a PPIO native
@@ -112,4 +190,25 @@ func registerPPIONativeModel(modelName string, remoteModel *PPIOModelV2) error {
 	}
 
 	return model.DB.Save(&mc).Error
+}
+
+// addModelToMultimodalChannel adds a model to the first PPIO multimodal
+// channel's model list. This fixes a bug where auto-discovered models were
+// registered in ModelConfig but never added to the channel, making them
+// invisible to the routing system until the next daily sync.
+func addModelToMultimodalChannel(modelName string) {
+	var ch model.Channel
+	if err := model.DB.Where("type = ?", model.ChannelTypePPIOMultimodal).First(&ch).Error; err != nil {
+		return
+	}
+
+	if slices.Contains(ch.Models, modelName) {
+		return
+	}
+
+	ch.Models = append(ch.Models, modelName)
+
+	if err := model.DB.Save(&ch).Error; err != nil {
+		log.Printf("ppio autodiscover: failed to add %s to multimodal channel: %v", modelName, err)
+	}
 }
