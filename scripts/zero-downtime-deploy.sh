@@ -36,7 +36,7 @@ cd "${ROOT_DIR}"
 STATE_FILE="/data/aiproxy/.active-port"
 ENV_FILE_PATH="/data/aiproxy/.env"
 UPSTREAM_CONF="/etc/nginx/conf.d/aiproxy-upstream.conf"
-LOCK_FILE="/tmp/aiproxy-deploy.lock"
+LOCK_FILE="/data/aiproxy/.deploy.lock"
 DRAIN_TIMEOUT=600
 HEALTH_TIMEOUT=90
 STABILIZE_WAIT=10
@@ -196,6 +196,14 @@ echo ""
 DEPLOY_START=$(date +%s)
 
 # ── Acquire deploy lock ───────────────────────────────────────
+# Ensure lock file exists and is writable by the current user.
+# Previous sudo runs may have left a root-owned file.
+if [[ -f "${LOCK_FILE}" ]] && [[ ! -w "${LOCK_FILE}" ]]; then
+  sudo rm -f "${LOCK_FILE}"
+fi
+touch "${LOCK_FILE}" 2>/dev/null || sudo touch "${LOCK_FILE}"
+[[ -w "${LOCK_FILE}" ]] || sudo chmod 666 "${LOCK_FILE}"
+
 exec 200>"${LOCK_FILE}"
 if ! flock -n 200; then
   fail "Another deploy is in progress (lock: ${LOCK_FILE})"
