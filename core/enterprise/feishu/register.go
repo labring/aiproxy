@@ -5,7 +5,9 @@ package feishu
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -170,23 +172,26 @@ func GetFeishuUsers(c *gin.Context) {
 		order = "desc"
 	}
 
-	// Special handling for quota_usage_percent sorting via subquery JOIN
+	// quota_usage_percent sorting requires policy-based computation (not available in SQL),
+	// so we fetch all matching users and sort/paginate in Go.
+	sortByQuota := sortBy == "quota_usage_percent"
+
 	orderClause := sortBy + " " + order
-	if sortBy == "quota_usage_percent" {
-		joinSQL := "LEFT JOIN (" +
-			"SELECT group_id AS _qg, " +
-			"CASE WHEN MAX(period_quota) > 0 " +
-			"THEN (SUM(used_amount) - SUM(period_last_update_amount)) / MAX(period_quota) " +
-			"ELSE 0 END AS _usage_pct " +
-			"FROM tokens WHERE status = ? GROUP BY group_id" +
-			") _qt ON feishu_users.group_id = _qt._qg"
-		tx = tx.Joins(joinSQL, model.TokenStatusEnabled)
-		orderClause = "COALESCE(_qt._usage_pct, -1) " + order
+	if sortByQuota {
+		orderClause = "id desc" // default order; real sort applied in Go after quota computation
 	}
 
-	if err := tx.Order(orderClause).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
-		return
+	if sortByQuota {
+		// Fetch all matching users (no SQL pagination)
+		if err := tx.Order(orderClause).Find(&users).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		if err := tx.Order(orderClause).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+			middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	// Build response with department path
@@ -197,8 +202,8 @@ func GetFeishuUsers(c *gin.Context) {
 	// Batch resolve effective quota policies
 	userPolicyMap, deptPolicyMap := batchResolveEffectivePolicies(users)
 
-	// Batch resolve quota usage percentages
-	quotaUsageMap := batchResolveQuotaUsage(users)
+	// Batch resolve quota usage percentages (using policy + group_summaries)
+	quotaUsageMap := batchResolveQuotaUsage(users, userPolicyMap, deptPolicyMap)
 
 	usersWithDept := make([]FeishuUserWithDepartment, len(users))
 	for i, user := range users {
@@ -253,7 +258,8 @@ func GetFeishuUsers(c *gin.Context) {
 
 		// Resolve effective policy
 		if up, ok := userPolicyMap[user.OpenID]; ok {
-			entry.EffectivePolicy = &up
+			name := up.Name
+			entry.EffectivePolicy = &name
 			src := "user"
 			entry.PolicySource = &src
 		} else {
@@ -264,7 +270,8 @@ func GetFeishuUsers(c *gin.Context) {
 				}
 
 				if dp, ok := deptPolicyMap[deptID]; ok {
-					entry.EffectivePolicy = &dp
+					name := dp.Name
+					entry.EffectivePolicy = &name
 					src := "department"
 					entry.PolicySource = &src
 
@@ -274,6 +281,41 @@ func GetFeishuUsers(c *gin.Context) {
 		}
 
 		usersWithDept[i] = entry
+	}
+
+	// When sorting by quota_usage_percent, sort and paginate in Go
+	if sortByQuota {
+		sort.Slice(usersWithDept, func(i, j int) bool {
+			pi := usersWithDept[i].QuotaUsagePercent
+			pj := usersWithDept[j].QuotaUsagePercent
+
+			// nil (no quota) sorts last regardless of direction
+			if pi == nil && pj == nil {
+				return false
+			}
+			if pi == nil {
+				return false
+			}
+			if pj == nil {
+				return true
+			}
+
+			if order == "asc" {
+				return *pi < *pj
+			}
+			return *pi > *pj
+		})
+
+		// Apply pagination
+		start := offset
+		if start > len(usersWithDept) {
+			start = len(usersWithDept)
+		}
+		end := start + limit
+		if end > len(usersWithDept) {
+			end = len(usersWithDept)
+		}
+		usersWithDept = usersWithDept[start:end]
 	}
 
 	middleware.SuccessResponse(c, gin.H{
@@ -289,67 +331,138 @@ type quotaUsageInfo struct {
 	PeriodUsed   float64
 }
 
-// batchResolveQuotaUsage computes the current quota period usage for each group.
-// It sums all enabled tokens in each group: usage = SUM(used_amount) - SUM(period_last_update_amount),
-// and uses MAX(period_quota) as the group's effective period quota.
-func batchResolveQuotaUsage(users []models.FeishuUser) map[string]*quotaUsageInfo {
+// batchResolveQuotaUsage computes the current quota period usage for each group
+// using the authoritative policy (PeriodQuota/PeriodType) and group_summaries table.
+// This is consistent with GetMyStats and avoids dependence on token snapshot timing.
+func batchResolveQuotaUsage(
+	users []models.FeishuUser,
+	userPolicyMap map[string]*models.QuotaPolicy,
+	deptPolicyMap map[string]*models.QuotaPolicy,
+) map[string]*quotaUsageInfo {
 	result := make(map[string]*quotaUsageInfo)
 	if len(users) == 0 {
 		return result
 	}
 
-	groupIDs := make([]string, 0, len(users))
-	seen := make(map[string]bool)
-	for _, u := range users {
-		if u.GroupID != "" && !seen[u.GroupID] {
-			seen[u.GroupID] = true
-			groupIDs = append(groupIDs, u.GroupID)
-		}
+	// Resolve effective policy per group: user > department hierarchy
+	type groupPolicy struct {
+		groupID     string
+		periodType  int
+		periodQuota float64
 	}
 
-	if len(groupIDs) == 0 {
+	periodBuckets := make(map[int][]string)    // periodType → groupIDs
+	groupPolicies := make(map[string]float64)  // groupID → periodQuota
+
+	for _, u := range users {
+		if u.GroupID == "" {
+			continue
+		}
+
+		var policy *models.QuotaPolicy
+		if p, ok := userPolicyMap[u.OpenID]; ok {
+			policy = p
+		} else {
+			for _, deptID := range []string{u.DepartmentID, u.Level2DeptID, u.Level1DeptID} {
+				if deptID == "" {
+					continue
+				}
+				if p, ok := deptPolicyMap[deptID]; ok {
+					policy = p
+					break
+				}
+			}
+		}
+
+		if policy == nil || policy.PeriodQuota <= 0 {
+			continue
+		}
+
+		if _, exists := groupPolicies[u.GroupID]; exists {
+			continue // already processed this group
+		}
+
+		groupPolicies[u.GroupID] = policy.PeriodQuota
+		periodBuckets[policy.PeriodType] = append(periodBuckets[policy.PeriodType], u.GroupID)
+	}
+
+	if len(groupPolicies) == 0 {
 		return result
 	}
 
-	type groupAgg struct {
-		GroupID       string  `gorm:"column:group_id"`
-		TotalUsed     float64 `gorm:"column:total_used"`
-		TotalBaseline float64 `gorm:"column:total_baseline"`
-		PeriodQuota   float64 `gorm:"column:period_quota"`
-	}
+	// Query group_summaries per period type (at most 3 queries: daily/weekly/monthly)
+	for periodType, groupIDs := range periodBuckets {
+		periodStart := currentPeriodStartByType(periodType)
 
-	var aggs []groupAgg
-	model.DB.Model(&model.Token{}).
-		Select("group_id, SUM(used_amount) as total_used, SUM(period_last_update_amount) as total_baseline, MAX(period_quota) as period_quota").
-		Where("group_id IN ? AND status = ?", groupIDs, model.TokenStatusEnabled).
-		Group("group_id").
-		Find(&aggs)
+		type groupAgg struct {
+			GroupID    string  `gorm:"column:group_id"`
+			PeriodUsed float64 `gorm:"column:period_used"`
+		}
 
-	for _, a := range aggs {
-		if a.PeriodQuota <= 0 {
-			continue
+		var aggs []groupAgg
+		model.LogDB.Model(&model.GroupSummary{}).
+			Select("group_id, SUM(used_amount) as period_used").
+			Where("group_id IN ? AND hour_timestamp >= ?", groupIDs, periodStart.Unix()).
+			Group("group_id").
+			Find(&aggs)
+
+		for _, a := range aggs {
+			pq := groupPolicies[a.GroupID]
+			if pq <= 0 {
+				continue
+			}
+			pct := a.PeriodUsed / pq
+			result[a.GroupID] = &quotaUsageInfo{
+				UsagePercent: pct,
+				PeriodQuota:  pq,
+				PeriodUsed:   a.PeriodUsed,
+			}
 		}
-		used := a.TotalUsed - a.TotalBaseline
-		if used < 0 {
-			used = 0
-		}
-		pct := used / a.PeriodQuota
-		result[a.GroupID] = &quotaUsageInfo{
-			UsagePercent: pct,
-			PeriodQuota:  a.PeriodQuota,
-			PeriodUsed:   used,
+
+		// Groups with no summaries still have quota info (0% used)
+		for _, gid := range groupIDs {
+			if _, exists := result[gid]; !exists {
+				pq := groupPolicies[gid]
+				if pq > 0 {
+					result[gid] = &quotaUsageInfo{
+						UsagePercent: 0,
+						PeriodQuota:  pq,
+						PeriodUsed:   0,
+					}
+				}
+			}
 		}
 	}
 
 	return result
 }
 
+// currentPeriodStartByType computes the calendar-aligned start of the current period
+// for a given policy PeriodType (int: 1=daily, 2=weekly, 3=monthly).
+func currentPeriodStartByType(periodType int) time.Time {
+	now := time.Now()
+
+	switch periodType {
+	case models.PeriodTypeDaily:
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	case models.PeriodTypeWeekly:
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7 // Sunday = 7
+		}
+		monday := now.AddDate(0, 0, -(weekday - 1))
+		return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, now.Location())
+	default: // monthly or unknown
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	}
+}
+
 // batchResolveEffectivePolicies returns two maps:
-// 1. openID → policy name (for users with UserQuotaPolicy)
-// 2. departmentID → policy name (for departments with DepartmentQuotaPolicy, all ID forms)
-func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]string, map[string]string) {
-	userPolicyMap := make(map[string]string)
-	deptPolicyMap := make(map[string]string)
+// 1. openID → *QuotaPolicy (for users with UserQuotaPolicy)
+// 2. departmentID → *QuotaPolicy (for departments with DepartmentQuotaPolicy, all ID forms)
+func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]*models.QuotaPolicy, map[string]*models.QuotaPolicy) {
+	userPolicyMap := make(map[string]*models.QuotaPolicy)
+	deptPolicyMap := make(map[string]*models.QuotaPolicy)
 
 	if len(users) == 0 {
 		return userPolicyMap, deptPolicyMap
@@ -375,7 +488,7 @@ func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]string
 
 		for _, up := range userPolicies {
 			if up.QuotaPolicy != nil {
-				userPolicyMap[up.OpenID] = up.QuotaPolicy.Name
+				userPolicyMap[up.OpenID] = up.QuotaPolicy
 			}
 		}
 	}
@@ -392,7 +505,7 @@ func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]string
 
 		for _, dp := range deptPolicies {
 			if dp.QuotaPolicy != nil {
-				deptPolicyMap[dp.DepartmentID] = dp.QuotaPolicy.Name
+				deptPolicyMap[dp.DepartmentID] = dp.QuotaPolicy
 			}
 		}
 	}
