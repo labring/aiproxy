@@ -372,7 +372,7 @@ claude
 | **Responses** | OpenAI Responses 格式 | 部分新版 GPT 模型的专用格式 |
 | **Embeddings** | 文本向量化 | 用于语义搜索、知识库构建，非对话用途 |
 | **Rerank** | 结果重排序 | 搜索结果优化，非对话用途 |
-| **Web Search** | 实时网页搜索 | 独立的搜索接口，可被 AI 工具作为 tool/skill 调用 |
+| **Web Search** | 实时网页搜索 | 独立搜索接口（通用搜索 + Tavily），可被 AI 工具作为 tool/skill 调用 |
 
 **常见组合解读：**
 
@@ -393,15 +393,25 @@ claude
 
 直接调用搜索 API，返回原始搜索结果。适合 AI 工具作为 tool / skill 调用，或自行解析搜索结果。
 
+#### 可用模型
+
+| 模型 | 说明 | 上游端点 |
+|------|------|---------|
+| `ppio-web-search` | 通用网页搜索（Bing Search 兼容格式） | PPIO `/v3/web-search` |
+| `ppio-tavily-search` | Tavily 搜索（结构化搜索，适合 AI Agent） | PPIO `/v3/tavily/search` |
+
+两个模型共用同一端点 `/v1/web-search`，通过请求体中的 `model` 字段区分。
+
 #### 接口信息
 
 | 项目 | 值 |
 |------|---|
 | **端点** | `POST https://apiproxy.paigod.work/v1/web-search` |
-| **虚拟模型** | `ppio-web-search`（请求体中必须包含此字段） |
 | **认证** | 与其他接口相同，`Authorization: Bearer sk-xxxx` |
 
 #### 请求示例
+
+**通用搜索（ppio-web-search）：**
 
 ```bash
 curl -X POST https://apiproxy.paigod.work/v1/web-search \
@@ -414,23 +424,78 @@ curl -X POST https://apiproxy.paigod.work/v1/web-search \
   }'
 ```
 
+**Tavily 搜索（ppio-tavily-search）：**
+
+```bash
+curl -X POST https://apiproxy.paigod.work/v1/web-search \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ppio-tavily-search",
+    "query": "React 19.1 新特性"
+  }'
+```
+
 #### 请求参数
+
+**ppio-web-search 参数：**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `model` | string | 是 | 固定填 `ppio-web-search` |
+| `model` | string | 是 | 填 `ppio-web-search` |
 | `query` | string | 是 | 搜索关键词 |
 | `count` | int | 否 | 返回结果数量（默认 10，最大 50） |
 | `freshness` | string | 否 | 时效过滤：`24h`、`7d`、`30d` |
 | `summary` | bool | 否 | 是否返回摘要（默认 false） |
 
+**ppio-tavily-search 参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `model` | string | 是 | 填 `ppio-tavily-search` |
+| `query` | string | 是 | 搜索关键词 |
+| `max_results` | int | 否 | 返回结果数量（默认 5） |
+| `search_depth` | string | 否 | 搜索深度：`basic`（默认）、`advanced` |
+| `include_answer` | bool | 否 | 是否返回 AI 生成的摘要答案 |
+| `include_raw_content` | bool | 否 | 是否返回原始页面内容 |
+
+#### 两种搜索模型对比
+
+| 特性 | `ppio-web-search` | `ppio-tavily-search` |
+|------|-------------------|---------------------|
+| 搜索引擎 | Bing Search 兼容 | Tavily（AI 优化搜索） |
+| 响应格式 | Bing 格式（`webPages`、`images` 等） | Tavily 格式（`results` 数组，含 `score` 评分） |
+| 适用场景 | 通用搜索、需要图片/视频结果 | AI Agent tool call、需要高质量结构化结果 |
+| 响应速度 | 200ms ~ 1s | 300ms ~ 1.5s |
+
 #### 响应格式
 
-返回标准搜索结果结构（Bing Search 兼容格式），包含 `webPages`、`images`、`videos` 等字段。
+**ppio-web-search** 返回 Bing Search 兼容结构，包含 `webPages`、`images`、`videos` 等字段。
+
+**ppio-tavily-search** 返回 Tavily 结构化结果：
+
+```json
+{
+  "query": "React 19.1 新特性",
+  "results": [
+    {
+      "url": "https://example.com/article",
+      "title": "React 19.1 Release Notes",
+      "content": "摘要内容...",
+      "score": 0.95
+    }
+  ],
+  "response_time": 0.69
+}
+```
+
+#### 计费说明
+
+搜索接口按次计费，每次成功请求计 1 次搜索调用。费用通过模型配置中的 `WebSearchPrice` 设定，具体单价请在"我的接入"页面查看。
 
 #### 超时说明
 
-独立搜索接口的超时为 **15 分钟**（系统默认值）。搜索引擎执行层有内置的 **30 秒**硬超时保护，正常响应时间在 200ms~1s 之间。
+独立搜索接口的超时为 **15 分钟**（系统默认值）。搜索引擎执行层有内置的 **30 秒**硬超时保护，正常响应时间在 200ms~1.5s 之间。
 
 #### 在 Claude Code 中使用
 
@@ -445,7 +510,7 @@ curl -X POST https://apiproxy.paigod.work/v1/web-search \
 curl -s -X POST https://apiproxy.paigod.work/v1/web-search \
   -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"ppio-web-search","query":"$ARGUMENTS","count":5}'
+  -d '{"model":"ppio-tavily-search","query":"$ARGUMENTS"}'
 ```
 
 然后在 Claude Code 中通过 `/web-search React 19.1 新特性` 触发。
@@ -457,7 +522,7 @@ curl -s -X POST https://apiproxy.paigod.work/v1/web-search \
 ```
 搜索一下 "React 19.1 breaking changes" 的最新信息，
 用 curl POST https://apiproxy.paigod.work/v1/web-search 调用，
-请求体 {"model":"ppio-web-search","query":"React 19.1 breaking changes","count":5}，
+请求体 {"model":"ppio-tavily-search","query":"React 19.1 breaking changes"}，
 header 用 Authorization: Bearer $ANTHROPIC_API_KEY
 ```
 
@@ -469,7 +534,7 @@ header 用 Authorization: Bearer $ANTHROPIC_API_KEY
 URL:    https://apiproxy.paigod.work/v1/web-search
 Method: POST
 Header: Authorization: Bearer sk-xxxxxxxxxxxx
-Body:   {"model": "ppio-web-search", "query": "{{query}}", "count": 5}
+Body:   {"model": "ppio-tavily-search", "query": "{{query}}"}
 ```
 
 ### 4.2 对话内联搜索（Web Search Plugin）
@@ -521,9 +586,9 @@ curl -X POST https://apiproxy.paigod.work/v1/chat/completions \
 | 调用方式 | 独立 HTTP 请求 | Chat Completions 请求中附带参数 |
 | 适用场景 | AI Agent tool、自建搜索流程 | 对话中需要实时信息 |
 | 是否需要额外处理 | 需要自行解析和组织结果 | 模型自动整合，可带引用标注 |
-| 计费 | 仅搜索（当前免费） | 搜索（免费）+ 模型调用（正常计费） |
+| 计费 | 按次计费（WebSearchPrice） | 搜索（按次）+ 模型调用（按 token） |
 
-> 💡 Web Search 使用与其他模型相同的 API Key 和认证方式，无需额外申请。搜索接口当前不计费。
+> 💡 Web Search 使用与其他模型相同的 API Key 和认证方式，无需额外申请。
 
 ---
 
