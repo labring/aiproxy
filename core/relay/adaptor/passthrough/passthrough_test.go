@@ -230,6 +230,23 @@ func TestExtractUsage_NullDetails(t *testing.T) {
 	}
 }
 
+// Upstream returns total_tokens that doesn't match prompt + completion (PPIO bug).
+// Our TotalTokens must always be self-consistent.
+func TestExtractUsage_InconsistentUpstreamTotal(t *testing.T) {
+	payload := `data: {"usage":{"prompt_tokens":100,"completion_tokens":10,` +
+		`"total_tokens":60,` + // buggy upstream: 60 != 100+10
+		`"prompt_tokens_details":{"cached_tokens":50}}}` + "\n"
+
+	u := extractUsageFromTail([]byte(payload))
+	if int64(u.TotalTokens) != 110 { // must be 100+10, not upstream's 60
+		t.Errorf("TotalTokens: want 110, got %d", u.TotalTokens)
+	}
+
+	if int64(u.CachedTokens) != 50 {
+		t.Errorf("CachedTokens: want 50, got %d", u.CachedTokens)
+	}
+}
+
 // Empty / missing usage should return zero Usage without panic.
 func TestExtractUsage_Missing(t *testing.T) {
 	u := extractUsageFromTail([]byte(`data: {"choices":[]}`))
@@ -264,6 +281,11 @@ func TestMergeAnthropicSSEUsage_HeadFillsMissingFields(t *testing.T) {
 	if int64(got.CacheCreationTokens) != 3 {
 		t.Errorf("CacheCreationTokens: want 3, got %d", got.CacheCreationTokens)
 	}
+
+	// TotalTokens must be recomputed from merged fields.
+	if int64(got.TotalTokens) != 26 { // 14 + 12
+		t.Errorf("TotalTokens: want 26, got %d", got.TotalTokens)
+	}
 }
 
 func TestMergeAnthropicSSEUsage_TailWinsWhenComplete(t *testing.T) {
@@ -280,8 +302,26 @@ func TestMergeAnthropicSSEUsage_TailWinsWhenComplete(t *testing.T) {
 	}
 
 	got := mergeAnthropicSSEUsage(head, tail)
-	if got != tail {
-		t.Errorf("expected tail usage to remain unchanged, got %+v want %+v", got, tail)
+	// Tail's fields win when non-zero.
+	if int64(got.InputTokens) != 20 {
+		t.Errorf("InputTokens: want 20, got %d", got.InputTokens)
+	}
+
+	if int64(got.OutputTokens) != 12 {
+		t.Errorf("OutputTokens: want 12, got %d", got.OutputTokens)
+	}
+
+	if int64(got.CachedTokens) != 9 {
+		t.Errorf("CachedTokens: want 9, got %d", got.CachedTokens)
+	}
+
+	if int64(got.CacheCreationTokens) != 7 {
+		t.Errorf("CacheCreationTokens: want 7, got %d", got.CacheCreationTokens)
+	}
+
+	// TotalTokens is always recomputed from merged fields.
+	if int64(got.TotalTokens) != 32 { // 20 + 12
+		t.Errorf("TotalTokens: want 32, got %d", got.TotalTokens)
 	}
 }
 

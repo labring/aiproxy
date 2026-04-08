@@ -116,5 +116,8 @@ func mergeAnthropicSSEUsage(head, tail model.Usage) model.Usage {
 		merged.CacheCreationTokens = head.CacheCreationTokens
 	}
 
+	// Always recompute — head and tail each only have partial totals.
+	merged.TotalTokens = merged.InputTokens + merged.OutputTokens
+
 	return merged
 }

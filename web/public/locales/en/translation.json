@@ -315,6 +315,7 @@
       "avgTokensPerReq": "Avg Tokens/Req",
       "avgCostPerReq": "Avg Cost/Req",
       "outputInputRatio": "Output/Input",
+      "reconciliationTokens": "Reconciliation Tokens",
       "allDepartments": "All Departments",
       "top": "Top {{count}}",
       "export": "Export Report",

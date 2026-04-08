@@ -72,6 +72,7 @@ export const MEASURE_FIELDS: FieldDef[] = [
     { key: "retry_rate", category: "computed" },
     { key: "unique_models", category: "computed" },
     { key: "active_users", category: "computed" },
+    { key: "reconciliation_tokens", category: "computed" },
 ]
 
 export const CATEGORIES = ["requests", "tokens", "cost", "performance", "computed"] as const
@@ -127,6 +128,7 @@ const FIELD_LABELS: Record<string, { zh: string; en: string }> = {
     retry_rate: { zh: "重试率 %", en: "Retry Rate %" },
     unique_models: { zh: "使用模型数", en: "Unique Models" },
     active_users: { zh: "活跃用户数", en: "Active Users" },
+    reconciliation_tokens: { zh: "对账 Token (不含缓存)", en: "Reconciliation Tokens" },
 }
 
 export function getLabel(key: string, lang: string): string {

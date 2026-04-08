@@ -91,7 +91,8 @@ var computedMeasures = map[string][]string{
 	"avg_ttfb":            {"total_ttfb_ms", "request_count"},
 	"output_input_ratio":  {"output_tokens", "input_tokens"},
 	"cost_per_1k_tokens":  {"used_amount", "total_tokens"},
-	"retry_rate":          {"retry_count", "request_count"},
+	"retry_rate":             {"retry_count", "request_count"},
+	"reconciliation_tokens":  {"input_tokens", "output_tokens", "cached_tokens", "cache_creation_tokens"},
 }
 
 // measureLabels provides human-readable labels for measures.
@@ -132,6 +133,7 @@ var measureLabels = map[string]string{
 	"retry_rate":            "重试率 (%)",
 	"image_output_tokens":   "图片输出 Token",
 	"cache_creation_tokens": "缓存创建 Token",
+	"reconciliation_tokens": "对账 Token (不含缓存)",
 }
 
 // dimensionLabels provides human-readable labels for dimensions.
@@ -917,6 +919,8 @@ func computeDerivedMeasures(row map[string]interface{}, r rawRow, measures []str
 			row[m] = safeDivide(r.UsedAmount, float64(r.TotalTokens)) * 1000
 		case "retry_rate":
 			row[m] = safePercent(float64(r.RetryCount), float64(r.RequestCount))
+		case "reconciliation_tokens":
+			row[m] = max(0, r.InputTokens-r.CachedTokens-r.CacheCrTokens) + r.OutputTokens
 		}
 	}
 }

@@ -14,18 +14,20 @@ import (
 
 // UserRankingEntry holds a single user's ranking in usage.
 type UserRankingEntry struct {
-	Rank           int     `json:"rank"`
-	GroupID        string  `json:"group_id"`
-	UserName       string  `json:"user_name"`
-	DepartmentID   string  `json:"department_id"`
-	DepartmentName string  `json:"department_name"`
-	UsedAmount     float64 `json:"used_amount"`
-	RequestCount   int64   `json:"request_count"`
-	TotalTokens    int64   `json:"total_tokens"`
-	InputTokens    int64   `json:"input_tokens"`
-	OutputTokens   int64   `json:"output_tokens"`
-	SuccessRate    float64 `json:"success_rate"`
-	UniqueModels   int     `json:"unique_models"`
+	Rank                int     `json:"rank"`
+	GroupID             string  `json:"group_id"`
+	UserName            string  `json:"user_name"`
+	DepartmentID        string  `json:"department_id"`
+	DepartmentName      string  `json:"department_name"`
+	UsedAmount          float64 `json:"used_amount"`
+	RequestCount        int64   `json:"request_count"`
+	TotalTokens         int64   `json:"total_tokens"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	CachedTokens        int64   `json:"cached_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	SuccessRate         float64 `json:"success_rate"`
+	UniqueModels        int     `json:"unique_models"`
 }
 
 // DepartmentRankingEntry holds a single department's ranking in usage.
@@ -86,14 +88,16 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 
 	// Query aggregated usage from group_summaries by group_id
 	type groupAgg struct {
-		GroupID      string  `gorm:"column:group_id"`
-		UsedAmount   float64 `gorm:"column:used_amount"`
-		RequestCount int64   `gorm:"column:request_count"`
-		TotalTokens  int64   `gorm:"column:total_tokens"`
-		InputTokens  int64   `gorm:"column:input_tokens"`
-		OutputTokens int64   `gorm:"column:output_tokens"`
-		SuccessCount int64   `gorm:"column:success_count"`
-		UniqueModels int     `gorm:"column:unique_models"`
+		GroupID             string  `gorm:"column:group_id"`
+		UsedAmount          float64 `gorm:"column:used_amount"`
+		RequestCount        int64   `gorm:"column:request_count"`
+		TotalTokens         int64   `gorm:"column:total_tokens"`
+		InputTokens         int64   `gorm:"column:input_tokens"`
+		OutputTokens        int64   `gorm:"column:output_tokens"`
+		CachedTokens        int64   `gorm:"column:cached_tokens"`
+		CacheCreationTokens int64   `gorm:"column:cache_creation_tokens"`
+		SuccessCount        int64   `gorm:"column:success_count"`
+		UniqueModels        int     `gorm:"column:unique_models"`
 	}
 
 	var results []groupAgg
@@ -107,6 +111,8 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			"SUM(total_tokens) as total_tokens",
 			"SUM(input_tokens) as input_tokens",
 			"SUM(output_tokens) as output_tokens",
+			"SUM(cached_tokens) as cached_tokens",
+			"SUM(cache_creation_tokens) as cache_creation_tokens",
 			"SUM(status2xx_count) as success_count",
 			"COUNT(DISTINCT model) as unique_models",
 		).
@@ -151,6 +157,8 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			entry.TotalTokens = agg.TotalTokens
 			entry.InputTokens = agg.InputTokens
 			entry.OutputTokens = agg.OutputTokens
+			entry.CachedTokens = agg.CachedTokens
+			entry.CacheCreationTokens = agg.CacheCreationTokens
 			entry.UniqueModels = agg.UniqueModels
 			if agg.RequestCount > 0 {
 				entry.SuccessRate = float64(agg.SuccessCount) / float64(agg.RequestCount) * 100.0

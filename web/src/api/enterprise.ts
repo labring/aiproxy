@@ -206,6 +206,8 @@ export interface UserRankingItem {
     total_tokens: number
     input_tokens: number
     output_tokens: number
+    cached_tokens: number
+    cache_creation_tokens: number
     success_rate: number
     unique_models: number
 }

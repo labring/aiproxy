@@ -304,6 +304,7 @@
       "avgTokensPerReq": "平均Token/请求",
       "avgCostPerReq": "平均费用/请求",
       "outputInputRatio": "输出/输入比",
+      "reconciliationTokens": "对账 Token",
       "allDepartments": "全部部门",
       "top": "前 {{count}} 名",
       "export": "导出报表",

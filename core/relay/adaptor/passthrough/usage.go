@@ -181,12 +181,10 @@ func (r *rawUsage) toModelUsage() model.Usage {
 		u.OutputTokens = r.OutputTokens
 	}
 
-	// Total tokens: use OpenAI's total_tokens if present, otherwise compute from input + output.
-	if r.TotalTokens > 0 {
-		u.TotalTokens = r.TotalTokens
-	} else {
-		u.TotalTokens = u.InputTokens + u.OutputTokens
-	}
+	// Total tokens: always self-compute to guarantee consistency.
+	// Upstream total_tokens can be wrong (e.g. PPIO mixes Anthropic semantics
+	// where total excludes cached input tokens). Never trust it.
+	u.TotalTokens = u.InputTokens + u.OutputTokens
 
 	// Reasoning tokens (OpenAI format: completion_tokens_details.reasoning_tokens).
 	if r.CompletionTokensDetails != nil {

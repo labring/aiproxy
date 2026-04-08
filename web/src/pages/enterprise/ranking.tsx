@@ -36,7 +36,7 @@ type SortField =
     | "rank" | "user_name" | "department_name"
     | "total_tokens" | "request_count" | "unique_models" | "success_rate"
     | "cost_per_1k_tokens"
-    | "used_amount" | "input_tokens" | "output_tokens"
+    | "used_amount" | "input_tokens" | "output_tokens" | "reconciliation_tokens"
     | "avg_tokens_per_req" | "avg_cost_per_req" | "output_input_ratio"
 
 type SortDirection = "asc" | "desc"
@@ -47,6 +47,7 @@ interface RankingRow extends UserRankingItem {
     avg_tokens_per_req: number
     avg_cost_per_req: number
     output_input_ratio: number
+    reconciliation_tokens: number
 }
 
 interface ColumnDef {
@@ -177,6 +178,11 @@ const COLUMNS: ColumnDef[] = [
         align: "right", defaultVisible: false, sortable: true, optional: true,
         format: formatNumber,
     },
+    {
+        key: "reconciliation_tokens", labelKey: "enterprise.ranking.reconciliationTokens",
+        align: "right", defaultVisible: false, sortable: true, optional: true,
+        format: formatNumber,
+    },
 ]
 
 const DEFAULT_VISIBLE = new Set(
@@ -193,12 +199,16 @@ function deriveRow(item: UserRankingItem): RankingRow {
     const inputTokens = item.input_tokens || 0
     const outputTokens = item.output_tokens || 0
 
+    const cachedTokens = item.cached_tokens || 0
+    const cacheCreationTokens = item.cache_creation_tokens || 0
+
     return {
         ...item,
         cost_per_1k_tokens: totalTokens > 0 ? (usedAmount / totalTokens) * 1000 : 0,
         avg_tokens_per_req: requestCount > 0 ? totalTokens / requestCount : 0,
         avg_cost_per_req: requestCount > 0 ? usedAmount / requestCount : 0,
         output_input_ratio: inputTokens > 0 ? outputTokens / inputTokens : 0,
+        reconciliation_tokens: Math.max(0, inputTokens - cachedTokens - cacheCreationTokens) + outputTokens,
     }
 }
 
