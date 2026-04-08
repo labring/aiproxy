@@ -37,6 +37,11 @@ test-config.env
 test-*.sh
 test-*.py
 
+# Internal docs (contain sensitive infra/domain details)
+CLAUDE.md
+DEPLOYMENT.md
+USER-GUIDE.md
+
 # Temporary docs (not part of main docs)
 PPIO-*.md
 MULTIMODAL-SUPPORT.md
