@@ -523,6 +523,8 @@ export interface QuotaNotifConfig {
     admin_alert_threshold: number
     admin_alert_title: string
     admin_alert_body: string
+    policy_change_title: string
+    policy_change_body: string
 }
 
 export interface QuotaNotifConfigResponse extends QuotaNotifConfig {
@@ -884,7 +886,11 @@ export const enterpriseApi = {
         return put<QuotaNotifConfig>('/enterprise/quota/notif-config', cfg)
     },
 
-    getAlertHistory: (page = 1, perPage = 20, filters?: { open_id?: string; status?: string; tier?: number }): Promise<QuotaAlertHistoryResponse> => {
+    getAlertHistory: (page = 1, perPage = 20, filters?: {
+        open_id?: string; status?: string; tier?: number;
+        keyword?: string; period_type?: string;
+        start_time?: number; end_time?: number;
+    }): Promise<QuotaAlertHistoryResponse> => {
         return get<QuotaAlertHistoryResponse>('/enterprise/quota/alert-history', {
             params: { page, per_page: perPage, ...filters }
         })

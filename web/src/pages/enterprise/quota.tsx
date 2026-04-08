@@ -1111,6 +1111,7 @@ const TIER_MAP = {
     tier2:   { titleField: "tier2_title"   as const, bodyField: "tier2_body"   as const, color: "orange" as const },
     tier3:   { titleField: "tier3_title"   as const, bodyField: "tier3_body"   as const, color: "red"    as const },
     exhaust: { titleField: "exhaust_title" as const, bodyField: "exhaust_body" as const, color: "red"    as const },
+    policy_change: { titleField: "policy_change_title" as const, bodyField: "policy_change_body" as const, color: "green" as const },
 } as const
 
 function notifPeriodTypeLabel(tp: string): string {
@@ -1129,13 +1130,15 @@ const DEFAULT_NOTIF_CONFIG: QuotaNotifConfig = {
     admin_alert_threshold: 0.8,
     admin_alert_title: "成员额度用量告警",
     admin_alert_body: "{name} 本{period_type}的 AI 用量已达 {usage_pct}（告警阈值 {admin_threshold}，周期额度 {period_quota}），请关注。",
+    policy_change_title: "AI 额度策略变更通知",
+    policy_change_body: "您好 {name}，您的 AI 额度策略已变更为「{policy_name}」（周期额度 {period_quota}/{period_type}，阈值 {tier1_ratio}/{tier2_ratio}）。如有疑问请联系管理员。",
 }
 
 function NotifConfigTab({ canManage }: { canManage: boolean }) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [draft, setDraft] = useState<QuotaNotifConfig | null>(null)
-    const [selectedTier, setSelectedTier] = useState<"tier2" | "tier3" | "exhaust">("tier2")
+    const [selectedTier, setSelectedTier] = useState<"tier2" | "tier3" | "exhaust" | "policy_change">("tier2")
 
     const adminName = useAuthStore(s => s.enterpriseUser?.name ?? "管理员")
 
@@ -1162,7 +1165,14 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
 
     const cfg: QuotaNotifConfig = draft ?? serverCfg ?? DEFAULT_NOTIF_CONFIG
 
-    const VARIABLES = [
+    const VARIABLES = selectedTier === "policy_change" ? [
+        { key: "{name}", label: t("enterprise.quota.notif.varName" as never) },
+        { key: "{policy_name}", label: t("enterprise.quota.notif.varPolicyName" as never) },
+        { key: "{period_quota}", label: t("enterprise.quota.notif.varPeriodQuota" as never) },
+        { key: "{period_type}", label: t("enterprise.quota.notif.varPeriodType" as never) },
+        { key: "{tier1_ratio}", label: t("enterprise.quota.notif.varTier1Ratio" as never) },
+        { key: "{tier2_ratio}", label: t("enterprise.quota.notif.varTier2Ratio" as never) },
+    ] : [
         { key: "{name}", label: t("enterprise.quota.notif.varName" as never) },
         { key: "{usage_pct}", label: t("enterprise.quota.notif.varUsagePct" as never) },
         { key: "{tier_threshold}", label: t("enterprise.quota.notif.varTierThreshold" as never) },
@@ -1173,6 +1183,16 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
     const { titleField, bodyField, color } = TIER_MAP[selectedTier]
 
     const previewVars = useMemo<Record<string, string>>(() => {
+        if (selectedTier === "policy_change") {
+            return {
+                name: adminName,
+                policy_name: "标准版额度策略",
+                period_quota: quota ? `¥${quota.period_quota.toFixed(2)}` : "¥100.00",
+                period_type: quota ? notifPeriodTypeLabel(quota.period_type) : "月",
+                tier1_ratio: `${((quota?.tier1_ratio ?? 0.7) * 100).toFixed(0)}%`,
+                tier2_ratio: `${((quota?.tier2_ratio ?? 0.9) * 100).toFixed(0)}%`,
+            }
+        }
         const tierThresholdStr =
             selectedTier === "tier2" ? `${((quota?.tier1_ratio ?? 0.7) * 100).toFixed(0)}%`
             : selectedTier === "tier3" ? `${((quota?.tier2_ratio ?? 0.9) * 100).toFixed(0)}%`
@@ -1239,6 +1259,7 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
                             <SelectItem value="tier2">{t("enterprise.quota.notif.tier2" as never)}</SelectItem>
                             <SelectItem value="tier3">{t("enterprise.quota.notif.tier3" as never)}</SelectItem>
                             <SelectItem value="exhaust">{t("enterprise.quota.notif.exhaust" as never)}</SelectItem>
+                            <SelectItem value="policy_change">{t("enterprise.quota.notif.policyChange" as never)}</SelectItem>
                         </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">{t(`enterprise.quota.notif.${selectedTier}Desc` as never)}</p>
@@ -1273,7 +1294,7 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
                         </p>
                         <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 mt-2">
                             <div className="flex items-center gap-2">
-                                <div className={`w-1 h-5 rounded-full ${color === "orange" ? "bg-orange-400" : "bg-red-400"}`} />
+                                <div className={`w-1 h-5 rounded-full ${color === "orange" ? "bg-orange-400" : color === "green" ? "bg-green-400" : "bg-red-400"}`} />
                                 <span className="font-medium text-sm">
                                     {renderTemplate(cfg[titleField], previewVars)}
                                 </span>

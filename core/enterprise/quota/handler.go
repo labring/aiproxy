@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/feishu"
 	"github.com/labring/aiproxy/core/enterprise/models"
@@ -443,6 +444,9 @@ func bindDepartmentPolicyCore(departmentID string, quotaPolicyID int) (*models.D
 		go syncPolicyToDepartmentUsers(departmentID, &policy)
 	}
 
+	// Notify affected department users about policy change
+	go notifyPolicyChangeDepartment(departmentID, &policy)
+
 	return &existing, &policy, nil
 }
 
@@ -535,6 +539,8 @@ func BindPolicyToUser(c *gin.Context) {
 	if policy.PeriodQuota > 0 {
 		syncPolicyToToken(req.OpenID, &policy)
 	}
+
+	go notifyPolicyChangeForUser(req.OpenID, &policy)
 
 	middleware.SuccessResponse(c, binding)
 }
@@ -692,6 +698,11 @@ func BatchBindPolicyToUsers(c *gin.Context) {
 	// Batch sync with bounded concurrency
 	if policy.PeriodQuota > 0 && len(syncOpenIDs) > 0 {
 		go syncPolicyToTokenBatch(syncOpenIDs, &policy)
+	}
+
+	// Clear dedup keys and send policy change notifications for all bound users
+	if len(syncOpenIDs) > 0 {
+		go notifyPolicyChangeBatch(syncOpenIDs, &policy)
 	}
 
 	if len(errs) > 0 && len(results) == 0 {
@@ -996,6 +1007,11 @@ func ListAlertHistory(c *gin.Context) {
 		tx = tx.Where("open_id = ?", openID)
 	}
 
+	if keyword := c.Query("keyword"); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("user_name "+common.LikeOp()+" ? OR open_id "+common.LikeOp()+" ?", like, like)
+	}
+
 	if status := c.Query("status"); status != "" {
 		tx = tx.Where("status = ?", status)
 	}
@@ -1003,6 +1019,22 @@ func ListAlertHistory(c *gin.Context) {
 	if tierStr := c.Query("tier"); tierStr != "" {
 		if tier, err := strconv.Atoi(tierStr); err == nil {
 			tx = tx.Where("tier = ?", tier)
+		}
+	}
+
+	if periodType := c.Query("period_type"); periodType != "" {
+		tx = tx.Where("period_type = ?", periodType)
+	}
+
+	if startTime := c.Query("start_time"); startTime != "" {
+		if ms, err := strconv.ParseInt(startTime, 10, 64); err == nil {
+			tx = tx.Where("created_at >= ?", time.UnixMilli(ms))
+		}
+	}
+
+	if endTime := c.Query("end_time"); endTime != "" {
+		if ms, err := strconv.ParseInt(endTime, 10, 64); err == nil {
+			tx = tx.Where("created_at <= ?", time.UnixMilli(ms))
 		}
 	}
 
@@ -1030,4 +1062,35 @@ func ListAlertHistory(c *gin.Context) {
 		"records": records,
 		"total":   total,
 	})
+}
+
+// notifyPolicyChangeForUser looks up the Feishu user name and sends a policy change notification.
+func notifyPolicyChangeForUser(openID string, policy *models.QuotaPolicy) {
+	periodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
+	ClearUserNotifDedup(openID, periodType)
+
+	var user models.FeishuUser
+	if err := model.DB.Where("open_id = ?", openID).First(&user).Error; err != nil {
+		NotifyPolicyChange(openID, "", policy)
+
+		return
+	}
+
+	NotifyPolicyChange(openID, user.Name, policy)
+}
+
+// notifyPolicyChangeBatch sends policy change notifications to multiple users with bounded concurrency.
+func notifyPolicyChangeBatch(openIDs []string, policy *models.QuotaPolicy) {
+	runBounded(openIDs, func(openID string) {
+		notifyPolicyChangeForUser(openID, policy)
+	})
+}
+
+// notifyPolicyChangeDepartment sends policy change notifications to all users in a department
+// that do not have personal overrides.
+func notifyPolicyChangeDepartment(departmentID string, policy *models.QuotaPolicy) {
+	openIDs := getDepartmentUserIDsWithoutOverride(departmentID)
+	if len(openIDs) > 0 {
+		notifyPolicyChangeBatch(openIDs, policy)
+	}
 }

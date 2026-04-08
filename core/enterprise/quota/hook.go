@@ -38,6 +38,12 @@ func CheckQuotaTier(
 			log.Errorf("failed to get multi-level quota policy for user %s: %v", feishuUser.OpenID, err)
 		}
 		if policy != nil {
+			// Pre-fix: ensure token has PeriodQuota from policy before any calculation.
+			// applyPolicyTiers receives token by value, so its internal fix won't propagate back.
+			if token.PeriodQuota <= 0 && policy.PeriodQuota > 0 {
+				token.PeriodQuota = policy.PeriodQuota
+			}
+
 			// Apply the user/department/group policy
 			effModel, rpmMul, tpmMul, blocked := applyPolicyTiers(policy, token, requestModel)
 			// Trigger async notification if usage entered a higher tier

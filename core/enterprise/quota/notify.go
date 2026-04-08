@@ -34,6 +34,10 @@ type NotifConfig struct {
 	AdminAlertThreshold float64 `json:"admin_alert_threshold"` // 0.0-1.0, e.g. 0.8 = 80%
 	AdminAlertTitle     string  `json:"admin_alert_title"`
 	AdminAlertBody      string  `json:"admin_alert_body"`
+
+	// Policy change notification: sent when a user's quota policy is reassigned
+	PolicyChangeTitle string `json:"policy_change_title"`
+	PolicyChangeBody  string `json:"policy_change_body"`
 }
 
 // DefaultNotifConfig is the default Chinese notification template.
@@ -49,6 +53,8 @@ var DefaultNotifConfig = NotifConfig{
 	AdminAlertThreshold: 0.8,
 	AdminAlertTitle:     "成员额度用量告警",
 	AdminAlertBody:      "{name} 本{period_type}的 AI 用量已达 {usage_pct}（告警阈值 {admin_threshold}，周期额度 {period_quota}），请关注。",
+	PolicyChangeTitle:   "AI 额度策略变更通知",
+	PolicyChangeBody:    "您好 {name}，您的 AI 额度策略已变更为「{policy_name}」（周期额度 {period_quota}/{period_type}，阈值 {tier1_ratio}/{tier2_ratio}）。如有疑问请联系管理员。",
 }
 
 // cachedNotifConfig holds the in-memory config to avoid a DB read on every
@@ -288,5 +294,83 @@ func MaybeNotifyAdmin(
 	}
 	if err := model.DB.Create(&record).Error; err != nil {
 		log.WithError(err).Warn("failed to record admin quota alert history")
+	}
+}
+
+// ClearUserNotifDedup removes all notification dedup keys for a user,
+// allowing notifications to fire again after a policy change.
+func ClearUserNotifDedup(openID, periodType string) {
+	for _, tier := range []int{2, 3, 4} {
+		trylock.Delete(notifDedupKey(openID, tier, periodType))
+	}
+
+	trylock.Delete(adminNotifDedupKey(openID, periodType))
+}
+
+// TierPolicyChange is the tier value used in QuotaAlertHistory for policy change notifications.
+const TierPolicyChange = 5
+
+// policyChangeDedupKey returns the dedup key for policy change notifications.
+func policyChangeDedupKey(openID string, policyID int) string {
+	return fmt.Sprintf("enterprise:quota_notif_policy_change:%s:%d", openID, policyID)
+}
+
+// NotifyPolicyChange sends a P2P notification to a user when their quota policy changes.
+// Must be called in a goroutine.
+func NotifyPolicyChange(openID, userName string, policy *models.QuotaPolicy) {
+	n := enterprisenotify.GetEnterpriseNotifier()
+	if n == nil {
+		return
+	}
+
+	cfg := GetNotifConfig()
+	if !cfg.Enabled {
+		return
+	}
+
+	title := cfg.PolicyChangeTitle
+	body := cfg.PolicyChangeBody
+	if title == "" || body == "" {
+		return
+	}
+
+	// Dedup: avoid duplicate sends during batch operations (5 min TTL)
+	if !trylock.Lock(policyChangeDedupKey(openID, policy.ID), 5*time.Minute) {
+		return
+	}
+
+	vars := map[string]string{
+		"name":        userName,
+		"policy_name": policy.Name,
+		"period_quota": fmt.Sprintf("¥%.2f", policy.PeriodQuota),
+		"period_type": periodTypeLabel(PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)),
+		"tier1_ratio": fmt.Sprintf("%.0f%%", policy.Tier1Ratio*100),
+		"tier2_ratio": fmt.Sprintf("%.0f%%", policy.Tier2Ratio*100),
+	}
+
+	renderedTitle := RenderTemplate(title, vars)
+	renderedBody := RenderTemplate(body, vars)
+
+	record := models.QuotaAlertHistory{
+		OpenID:      openID,
+		UserName:    userName,
+		Tier:        TierPolicyChange,
+		UsageRatio:  0,
+		PeriodQuota: policy.PeriodQuota,
+		PeriodType:  PolicyPeriodTypeToTokenPeriodType(policy.PeriodType),
+		Title:       renderedTitle,
+		Body:        renderedBody,
+	}
+
+	if err := n.NotifyUser(openID, renderedTitle, renderedBody, notify.FeishuColorGreen); err != nil {
+		log.WithError(err).WithField("open_id", openID).Warn("policy change notification failed")
+		record.Status = "failed"
+		record.Error = err.Error()
+	} else {
+		record.Status = "sent"
+	}
+
+	if err := model.DB.Create(&record).Error; err != nil {
+		log.WithError(err).Warn("failed to record policy change alert history")
 	}
 }

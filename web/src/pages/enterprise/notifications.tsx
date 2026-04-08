@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Bell, Save, AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react"
@@ -91,6 +91,7 @@ function NotifConfigTab() {
                 { key: "tier2" as const, titleKey: "tier2_title" as const, bodyKey: "tier2_body" as const, color: "text-orange-600", label: t("enterprise.notifications.tier2Label") },
                 { key: "tier3" as const, titleKey: "tier3_title" as const, bodyKey: "tier3_body" as const, color: "text-red-600", label: t("enterprise.notifications.tier3Label") },
                 { key: "exhaust" as const, titleKey: "exhaust_title" as const, bodyKey: "exhaust_body" as const, color: "text-red-800", label: t("enterprise.notifications.exhaustLabel") },
+                { key: "policy_change" as const, titleKey: "policy_change_title" as const, bodyKey: "policy_change_body" as const, color: "text-blue-600", label: t("enterprise.notifications.policyChangeLabel" as never) },
             ].map(({ titleKey, bodyKey, color, label }) => (
                 <Card key={titleKey}>
                     <CardHeader className="pb-3">
@@ -195,6 +196,9 @@ function NotifConfigTab() {
                         <code>{"{period_type}"}</code><span>{t("enterprise.notifications.varPeriodType")}</span>
                         <code>{"{tier_threshold}"}</code><span>{t("enterprise.notifications.varTierThreshold")}</span>
                         <code>{"{admin_threshold}"}</code><span>{t("enterprise.notifications.varAdminThreshold")}</span>
+                        <code>{"{policy_name}"}</code><span>{t("enterprise.notifications.varPolicyName" as never)}</span>
+                        <code>{"{tier1_ratio}"}</code><span>{t("enterprise.notifications.varTier1Ratio" as never)}</span>
+                        <code>{"{tier2_ratio}"}</code><span>{t("enterprise.notifications.varTier2Ratio" as never)}</span>
                     </div>
                 </CardContent>
             </Card>
@@ -219,17 +223,28 @@ function AlertHistoryTab() {
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [tierFilter, setTierFilter] = useState<string>("all")
+    const [periodTypeFilter, setPeriodTypeFilter] = useState<string>("all")
+    const [keyword, setKeyword] = useState("")
+    const [debouncedKeyword, setDebouncedKeyword] = useState("")
     const perPage = 20
 
+    // Debounce keyword search
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedKeyword(keyword), 500)
+        return () => clearTimeout(timer)
+    }, [keyword])
+
     const filters = useMemo(() => {
-        const f: { status?: string; tier?: number } = {}
+        const f: { status?: string; tier?: number; keyword?: string; period_type?: string } = {}
         if (statusFilter !== "all") f.status = statusFilter
         if (tierFilter !== "all") f.tier = Number(tierFilter)
+        if (periodTypeFilter !== "all") f.period_type = periodTypeFilter
+        if (debouncedKeyword) f.keyword = debouncedKeyword
         return f
-    }, [statusFilter, tierFilter])
+    }, [statusFilter, tierFilter, periodTypeFilter, debouncedKeyword])
 
     const { data, isLoading } = useQuery({
-        queryKey: ["alert-history", page, statusFilter, tierFilter],
+        queryKey: ["alert-history", page, statusFilter, tierFilter, periodTypeFilter, debouncedKeyword],
         queryFn: () => enterpriseApi.getAlertHistory(page, perPage, filters),
     })
 
@@ -239,6 +254,7 @@ function AlertHistoryTab() {
             2: { label: t("enterprise.notifications.tierLevel2"), className: "bg-orange-100 text-orange-800" },
             3: { label: t("enterprise.notifications.tierLevel3"), className: "bg-red-100 text-red-800" },
             4: { label: t("enterprise.notifications.tierExhaust"), className: "bg-red-200 text-red-900" },
+            5: { label: t("enterprise.notifications.tierPolicyChange" as never), className: "bg-blue-100 text-blue-800" },
         }
         const cfg = configs[tier] || { label: `T${tier}`, className: "bg-gray-100 text-gray-800" }
         return <Badge className={cfg.className}>{cfg.label}</Badge>
@@ -266,7 +282,13 @@ function AlertHistoryTab() {
     return (
         <div className="space-y-4">
             {/* Filters */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+                <Input
+                    placeholder={t("enterprise.notifications.searchUser" as never)}
+                    value={keyword}
+                    onChange={(e) => { setKeyword(e.target.value); setPage(1) }}
+                    className="w-48"
+                />
                 <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1) }}>
                     <SelectTrigger className="w-32">
                         <SelectValue />
@@ -287,6 +309,18 @@ function AlertHistoryTab() {
                         <SelectItem value="2">{t("enterprise.notifications.tierLevel2")}</SelectItem>
                         <SelectItem value="3">{t("enterprise.notifications.tierLevel3")}</SelectItem>
                         <SelectItem value="4">{t("enterprise.notifications.tierExhaust")}</SelectItem>
+                        <SelectItem value="5">{t("enterprise.notifications.tierPolicyChange" as never)}</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select value={periodTypeFilter} onValueChange={v => { setPeriodTypeFilter(v); setPage(1) }}>
+                    <SelectTrigger className="w-32">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">{t("enterprise.notifications.allPeriods" as never)}</SelectItem>
+                        <SelectItem value="daily">{t("enterprise.quota.daily")}</SelectItem>
+                        <SelectItem value="weekly">{t("enterprise.quota.weekly")}</SelectItem>
+                        <SelectItem value="monthly">{t("enterprise.quota.monthly")}</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

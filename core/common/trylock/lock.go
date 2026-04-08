@@ -83,3 +83,16 @@ func Lock(key string, expiration time.Duration) bool {
 
 	return true
 }
+
+// Delete removes a lock key, allowing the next Lock call for the same key to succeed.
+// Used to reset dedup state when conditions change (e.g., quota policy reassignment).
+func Delete(key string) {
+	memRecord.Delete(key)
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		_ = common.RDB.Del(ctx, common.RedisKey(key)).Err()
+	}
+}
