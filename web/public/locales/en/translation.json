@@ -439,16 +439,21 @@
       "statusError": "Error",
       "noLogs": "No request records",
       "logTime": "Time",
+      "logRequestId": "Request ID",
+      "logToken": "Token",
       "logModel": "Model",
       "logEndpoint": "Endpoint",
       "logStatus": "Status",
       "logTokens": "Tokens",
       "logCost": "Cost",
+      "logUpstreamId": "Upstream ID",
       "loadMore": "Load more",
       "loading": "Loading...",
       "requestBody": "Request Body",
       "responseBody": "Response Body",
-      "noDetail": "No detail available"
+      "noDetail": "No detail available",
+      "copyLog": "Copy log",
+      "logCopied": "Log copied to clipboard"
     },
     "ppio": {
       "title": "PPIO Model Sync",

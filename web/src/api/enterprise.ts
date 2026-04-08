@@ -481,16 +481,20 @@ export interface UserLog {
     id: number
     request_at: number
     created_at: number
+    request_id?: string
+    token_name?: string
     model: string
     endpoint: string
+    content?: string
     code: number
     usage: {
-        prompt_tokens: number
-        completion_tokens: number
+        input_tokens: number
+        output_tokens: number
         total_tokens: number
     }
     used_amount?: number
-    ttfb_ms: number
+    ttfb_milliseconds: number
+    upstream_id?: string
     has_detail: boolean
 }
 

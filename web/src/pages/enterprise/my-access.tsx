@@ -1026,6 +1026,23 @@ function RequestLogsSection() {
         return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
     }
 
+    const copyLogText = (log: UserLog) => {
+        const text = [
+            `Request ID: ${log.request_id || "-"}`,
+            `Time: ${new Date(log.request_at).toISOString()}`,
+            `Token: ${log.token_name || "-"}`,
+            `Model: ${log.model}`,
+            `Endpoint: ${log.endpoint}`,
+            `Status: ${log.code}`,
+            `Error: ${log.content || "-"}`,
+            `Tokens: ${log.usage?.total_tokens || 0}`,
+            `Cost: ${log.used_amount ?? 0}`,
+            `TTFB: ${log.ttfb_milliseconds > 0 ? `${log.ttfb_milliseconds}ms` : "-"}`,
+            `Upstream ID: ${log.upstream_id || "-"}`,
+        ].join("\n")
+        copyToClipboard(text, t("enterprise.myAccess.logCopied" as never))
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -1083,9 +1100,11 @@ function RequestLogsSection() {
                                 <thead>
                                     <tr className="border-b bg-muted/50">
                                         <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logTime" as never)}</th>
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logRequestId" as never)}</th>
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logToken" as never)}</th>
                                         <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logModel" as never)}</th>
                                         <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logEndpoint" as never)}</th>
-                                        <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logStatus" as never)}</th>
+                                        <th className="px-3 py-2 text-left font-medium">{t("enterprise.myAccess.logStatus" as never)}</th>
                                         <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logTokens" as never)}</th>
                                         <th className="px-3 py-2 text-right font-medium">{t("enterprise.myAccess.logCost" as never)}</th>
                                         <th className="px-3 py-2 text-right font-medium">TTFB</th>
@@ -1101,6 +1120,12 @@ function RequestLogsSection() {
                                                 <td className="px-3 py-2 tabular-nums text-muted-foreground whitespace-nowrap">
                                                     {formatTime(log.created_at)}
                                                 </td>
+                                                <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground max-w-[120px] truncate" title={log.request_id || "-"}>
+                                                    {log.request_id || "-"}
+                                                </td>
+                                                <td className="px-3 py-2 text-muted-foreground max-w-[100px] truncate" title={log.token_name || "-"}>
+                                                    {log.token_name || "-"}
+                                                </td>
                                                 <td className="px-3 py-2 font-mono max-w-[160px] truncate" title={log.model}>
                                                     {log.model}
                                                 </td>
@@ -1109,10 +1134,15 @@ function RequestLogsSection() {
                                                         {epInfo?.label || log.endpoint}
                                                     </span>
                                                 </td>
-                                                <td className="px-3 py-2 text-right tabular-nums">
-                                                    <span className={isSuccess ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                                <td className="px-3 py-2 text-left">
+                                                    <span className={`tabular-nums ${isSuccess ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                                                         {log.code}
                                                     </span>
+                                                    {!isSuccess && log.content && (
+                                                        <p className="text-[10px] text-red-500/80 dark:text-red-400/80 truncate max-w-[140px] mt-0.5" title={log.content}>
+                                                            {log.content}
+                                                        </p>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                                                     {formatNumber(log.usage?.total_tokens || 0)}
@@ -1121,9 +1151,9 @@ function RequestLogsSection() {
                                                     {formatAmount(log.used_amount ?? 0)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                                    {log.ttfb_ms > 0 ? formatMs(log.ttfb_ms) : "-"}
+                                                    {log.ttfb_milliseconds > 0 ? formatMs(log.ttfb_milliseconds) : "-"}
                                                 </td>
-                                                <td className="px-3 py-2 text-center">
+                                                <td className="px-3 py-2 text-center whitespace-nowrap">
                                                     {log.has_detail && (
                                                         <Button
                                                             variant="ghost"
@@ -1132,6 +1162,17 @@ function RequestLogsSection() {
                                                             onClick={() => setDetailLog(log)}
                                                         >
                                                             <FileText className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    )}
+                                                    {!isSuccess && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6"
+                                                            title={t("enterprise.myAccess.copyLog" as never)}
+                                                            onClick={() => copyLogText(log)}
+                                                        >
+                                                            <Copy className="w-3.5 h-3.5" />
                                                         </Button>
                                                     )}
                                                 </td>
@@ -1170,6 +1211,12 @@ function RequestLogsSection() {
                         </div>
                     ) : detail ? (
                         <div className="space-y-3">
+                            {detailLog?.upstream_id && (
+                                <div className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium text-muted-foreground">{t("enterprise.myAccess.logUpstreamId" as never)}:</span>
+                                    <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px]">{detailLog.upstream_id}</code>
+                                </div>
+                            )}
                             <div>
                                 <p className="text-xs font-medium text-muted-foreground mb-1">
                                     {t("enterprise.myAccess.requestBody" as never)}

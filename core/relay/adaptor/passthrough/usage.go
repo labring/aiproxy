@@ -181,8 +181,12 @@ func (r *rawUsage) toModelUsage() model.Usage {
 		u.OutputTokens = r.OutputTokens
 	}
 
-	// Total tokens (OpenAI only; Anthropic/Responses API don't return it).
-	u.TotalTokens = r.TotalTokens
+	// Total tokens: use OpenAI's total_tokens if present, otherwise compute from input + output.
+	if r.TotalTokens > 0 {
+		u.TotalTokens = r.TotalTokens
+	} else {
+		u.TotalTokens = u.InputTokens + u.OutputTokens
+	}
 
 	// Reasoning tokens (OpenAI format: completion_tokens_details.reasoning_tokens).
 	if r.CompletionTokensDetails != nil {
