@@ -1182,7 +1182,7 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
 
     const { titleField, bodyField, color } = TIER_MAP[selectedTier]
 
-    const previewVars = useMemo<Record<string, string>>(() => {
+    const previewVars = useMemo(() => {
         if (selectedTier === "policy_change") {
             return {
                 name: adminName,
@@ -1191,7 +1191,7 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
                 period_type: quota ? notifPeriodTypeLabel(quota.period_type) : "月",
                 tier1_ratio: `${((quota?.tier1_ratio ?? 0.7) * 100).toFixed(0)}%`,
                 tier2_ratio: `${((quota?.tier2_ratio ?? 0.9) * 100).toFixed(0)}%`,
-            }
+            } as Record<string, string>
         }
         const tierThresholdStr =
             selectedTier === "tier2" ? `${((quota?.tier1_ratio ?? 0.7) * 100).toFixed(0)}%`
@@ -1205,7 +1205,7 @@ function NotifConfigTab({ canManage }: { canManage: boolean }) {
             period_quota: quota ? `¥${quota.period_quota.toFixed(2)}` : "¥100.00",
             period_type: quota ? notifPeriodTypeLabel(quota.period_type) : "月",
             tier_threshold: tierThresholdStr,
-        }
+        } as Record<string, string>
     }, [selectedTier, quota, adminName])
 
     const copyToClipboard = (text: string) => {
