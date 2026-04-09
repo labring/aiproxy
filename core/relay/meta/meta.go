@@ -38,6 +38,7 @@ type Meta struct {
 
 	RequestUsage       model.Usage
 	RequestServiceTier string
+	PromptCacheKey     string
 
 	JobID        string
 	GenerationID string
@@ -103,6 +104,12 @@ func WithGenerationID(generationID string) Option {
 func WithResponseID(responseID string) Option {
 	return func(meta *Meta) {
 		meta.ResponseID = responseID
+	}
+}
+
+func WithPromptCacheKey(promptCacheKey string) Option {
+	return func(meta *Meta) {
+		meta.PromptCacheKey = promptCacheKey
 	}
 }
 

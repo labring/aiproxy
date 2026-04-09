@@ -665,6 +665,7 @@
     "id": "ID",
     "requestId": "Request ID",
     "upstreamId": "Upstream ID",
+    "promptCacheKey": "Prompt Cache Key",
     "channel": "Channel",
     "group": "Group",
     "user": "User",

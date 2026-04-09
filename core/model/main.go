@@ -366,6 +366,15 @@ func preMigrationCleanup(batchSize int) error {
 		return fmt.Errorf("failed to cleanup request details: %w", err)
 	}
 
+	// Clean up expired stores
+	err = preMigrationCleanupStores(batchSize)
+	if err != nil {
+		if ignoreNoSuchTable(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to cleanup stores: %w", err)
+	}
+
 	log.Info("pre-migration cleanup completed")
 
 	return nil
@@ -533,4 +542,12 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 	}
 
 	return nil
+}
+
+func preMigrationCleanupStores(batchSize int) error {
+	return LogDB.
+		Session(&gorm.Session{SkipDefaultTransaction: true}).
+		Where("expires_at < ?", time.Now()).
+		Delete(&StoreV2{}).
+		Error
 }

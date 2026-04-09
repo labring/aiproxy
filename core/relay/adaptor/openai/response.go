@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -18,6 +19,49 @@ import (
 	"github.com/labring/aiproxy/core/relay/render"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
+
+const defaultPromptCacheStoreTTL = 30 * time.Minute
+
+func getPromptCacheStoreTTL(retention string) time.Duration {
+	retention = strings.TrimSpace(strings.ToLower(retention))
+	if retention == "" || retention == "in-memory" || retention == "in_memory" {
+		return defaultPromptCacheStoreTTL
+	}
+
+	ttl, err := time.ParseDuration(retention)
+	if err != nil || ttl <= 0 {
+		return defaultPromptCacheStoreTTL
+	}
+
+	return ttl
+}
+
+func getPromptCacheRetention(retention *string) string {
+	if retention == nil {
+		return ""
+	}
+
+	return *retention
+}
+
+func savePromptCacheKeyChannelMapping(
+	meta *meta.Meta,
+	store adaptor.Store,
+	retention string,
+) error {
+	if meta.PromptCacheKey == "" {
+		return nil
+	}
+
+	return store.SaveIfNotExistStore(adaptor.StoreCache{
+		ID:        model.PromptCacheStoreID(meta.OriginModel, meta.PromptCacheKey),
+		GroupID:   meta.Group.ID,
+		TokenID:   meta.Token.ID,
+		ChannelID: meta.Channel.ID,
+		Model:     meta.OriginModel,
+		ExpiresAt: time.Now().Add(getPromptCacheStoreTTL(retention)),
+	})
+}
 
 // ConvertResponseRequest converts a response creation request
 func ConvertResponseRequest(
@@ -86,7 +130,7 @@ func ResponseHandler(
 	// Store the response ID if needed for later retrieval
 	if response.Store && response.ID != "" {
 		err = store.SaveStore(adaptor.StoreCache{
-			ID:        response.ID,
+			ID:        model.ResponseStoreID(response.ID),
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,
@@ -97,6 +141,15 @@ func ResponseHandler(
 			log := common.GetLogger(c)
 			log.Errorf("save response store failed: %v", err)
 		}
+	}
+
+	if err = savePromptCacheKeyChannelMapping(
+		meta,
+		store,
+		getPromptCacheRetention(response.PromptCacheRetention),
+	); err != nil {
+		log := common.GetLogger(c)
+		log.Errorf("save prompt cache key store failed: %v", err)
 	}
 
 	// Write response
@@ -133,8 +186,9 @@ func ResponseStreamHandler(
 	defer cleanup()
 
 	var (
-		usage      model.Usage
-		responseID string
+		usage                model.Usage
+		responseID           string
+		promptCacheKeyStored bool
 	)
 
 	for scanner.Scan() {
@@ -162,7 +216,7 @@ func ResponseStreamHandler(
 			responseID = event.Response.ID
 			if event.Response.Store && responseID != "" {
 				err = store.SaveStore(adaptor.StoreCache{
-					ID:        responseID,
+					ID:        model.ResponseStoreID(responseID),
 					GroupID:   meta.Group.ID,
 					TokenID:   meta.Token.ID,
 					ChannelID: meta.Channel.ID,
@@ -172,6 +226,19 @@ func ResponseStreamHandler(
 				if err != nil {
 					log.Errorf("save response store failed: %v", err)
 				}
+			}
+		}
+
+		if !promptCacheKeyStored && event.Response != nil {
+			err = savePromptCacheKeyChannelMapping(
+				meta,
+				store,
+				getPromptCacheRetention(event.Response.PromptCacheRetention),
+			)
+			if err != nil {
+				log.Errorf("save prompt cache key store failed: %v", err)
+			} else {
+				promptCacheKeyStored = true
 			}
 		}
 
@@ -186,6 +253,13 @@ func ResponseStreamHandler(
 
 	if err := scanner.Err(); err != nil {
 		log.Error("error reading response stream: " + err.Error())
+	}
+
+	if !promptCacheKeyStored {
+		err := savePromptCacheKeyChannelMapping(meta, store, "")
+		if err != nil {
+			log.Errorf("save prompt cache key store failed: %v", err)
+		}
 	}
 
 	return adaptor.DoResponseResult{Usage: usage}, nil

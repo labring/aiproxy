@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -139,15 +140,12 @@ var (
 	ErrChannelsExhausted = errors.New("channels exhausted")
 )
 
-func getRandomChannel(
+func getAvailableChannels(
 	mc *model.ModelCaches,
 	availableSet []string,
 	modelName string,
 	mode mode.Mode,
-	errorRates map[int64]float64,
-	maxErrorRate float64,
-	ignoreChannelMap ...map[int64]struct{},
-) (*model.Channel, []*model.Channel, error) {
+) ([]*model.Channel, error) {
 	channelMap := make(map[int]*model.Channel)
 	if len(availableSet) != 0 {
 		for _, set := range availableSet {
@@ -182,20 +180,16 @@ func getRandomChannel(
 		}
 	}
 
+	if len(channelMap) == 0 {
+		return nil, ErrChannelsNotFound
+	}
+
 	migratedChannels := make([]*model.Channel, 0, len(channelMap))
 	for _, channel := range channelMap {
 		migratedChannels = append(migratedChannels, channel)
 	}
 
-	channel, err := ignoreChannel(
-		migratedChannels,
-		mode,
-		errorRates,
-		maxErrorRate,
-		ignoreChannelMap...,
-	)
-
-	return channel, migratedChannels, err
+	return migratedChannels, nil
 }
 
 func getPriority(channel *model.Channel, errorRate float64) int32 {
@@ -210,7 +204,7 @@ func getPriority(channel *model.Channel, errorRate float64) int32 {
 	return int32(float64(priority) / errorRate)
 }
 
-func ignoreChannel(
+func pickChannel(
 	channels []*model.Channel,
 	mode mode.Mode,
 	errorRates map[int64]float64,
@@ -259,13 +253,36 @@ func getChannelWithFallback(
 	availableSet []string,
 	modelName string,
 	mode mode.Mode,
+	preferChannelIDs []int,
 	errorRates map[int64]float64,
 	ignoreChannelIDs map[int64]struct{},
 ) (*model.Channel, []*model.Channel, error) {
-	channel, migratedChannels, err := getRandomChannel(
+	migratedChannels, err := getAvailableChannels(
 		cache,
 		availableSet,
 		modelName,
+		mode,
+	)
+	if err != nil {
+		return nil, migratedChannels, err
+	}
+
+	if len(preferChannelIDs) > 0 {
+		channel := pickPreferredChannel(
+			migratedChannels,
+			mode,
+			preferChannelIDs,
+			errorRates,
+			maxRetryErrorRate,
+			ignoreChannelIDs,
+		)
+		if channel != nil {
+			return channel, migratedChannels, nil
+		}
+	}
+
+	channel, err := pickChannel(
+		migratedChannels,
 		mode,
 		errorRates,
 		maxRetryErrorRate,
@@ -279,19 +296,62 @@ func getChannelWithFallback(
 		return nil, migratedChannels, err
 	}
 
-	return getRandomChannel(
-		cache,
-		availableSet,
-		modelName,
+	channel, err = pickChannel(
+		migratedChannels,
 		mode,
 		errorRates,
 		0,
+		ignoreChannelIDs,
 	)
+
+	return channel, migratedChannels, err
+}
+
+func pickPreferredChannel(
+	channels []*model.Channel,
+	mode mode.Mode,
+	preferChannelIDs []int,
+	errorRates map[int64]float64,
+	maxErrorRate float64,
+	ignoreChannelIDs ...map[int64]struct{},
+) *model.Channel {
+	if len(preferChannelIDs) == 0 {
+		return nil
+	}
+
+	channelMap := make(map[int]*model.Channel, len(channels))
+	for _, channel := range channels {
+		channelMap[channel.ID] = channel
+	}
+
+	seen := make(map[int]struct{}, len(preferChannelIDs))
+	for _, channelID := range preferChannelIDs {
+		if _, ok := seen[channelID]; ok {
+			continue
+		}
+
+		seen[channelID] = struct{}{}
+		if channel, ok := channelMap[channelID]; ok {
+			filtered := filterChannels(
+				[]*model.Channel{channel},
+				mode,
+				errorRates,
+				maxErrorRate,
+				ignoreChannelIDs...,
+			)
+			if len(filtered) > 0 {
+				return filtered[0]
+			}
+		}
+	}
+
+	return nil
 }
 
 type initialChannel struct {
 	channel           *model.Channel
 	designatedChannel bool
+	preferChannelIDs  []int
 	ignoreChannelIDs  map[int64]struct{}
 	errorRates        map[int64]float64
 	migratedChannels  []*model.Channel
@@ -353,11 +413,17 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		log.Errorf("get channel model error rates failed: %+v", err)
 	}
 
+	preferChannelIDs := []int(nil)
+	if m == mode.Responses {
+		preferChannelIDs = getPreferChannelIDs(c, modelName)
+	}
+
 	channel, migratedChannels, err := getChannelWithFallback(
 		mc,
 		availableSet,
 		modelName,
 		m,
+		preferChannelIDs,
 		errorRates,
 		ignoreChannelIDs,
 	)
@@ -365,12 +431,41 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		return nil, err
 	}
 
+	if len(preferChannelIDs) > 0 && slices.Contains(preferChannelIDs, channel.ID) {
+		log.Data["prefer_channels"] = fmt.Sprintf("%v", preferChannelIDs)
+	}
+
 	return &initialChannel{
 		channel:          channel,
+		preferChannelIDs: preferChannelIDs,
 		ignoreChannelIDs: ignoreChannelIDs,
 		errorRates:       errorRates,
 		migratedChannels: migratedChannels,
 	}, nil
+}
+
+func getPreferChannelIDs(c *gin.Context, modelName string) []int {
+	if middleware.GetPromptCacheKey(c) == "" {
+		return nil
+	}
+
+	group := middleware.GetGroup(c)
+	token := middleware.GetToken(c)
+
+	store, err := model.CacheGetStore(
+		group.ID,
+		token.ID,
+		model.PromptCacheStoreID(modelName, middleware.GetPromptCacheKey(c)),
+	)
+	if err != nil {
+		return nil
+	}
+
+	if store.ChannelID == 0 {
+		return nil
+	}
+
+	return []int{store.ChannelID}
 }
 
 func getWebSearchChannel(
@@ -386,6 +481,7 @@ func getWebSearchChannel(
 		nil,
 		modelName,
 		mode.ChatCompletions,
+		nil,
 		errorRates,
 		ignoreChannelIDs)
 	if err != nil {
@@ -411,10 +507,25 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 		return state.lastHasPermissionChannel, nil
 	}
 
+	if len(state.preferChannelIDs) > 0 {
+		newChannel := pickPreferredChannel(
+			state.migratedChannels,
+			state.meta.Mode,
+			state.preferChannelIDs,
+			state.errorRates,
+			maxRetryErrorRate,
+			state.ignoreChannelIDs,
+			state.failedChannelIDs,
+		)
+		if newChannel != nil {
+			return newChannel, nil
+		}
+	}
+
 	// For the last retry, filter out all previously failed channels if there are other options
 	if currentRetry == totalRetries-1 && len(state.failedChannelIDs) > 0 {
 		// Check if there are channels available after filtering out failed channels
-		newChannel, err := ignoreChannel(
+		newChannel, err := pickChannel(
 			state.migratedChannels,
 			state.meta.Mode,
 			state.errorRates,
@@ -428,12 +539,17 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 		// If no channels available after filtering, fall back to not using failed channels filter
 	}
 
-	newChannel, err := ignoreChannel(
+	ignoreChannelIDs := []map[int64]struct{}{state.ignoreChannelIDs}
+	if currentRetry != totalRetries-1 {
+		ignoreChannelIDs = append(ignoreChannelIDs, state.failedChannelIDs)
+	}
+
+	newChannel, err := pickChannel(
 		state.migratedChannels,
 		state.meta.Mode,
 		state.errorRates,
 		maxRetryErrorRate,
-		state.ignoreChannelIDs,
+		ignoreChannelIDs...,
 	)
 	if err != nil {
 		if !errors.Is(err, ErrChannelsExhausted) || state.lastHasPermissionChannel == nil {

@@ -897,10 +897,22 @@ func CacheSetStore(store *StoreCache) error {
 	defer cancel()
 
 	key := common.RedisKeyf(StoreCacheKey, store.GroupID, store.TokenID, store.ID)
+	return cacheSetStore(ctx, key, store)
+}
+
+func cacheSetStore(ctx context.Context, key string, store *StoreCache) error {
 	pipe := common.RDB.Pipeline()
 	pipe.HSet(ctx, key, store)
 
 	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
+	if !store.ExpiresAt.IsZero() {
+		storeTTL := time.Until(store.ExpiresAt)
+		if storeTTL <= 0 {
+			expireTime = time.Second
+		} else if storeTTL < expireTime {
+			expireTime = storeTTL
+		}
+	}
 	pipe.Expire(ctx, key, expireTime)
 	_, err := pipe.Exec(ctx)
 
@@ -925,7 +937,11 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 
 	err := common.RDB.HGetAll(ctx, cacheKey).Scan(storeCache)
 	if err == nil && storeCache.ID != "" {
-		return storeCache, nil
+		if !storeCache.ExpiresAt.IsZero() && !storeCache.ExpiresAt.After(time.Now()) {
+			_ = common.RDB.Del(ctx, cacheKey).Err()
+		} else {
+			return storeCache, nil
+		}
 	}
 
 	store, err := GetStore(group, tokenID, id)

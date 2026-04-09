@@ -440,6 +440,19 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	c.Set(RequestUser, user)
 
+	promptCacheKey, err := getPromptCacheKey(c, mode)
+	if err != nil {
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+
+		return
+	}
+
+	c.Set(PromptCacheKey, promptCacheKey)
+
 	metadata, err := getRequestMetadata(c, mode)
 	if err != nil {
 		AbortLogWithMessage(
@@ -478,6 +491,10 @@ func GetRequestModel(c *gin.Context) string {
 
 func GetRequestUser(c *gin.Context) string {
 	return c.GetString(RequestUser)
+}
+
+func GetPromptCacheKey(c *gin.Context) string {
+	return c.GetString(PromptCacheKey)
 }
 
 func GetChannelID(c *gin.Context) int {
@@ -523,6 +540,7 @@ func NewMetaByContext(c *gin.Context,
 	jobID := GetJobID(c)
 	generationID := GetGenerationID(c)
 	responseID := GetResponseID(c)
+	promptCacheKey := GetPromptCacheKey(c)
 
 	opts = append(
 		opts,
@@ -534,6 +552,7 @@ func NewMetaByContext(c *gin.Context,
 		meta.WithJobID(jobID),
 		meta.WithGenerationID(generationID),
 		meta.WithResponseID(responseID),
+		meta.WithPromptCacheKey(promptCacheKey),
 	)
 
 	return meta.NewMeta(
@@ -570,24 +589,28 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 	case m == mode.VideoGenerationsGetJobs:
 		jobID := c.Param("id")
 
-		store, err := model.CacheGetStore(group, tokenID, jobID)
+		store, err := model.CacheGetStore(group, tokenID, model.VideoJobStoreID(jobID))
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(JobID, store.ID)
+		c.Set(JobID, jobID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
 	case m == mode.VideoGenerationsContent:
 		generationID := c.Param("id")
 
-		store, err := model.CacheGetStore(group, tokenID, generationID)
+		store, err := model.CacheGetStore(
+			group,
+			tokenID,
+			model.VideoGenerationStoreID(generationID),
+		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(GenerationID, store.ID)
+		c.Set(GenerationID, generationID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
@@ -595,12 +618,12 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		m == mode.ResponsesCancel || m == mode.ResponsesInputItems:
 		responseID := c.Param("response_id")
 
-		store, err := model.CacheGetStore(group, tokenID, responseID)
+		store, err := model.CacheGetStore(group, tokenID, model.ResponseStoreID(responseID))
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(ResponseID, store.ID)
+		c.Set(ResponseID, responseID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
@@ -621,12 +644,16 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		}
 
 		if responseID != "" {
-			store, err := model.CacheGetStore(group, tokenID, responseID)
+			store, err := model.CacheGetStore(
+				group,
+				tokenID,
+				model.ResponseStoreID(responseID),
+			)
 			if err != nil {
 				return "", fmt.Errorf("get request model failed: %w", err)
 			}
 
-			c.Set(ResponseID, store.ID)
+			c.Set(ResponseID, responseID)
 			c.Set(ChannelID, store.ChannelID)
 		}
 
@@ -668,6 +695,40 @@ func GetPreviousResponseIDFromJSON(body []byte) (string, error) {
 	}
 
 	return node.String()
+}
+
+func getPromptCacheKey(c *gin.Context, m mode.Mode) (string, error) {
+	if m != mode.Responses {
+		return "", nil
+	}
+
+	body, err := common.GetRequestBodyReusable(c.Request)
+	if err != nil {
+		return "", fmt.Errorf("get request prompt_cache_key failed: %w", err)
+	}
+
+	return GetPromptCacheKeyFromJSON(body)
+}
+
+func GetPromptCacheKeyFromJSON(body []byte) (string, error) {
+	node, err := sonic.GetWithOptions(body, ast.SearchOptions{}, "prompt_cache_key")
+	if err != nil {
+		if errors.Is(err, ast.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("get request prompt_cache_key failed: %w", err)
+	}
+
+	if node.Exists() {
+		s, err := node.String()
+		if err != nil {
+			return "", fmt.Errorf("get request prompt_cache_key failed: %w", err)
+		}
+
+		return s, nil
+	}
+
+	return "", nil
 }
 
 // https://platform.openai.com/docs/api-reference/chat

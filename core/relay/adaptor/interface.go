@@ -25,6 +25,7 @@ type StoreCache struct {
 type Store interface {
 	GetStore(group string, tokenID int, id string) (StoreCache, error)
 	SaveStore(store StoreCache) error
+	SaveIfNotExistStore(store StoreCache) error
 }
 
 type Metadata struct {

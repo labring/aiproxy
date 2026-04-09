@@ -653,6 +653,7 @@
     "id": "ID",
     "requestId": "请求 ID",
     "upstreamId": "上游 ID",
+    "promptCacheKey": "Prompt 缓存键",
     "channel": "渠道",
     "group": "组别",
     "user": "用户",

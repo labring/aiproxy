@@ -85,6 +85,19 @@ func (s *storeImpl) SaveStore(store adaptor.StoreCache) error {
 	return err
 }
 
+func (s *storeImpl) SaveIfNotExistStore(store adaptor.StoreCache) error {
+	_, err := model.SaveIfNotExistStore(&model.StoreV2{
+		ID:        store.ID,
+		GroupID:   store.GroupID,
+		TokenID:   store.TokenID,
+		ChannelID: store.ChannelID,
+		Model:     store.Model,
+		ExpiresAt: store.ExpiresAt,
+	})
+
+	return err
+}
+
 func wrapPlugin(ctx context.Context, mc *model.ModelCaches, a adaptor.Adaptor) adaptor.Adaptor {
 	return plugin.WrapperAdaptor(a,
 		monitorplugin.NewGroupMonitorPlugin(),
@@ -389,6 +402,7 @@ func effectiveDetailBodyMaxSize(modelLimit, globalLimit int64) int64 {
 type retryState struct {
 	retryTimes               int
 	lastHasPermissionChannel *model.Channel
+	preferChannelIDs         []int
 	ignoreChannelIDs         map[int64]struct{}
 	errorRates               map[int64]float64
 	exhausted                bool
@@ -430,6 +444,7 @@ func initRetryState(
 ) *retryState {
 	state := &retryState{
 		retryTimes:       retryTimes,
+		preferChannelIDs: channel.preferChannelIDs,
 		ignoreChannelIDs: channel.ignoreChannelIDs,
 		errorRates:       channel.errorRates,
 		meta:             meta,

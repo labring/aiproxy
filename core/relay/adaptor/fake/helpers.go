@@ -337,6 +337,10 @@ func (discardStore) SaveStore(adaptor.StoreCache) error {
 	return nil
 }
 
+func (discardStore) SaveIfNotExistStore(adaptor.StoreCache) error {
+	return nil
+}
+
 func buildResponseObject(
 	meta *meta.Meta,
 	cfg Config,

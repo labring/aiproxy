@@ -57,6 +57,7 @@ func recordConsume(
 		amount,
 		user,
 		metadata,
+		meta.PromptCacheKey,
 		upstreamID,
 		serviceTier,
 		summaryServiceTier,
