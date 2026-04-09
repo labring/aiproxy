@@ -163,6 +163,11 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 						relaymodel.GeminiSafetyThresholdBlockOnlyHigh,
 					},
 				},
+				"disable_auto_image_url_to_base64": map[string]any{
+					"type":        "boolean",
+					"title":       "Disable Auto Image URL To Base64",
+					"description": "Keep image URLs unchanged instead of downloading and converting them to base64.",
+				},
 			},
 		},
 	}

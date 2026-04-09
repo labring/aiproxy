@@ -54,6 +54,17 @@ func shouldAutoIncludeThoughts(modelName string) bool {
 	return true
 }
 
+func autoImageURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
+	if meta != nil {
+		switch meta.Channel.Type {
+		case model.ChannelTypeVertexAI, model.ChannelTypeAWS:
+			return false
+		}
+	}
+
+	return cfg.DisableAutoImageURLToBase64
+}
+
 type CountTokensResponse struct {
 	Error       *relaymodel.GeminiError `json:"error,omitempty"`
 	TotalTokens int                     `json:"totalTokens"`
@@ -269,13 +280,31 @@ func buildToolConfig(textRequest *relaymodel.GeneralOpenAIRequest) *relaymodel.G
 	return &toolConfig
 }
 
-func buildMessageParts(message relaymodel.MessageContent) *relaymodel.GeminiPart {
+func buildMessageParts(
+	message relaymodel.MessageContent,
+) *relaymodel.GeminiPart {
 	part := &relaymodel.GeminiPart{
 		Text: message.Text,
 	}
 	if message.ImageURL != nil {
-		part.InlineData = &relaymodel.GeminiInlineData{
-			Data: message.ImageURL.URL,
+		imageURL := message.ImageURL.URL
+		switch {
+		case strings.HasPrefix(imageURL, "data:image/"):
+			mimeType, data, err := image.GetImageFromURL(context.Background(), imageURL)
+			if err == nil {
+				part.InlineData = &relaymodel.GeminiInlineData{
+					MimeType: mimeType,
+					Data:     data,
+				}
+			} else {
+				part.FileData = &relaymodel.GeminiFileData{
+					FileURI: imageURL,
+				}
+			}
+		default:
+			part.FileData = &relaymodel.GeminiFileData{
+				FileURI: imageURL,
+			}
 		}
 	}
 
@@ -285,6 +314,7 @@ func buildMessageParts(message relaymodel.MessageContent) *relaymodel.GeminiPart
 // Add this helper function to track tool calls
 func buildContents(
 	textRequest *relaymodel.GeneralOpenAIRequest,
+	collectImageTasks bool,
 ) (*relaymodel.GeminiChatContent, []*relaymodel.GeminiChatContent, []*relaymodel.GeminiPart) {
 	contents := make([]*relaymodel.GeminiChatContent, 0, len(textRequest.Messages))
 
@@ -395,11 +425,11 @@ func buildContents(
 			for _, part := range openaiContent {
 				msgPart := buildMessageParts(part)
 
-				if msgPart.Text == "" && msgPart.InlineData == nil {
+				if msgPart.Text == "" && msgPart.InlineData == nil && msgPart.FileData == nil {
 					continue
 				}
 
-				if msgPart.InlineData != nil {
+				if collectImageTasks && msgPart.FileData != nil {
 					imageTasks = append(imageTasks, msgPart)
 				}
 
@@ -439,7 +469,10 @@ func buildContents(
 	return systemContent, mergedContents, imageTasks
 }
 
-func processImageTasks(ctx context.Context, imageTasks []*relaymodel.GeminiPart) error {
+func processImageTasks(
+	ctx context.Context,
+	imageTasks []*relaymodel.GeminiPart,
+) error {
 	if len(imageTasks) == 0 {
 		return nil
 	}
@@ -453,7 +486,7 @@ func processImageTasks(ctx context.Context, imageTasks []*relaymodel.GeminiPart)
 	)
 
 	for _, task := range imageTasks {
-		if task.InlineData == nil || task.InlineData.Data == "" {
+		if task.FileData == nil || task.FileData.FileURI == "" {
 			continue
 		}
 
@@ -461,7 +494,7 @@ func processImageTasks(ctx context.Context, imageTasks []*relaymodel.GeminiPart)
 			_ = sem.Acquire(ctx, 1)
 			defer sem.Release(1)
 
-			mimeType, data, err := image.GetImageFromURL(ctx, task.InlineData.Data)
+			mimeType, data, err := image.GetImageFromURL(ctx, task.FileData.FileURI)
 			if err != nil {
 				mu.Lock()
 
@@ -472,8 +505,11 @@ func processImageTasks(ctx context.Context, imageTasks []*relaymodel.GeminiPart)
 				return
 			}
 
-			task.InlineData.MimeType = mimeType
-			task.InlineData.Data = data
+			task.InlineData = &relaymodel.GeminiInlineData{
+				MimeType: mimeType,
+				Data:     data,
+			}
+			task.FileData = nil
 		})
 	}
 
@@ -503,12 +539,20 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	textRequest.Model = meta.ActualModel
 	meta.Set("stream", textRequest.Stream)
 
-	systemContent, contents, imageTasks := buildContents(textRequest)
+	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+
+	systemContent, contents, imageTasks := buildContents(
+		textRequest,
+		!disableAutoImageURLToBase64,
+	)
 
 	// Process image tasks concurrently
 	if len(imageTasks) > 0 {
-		if err := processImageTasks(req.Context(), imageTasks); err != nil {
-			return adaptor.ConvertResult{}, err
+		if err := processImageTasks(
+			req.Context(),
+			imageTasks,
+		); err != nil {
+			common.GetLoggerFromReq(req).Warnf("process gemini image tasks failed: %v", err)
 		}
 	}
 

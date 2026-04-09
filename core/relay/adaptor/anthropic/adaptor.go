@@ -264,6 +264,11 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 					"title":       "Remove Tool Defer Loading",
 					"description": "Strip tool defer_loading from the request body before relay.",
 				},
+				"disable_auto_image_url_to_base64": map[string]any{
+					"type":        "boolean",
+					"title":       "Disable Auto Image URL To Base64",
+					"description": "Keep image URLs unchanged instead of downloading and converting them to base64.",
+				},
 			},
 		},
 	}

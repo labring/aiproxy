@@ -89,6 +89,12 @@ func WithRequestUsage(requestUsage model.Usage) Option {
 	}
 }
 
+func WithRequestServiceTier(requestServiceTier string) Option {
+	return func(meta *Meta) {
+		meta.RequestServiceTier = requestServiceTier
+	}
+}
+
 func WithJobID(jobID string) Option {
 	return func(meta *Meta) {
 		meta.JobID = jobID

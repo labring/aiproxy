@@ -2,9 +2,11 @@ package gemini_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/bytedance/sonic"
@@ -224,4 +226,221 @@ func TestConvertRequest_Gemini25ProAutoInjectsThinkingConfig(t *testing.T) {
 	assert.NotNil(t, geminiReq.GenerationConfig)
 	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig)
 	assert.True(t, geminiReq.GenerationConfig.ThinkingConfig.IncludeThoughts)
+}
+
+func TestConvertRequest_DisableAutoImageURLToBase64(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+		Configs: model.ChannelConfigs{
+			"disable_auto_image_url_to_base64": true,
+		},
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-1.5-pro",
+		model.ModelConfig{},
+	)
+
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-1.5-pro",
+		Messages: []relaymodel.Message{
+			{
+				Role: "user",
+				Content: []relaymodel.MessageContent{
+					{
+						Type: relaymodel.ContentTypeImageURL,
+						ImageURL: &relaymodel.ImageURL{
+							URL: "https://example.com/test.png",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.Len(t, geminiReq.Contents, 1)
+	assert.Len(t, geminiReq.Contents[0].Parts, 1)
+	assert.Nil(t, geminiReq.Contents[0].Parts[0].InlineData)
+	assert.NotNil(t, geminiReq.Contents[0].Parts[0].FileData)
+	assert.Equal(t, "", geminiReq.Contents[0].Parts[0].FileData.MimeType)
+	assert.Equal(t, "https://example.com/test.png", geminiReq.Contents[0].Parts[0].FileData.FileURI)
+}
+
+func TestBuildMessagePartsUsesInlineDataForDataURL(t *testing.T) {
+	t.Parallel()
+
+	part := gemini.BuildMessagePartForTest(
+		relaymodel.MessageContent{
+			Type: relaymodel.ContentTypeImageURL,
+			ImageURL: &relaymodel.ImageURL{
+				URL: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+			},
+		},
+	)
+
+	assert.NotNil(t, part.InlineData)
+	assert.Nil(t, part.FileData)
+	assert.Equal(t, "image/png", part.InlineData.MimeType)
+	assert.NotEmpty(t, part.InlineData.Data)
+}
+
+func TestBuildMessagePartsUsesFileDataForHTTPWhenAutoBase64Disabled(t *testing.T) {
+	t.Parallel()
+
+	part := gemini.BuildMessagePartForTest(
+		relaymodel.MessageContent{
+			Type: relaymodel.ContentTypeImageURL,
+			ImageURL: &relaymodel.ImageURL{
+				URL: "https://example.com/test.png",
+			},
+		},
+	)
+
+	assert.Nil(t, part.InlineData)
+	assert.NotNil(t, part.FileData)
+	assert.Equal(t, "https://example.com/test.png", part.FileData.FileURI)
+}
+
+func TestBuildMessagePartsUsesFileDataForHTTPURL(t *testing.T) {
+	t.Parallel()
+
+	part := gemini.BuildMessagePartForTest(
+		relaymodel.MessageContent{
+			Type: relaymodel.ContentTypeImageURL,
+			ImageURL: &relaymodel.ImageURL{
+				URL: "https://example.com/test.png",
+			},
+		},
+	)
+
+	assert.Nil(t, part.InlineData)
+	assert.NotNil(t, part.FileData)
+	assert.Equal(t, "https://example.com/test.png", part.FileData.FileURI)
+}
+
+func TestProcessImageTasksRewritesInlineDataHTTPURLToBase64(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte{
+			0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n',
+			0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',
+			0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+			0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+			0x89, 0x00, 0x00, 0x00, 0x0d, 'I', 'D', 'A', 'T',
+			0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x50, 0x0f,
+			0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c,
+			0x20, 0x00, 0x00, 0x00, 'I', 'E', 'N', 'D', 0xae,
+			0x42, 0x60, 0x82,
+		})
+	}))
+	defer ts.Close()
+
+	part := gemini.BuildMessagePartForTest(
+		relaymodel.MessageContent{
+			Type: relaymodel.ContentTypeImageURL,
+			ImageURL: &relaymodel.ImageURL{
+				URL: ts.URL + "/test.png",
+			},
+		},
+	)
+
+	err := gemini.ProcessImageTasksForTest(context.Background(), []*relaymodel.GeminiPart{part})
+	assert.NoError(t, err)
+	assert.NotNil(t, part.InlineData)
+	assert.Nil(t, part.FileData)
+	assert.Equal(t, "image/png", part.InlineData.MimeType)
+	assert.NotEmpty(t, part.InlineData.Data)
+}
+
+func TestBuildMessagePartsPreservesInvalidDataURLAsFileData(t *testing.T) {
+	t.Parallel()
+
+	part := gemini.BuildMessagePartForTest(
+		relaymodel.MessageContent{
+			Type: relaymodel.ContentTypeImageURL,
+			ImageURL: &relaymodel.ImageURL{
+				URL: "data:image/png;bad",
+			},
+		},
+	)
+
+	assert.Nil(t, part.InlineData)
+	assert.NotNil(t, part.FileData)
+	assert.Equal(t, "data:image/png;bad", part.FileData.FileURI)
+}
+
+func TestConvertRequestKeepsFileDataWhenImageConversionFails(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-1.5-pro",
+		model.ModelConfig{},
+	)
+
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-1.5-pro",
+		Messages: []relaymodel.Message{
+			{
+				Role: "user",
+				Content: []relaymodel.MessageContent{
+					{
+						Type: relaymodel.ContentTypeImageURL,
+						ImageURL: &relaymodel.ImageURL{
+							URL: "data:image/png;bad",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+	var geminiReq relaymodel.GeminiChatRequest
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.Len(t, geminiReq.Contents, 1)
+	assert.Len(t, geminiReq.Contents[0].Parts, 1)
+	assert.Nil(t, geminiReq.Contents[0].Parts[0].InlineData)
+	assert.NotNil(t, geminiReq.Contents[0].Parts[0].FileData)
+	assert.Equal(
+		t,
+		"data:image/png;bad",
+		geminiReq.Contents[0].Parts[0].FileData.FileURI,
+	)
 }

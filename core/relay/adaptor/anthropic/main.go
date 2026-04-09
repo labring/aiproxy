@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/image"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -22,6 +23,17 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 	"golang.org/x/sync/semaphore"
 )
+
+func autoImageURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
+	if meta != nil {
+		switch meta.Channel.Type {
+		case model.ChannelTypeVertexAI, model.ChannelTypeAWS:
+			return false
+		}
+	}
+
+	return cfg.DisableAutoImageURLToBase64
+}
 
 func ConvertRequest(
 	meta *meta.Meta,
@@ -171,13 +183,15 @@ func ConvertRequestBodyToBytes(
 		RemoveToolsCustomDeferLoading(node)
 	}
 
-	err := ConvertImage2Base64(ctx, node)
-	if err != nil {
-		return nil, err
+	if !autoImageURLToBase64Disabled(meta, adaptorConfig) {
+		err := ConvertImage2Base64(ctx, node)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Set the actual model in the request
-	_, err = node.Set("model", ast.NewString(meta.ActualModel))
+	_, err := node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return nil, err
 	}
