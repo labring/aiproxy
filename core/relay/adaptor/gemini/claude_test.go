@@ -225,7 +225,8 @@ func TestConvertClaudeRequest_DisableAutoImageURLToBase64(t *testing.T) {
 		},
 	}
 
-	data, _ := json.Marshal(reqBody)
+	data, err := json.Marshal(reqBody)
+	require.NoError(t, err)
 	req, _ := http.NewRequestWithContext(
 		t.Context(),
 		http.MethodPost,
@@ -237,12 +238,17 @@ func TestConvertClaudeRequest_DisableAutoImageURLToBase64(t *testing.T) {
 	require.NoError(t, err)
 
 	body, _ := io.ReadAll(result.Body)
+
 	var geminiReq relaymodel.GeminiChatRequest
 	require.NoError(t, json.Unmarshal(body, &geminiReq))
 	require.Len(t, geminiReq.Contents, 1)
 	require.Len(t, geminiReq.Contents[0].Parts, 1)
 	require.Nil(t, geminiReq.Contents[0].Parts[0].InlineData)
 	require.NotNil(t, geminiReq.Contents[0].Parts[0].FileData)
-	require.Equal(t, "https://example.com/test.png", geminiReq.Contents[0].Parts[0].FileData.FileURI)
+	require.Equal(
+		t,
+		"https://example.com/test.png",
+		geminiReq.Contents[0].Parts[0].FileData.FileURI,
+	)
 	require.Equal(t, "", geminiReq.Contents[0].Parts[0].FileData.MimeType)
 }

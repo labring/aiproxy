@@ -1,8 +1,10 @@
 package gemini
 
-import "context"
+import (
+	"context"
 
-import relaymodel "github.com/labring/aiproxy/core/relay/model"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
+)
 
 func BuildMessagePartForTest(
 	message relaymodel.MessageContent,

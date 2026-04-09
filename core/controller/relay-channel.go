@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"slices"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	"github.com/labring/aiproxy/core/relay/mode"
+	"github.com/labring/aiproxy/core/relay/plugin/cachefollow"
 )
 
 const (
@@ -413,9 +413,10 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		log.Errorf("get channel model error rates failed: %+v", err)
 	}
 
-	preferChannelIDs := []int(nil)
-	if m == mode.Responses {
-		preferChannelIDs = getPreferChannelIDs(c, modelName)
+	preferChannelIDs := getPreferChannelIDs(c, modelName, m)
+
+	if len(preferChannelIDs) > 0 {
+		log.Data["prefer_channels"] = fmt.Sprintf("%v", preferChannelIDs)
 	}
 
 	channel, migratedChannels, err := getChannelWithFallback(
@@ -431,10 +432,6 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		return nil, err
 	}
 
-	if len(preferChannelIDs) > 0 && slices.Contains(preferChannelIDs, channel.ID) {
-		log.Data["prefer_channels"] = fmt.Sprintf("%v", preferChannelIDs)
-	}
-
 	return &initialChannel{
 		channel:          channel,
 		preferChannelIDs: preferChannelIDs,
@@ -444,28 +441,104 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 	}, nil
 }
 
-func getPreferChannelIDs(c *gin.Context, modelName string) []int {
-	if middleware.GetPromptCacheKey(c) == "" {
+func supportsPromptCacheKeyMode(m mode.Mode) bool {
+	switch m {
+	case mode.Responses, mode.ChatCompletions:
+		return true
+	default:
+		return false
+	}
+}
+
+func supportsCacheFollowMode(m mode.Mode) bool {
+	switch m {
+	case mode.Responses, mode.ChatCompletions, mode.Gemini, mode.Anthropic:
+		return true
+	default:
+		return false
+	}
+}
+
+func isCacheFollowEnabled(c *gin.Context) bool {
+	v, ok := c.Get(middleware.ModelConfig)
+	if !ok {
+		return false
+	}
+
+	modelConfig, ok := v.(model.ModelConfig)
+	if !ok {
+		panic(fmt.Sprintf("model config type error: %T, %v", v, v))
+	}
+
+	pluginConfig := cachefollow.Config{}
+	if err := modelConfig.LoadPluginConfig(cachefollow.PluginName, &pluginConfig); err != nil {
+		return false
+	}
+
+	return pluginConfig.Enable
+}
+
+func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
+	if !supportsCacheFollowMode(m) || !isCacheFollowEnabled(c) {
 		return nil
 	}
 
 	group := middleware.GetGroup(c)
 	token := middleware.GetToken(c)
+	preferChannelIDs := make([]int, 0, 4)
+	seen := make(map[int]struct{}, 4)
 
-	store, err := model.CacheGetStore(
-		group.ID,
-		token.ID,
-		model.PromptCacheStoreID(modelName, middleware.GetPromptCacheKey(c)),
-	)
-	if err != nil {
+	appendChannelID := func(storeID string) {
+		if storeID == "" {
+			return
+		}
+
+		store, err := model.CacheGetStore(group.ID, token.ID, storeID)
+		if err != nil || store.ChannelID == 0 {
+			return
+		}
+
+		if _, ok := seen[store.ChannelID]; ok {
+			return
+		}
+
+		seen[store.ChannelID] = struct{}{}
+		preferChannelIDs = append(preferChannelIDs, store.ChannelID)
+	}
+
+	if supportsPromptCacheKeyMode(m) {
+		if promptCacheKey := middleware.GetPromptCacheKey(c); promptCacheKey != "" {
+			appendChannelID(
+				model.PromptCacheStoreID(
+					modelName,
+					promptCacheKey,
+					model.CacheKeyTypeStable,
+				),
+			)
+			appendChannelID(
+				model.PromptCacheStoreID(
+					modelName,
+					promptCacheKey,
+					model.CacheKeyTypeLast,
+				),
+			)
+
+			if len(preferChannelIDs) == 0 {
+				return nil
+			}
+
+			return preferChannelIDs
+		}
+	}
+
+	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable))
+	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeLast))
+
+	if len(preferChannelIDs) == 0 {
 		return nil
 	}
 
-	if store.ChannelID == 0 {
-		return nil
-	}
-
-	return []int{store.ChannelID}
+	return preferChannelIDs
 }
 
 func getWebSearchChannel(

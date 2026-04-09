@@ -317,6 +317,39 @@ func TestConvertChatCompletionToResponsesRequest(t *testing.T) {
 				assert.Equal(t, "priority", *responsesReq.ServiceTier)
 			},
 		},
+		{
+			name: "request with prompt cache key",
+			inputRequest: relaymodel.GeneralOpenAIRequest{
+				Model:          "gpt-5-codex",
+				PromptCacheKey: "cache-key-1",
+				Messages: []relaymodel.Message{
+					{Role: "user", Content: "Hello"},
+				},
+			},
+			checkFunc: func(t *testing.T, responsesReq relaymodel.CreateResponseRequest) {
+				t.Helper()
+				require.NotNil(t, responsesReq.PromptCacheKey)
+				assert.Equal(t, "cache-key-1", *responsesReq.PromptCacheKey)
+			},
+		},
+		{
+			name: "request with prompt cache retention and user",
+			inputRequest: relaymodel.GeneralOpenAIRequest{
+				Model:                "gpt-5-codex",
+				PromptCacheRetention: "24h",
+				User:                 "user-123",
+				Messages: []relaymodel.Message{
+					{Role: "user", Content: "Hello"},
+				},
+			},
+			checkFunc: func(t *testing.T, responsesReq relaymodel.CreateResponseRequest) {
+				t.Helper()
+				require.NotNil(t, responsesReq.PromptCacheRetention)
+				assert.Equal(t, "24h", *responsesReq.PromptCacheRetention)
+				require.NotNil(t, responsesReq.User)
+				assert.Equal(t, "user-123", *responsesReq.User)
+			},
+		},
 	}
 
 	for _, tt := range tests {

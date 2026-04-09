@@ -191,7 +191,7 @@ export const useTestChannel = () => {
         const cancel = channelApi.testChannel(
             id,
             (result) => {
-                setResults(prev => [...prev, result])
+                setResults(prev => [result, ...prev])
             },
             () => {
                 setIsTesting(false)
@@ -304,7 +304,7 @@ export const useTestChannelPreviewAll = () => {
         const cancel = channelApi.testChannelPreviewAllStream(
             data,
             (result) => {
-                setResults(prev => [...prev, result])
+                setResults(prev => [result, ...prev])
             },
             () => {
                 setIsTesting(false)
@@ -362,7 +362,7 @@ export const useTestAllChannels = () => {
 
         const cancel = channelApi.testAllChannels(
             (result) => {
-                setResults(prev => [...prev, result])
+                setResults(prev => [result, ...prev])
             },
             () => {
                 setIsTesting(false)

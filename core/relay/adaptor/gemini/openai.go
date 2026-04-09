@@ -311,7 +311,159 @@ func buildMessageParts(
 	return part
 }
 
-// Add this helper function to track tool calls
+func parseToolCallArguments(arguments string) map[string]any {
+	if arguments == "" {
+		return make(map[string]any)
+	}
+
+	var args map[string]any
+	if err := sonic.UnmarshalString(arguments, &args); err != nil {
+		return make(map[string]any)
+	}
+
+	return args
+}
+
+func appendAssistantToolCalls(
+	content *relaymodel.GeminiChatContent,
+	toolCalls []relaymodel.ToolCall,
+	toolCallMap map[string]string,
+) {
+	for _, toolCall := range toolCalls {
+		toolCallMap[toolCall.ID] = toolCall.Function.Name
+
+		part := &relaymodel.GeminiPart{
+			FunctionCall: &relaymodel.GeminiFunctionCall{
+				Name: toolCall.Function.Name,
+				Args: parseToolCallArguments(toolCall.Function.Arguments),
+			},
+		}
+
+		if toolCall.ExtraContent != nil &&
+			toolCall.ExtraContent.Google != nil &&
+			toolCall.ExtraContent.Google.ThoughtSignature != "" {
+			part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
+		} else {
+			part.ThoughtSignature = ThoughtSignatureDummySkipValidator
+		}
+
+		content.Parts = append(content.Parts, part)
+	}
+}
+
+func getToolResponseName(
+	message relaymodel.Message,
+	toolCallMap map[string]string,
+) string {
+	toolName := toolCallMap[message.ToolCallID]
+	if toolName != "" {
+		return toolName
+	}
+
+	if message.Name != nil {
+		return *message.Name
+	}
+
+	return "tool_" + message.ToolCallID
+}
+
+func parseToolResponseContent(content any) map[string]any {
+	if content == nil {
+		return make(map[string]any)
+	}
+
+	switch c := content.(type) {
+	case map[string]any:
+		return c
+	case string:
+		var contentMap map[string]any
+		if err := sonic.UnmarshalString(c, &contentMap); err != nil {
+			return map[string]any{"result": c}
+		}
+
+		return contentMap
+	default:
+		return make(map[string]any)
+	}
+}
+
+func appendToolResponse(
+	content *relaymodel.GeminiChatContent,
+	message relaymodel.Message,
+	toolCallMap map[string]string,
+) {
+	toolName := getToolResponseName(message, toolCallMap)
+	content.Parts = append(content.Parts, &relaymodel.GeminiPart{
+		FunctionResponse: &relaymodel.GeminiFunctionResponse{
+			Name: toolName,
+			Response: map[string]any{
+				"name":    toolName,
+				"content": parseToolResponseContent(message.Content),
+			},
+		},
+	})
+}
+
+func buildRegularMessageParts(
+	message relaymodel.Message,
+	collectImageTasks bool,
+) ([]*relaymodel.GeminiPart, []*relaymodel.GeminiPart) {
+	openaiContent := message.ParseContent()
+	if len(openaiContent) == 0 {
+		return nil, nil
+	}
+
+	parts := make([]*relaymodel.GeminiPart, 0, len(openaiContent))
+
+	imageTasks := make([]*relaymodel.GeminiPart, 0)
+	for _, part := range openaiContent {
+		msgPart := buildMessageParts(part)
+		if msgPart.Text == "" && msgPart.InlineData == nil && msgPart.FileData == nil {
+			continue
+		}
+
+		if collectImageTasks && msgPart.FileData != nil {
+			imageTasks = append(imageTasks, msgPart)
+		}
+
+		parts = append(parts, msgPart)
+	}
+
+	return parts, imageTasks
+}
+
+func normalizeGeminiRole(role string) string {
+	switch role {
+	case relaymodel.RoleAssistant:
+		return relaymodel.GeminiRoleModel
+	case "tool":
+		return relaymodel.GeminiRoleUser
+	default:
+		return role
+	}
+}
+
+func mergeConsecutiveContents(
+	contents []*relaymodel.GeminiChatContent,
+) []*relaymodel.GeminiChatContent {
+	mergedContents := make([]*relaymodel.GeminiChatContent, 0, len(contents))
+	for _, content := range contents {
+		if len(mergedContents) > 0 &&
+			mergedContents[len(mergedContents)-1].Role == content.Role {
+			mergedContents[len(mergedContents)-1].Parts = append(
+				mergedContents[len(mergedContents)-1].Parts,
+				content.Parts...,
+			)
+
+			continue
+		}
+
+		mergedContents = append(mergedContents, content)
+	}
+
+	return mergedContents
+}
+
 func buildContents(
 	textRequest *relaymodel.GeneralOpenAIRequest,
 	collectImageTasks bool,
@@ -323,92 +475,21 @@ func buildContents(
 		systemContent *relaymodel.GeminiChatContent
 	)
 
-	// Track tool calls by ID to get their names for tool results
-	toolCallMap := make(map[string]string) // tool_call_id -> tool_name
+	toolCallMap := make(map[string]string)
 
 	for _, message := range textRequest.Messages {
 		content := relaymodel.GeminiChatContent{
 			Role: message.Role,
 		}
 
-		// Track tool calls from assistant messages
 		switch {
 		case message.Role == relaymodel.RoleAssistant && len(message.ToolCalls) > 0:
-			for _, toolCall := range message.ToolCalls {
-				toolCallMap[toolCall.ID] = toolCall.Function.Name
-
-				var args map[string]any
-				if toolCall.Function.Arguments != "" {
-					if err := sonic.UnmarshalString(
-						toolCall.Function.Arguments,
-						&args,
-					); err != nil {
-						args = make(map[string]any)
-					}
-				} else {
-					args = make(map[string]any)
-				}
-
-				part := &relaymodel.GeminiPart{
-					FunctionCall: &relaymodel.GeminiFunctionCall{
-						Name: toolCall.Function.Name,
-						Args: args,
-					},
-				}
-
-				// Restore Gemini thought signature if present in extra_content (OpenAI format)
-				if toolCall.ExtraContent != nil &&
-					toolCall.ExtraContent.Google != nil &&
-					toolCall.ExtraContent.Google.ThoughtSignature != "" {
-					part.ThoughtSignature = toolCall.ExtraContent.Google.ThoughtSignature
-				} else {
-					// If thought signature is missing (e.g., from non-Gemini sources or clients that don't preserve it),
-					// use a dummy signature to skip Gemini's validation as per their FAQ:
-					// https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
-					part.ThoughtSignature = ThoughtSignatureDummySkipValidator
-				}
-
-				content.Parts = append(content.Parts, part)
-			}
+			appendAssistantToolCalls(&content, message.ToolCalls, toolCallMap)
 		case message.Role == "tool" && message.ToolCallID != "":
-			// Handle tool results - get the tool name from our map
-			toolName := toolCallMap[message.ToolCallID]
-			if toolName == "" {
-				// Fallback: try to get from message.Name if available
-				if message.Name != nil {
-					toolName = *message.Name
-				} else {
-					// If still no name, use a default or the tool ID
-					toolName = "tool_" + message.ToolCallID
-				}
-			}
-
-			var contentMap map[string]any
-			if message.Content != nil {
-				switch content := message.Content.(type) {
-				case map[string]any:
-					contentMap = content
-				case string:
-					if err := sonic.UnmarshalString(content, &contentMap); err != nil {
-						contentMap = map[string]any{"result": content}
-					}
-				}
-			} else {
-				contentMap = make(map[string]any)
-			}
-
-			content.Parts = append(content.Parts, &relaymodel.GeminiPart{
-				FunctionResponse: &relaymodel.GeminiFunctionResponse{
-					Name: toolName, // Now properly set
-					Response: map[string]any{
-						"name":    toolName, // Now properly set
-						"content": contentMap,
-					},
-				},
-			})
+			appendToolResponse(&content, message, toolCallMap)
 		case message.Role == relaymodel.RoleSystem:
 			systemContent = &relaymodel.GeminiChatContent{
-				Role: relaymodel.RoleUser, // Gemini uses "user" for system content
+				Role: relaymodel.RoleUser,
 				Parts: []*relaymodel.GeminiPart{{
 					Text: message.StringContent(),
 				}},
@@ -416,57 +497,19 @@ func buildContents(
 
 			continue
 		default:
-			// Handle regular messages
-			openaiContent := message.ParseContent()
-			if len(openaiContent) == 0 {
-				continue
-			}
-
-			for _, part := range openaiContent {
-				msgPart := buildMessageParts(part)
-
-				if msgPart.Text == "" && msgPart.InlineData == nil && msgPart.FileData == nil {
-					continue
-				}
-
-				if collectImageTasks && msgPart.FileData != nil {
-					imageTasks = append(imageTasks, msgPart)
-				}
-
-				content.Parts = append(content.Parts, msgPart)
-			}
+			parts, tasks := buildRegularMessageParts(message, collectImageTasks)
+			content.Parts = append(content.Parts, parts...)
+			imageTasks = append(imageTasks, tasks...)
 		}
 
-		// Adjust role for Gemini
-		switch content.Role {
-		case relaymodel.RoleAssistant:
-			content.Role = relaymodel.GeminiRoleModel
-		case "tool":
-			content.Role = relaymodel.GeminiRoleUser
-		}
+		content.Role = normalizeGeminiRole(content.Role)
 
 		if len(content.Parts) > 0 {
 			contents = append(contents, &content)
 		}
 	}
 
-	// Merge consecutive messages with the same role to avoid Gemini API errors
-	// Gemini expects alternating user/model messages, but we might receive multiple
-	// consecutive user messages (e.g., multiple tool results)
-	mergedContents := make([]*relaymodel.GeminiChatContent, 0, len(contents))
-	for i, content := range contents {
-		if i > 0 && mergedContents[len(mergedContents)-1].Role == content.Role {
-			// Merge with previous message of the same role
-			mergedContents[len(mergedContents)-1].Parts = append(
-				mergedContents[len(mergedContents)-1].Parts,
-				content.Parts...,
-			)
-		} else {
-			mergedContents = append(mergedContents, content)
-		}
-	}
-
-	return systemContent, mergedContents, imageTasks
+	return systemContent, mergeConsecutiveContents(contents), imageTasks
 }
 
 func processImageTasks(

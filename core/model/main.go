@@ -367,7 +367,7 @@ func preMigrationCleanup(batchSize int) error {
 	}
 
 	// Clean up expired stores
-	err = preMigrationCleanupStores(batchSize)
+	err = preMigrationCleanupStores()
 	if err != nil {
 		if ignoreNoSuchTable(err) {
 			return nil
@@ -544,7 +544,7 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 	return nil
 }
 
-func preMigrationCleanupStores(batchSize int) error {
+func preMigrationCleanupStores() error {
 	return LogDB.
 		Session(&gorm.Session{SkipDefaultTransaction: true}).
 		Where("expires_at < ?", time.Now()).

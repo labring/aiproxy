@@ -103,6 +103,7 @@ export const channelApi = {
         // Build URL with query parameters including token
         const params = new URLSearchParams({
             return_success: 'true',
+            success_body: 'true',
             stream: 'true',
         })
         if (token) {
@@ -143,7 +144,7 @@ export const channelApi = {
 
     // 测试单个模型
     testChannelModel: async (id: number, model: string): Promise<ChannelTestResult> => {
-        const response = await get<ChannelTestResult>(`channel/${id}/${model}`)
+        const response = await get<ChannelTestResult>(`channel/${id}/${model}?success_body=true`)
         return response
     },
 
@@ -158,7 +159,7 @@ export const channelApi = {
         model_mapping?: Record<string, string>
         configs?: Record<string, unknown>
     }): Promise<ChannelTestResult> => {
-        const response = await post<ChannelTestResult>('channel/test-preview', data)
+        const response = await post<ChannelTestResult>('channel/test-preview?return_success=true&success_body=true', data)
         return response
     },
 
@@ -189,7 +190,7 @@ export const channelApi = {
         // Get authorization token from auth store
         const token = useAuthStore.getState().token
 
-        fetch('/api/channel/test-preview-all?stream=true', {
+        fetch('/api/channel/test-preview-all?stream=true&return_success=true&success_body=true', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -268,6 +269,7 @@ export const channelApi = {
         // Build URL with query parameters including token
         const params = new URLSearchParams({
             return_success: 'true',
+            success_body: 'true',
             stream: 'true',
         })
         if (token) {

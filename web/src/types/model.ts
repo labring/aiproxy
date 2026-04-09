@@ -85,6 +85,7 @@ export type ModelSaveRequest = Omit<ModelConfig, 'created_at' | 'updated_at'>
 
 type Plugin = {
     cache: CachePlugin // 缓存插件
+    cachefollow: CacheFollowPlugin // 缓存跟随插件
     "web-search": WebSearchPlugin // 网络搜索插件
     "think-split": ThinkSplitPlugin // 思考拆分插件
     "stream-fake": StreamFakePlugin // 流式伪装插件
@@ -96,6 +97,10 @@ type CachePlugin = {
     item_max_size?: number
     add_cache_hit_header?: boolean
     cache_hit_header?: string
+}
+
+type CacheFollowPlugin = {
+    enable: boolean
 }
 
 type WebSearchPlugin = {
@@ -174,6 +179,7 @@ export interface ModelCreateRequest {
 export type {
     Plugin,
     CachePlugin,
+    CacheFollowPlugin,
     WebSearchPlugin,
     ThinkSplitPlugin,
     StreamFakePlugin,

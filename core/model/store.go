@@ -22,7 +22,19 @@ const (
 	StorePrefixVideoJob        = "video_job"
 	StorePrefixVideoGeneration = "video_generation"
 	StorePrefixPromptCacheKey  = "prompt_cache_key"
+	StorePrefixCacheFollow     = "cachefollow"
 )
+
+type CacheKeyType string
+
+const (
+	CacheKeyTypeStable CacheKeyType = "stable"
+	CacheKeyTypeLast   CacheKeyType = "last"
+)
+
+type SaveStoreOption struct {
+	MinUpdateInterval time.Duration
+}
 
 // StoreV2 represents channel-associated data storage for various purposes:
 // - Video generation jobs and their results
@@ -31,6 +43,7 @@ const (
 type StoreV2 struct {
 	ID        string    `gorm:"size:128;primaryKey:3"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 	ExpiresAt time.Time `gorm:"index"`
 	GroupID   string    `gorm:"size:64;primaryKey:1"`
 	TokenID   int       `gorm:"primaryKey:2"`
@@ -61,22 +74,32 @@ func (s *StoreV2) BeforeSave(_ *gorm.DB) error {
 		s.ExpiresAt = s.CreatedAt.Add(time.Hour * 24 * 30)
 	}
 
+	if s.UpdatedAt.IsZero() {
+		s.UpdatedAt = s.CreatedAt
+	}
+
 	return nil
 }
 
 func SaveStore(s *StoreV2) (*StoreV2, error) {
-	if err := LogDB.Save(s).Error; err != nil {
-		return nil, err
+	return SaveStoreWithOption(s, SaveStoreOption{})
+}
+
+func SaveStoreWithOption(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+	if opt.MinUpdateInterval > 0 {
+		if existing, ok := getStoreFastPath(s, opt); ok {
+			return existing, nil
+		}
 	}
 
-	if err := CacheSetStore(s.ToStoreCache()); err != nil {
-		return nil, err
-	}
-
-	return s, nil
+	return upsertStore(s, opt)
 }
 
 func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
+	if existing, ok := getStoreFastPath(s, SaveStoreOption{}); ok {
+		return existing, nil
+	}
+
 	tx := LogDB.Clauses(clause.OnConflict{DoNothing: true}).Create(s)
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -113,7 +136,7 @@ func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
 			time.Now(),
 		).
 		UpdateColumns(map[string]any{
-			"created_at": s.CreatedAt,
+			"updated_at": s.UpdatedAt,
 			"expires_at": s.ExpiresAt,
 			"channel_id": s.ChannelID,
 			"model":      s.Model,
@@ -140,6 +163,108 @@ func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
 	}
 
 	return existing, nil
+}
+
+func getStoreFastPath(s *StoreV2, opt SaveStoreOption) (*StoreV2, bool) {
+	sc, ok := cachePeekStore(s.GroupID, s.TokenID, s.ID)
+	if !ok {
+		return nil, false
+	}
+
+	if opt.MinUpdateInterval > 0 {
+		if sc.UpdatedAt.IsZero() || time.Since(sc.UpdatedAt) >= opt.MinUpdateInterval {
+			return nil, false
+		}
+	}
+
+	return sc.ToStoreV2(), true
+}
+
+func saveStoreWithMinUpdateInterval(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+	now := time.Now()
+	prepareStoreForSave(s, now)
+
+	cutoff := now.Add(-opt.MinUpdateInterval)
+
+	tx := LogDB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "group_id"},
+			{Name: "token_id"},
+			{Name: "id"},
+		},
+		DoUpdates: clause.Assignments(map[string]any{
+			"updated_at": s.UpdatedAt,
+			"expires_at": s.ExpiresAt,
+			"channel_id": s.ChannelID,
+			"model":      s.Model,
+		}),
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Expr{
+				SQL:  "updated_at <= ? OR expires_at <= ?",
+				Vars: []any{cutoff, now},
+			},
+		}},
+	}).Create(s)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID)
+}
+
+func upsertStore(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+	if opt.MinUpdateInterval > 0 {
+		return saveStoreWithMinUpdateInterval(s, opt)
+	}
+
+	now := time.Now()
+	prepareStoreForSave(s, now)
+
+	tx := LogDB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "group_id"},
+			{Name: "token_id"},
+			{Name: "id"},
+		},
+		DoUpdates: clause.Assignments(map[string]any{
+			"updated_at": s.UpdatedAt,
+			"expires_at": s.ExpiresAt,
+			"channel_id": s.ChannelID,
+			"model":      s.Model,
+		}),
+	}).Create(s)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID)
+}
+
+func prepareStoreForSave(s *StoreV2, now time.Time) {
+	if s.CreatedAt.IsZero() {
+		s.CreatedAt = now
+	}
+
+	if s.UpdatedAt.IsZero() {
+		s.UpdatedAt = now
+	}
+
+	if s.ExpiresAt.IsZero() {
+		s.ExpiresAt = s.CreatedAt.Add(time.Hour * 24 * 30)
+	}
+}
+
+func loadAndCacheStore(group string, tokenID int, id string) (*StoreV2, error) {
+	current, err := getStore(group, tokenID, id, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := CacheSetStore(current.ToStoreCache()); err != nil {
+		return nil, err
+	}
+
+	return current, nil
 }
 
 func GetStore(group string, tokenID int, id string) (*StoreV2, error) {
@@ -172,6 +297,16 @@ func StoreID(prefix, id string) string {
 	return nsPrefix + id
 }
 
+func HashedStoreID(prefix string, parts ...string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s", strings.Join(parts, ":")))
+
+	return StoreID(prefix, hex.EncodeToString(sum[:]))
+}
+
 func ResponseStoreID(responseID string) string {
 	return StoreID(StorePrefixResponse, responseID)
 }
@@ -184,7 +319,10 @@ func VideoGenerationStoreID(generationID string) string {
 	return StoreID(StorePrefixVideoGeneration, generationID)
 }
 
-func PromptCacheStoreID(modelName, promptCacheKey string) string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%s:%s", modelName, promptCacheKey))
-	return StoreID(StorePrefixPromptCacheKey, hex.EncodeToString(sum[:]))
+func PromptCacheStoreID(modelName, promptCacheKey string, keyType CacheKeyType) string {
+	return HashedStoreID(StorePrefixPromptCacheKey, string(keyType), modelName, promptCacheKey)
+}
+
+func CacheFollowStoreID(modelName string, keyType CacheKeyType) string {
+	return HashedStoreID(StorePrefixCacheFollow, string(keyType), modelName)
 }

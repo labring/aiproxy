@@ -19,12 +19,19 @@ type StoreCache struct {
 	TokenID   int
 	ChannelID int
 	Model     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	ExpiresAt time.Time
+}
+
+type SaveStoreOption struct {
+	MinUpdateInterval time.Duration
 }
 
 type Store interface {
 	GetStore(group string, tokenID int, id string) (StoreCache, error)
 	SaveStore(store StoreCache) error
+	SaveStoreWithOption(store StoreCache, opt SaveStoreOption) error
 	SaveIfNotExistStore(store StoreCache) error
 }
 

@@ -31,6 +31,10 @@ func (noopStore) SaveStore(adaptor.StoreCache) error {
 	return nil
 }
 
+func (noopStore) SaveStoreWithOption(adaptor.StoreCache, adaptor.SaveStoreOption) error {
+	return nil
+}
+
 func (noopStore) SaveIfNotExistStore(adaptor.StoreCache) error {
 	return nil
 }
@@ -44,6 +48,14 @@ func (s *recordingStore) GetStore(string, int, string) (adaptor.StoreCache, erro
 }
 
 func (s *recordingStore) SaveStore(cache adaptor.StoreCache) error {
+	s.saved = append(s.saved, cache)
+	return nil
+}
+
+func (s *recordingStore) SaveStoreWithOption(
+	cache adaptor.StoreCache,
+	_ adaptor.SaveStoreOption,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

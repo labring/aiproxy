@@ -12,6 +12,8 @@ func TestGetPromptCacheKeyFromJSON(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns prompt cache key when present", func(t *testing.T) {
+		t.Parallel()
+
 		key, err := middleware.GetPromptCacheKeyFromJSON(
 			[]byte(`{"model":"gpt-5","prompt_cache_key":"cache-key-1"}`),
 		)
@@ -20,6 +22,8 @@ func TestGetPromptCacheKeyFromJSON(t *testing.T) {
 	})
 
 	t.Run("returns empty when missing", func(t *testing.T) {
+		t.Parallel()
+
 		key, err := middleware.GetPromptCacheKeyFromJSON([]byte(`{"model":"gpt-5"}`))
 		require.NoError(t, err)
 		assert.Empty(t, key)

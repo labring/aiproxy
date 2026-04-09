@@ -992,6 +992,16 @@ func ConvertChatCompletionToResponsesRequest(
 		responsesReq.ServiceTier = &chatReq.ServiceTier
 	}
 
+	// Map prompt cache key
+	if chatReq.PromptCacheKey != "" {
+		responsesReq.PromptCacheKey = &chatReq.PromptCacheKey
+	}
+
+	// Map prompt cache retention
+	if chatReq.PromptCacheRetention != "" {
+		responsesReq.PromptCacheRetention = &chatReq.PromptCacheRetention
+	}
+
 	// Map user
 	if chatReq.User != "" {
 		responsesReq.User = &chatReq.User

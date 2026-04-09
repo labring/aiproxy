@@ -86,6 +86,7 @@ const MANAGED_PLUGIN_KEYS = {
         'add_cache_hit_header',
         'cache_hit_header',
     ]),
+    cachefollow: new Set(['enable']),
     'web-search': new Set([
         'enable',
         'force_search',
@@ -223,6 +224,7 @@ export function ModelForm({
             price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
+                cachefollow: { enable: false, ...defaultValues.plugin?.cachefollow },
                 "web-search": { enable: false, search_from: [], ...defaultValues.plugin?.["web-search"] },
                 "think-split": { enable: false, ...defaultValues.plugin?.["think-split"] },
                 "stream-fake": { enable: false, ...defaultValues.plugin?.["stream-fake"] },
@@ -448,6 +450,14 @@ export function ModelForm({
             })
         }
 
+        if (data.plugin?.cachefollow?.enable) {
+            Object.assign(pluginData, {
+                cachefollow: {
+                    enable: true
+                }
+            })
+        }
+
         // Web search plugin - 如果开启，必须有 enable 和 search_from，其他字段可选
         if (data.plugin?.["web-search"]?.enable && data.plugin["web-search"].search_from && data.plugin["web-search"].search_from.length > 0) {
             // Clean up search engines - remove empty spec objects
@@ -530,7 +540,7 @@ export function ModelForm({
 
         const existingPlugin = (baseModelConfig?.plugin || {}) as Record<string, unknown>
         const mergedPlugin: Record<string, unknown> = Object.fromEntries(
-            Object.entries(existingPlugin).filter(([key]) => !['cache', 'web-search', 'think-split', 'stream-fake'].includes(key))
+            Object.entries(existingPlugin).filter(([key]) => !['cache', 'cachefollow', 'web-search', 'think-split', 'stream-fake'].includes(key))
         )
 
         if (data.plugin?.cache?.enable) {
@@ -545,6 +555,17 @@ export function ModelForm({
                 ...(data.plugin.cache.item_max_size !== undefined && { item_max_size: data.plugin.cache.item_max_size }),
                 ...(data.plugin.cache.add_cache_hit_header !== undefined && { add_cache_hit_header: data.plugin.cache.add_cache_hit_header }),
                 ...(data.plugin.cache.cache_hit_header !== undefined && { cache_hit_header: data.plugin.cache.cache_hit_header }),
+            }
+        }
+
+        if (data.plugin?.cachefollow?.enable) {
+            const existingCacheFollowPlugin = (baseModelConfig?.plugin?.cachefollow || {}) as Record<string, unknown>
+            const preservedCacheFollowPluginFields = Object.fromEntries(
+                Object.entries(existingCacheFollowPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS.cachefollow.has(key))
+            )
+            mergedPlugin.cachefollow = {
+                ...preservedCacheFollowPluginFields,
+                enable: true,
             }
         }
 
@@ -1411,6 +1432,32 @@ export function ModelForm({
                                     </CollapsibleContent>
                                 )}
                             </Collapsible>
+                        </div>
+
+                        <hr className="border-border" />
+
+                        {/* Cache Follow Plugin */}
+                        <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center space-x-3">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-center space-x-2">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <div>
+                                    <Label className="text-sm font-medium">{t("model.dialog.cacheFollowPlugin.title")}</Label>
+                                    <p className="text-xs text-muted-foreground">{t("model.dialog.cacheFollowPlugin.description")}</p>
+                                </div>
+                            </div>
                         </div>
 
                         <hr className="border-border" />

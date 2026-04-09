@@ -764,7 +764,9 @@ func GetPreviousResponseIDFromJSON(body []byte) (string, error) {
 }
 
 func getPromptCacheKey(c *gin.Context, m mode.Mode) (string, error) {
-	if m != mode.Responses {
+	switch m {
+	case mode.Responses, mode.ChatCompletions:
+	default:
 		return "", nil
 	}
 
@@ -808,6 +810,7 @@ func GetRequestServiceTier(c *gin.Context) string {
 func getRequestUser(c *gin.Context, m mode.Mode) (string, error) {
 	switch m {
 	case mode.ChatCompletions,
+		mode.Responses,
 		mode.Completions,
 		mode.Embeddings,
 		mode.ImagesGenerations,

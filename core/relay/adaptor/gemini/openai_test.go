@@ -431,7 +431,9 @@ func TestConvertRequestKeepsFileDataWhenImageConversionFails(t *testing.T) {
 	assert.NoError(t, err)
 
 	bodyBytes, _ := io.ReadAll(result.Body)
+
 	var geminiReq relaymodel.GeminiChatRequest
+
 	err = json.Unmarshal(bodyBytes, &geminiReq)
 	assert.NoError(t, err)
 	assert.Len(t, geminiReq.Contents, 1)

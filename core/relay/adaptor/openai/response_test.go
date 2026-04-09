@@ -1,3 +1,4 @@
+//nolint:testpackage
 package openai
 
 import (
@@ -6,13 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,18 +29,17 @@ func (s *responseTestStore) SaveStore(cache adaptor.StoreCache) error {
 	return nil
 }
 
-func (s *responseTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
-	s.savedIfNotExist = append(s.savedIfNotExist, cache)
+func (s *responseTestStore) SaveStoreWithOption(
+	cache adaptor.StoreCache,
+	_ adaptor.SaveStoreOption,
+) error {
+	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func TestGetPromptCacheStoreTTL(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 24*time.Hour, getPromptCacheStoreTTL("24h"))
-	assert.Equal(t, defaultPromptCacheStoreTTL, getPromptCacheStoreTTL(""))
-	assert.Equal(t, defaultPromptCacheStoreTTL, getPromptCacheStoreTTL("in-memory"))
-	assert.Equal(t, defaultPromptCacheStoreTTL, getPromptCacheStoreTTL("invalid"))
+func (s *responseTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+	s.savedIfNotExist = append(s.savedIfNotExist, cache)
+	return nil
 }
 
 func TestResponseHandlerPromptCacheRetention(t *testing.T) {
@@ -49,32 +47,39 @@ func TestResponseHandlerPromptCacheRetention(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name      string
-		body      string
-		expectTTL time.Duration
+		name              string
+		body              string
+		expectStoreWrites int
 	}{
 		{
-			name:      "default retention when upstream does not return prompt_cache_retention",
-			body:      `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false}`,
-			expectTTL: defaultPromptCacheStoreTTL,
+			name:              "empty retention when upstream does not return prompt_cache_retention",
+			body:              `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false}`,
+			expectStoreWrites: 0,
 		},
 		{
-			name:      "custom retention from upstream response",
-			body:      `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false,"prompt_cache_retention":"24h"}`,
-			expectTTL: 24 * time.Hour,
+			name:              "custom retention from upstream response",
+			body:              `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false,"prompt_cache_retention":"24h"}`,
+			expectStoreWrites: 0,
 		},
 		{
-			name:      "invalid retention falls back to default",
-			body:      `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false,"prompt_cache_retention":"bad-value"}`,
-			expectTTL: defaultPromptCacheStoreTTL,
+			name:              "invalid retention is still passed through to plugin layer",
+			body:              `{"id":"resp_123","object":"response","created_at":1,"status":"completed","model":"gpt-5","output":[],"parallel_tool_calls":true,"store":false,"prompt_cache_retention":"bad-value"}`,
+			expectStoreWrites: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			c.Request = httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/responses",
+				nil,
+			)
 			store := &responseTestStore{}
 			meta := &meta.Meta{
 				OriginModel:    "gpt-5",
@@ -90,18 +95,9 @@ func TestResponseHandlerPromptCacheRetention(t *testing.T) {
 				Header:     make(http.Header),
 			}
 
-			start := time.Now()
 			_, err := ResponseHandler(meta, store, c, resp)
-			end := time.Now()
 			require.Nil(t, err)
-			require.Len(t, store.savedIfNotExist, 1)
-
-			assertPromptCacheExpiryInWindow(t, store.savedIfNotExist[0].ExpiresAt, start, end, tt.expectTTL)
-			assert.Equal(
-				t,
-				model.PromptCacheStoreID("gpt-5", "cache-key"),
-				store.savedIfNotExist[0].ID,
-			)
+			require.Len(t, store.savedIfNotExist, tt.expectStoreWrites)
 		})
 	}
 }
@@ -112,7 +108,12 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
 	store := &responseTestStore{}
 	meta := &meta.Meta{
 		OriginModel:    "gpt-5",
@@ -131,24 +132,7 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 		Header:     make(http.Header),
 	}
 
-	start := time.Now()
 	_, err := ResponseStreamHandler(meta, store, c, resp)
-	end := time.Now()
 	require.Nil(t, err)
-	require.Len(t, store.savedIfNotExist, 1)
-
-	assertPromptCacheExpiryInWindow(t, store.savedIfNotExist[0].ExpiresAt, start, end, 24*time.Hour)
-}
-
-func assertPromptCacheExpiryInWindow(
-	t *testing.T,
-	expiresAt time.Time,
-	start time.Time,
-	end time.Time,
-	ttl time.Duration,
-) {
-	t.Helper()
-
-	assert.True(t, expiresAt.After(start.Add(ttl-time.Second)))
-	assert.True(t, expiresAt.Before(end.Add(ttl+time.Second)))
+	require.Empty(t, store.savedIfNotExist)
 }

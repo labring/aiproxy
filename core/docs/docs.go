@@ -54,6 +54,129 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/channel/test": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test a single model in channel without saving to database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Test channel preview (single model)",
+                "parameters": [
+                    {
+                        "description": "Channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestSingleModelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.ChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/channel/test-all": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test all models in channel without saving to database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Test channel preview (all models)",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Return success",
+                        "name": "return_success",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Stream mode (SSE)",
+                        "name": "stream",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.TestResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/channel/{id}": {
             "get": {
                 "security": [
@@ -649,6 +772,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/channels/batch_info": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns id, name, and type for a batch of channel IDs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channels"
+                ],
+                "summary": "Get basic info for multiple channels",
+                "parameters": [
+                    {
+                        "description": "Channel IDs",
+                        "name": "ids",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.ChannelBasicInfo"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -1314,6 +1494,179 @@ const docTemplate = `{
                                             "items": {
                                                 "$ref": "#/definitions/model.TimeSummaryDataV2"
                                             }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboardv3/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns model-specific metrics and usage data for the given channel with detailed amount breakdown",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get model usage data for a specific channel (V3 with detailed amounts)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardV3Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboardv3/{group}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns model-specific metrics and usage data for the given group with detailed amount breakdown",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get model usage data for a specific group (V3 with detailed amounts)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardV3Response"
                                         }
                                     }
                                 }
@@ -2375,6 +2728,91 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/groups/consumption_ranking": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns channel, model, or group consumption ranking aggregated from summary data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get consumption ranking",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "group",
+                        "description": "Ranking type: channel, model, group",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order: used_amount_desc, used_amount_asc, request_count_desc, request_count_asc, total_tokens_desc, total_tokens_asc, channel_id_asc, channel_id_desc, model_asc, model_desc, group_id_asc, group_id_desc",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/groups/ip_groups": {
             "get": {
                 "security": [
@@ -2429,6 +2867,91 @@ const docTemplate = `{
                                                     "type": "string"
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/groups/ranking": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns channel, model, or group consumption ranking aggregated from summary data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get consumption ranking",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "group",
+                        "description": "Ranking type: channel, model, group",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order: used_amount_desc, used_amount_asc, request_count_desc, request_count_asc, total_tokens_desc, total_tokens_asc, channel_id_asc, channel_id_desc, model_asc, model_desc, group_id_asc, group_id_desc",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
                                         }
                                     }
                                 }
@@ -2608,6 +3131,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Request ID",
                         "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
                         "in": "query"
                     },
                     {
@@ -2801,6 +3330,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Status code type",
                         "name": "code_type",
                         "in": "query"
@@ -2914,6 +3449,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Request ID",
                         "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
                         "in": "query"
                     },
                     {
@@ -3276,6 +3817,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Request ID",
                         "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
                         "in": "query"
                     },
                     {
@@ -4856,7 +5403,8 @@ const docTemplate = `{
                             49,
                             50,
                             51,
-                            52
+                            52,
+                            53
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -5266,6 +5814,218 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/monitor/batch_group_token_metrics": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns runtime rpm/tpm summary metrics for explicit group and token-name pairs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Batch get runtime metrics for api key rows",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.BatchGroupTokenMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitor/group_model_metrics/{group}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns runtime rpm/tpm metrics grouped by model in a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get model runtime metrics for a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.GroupModelMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitor/group_summary_metrics": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns rpm/tpm summary metrics for one or more groups",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get summary metrics for multiple groups",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.GroupSummaryMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitor/group_token_metrics/{group}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns runtime rpm/tpm metrics grouped by token name in a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get token runtime metrics for a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.GroupTokenMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitor/group_tokenname_model_metrics/{group}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns runtime rpm/tpm metrics for token name and model combinations in a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get token-model runtime metrics for a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.GroupTokennameModelMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/monitor/models": {
             "get": {
                 "security": [
@@ -5298,6 +6058,43 @@ const docTemplate = `{
                                                 "type": "number",
                                                 "format": "float64"
                                             }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitor/runtime_metrics": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns runtime rpm/tpm/error metrics sourced from reqlimit and monitor",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "Get runtime metrics for models and channels",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.RuntimeMetricsResponse"
                                         }
                                     }
                                 }
@@ -8413,31 +9210,12 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "adaptor.ConfigTemplate": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "example": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "required": {
-                    "type": "boolean"
-                }
-            }
-        },
         "adaptors.AdaptorMeta": {
             "type": "object",
             "properties": {
-                "configs": {
+                "configSchema": {
                     "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/adaptor.ConfigTemplate"
-                    }
+                    "additionalProperties": {}
                 },
                 "defaultBaseUrl": {
                     "type": "string"
@@ -8494,6 +9272,9 @@ const docTemplate = `{
                 "priority": {
                     "type": "integer"
                 },
+                "proxy_url": {
+                    "type": "string"
+                },
                 "sets": {
                     "type": "array",
                     "items": {
@@ -8536,6 +9317,40 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "controller.BatchGroupTokenMetricsItem": {
+            "type": "object",
+            "properties": {
+                "group": {
+                    "type": "string"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "token_name": {
+                    "type": "string"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.BatchGroupTokenMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/controller.BatchGroupTokenMetricsItem"
                     }
                 }
             }
@@ -8594,11 +9409,23 @@ const docTemplate = `{
                 "price": {
                     "$ref": "#/definitions/model.Price"
                 },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
+                },
                 "retry_times": {
                     "type": "integer"
                 },
                 "rpm": {
                     "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
                 },
                 "timeout_config": {
                     "$ref": "#/definitions/model.TimeoutConfig"
@@ -8716,8 +9543,15 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "priority": {
+                    "type": "integer"
+                },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"
+                },
+                "weight": {
+                    "description": "权重百分比 (0-100)",
+                    "type": "number"
                 }
             }
         },
@@ -8825,6 +9659,17 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "integer"
+                }
+            }
+        },
+        "controller.GroupModelMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "models": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeRateMetric"
+                    }
                 }
             }
         },
@@ -9048,6 +9893,65 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.GroupSummaryMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeRateMetric"
+                    }
+                }
+            }
+        },
+        "controller.GroupTokenMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeRateMetric"
+                    }
+                }
+            }
+        },
+        "controller.GroupTokennameModelMetricsItem": {
+            "type": "object",
+            "properties": {
+                "group": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "token_name": {
+                    "type": "string"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.GroupTokennameModelMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/controller.GroupTokennameModelMetricsItem"
+                    }
+                }
+            }
+        },
         "controller.ImportChannelFromOneAPIRequest": {
             "type": "object",
             "properties": {
@@ -9219,6 +10123,157 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.RuntimeChannelMetric": {
+            "type": "object",
+            "properties": {
+                "banned_models": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "models": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeModelMetric"
+                    }
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.RuntimeChannelModelMetric": {
+            "type": "object",
+            "properties": {
+                "banned": {
+                    "type": "boolean"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.RuntimeMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "channel_models": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/definitions/controller.RuntimeChannelModelMetric"
+                        }
+                    }
+                },
+                "channels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeChannelMetric"
+                    }
+                },
+                "models": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeModelMetric"
+                    }
+                }
+            }
+        },
+        "controller.RuntimeModelMetric": {
+            "type": "object",
+            "properties": {
+                "accessible_groups": {
+                    "type": "integer"
+                },
+                "accessible_sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "banned_channels": {
+                    "type": "integer"
+                },
+                "channels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.RuntimeChannelMetric"
+                    }
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.RuntimeRateMetric": {
+            "type": "object",
+            "properties": {
+                "rpm": {
+                    "type": "integer"
+                },
+                "rps": {
+                    "type": "integer"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "tps": {
+                    "type": "integer"
+                }
+            }
+        },
         "controller.SaveEmbedMCPRequest": {
             "type": "object",
             "properties": {
@@ -9261,17 +10316,47 @@ const docTemplate = `{
                 "override_price": {
                     "type": "boolean"
                 },
+                "override_request_body_storage_max_size": {
+                    "type": "boolean"
+                },
+                "override_response_body_storage_max_size": {
+                    "type": "boolean"
+                },
                 "override_retry_times": {
+                    "type": "boolean"
+                },
+                "override_summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "override_summary_service_tier": {
+                    "type": "boolean"
+                },
+                "override_timeout_config": {
                     "type": "boolean"
                 },
                 "price": {
                     "$ref": "#/definitions/model.Price"
+                },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
                 },
                 "retry_times": {
                     "type": "integer"
                 },
                 "rpm": {
                     "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
+                },
+                "timeout_config": {
+                    "$ref": "#/definitions/model.TimeoutConfig"
                 },
                 "tpm": {
                     "type": "integer"
@@ -9332,11 +10417,23 @@ const docTemplate = `{
                 "price": {
                     "$ref": "#/definitions/model.Price"
                 },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
+                },
                 "retry_times": {
                     "type": "integer"
                 },
                 "rpm": {
                     "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
                 },
                 "timeout_config": {
                     "$ref": "#/definitions/model.TimeoutConfig"
@@ -9363,6 +10460,46 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.TestChannelRequest": {
+            "type": "object",
+            "required": [
+                "key",
+                "type"
+            ],
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "key": {
+                    "type": "string"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "integer"
+                }
+            }
+        },
         "controller.TestResult": {
             "type": "object",
             "properties": {
@@ -9374,6 +10511,44 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "controller.TestSingleModelRequest": {
+            "type": "object",
+            "required": [
+                "key",
+                "model",
+                "type"
+            ],
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "key": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "integer"
                 }
             }
         },
@@ -9517,6 +10692,26 @@ const docTemplate = `{
                 }
             }
         },
+        "mcp.Icon": {
+            "type": "object",
+            "properties": {
+                "mimeType": {
+                    "description": "Optional MIME type (e.g., \"image/png\", \"image/svg+xml\")",
+                    "type": "string"
+                },
+                "sizes": {
+                    "description": "Optional size specifications (e.g., [\"48x48\"], [\"any\"] for SVG)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "src": {
+                    "description": "URI pointing to the icon resource (HTTPS URL or data URI)",
+                    "type": "string"
+                }
+            }
+        },
         "mcp.Meta": {
             "type": "object",
             "properties": {
@@ -9529,6 +10724,19 @@ const docTemplate = `{
                     "description": "If specified, the caller is requesting out-of-band progress\nnotifications for this request (as represented by\nnotifications/progress). The value of this parameter is an\nopaque token that will be attached to any subsequent\nnotifications. The receiver is not obligated to provide these\nnotifications."
                 }
             }
+        },
+        "mcp.TaskSupport": {
+            "type": "string",
+            "enum": [
+                "forbidden",
+                "optional",
+                "required"
+            ],
+            "x-enum-varnames": [
+                "TaskSupportForbidden",
+                "TaskSupportOptional",
+                "TaskSupportRequired"
+            ]
         },
         "mcp.Tool": {
             "type": "object",
@@ -9549,9 +10757,28 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "defer_loading": {
+                    "description": "Support for deferred loading",
+                    "type": "boolean"
+                },
                 "description": {
                     "description": "A human-readable description of the tool.",
                     "type": "string"
+                },
+                "execution": {
+                    "description": "Execution describes execution behavior for the tool",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/mcp.ToolExecution"
+                        }
+                    ]
+                },
+                "icons": {
+                    "description": "Icons provides visual identifiers for the tool",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/mcp.Icon"
+                    }
                 },
                 "inputSchema": {
                     "description": "A JSON Schema object defining the expected parameters for the tool.",
@@ -9600,6 +10827,19 @@ const docTemplate = `{
                 }
             }
         },
+        "mcp.ToolExecution": {
+            "type": "object",
+            "properties": {
+                "taskSupport": {
+                    "description": "TaskSupport indicates whether the tool supports task augmentation.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/mcp.TaskSupport"
+                        }
+                    ]
+                }
+            }
+        },
         "mcp.ToolInputSchema": {
             "type": "object",
             "properties": {
@@ -9607,6 +10847,7 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "additionalProperties": {},
                 "properties": {
                     "type": "object",
                     "additionalProperties": {}
@@ -9629,6 +10870,7 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "additionalProperties": {},
                 "properties": {
                     "type": "object",
                     "additionalProperties": {}
@@ -9707,6 +10949,38 @@ const docTemplate = `{
                 "Gemini"
             ]
         },
+        "model.Amount": {
+            "type": "object",
+            "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cached_amount": {
+                    "type": "number"
+                },
+                "image_input_amount": {
+                    "type": "number"
+                },
+                "image_output_amount": {
+                    "type": "number"
+                },
+                "input_amount": {
+                    "type": "number"
+                },
+                "output_amount": {
+                    "type": "number"
+                },
+                "used_amount": {
+                    "type": "number"
+                },
+                "web_search_amount": {
+                    "type": "number"
+                }
+            }
+        },
         "model.AnthropicMessageRequest": {
             "type": "object",
             "properties": {
@@ -9778,6 +11052,9 @@ const docTemplate = `{
                 "priority": {
                     "type": "integer"
                 },
+                "proxy_url": {
+                    "type": "string"
+                },
                 "request_count": {
                     "type": "integer"
                 },
@@ -9798,6 +11075,20 @@ const docTemplate = `{
                 },
                 "used_amount": {
                     "type": "number"
+                }
+            }
+        },
+        "model.ChannelBasicInfo": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
                 }
             }
         },
@@ -9885,7 +11176,8 @@ const docTemplate = `{
                 49,
                 50,
                 51,
-                52
+                52,
+                53
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -9927,13 +11219,23 @@ const docTemplate = `{
                 "ChannelTypeQianfan",
                 "ChannelTypeSangforAICP",
                 "ChannelTypeStreamlake",
-                "ChannelTypeZhipuCoding"
+                "ChannelTypeZhipuCoding",
+                "ChannelTypeFake"
             ]
         },
         "model.ChartData": {
             "type": "object",
             "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
                 "audio_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cache_creation_count": {
                     "type": "integer"
                 },
                 "cache_creation_tokens": {
@@ -9942,20 +11244,38 @@ const docTemplate = `{
                 "cache_hit_count": {
                     "type": "integer"
                 },
+                "cached_amount": {
+                    "type": "number"
+                },
                 "cached_tokens": {
                     "type": "integer"
+                },
+                "claude_long_context": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
                 },
                 "exception_count": {
                     "type": "integer"
                 },
+                "image_input_amount": {
+                    "type": "number"
+                },
                 "image_input_tokens": {
                     "type": "integer"
+                },
+                "image_output_amount": {
+                    "type": "number"
                 },
                 "image_output_tokens": {
                     "type": "integer"
                 },
+                "input_amount": {
+                    "type": "number"
+                },
                 "input_tokens": {
                     "type": "integer"
+                },
+                "output_amount": {
+                    "type": "number"
                 },
                 "output_tokens": {
                     "type": "integer"
@@ -9967,6 +11287,15 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "retry_count": {
+                    "type": "integer"
+                },
+                "service_tier_flex": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "service_tier_priority": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "status_2xx_count": {
                     "type": "integer"
                 },
                 "status_400_count": {
@@ -9984,6 +11313,9 @@ const docTemplate = `{
                 "status_5xx_count": {
                     "type": "integer"
                 },
+                "status_other_count": {
+                    "type": "integer"
+                },
                 "timestamp": {
                     "type": "integer"
                 },
@@ -9997,6 +11329,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "used_amount": {
+                    "type": "number"
+                },
+                "web_search_amount": {
                     "type": "number"
                 },
                 "web_search_count": {
@@ -10110,6 +11445,9 @@ const docTemplate = `{
                 "prompt_cache_key": {
                     "type": "string"
                 },
+                "prompt_cache_retention": {
+                    "type": "string"
+                },
                 "safety_identifier": {
                     "type": "string"
                 },
@@ -10153,7 +11491,16 @@ const docTemplate = `{
         "model.DashboardResponse": {
             "type": "object",
             "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
                 "audio_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cache_creation_count": {
                     "type": "integer"
                 },
                 "cache_creation_tokens": {
@@ -10161,6 +11508,9 @@ const docTemplate = `{
                 },
                 "cache_hit_count": {
                     "type": "integer"
+                },
+                "cached_amount": {
+                    "type": "number"
                 },
                 "cached_tokens": {
                     "type": "integer"
@@ -10177,14 +11527,26 @@ const docTemplate = `{
                         "$ref": "#/definitions/model.ChartData"
                     }
                 },
+                "claude_long_context": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
                 "exception_count": {
                     "type": "integer"
+                },
+                "image_input_amount": {
+                    "type": "number"
                 },
                 "image_input_tokens": {
                     "type": "integer"
                 },
+                "image_output_amount": {
+                    "type": "number"
+                },
                 "image_output_tokens": {
                     "type": "integer"
+                },
+                "input_amount": {
+                    "type": "number"
                 },
                 "input_tokens": {
                     "type": "integer"
@@ -10201,6 +11563,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "output_amount": {
+                    "type": "number"
+                },
                 "output_tokens": {
                     "type": "integer"
                 },
@@ -10216,6 +11581,15 @@ const docTemplate = `{
                 "rpm": {
                     "type": "integer"
                 },
+                "service_tier_flex": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "service_tier_priority": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "status_2xx_count": {
+                    "type": "integer"
+                },
                 "status_400_count": {
                     "type": "integer"
                 },
@@ -10229,6 +11603,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status_5xx_count": {
+                    "type": "integer"
+                },
+                "status_other_count": {
                     "type": "integer"
                 },
                 "total_count": {
@@ -10250,7 +11627,39 @@ const docTemplate = `{
                 "used_amount": {
                     "type": "number"
                 },
+                "web_search_amount": {
+                    "type": "number"
+                },
                 "web_search_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DashboardV3Response": {
+            "type": "object",
+            "properties": {
+                "channels": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "time_series": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TimeSummaryDataV2"
+                    }
+                },
+                "tpm": {
                     "type": "integer"
                 }
             }
@@ -10418,11 +11827,20 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "prompt": {},
+                "prompt_cache_key": {
+                    "type": "string"
+                },
+                "prompt_cache_retention": {
+                    "type": "string"
+                },
                 "response_format": {
                     "$ref": "#/definitions/model.ResponseFormat"
                 },
                 "seed": {
                     "type": "number"
+                },
+                "service_tier": {
+                    "type": "string"
                 },
                 "size": {
                     "type": "string"
@@ -10525,6 +11943,12 @@ const docTemplate = `{
                         "$ref": "#/definitions/model.Log"
                     }
                 },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "total": {
                     "type": "integer"
                 }
@@ -10579,7 +12003,16 @@ const docTemplate = `{
         "model.GroupDashboardResponse": {
             "type": "object",
             "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
                 "audio_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cache_creation_count": {
                     "type": "integer"
                 },
                 "cache_creation_tokens": {
@@ -10587,6 +12020,9 @@ const docTemplate = `{
                 },
                 "cache_hit_count": {
                     "type": "integer"
+                },
+                "cached_amount": {
+                    "type": "number"
                 },
                 "cached_tokens": {
                     "type": "integer"
@@ -10603,14 +12039,26 @@ const docTemplate = `{
                         "$ref": "#/definitions/model.ChartData"
                     }
                 },
+                "claude_long_context": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
                 "exception_count": {
                     "type": "integer"
+                },
+                "image_input_amount": {
+                    "type": "number"
                 },
                 "image_input_tokens": {
                     "type": "integer"
                 },
+                "image_output_amount": {
+                    "type": "number"
+                },
                 "image_output_tokens": {
                     "type": "integer"
+                },
+                "input_amount": {
+                    "type": "number"
                 },
                 "input_tokens": {
                     "type": "integer"
@@ -10627,6 +12075,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "output_amount": {
+                    "type": "number"
+                },
                 "output_tokens": {
                     "type": "integer"
                 },
@@ -10642,6 +12093,15 @@ const docTemplate = `{
                 "rpm": {
                     "type": "integer"
                 },
+                "service_tier_flex": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "service_tier_priority": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "status_2xx_count": {
+                    "type": "integer"
+                },
                 "status_400_count": {
                     "type": "integer"
                 },
@@ -10655,6 +12115,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status_5xx_count": {
+                    "type": "integer"
+                },
+                "status_other_count": {
                     "type": "integer"
                 },
                 "token_names": {
@@ -10680,6 +12143,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "used_amount": {
+                    "type": "number"
+                },
+                "web_search_amount": {
                     "type": "number"
                 },
                 "web_search_count": {
@@ -10794,17 +12260,47 @@ const docTemplate = `{
                 "override_price": {
                     "type": "boolean"
                 },
+                "override_request_body_storage_max_size": {
+                    "type": "boolean"
+                },
+                "override_response_body_storage_max_size": {
+                    "type": "boolean"
+                },
                 "override_retry_times": {
+                    "type": "boolean"
+                },
+                "override_summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "override_summary_service_tier": {
+                    "type": "boolean"
+                },
+                "override_timeout_config": {
                     "type": "boolean"
                 },
                 "price": {
                     "$ref": "#/definitions/model.Price"
+                },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
                 },
                 "retry_times": {
                     "type": "integer"
                 },
                 "rpm": {
                     "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
+                },
+                "timeout_config": {
+                    "$ref": "#/definitions/model.TimeoutConfig"
                 },
                 "tpm": {
                     "type": "integer"
@@ -11066,6 +12562,9 @@ const docTemplate = `{
         "model.Log": {
             "type": "object",
             "properties": {
+                "amount": {
+                    "$ref": "#/definitions/model.Amount"
+                },
                 "channel": {
                     "type": "integer"
                 },
@@ -11105,6 +12604,9 @@ const docTemplate = `{
                 "price": {
                     "$ref": "#/definitions/model.Price"
                 },
+                "prompt_cache_key": {
+                    "type": "string"
+                },
                 "request_at": {
                     "type": "string"
                 },
@@ -11120,6 +12622,9 @@ const docTemplate = `{
                 "retry_times": {
                     "type": "integer"
                 },
+                "service_tier": {
+                    "type": "string"
+                },
                 "token_id": {
                     "type": "integer"
                 },
@@ -11129,11 +12634,11 @@ const docTemplate = `{
                 "ttfb_milliseconds": {
                     "type": "integer"
                 },
+                "upstream_id": {
+                    "type": "string"
+                },
                 "usage": {
                     "$ref": "#/definitions/model.Usage"
-                },
-                "used_amount": {
-                    "type": "number"
                 },
                 "user": {
                     "description": "https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids",
@@ -11274,11 +12779,23 @@ const docTemplate = `{
                 "price": {
                     "$ref": "#/definitions/model.Price"
                 },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
+                },
                 "retry_times": {
                     "type": "integer"
                 },
                 "rpm": {
                     "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
                 },
                 "timeout_config": {
                     "$ref": "#/definitions/model.TimeoutConfig"
@@ -11425,11 +12942,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/model.ResponseStatus"
                 },
                 "summary": {
-                    "description": "For reasoning type",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                    "description": "For reasoning type: []SummaryPart or string"
                 },
                 "type": {
                     "type": "string"
@@ -11540,6 +13053,9 @@ const docTemplate = `{
                 },
                 "output_token_min": {
                     "type": "integer"
+                },
+                "service_tier": {
+                    "type": "string"
                 },
                 "start_time": {
                     "description": "Unix timestamp, 0 means no start limit",
@@ -11899,8 +13415,14 @@ const docTemplate = `{
                 "previous_response_id": {
                     "type": "string"
                 },
+                "prompt_cache_retention": {
+                    "type": "string"
+                },
                 "reasoning": {
                     "$ref": "#/definitions/model.ResponseReasoning"
+                },
+                "service_tier": {
+                    "type": "string"
                 },
                 "status": {
                     "$ref": "#/definitions/model.ResponseStatus"
@@ -11964,7 +13486,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "summary": {
-                    "type": "string"
+                    "description": "string (\"detailed\", \"auto\", \"concise\") or []SummaryPart in response"
                 }
             }
         },
@@ -12077,10 +13599,19 @@ const docTemplate = `{
                 }
             }
         },
-        "model.SummaryDataV2": {
+        "model.SummaryDataSet": {
             "type": "object",
             "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
                 "audio_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cache_creation_count": {
                     "type": "integer"
                 },
                 "cache_creation_tokens": {
@@ -12089,35 +13620,35 @@ const docTemplate = `{
                 "cache_hit_count": {
                     "type": "integer"
                 },
-                "cached_tokens": {
-                    "type": "integer"
+                "cached_amount": {
+                    "type": "number"
                 },
-                "channel_id": {
+                "cached_tokens": {
                     "type": "integer"
                 },
                 "exception_count": {
                     "type": "integer"
                 },
-                "group_id": {
-                    "type": "string"
+                "image_input_amount": {
+                    "type": "number"
                 },
                 "image_input_tokens": {
                     "type": "integer"
                 },
+                "image_output_amount": {
+                    "type": "number"
+                },
                 "image_output_tokens": {
                     "type": "integer"
+                },
+                "input_amount": {
+                    "type": "number"
                 },
                 "input_tokens": {
                     "type": "integer"
                 },
-                "max_rpm": {
-                    "type": "integer"
-                },
-                "max_tpm": {
-                    "type": "integer"
-                },
-                "model": {
-                    "type": "string"
+                "output_amount": {
+                    "type": "number"
                 },
                 "output_tokens": {
                     "type": "integer"
@@ -12129,6 +13660,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "retry_count": {
+                    "type": "integer"
+                },
+                "status_2xx_count": {
                     "type": "integer"
                 },
                 "status_400_count": {
@@ -12144,6 +13678,137 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status_5xx_count": {
+                    "type": "integer"
+                },
+                "status_other_count": {
+                    "type": "integer"
+                },
+                "total_time_milliseconds": {
+                    "type": "integer"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                },
+                "total_ttfb_milliseconds": {
+                    "type": "integer"
+                },
+                "used_amount": {
+                    "type": "number"
+                },
+                "web_search_amount": {
+                    "type": "number"
+                },
+                "web_search_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.SummaryDataV2": {
+            "type": "object",
+            "properties": {
+                "audio_input_amount": {
+                    "type": "number"
+                },
+                "audio_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_creation_amount": {
+                    "type": "number"
+                },
+                "cache_creation_count": {
+                    "type": "integer"
+                },
+                "cache_creation_tokens": {
+                    "type": "integer"
+                },
+                "cache_hit_count": {
+                    "type": "integer"
+                },
+                "cached_amount": {
+                    "type": "number"
+                },
+                "cached_tokens": {
+                    "type": "integer"
+                },
+                "channel_id": {
+                    "type": "integer"
+                },
+                "claude_long_context": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "exception_count": {
+                    "type": "integer"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "image_input_amount": {
+                    "type": "number"
+                },
+                "image_input_tokens": {
+                    "type": "integer"
+                },
+                "image_output_amount": {
+                    "type": "number"
+                },
+                "image_output_tokens": {
+                    "type": "integer"
+                },
+                "input_amount": {
+                    "type": "number"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "max_rpm": {
+                    "type": "integer"
+                },
+                "max_tpm": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "output_amount": {
+                    "type": "number"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "request_count": {
+                    "type": "integer"
+                },
+                "retry_count": {
+                    "type": "integer"
+                },
+                "service_tier_flex": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "service_tier_priority": {
+                    "$ref": "#/definitions/model.SummaryDataSet"
+                },
+                "status_2xx_count": {
+                    "type": "integer"
+                },
+                "status_400_count": {
+                    "type": "integer"
+                },
+                "status_429_count": {
+                    "type": "integer"
+                },
+                "status_4xx_count": {
+                    "type": "integer"
+                },
+                "status_500_count": {
+                    "type": "integer"
+                },
+                "status_5xx_count": {
+                    "type": "integer"
+                },
+                "status_other_count": {
                     "type": "integer"
                 },
                 "timestamp": {
@@ -12162,6 +13827,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "used_amount": {
+                    "type": "number"
+                },
+                "web_search_amount": {
                     "type": "number"
                 },
                 "web_search_count": {

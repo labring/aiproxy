@@ -176,6 +176,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 	}
 
 	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+
 	var imageTasks []*relaymodel.ClaudeContent
 
 	hasToolCalls := false
@@ -231,6 +232,7 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 					content.Text = part.Text
 				case relaymodel.ContentTypeImageURL:
 					content.Type = relaymodel.ClaudeContentTypeImage
+
 					content.Source = &relaymodel.ClaudeImageSource{
 						Type: relaymodel.ClaudeImageSourceTypeURL,
 						URL:  part.ImageURL.URL,

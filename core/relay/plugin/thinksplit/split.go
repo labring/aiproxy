@@ -99,20 +99,29 @@ func (rw *thinkResponseWriter) getThinkSplitter() *splitter.Splitter {
 // ignore WriteHeaderNow
 func (rw *thinkResponseWriter) WriteHeaderNow() {}
 
+func (rw *thinkResponseWriter) writeWithOriginalLength(original, out []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(out)
+	if err != nil {
+		return n, err
+	}
+
+	return len(original), nil
+}
+
 func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 	if rw.done {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 	// For streaming responses, process each chunk
 	node, err := sonic.Get(b)
 	if err != nil || !node.Valid() {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	// Process the chunk
 	respMap, err := node.Map()
 	if err != nil {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	// Check if this is a streaming response chunk
@@ -123,10 +132,10 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 
 		jsonData, err := sonic.Marshal(respMap)
 		if err != nil {
-			return rw.ResponseWriter.Write(b)
+			return rw.writeWithOriginalLength(b, b)
 		}
 
-		return rw.ResponseWriter.Write(jsonData)
+		return rw.writeWithOriginalLength(b, jsonData)
 	}
 
 	rw.done = true
@@ -134,21 +143,21 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 
 	jsonData, err := sonic.Marshal(respMap)
 	if err != nil {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	if rw.ResponseWriter.Header().Get("Content-Length") != "" {
 		rw.ResponseWriter.Header().Set("Content-Length", strconv.Itoa(len(jsonData)))
 	}
 
-	return rw.ResponseWriter.Write(jsonData)
+	return rw.writeWithOriginalLength(b, jsonData)
 }
 
 func (rw *thinkResponseWriter) WriteString(s string) (int, error) {
 	return rw.Write(conv.StringToBytes(s))
 }
 
-// renderCallback maybe reuse data, so don't modify data
+// StreamSplitThink renderCallback maybe reuse data, so don't modify data
 func StreamSplitThink(data map[string]any, thinkSplitter *splitter.Splitter) (done bool) {
 	choices, ok := data["choices"].([]any)
 	// only support one choice

@@ -33,6 +33,9 @@ const pluginSchema = z.object({
         add_cache_hit_header: z.boolean().optional(),
         cache_hit_header: z.string().optional(),
     }).optional(),
+    cachefollow: z.object({
+        enable: z.boolean(),
+    }).optional(),
     "web-search": z.object({
         enable: z.boolean(),
         force_search: z.boolean().optional(),
