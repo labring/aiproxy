@@ -289,6 +289,22 @@ if docker ps -a --format '{{.Names}}' | grep -q '^aiproxy-canary$'; then
   docker rm -f aiproxy-canary 2>/dev/null || true
 fi
 
+# Cross-check NODE_TYPE vs .env domain — catch misconfigurations early
+NODE_TYPE="${NODE_TYPE:-domestic}"
+if [[ "${NODE_TYPE}" == "overseas" ]]; then
+  if grep -qE 'ai\.paigod\.work|apiproxy\.paigod\.work' "${ENV_FILE_PATH}" 2>/dev/null; then
+    warn "⚠ Overseas node .env contains domestic domain (paigod.work)."
+    warn "  Expected pplabs.tech domains for overseas deployment."
+    warn "  Check FEISHU_REDIRECT_URI, ENTERPRISE_BASE_URL etc. in ${ENV_FILE_PATH}"
+  fi
+elif [[ "${NODE_TYPE}" == "domestic" ]]; then
+  if grep -qE 'ai\.pplabs\.tech|apiproxy\.pplabs\.tech' "${ENV_FILE_PATH}" 2>/dev/null; then
+    warn "⚠ Domestic node .env contains overseas domain (pplabs.tech)."
+    warn "  Expected paigod.work domains for domestic deployment."
+    warn "  Check FEISHU_REDIRECT_URI, ENTERPRISE_BASE_URL etc. in ${ENV_FILE_PATH}"
+  fi
+fi
+
 pass "Pre-flight checks passed"
 
 # ══════════════════════════════════════════════════════════════
@@ -330,9 +346,20 @@ else
 fi
 
 # Step 1c: Build new image
-info "Building Docker image..."
-docker build -t aiproxy:local --no-cache .
-pass "Docker image built: aiproxy:local"
+BUILD_ARGS=""
+if [[ "${NODE_TYPE}" == "overseas" ]]; then
+  BUILD_ARGS="--build-arg USE_CN_MIRROR=false"
+  info "Building Docker image (overseas — official mirrors)..."
+else
+  info "Building Docker image (domestic — CN mirrors)..."
+fi
+docker build -t aiproxy:local --no-cache ${BUILD_ARGS} .
+# Tag with Git SHA for traceability
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+if [[ "${GIT_SHA}" != "unknown" ]]; then
+  docker tag aiproxy:local "aiproxy:sha-${GIT_SHA}"
+fi
+pass "Docker image built: aiproxy:local (sha-${GIT_SHA})"
 
 # Step 1d: Verify image
 info "Verifying image contents..."
@@ -489,6 +516,12 @@ sudo rm -f "${UPSTREAM_CONF}.bak"
 # Reset trap state — successful deploy
 CANARY_STARTED=0
 TRAFFIC_SWITCHED=0
+
+# ── Post-deploy cleanup check ────────────────────────────────
+if [[ -f "${SCRIPT_DIR}/post-deploy-cleanup.sh" ]]; then
+  info "Running post-deploy disk cleanup check..."
+  bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto || true
+fi
 
 # ── Summary ───────────────────────────────────────────────────
 DEPLOY_END=$(date +%s)

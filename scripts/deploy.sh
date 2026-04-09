@@ -217,6 +217,12 @@ else
   warn "Strongly recommended: ADMIN_KEY=xxx bash scripts/deploy.sh"
 fi
 
+# ── Post-deploy cleanup check ─────────────────────────────────
+if [[ -f "${SCRIPT_DIR}/post-deploy-cleanup.sh" ]]; then
+  info "Running post-deploy disk cleanup check..."
+  bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto || true
+fi
+
 # ── Summary ────────────────────────────────────────────────────
 DEPLOY_END=$(date +%s)
 DEPLOY_DURATION=$((DEPLOY_END - DEPLOY_START))
