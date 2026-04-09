@@ -7,6 +7,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -22,6 +23,17 @@ type Timeout struct {
 
 func NewTimeoutPlugin() plugin.Plugin {
 	return &Timeout{}
+}
+
+// isPassthroughChannel returns true for channels that embed the passthrough adaptor.
+// Update this when adding new passthrough-based adaptors.
+func isPassthroughChannel(chType model.ChannelType) bool {
+	switch chType {
+	case model.ChannelTypePPIO, model.ChannelTypePPIOMultimodal, model.ChannelTypeNovita:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t *Timeout) ConvertRequest(
@@ -59,8 +71,12 @@ func (t *Timeout) ConvertRequest(
 		mode.Completions,
 		mode.Responses,
 		mode.Anthropic:
-		stream, _ = isStream(req)
+		// Skip TTFB heuristic for passthrough; ModelConfig override (below) still applies.
+		if isPassthroughChannel(meta.Channel.Type) {
+			break
+		}
 
+		stream, _ = isStream(req)
 		inputTokens := meta.RequestUsage.InputTokens
 		if stream {
 			switch {
