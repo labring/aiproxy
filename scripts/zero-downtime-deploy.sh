@@ -38,7 +38,7 @@ ENV_FILE_PATH="/data/aiproxy/.env"
 UPSTREAM_CONF="/etc/nginx/conf.d/aiproxy-upstream.conf"
 LOCK_FILE="/data/aiproxy/.deploy.lock"
 DRAIN_TIMEOUT=600
-HEALTH_TIMEOUT=90
+HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-90}
 STABILIZE_WAIT=10
 
 # ── Flags ─────────────────────────────────────────────────────
