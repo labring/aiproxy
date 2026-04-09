@@ -168,12 +168,17 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		entries = append(entries, entry)
 	}
 
-	// Sort: by used_amount DESC, then by user_name ASC for zero-usage users
-	sort.Slice(entries, func(i, j int) bool {
+	// Sort: by used_amount DESC, then by user_name ASC, then by group_id ASC
+	// for deterministic ordering. Use SliceStable to guarantee consistent results
+	// across requests (map iteration order is random in Go).
+	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].UsedAmount != entries[j].UsedAmount {
 			return entries[i].UsedAmount > entries[j].UsedAmount
 		}
-		return entries[i].UserName < entries[j].UserName
+		if entries[i].UserName != entries[j].UserName {
+			return entries[i].UserName < entries[j].UserName
+		}
+		return entries[i].GroupID < entries[j].GroupID
 	})
 
 	// Apply limit
@@ -225,8 +230,13 @@ func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]Department
 		})
 	}
 
-	// Sort by used_amount descending
-	sortByUsedAmountDesc(entries)
+	// Sort by used_amount DESC, then department_id ASC for deterministic ordering
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].UsedAmount != entries[j].UsedAmount {
+			return entries[i].UsedAmount > entries[j].UsedAmount
+		}
+		return entries[i].DepartmentID < entries[j].DepartmentID
+	})
 
 	if len(entries) > limit {
 		entries = entries[:limit]
@@ -240,10 +250,3 @@ func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]Department
 	return entries, nil
 }
 
-func sortByUsedAmountDesc(entries []DepartmentRankingEntry) {
-	for i := 1; i < len(entries); i++ {
-		for j := i; j > 0 && entries[j].UsedAmount > entries[j-1].UsedAmount; j-- {
-			entries[j], entries[j-1] = entries[j-1], entries[j]
-		}
-	}
-}

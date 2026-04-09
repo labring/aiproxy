@@ -260,13 +260,17 @@ export default function EnterpriseRanking() {
     const level2Departments = useMemo(() => deptLevels?.level2_departments ?? [], [deptLevels])
 
     const { data: rankingData, isLoading } = useQuery({
-        queryKey: ["enterprise", "ranking", start, end, departmentFilter, limit],
-        queryFn: () => enterpriseApi.getUserRanking(departmentFilter, limit, start, end),
+        queryKey: ["enterprise", "ranking", start, end, departmentFilter],
+        queryFn: () => enterpriseApi.getUserRanking(departmentFilter, 0, start, end),
     })
 
     const rows: RankingRow[] = useMemo(
-        () => (rankingData?.ranking || []).map(deriveRow),
-        [rankingData],
+        () => {
+            const raw = rankingData?.ranking || []
+            const sliced = limit > 0 && raw.length > limit ? raw.slice(0, limit) : raw
+            return sliced.map(deriveRow)
+        },
+        [rankingData, limit],
     )
 
     const sortedRows = useMemo(() => {
