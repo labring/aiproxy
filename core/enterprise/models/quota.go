@@ -50,7 +50,7 @@ type QuotaPolicy struct {
 	Tier2BlockedModels string `json:"tier2_blocked_models" gorm:"size:1024;default:''"`
 	Tier3BlockedModels string `json:"tier3_blocked_models" gorm:"size:1024;default:''"`
 
-	// Price-based model blocking: block models whose input/output price (¥/1K tokens)
+	// Price-based model blocking: block models whose input/output price (¥/M tokens)
 	// exceeds the threshold. Condition controls how thresholds combine ("and"/"or").
 	// Threshold 0 = that dimension disabled. Both 0 = rule inactive.
 	Tier2PriceInputThreshold  float64 `json:"tier2_price_input_threshold"  gorm:"default:0"`
@@ -116,7 +116,7 @@ func (p *QuotaPolicy) IsModelBlockedAtTier(tier int, model string) bool {
 }
 
 // IsModelBlockedByPrice checks whether a model should be blocked at the given
-// tier based on its input/output price (¥/1K tokens).
+// tier based on its input/output price (¥/M tokens, normalized by caller).
 func (p *QuotaPolicy) IsModelBlockedByPrice(tier int, inputPrice, outputPrice float64) bool {
 	var inThresh, outThresh float64
 	var cond string

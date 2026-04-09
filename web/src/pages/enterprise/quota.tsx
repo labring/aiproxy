@@ -167,7 +167,7 @@ function PriceBlockingRule({
             <p className="text-xs text-muted-foreground mb-2">{t("enterprise.quota.priceBlockingHint")}</p>
             <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
                 <div>
-                    <Label className="text-xs">Input (¥/1K)</Label>
+                    <Label className="text-xs">Input (¥/M)</Label>
                     <Input
                         type="number"
                         min={0}
@@ -191,7 +191,7 @@ function PriceBlockingRule({
                     </SelectContent>
                 </Select>
                 <div>
-                    <Label className="text-xs">Output (¥/1K)</Label>
+                    <Label className="text-xs">Output (¥/M)</Label>
                     <Input
                         type="number"
                         min={0}

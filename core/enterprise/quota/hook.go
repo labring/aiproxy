@@ -163,12 +163,13 @@ func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, reques
 
 	usageRatio := computeUsageRatio(token)
 
-	// Resolve model pricing once for price-based blocking
+	// Resolve model pricing once for price-based blocking.
+	// Normalize to ¥/M tokens so thresholds match the "my access" model price display.
 	var inputPrice, outputPrice float64
 	if mc := model.LoadModelCaches(); mc != nil {
 		if cfg, ok := mc.ModelConfig.GetModelConfig(requestModel); ok {
-			inputPrice = float64(cfg.Price.InputPrice)
-			outputPrice = float64(cfg.Price.OutputPrice)
+			inputPrice = float64(cfg.Price.InputPrice) / float64(cfg.Price.GetInputPriceUnit()) * 1e6
+			outputPrice = float64(cfg.Price.OutputPrice) / float64(cfg.Price.GetOutputPriceUnit()) * 1e6
 		}
 	}
 
