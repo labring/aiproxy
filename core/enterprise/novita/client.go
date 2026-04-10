@@ -107,13 +107,16 @@ func (c *NovitaClient) FetchModels(ctx context.Context) ([]NovitaModel, error) {
 	return modelsResp.Data, nil
 }
 
-// FetchAllModels fetches the full model catalog via the Novita management API.
-// Requires a management token with extended access.
-func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
-	defer cancel()
+// novitaMultimodalModelTypes lists the mgmt API model_type values for non-chat
+// models that require separate requests (same approach as PPIO).
+var novitaMultimodalModelTypes = []string{"embedding", "image", "video", "audio"}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, novitaMgmtEndpoint, nil)
+// fetchMgmtModels calls the Novita management model-list API with the given
+// query string and returns the parsed model slice.
+func (c *NovitaClient) fetchMgmtModels(ctx context.Context, mgmtToken, query string) ([]NovitaModelV2, error) {
+	url := novitaMgmtEndpoint + query
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -146,6 +149,47 @@ func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]
 	}
 
 	return mgmtResp.Data, nil
+}
+
+// FetchAllModels fetches the full model catalog (including pa/ closed-source models)
+// via the Novita management API using the mgmt console token.
+//
+// The default query only returns open-source models. ?visibility=1 includes
+// closed-source pa/ models (e.g. pa/gpt-5.4, pa/claude-opus-4-6).
+// Non-chat types (embedding, image, video, audio) require separate requests.
+func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
+	defer cancel()
+
+	// Fetch chat models (the bulk of the catalog, including pa/ closed-source).
+	allModels, err := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1")
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a set of already-fetched model IDs to avoid duplicates.
+	seen := make(map[string]struct{}, len(allModels))
+	for _, m := range allModels {
+		seen[m.ID] = struct{}{}
+	}
+
+	// Fetch each non-chat type separately and merge.
+	for _, modelType := range novitaMultimodalModelTypes {
+		extra, extraErr := c.fetchMgmtModels(ctx, mgmtToken, "?model_type="+modelType)
+		if extraErr != nil {
+			log.Printf("Novita sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
+			continue
+		}
+
+		for _, m := range extra {
+			if _, exists := seen[m.ID]; !exists {
+				seen[m.ID] = struct{}{}
+				allModels = append(allModels, m)
+			}
+		}
+	}
+
+	return allModels, nil
 }
 
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs

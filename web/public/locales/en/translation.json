@@ -356,6 +356,7 @@
     "myAccess": {
       "title": "My Access",
       "baseUrl": "Base URL",
+      "baseUrlHint": "See channel-specific endpoint URLs in the model list below",
       "copied": "Copied to clipboard",
       "apiKeys": "API Key Management",
       "createKey": "Create Key",

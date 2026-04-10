@@ -3,11 +3,13 @@
 package enterprise
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -214,10 +216,31 @@ type ModelGroupInfo struct {
 }
 
 type MyAccessResponse struct {
-	BaseURL     string           `json:"base_url"`
-	GroupID     string           `json:"group_id"`
-	Tokens      []MyTokenInfo    `json:"tokens"`
-	ModelGroups []ModelGroupInfo `json:"model_groups"`
+	BaseURL       string            `json:"base_url"`
+	OwnerBaseURLs map[string]string `json:"owner_base_urls,omitempty"`
+	GroupID       string            `json:"group_id"`
+	Tokens        []MyTokenInfo     `json:"tokens"`
+	ModelGroups   []ModelGroupInfo  `json:"model_groups"`
+}
+
+var (
+	ownerBaseURLsOnce sync.Once
+	ownerBaseURLsMap  map[string]string
+)
+
+func loadOwnerBaseURLs() map[string]string {
+	ownerBaseURLsOnce.Do(func() {
+		raw := os.Getenv("ENTERPRISE_BASE_URLS")
+		if raw == "" {
+			return
+		}
+		var m map[string]string
+		if err := json.Unmarshal([]byte(raw), &m); err != nil {
+			return
+		}
+		ownerBaseURLsMap = m
+	})
+	return ownerBaseURLsMap
 }
 
 // GetMyAccess returns the user's access info including tokens and available models.
@@ -409,10 +432,11 @@ func GetMyAccess(c *gin.Context) {
 	}
 
 	middleware.SuccessResponse(c, MyAccessResponse{
-		BaseURL:     baseURL,
-		GroupID:     groupID,
-		Tokens:      tokenInfos,
-		ModelGroups: modelGroups,
+		BaseURL:       baseURL,
+		OwnerBaseURLs: loadOwnerBaseURLs(),
+		GroupID:       groupID,
+		Tokens:        tokenInfos,
+		ModelGroups:   modelGroups,
 	})
 }
 

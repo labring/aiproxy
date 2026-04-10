@@ -766,11 +766,11 @@ const SORT_COLUMNS: { field: ModelSortField; labelKey: string }[] = [
     { field: "output_price", labelKey: "enterprise.myAccess.outputPrice" },
 ]
 
-function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; baseUrl: string }) {
+function ModelGroupSection({ groups, baseUrl, ownerBaseUrls }: { groups: ModelGroupInfo[]; baseUrl: string; ownerBaseUrls?: Record<string, string> }) {
     const { t } = useTranslation()
     const [search, setSearch] = useState("")
     const [endpointFilter, setEndpointFilter] = useState("all")
-    const [openOwners, setOpenOwners] = useState<Set<string>>(() => new Set(groups.map(g => g.owner)))
+    const [openOwners, setOpenOwners] = useState<Set<string>>(() => new Set())
 
     const [sortField, setSortField] = useState<ModelSortField | null>(null)
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
@@ -873,19 +873,35 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                 {filteredGroups.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">{t("enterprise.myAccess.noModels")}</p>
                 ) : (
-                    filteredGroups.map(group => (
+                    filteredGroups.map(group => {
+                        const ownerUrl = ownerBaseUrls?.[group.owner] || baseUrl
+                        return (
                         <Collapsible
                             key={group.owner}
                             open={openOwners.has(group.owner)}
                             onOpenChange={() => toggleOwner(group.owner)}
                         >
-                            <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md hover:bg-muted text-sm font-medium">
-                                {openOwners.has(group.owner) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                <span>{ownerDisplayName(group.owner)}</span>
-                                <Badge variant="secondary" className="ml-1 text-xs">
-                                    {t("enterprise.myAccess.modelCount", { count: group.models.length })}
-                                </Badge>
-                            </CollapsibleTrigger>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted">
+                                <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
+                                    {openOwners.has(group.owner) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                    <span>{ownerDisplayName(group.owner)}</span>
+                                    <Badge variant="secondary" className="ml-1 text-xs">
+                                        {t("enterprise.myAccess.modelCount", { count: group.models.length })}
+                                    </Badge>
+                                </CollapsibleTrigger>
+                                {ownerBaseUrls?.[group.owner] && (
+                                    <div className="ml-auto flex items-center gap-1.5">
+                                        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">{ownerUrl}</code>
+                                        <button
+                                            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(ownerUrl, t("enterprise.myAccess.copied")) }}
+                                            title={t("enterprise.myAccess.copyUrl")}
+                                        >
+                                            <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                             <CollapsibleContent>
                                 <div className="ml-6 mt-1 border rounded-md overflow-x-auto">
                                     <table className="w-full text-sm">
@@ -920,7 +936,7 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                                             {m.supported_endpoints?.length > 0 ? (
                                                                 m.supported_endpoints.map(ep => {
                                                                     const info = ENDPOINT_LABELS[ep]
-                                                                    const fullUrl = getEndpointUrl(baseUrl, ep)
+                                                                    const fullUrl = getEndpointUrl(ownerUrl, ep)
                                                                     return (
                                                                         <button
                                                                             key={ep}
@@ -962,7 +978,7 @@ function ModelGroupSection({ groups, baseUrl }: { groups: ModelGroupInfo[]; base
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>
-                    ))
+                    )})
                 )}
             </CardContent>
         </Card>
@@ -1323,8 +1339,10 @@ export default function MyAccessPage() {
     }
 
     const baseUrl = data?.base_url || ""
+    const ownerBaseUrls = data?.owner_base_urls
     const tokens = data?.tokens || []
     const modelGroups = data?.model_groups || []
+    const hasMultipleUrls = ownerBaseUrls && Object.keys(ownerBaseUrls).length > 1
 
     return (
         <div className="p-6 space-y-6 max-w-6xl">
@@ -1353,6 +1371,11 @@ export default function MyAccessPage() {
                             {t("enterprise.myAccess.copyUrl")}
                         </Button>
                     </div>
+                    {hasMultipleUrls && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                            {t("enterprise.myAccess.baseUrlHint" as never)}
+                        </p>
+                    )}
                 </CardContent>
             </Card>
 
@@ -1423,11 +1446,11 @@ export default function MyAccessPage() {
                 </CardContent>
             </Card>
 
+            {/* Available Models */}
+            <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} ownerBaseUrls={ownerBaseUrls} />
+
             {/* Quick Start */}
             <QuickStartSection baseUrl={baseUrl} />
-
-            {/* Available Models */}
-            <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} />
 
             {/* Request History */}
             <RequestLogsSection />
