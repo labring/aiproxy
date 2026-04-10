@@ -80,10 +80,10 @@ for entry in "${NODES[@]}"; do
       -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
       "${HOST}" \
     "cd ${REPO_PATH} && \
-     sudo GIT_SSH_COMMAND='ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no' \
-     ADMIN_KEY='${ADMIN_KEY}' \
-     NODE_TYPE='${NODE_TYPE}' \
-     bash scripts/deploy.sh ${DEPLOY_ARGS}"; then
+     sudo bash -c 'export GIT_SSH_COMMAND=\"ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no\" && \
+     export ADMIN_KEY=\"${ADMIN_KEY}\" && \
+     export NODE_TYPE=\"${NODE_TYPE}\" && \
+     bash scripts/deploy.sh ${DEPLOY_ARGS}'"; then
     pass "${NODE_TYPE} node deployed successfully"
     SUCCEEDED+=("${NODE_TYPE}:${HOST}")
 
