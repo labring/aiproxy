@@ -104,8 +104,15 @@ var ownerPriority = map[model.ModelOwner]int{
 
 // CanClaimOwnership returns true if newOwner can take ownership from existingOwner.
 // A provider can claim if it has strictly higher priority than the current owner.
+// Note: unknown owners have implicit priority 0 (map zero-value).
 func CanClaimOwnership(existingOwner, newOwner model.ModelOwner) bool {
 	return ownerPriority[newOwner] > ownerPriority[existingOwner]
+}
+
+// ShouldSkipOwnership returns true when the caller (newOwner) must NOT modify an
+// existing model because it belongs to a higher-priority provider.
+func ShouldSkipOwnership(existingOwner, newOwner model.ModelOwner) bool {
+	return existingOwner != newOwner && !CanClaimOwnership(existingOwner, newOwner)
 }
 
 // AdjustTierBounds returns the effective [minTokens, maxTokens] for a tiered-billing

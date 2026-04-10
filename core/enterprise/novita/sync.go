@@ -124,7 +124,9 @@ func ExecuteSync(
 
 	remoteIDs := make([]string, 0, len(allModels))
 	for i := range allModels {
-		remoteIDs = append(remoteIDs, allModels[i].ID)
+		if allModels[i].IsAvailable() {
+			remoteIDs = append(remoteIDs, allModels[i].ID)
+		}
 	}
 
 	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, remoteIDs)
@@ -256,12 +258,10 @@ func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) er
 		tpm = int64(m.TPM)
 	}
 
-	// Check if model already exists (possibly with a different owner).
-	// Novita has lower priority than PPIO, so it cannot claim PPIO-owned models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
-		if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
-			return nil // lower-priority provider cannot claim
+		if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerNovita) {
+			return nil
 		}
 
 		existing.Owner = model.ModelOwnerNovita
@@ -296,8 +296,7 @@ func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) er
 		return err
 	}
 
-	// Only update models we own or can claim via priority
-	if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
+	if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerNovita) {
 		return nil
 	}
 
@@ -729,7 +728,7 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 		var existing model.ModelConfig
 		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
 			// Only update if we own or can claim via priority
-			if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
+			if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerNovita) {
 				continue
 			}
 

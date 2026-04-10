@@ -215,7 +215,9 @@ func ExecuteSync( //nolint:cyclop
 
 	remoteIDs := make([]string, 0, len(allModels))
 	for i := range allModels {
-		remoteIDs = append(remoteIDs, allModels[i].ID)
+		if allModels[i].IsAvailable() {
+			remoteIDs = append(remoteIDs, allModels[i].ID)
+		}
 	}
 
 	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, remoteIDs)
@@ -415,7 +417,7 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 		var existing model.ModelConfig
 		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
 			// Only update if we own or can claim via priority
-			if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+			if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerPPIO) {
 				continue
 			}
 
@@ -751,12 +753,10 @@ func RecordSyncHistory(opts SyncOptions, result *SyncResult) error {
 func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 	configData := synccommon.ToModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 
-	// Check if model already exists (possibly with a different owner).
-	// PPIO has higher priority than Novita, so it can claim cross-owner models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", ppioModel.ID).First(&existing).Error; err == nil {
-		if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
-			return nil // lower-priority provider cannot claim
+		if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerPPIO) {
+			return nil
 		}
 
 		existing.Owner = model.ModelOwnerPPIO
@@ -822,12 +822,10 @@ func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 		tpm = int64(m.TPM)
 	}
 
-	// Check if model already exists (possibly with a different owner).
-	// PPIO has higher priority than Novita, so it can claim cross-owner models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
-		if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
-			return nil // lower-priority provider cannot claim
+		if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerPPIO) {
+			return nil
 		}
 
 		existing.Owner = model.ModelOwnerPPIO
@@ -863,8 +861,7 @@ func updateModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 		return err
 	}
 
-	// Only update models we own or can claim via priority
-	if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+	if synccommon.ShouldSkipOwnership(existing.Owner, model.ModelOwnerPPIO) {
 		return nil
 	}
 
