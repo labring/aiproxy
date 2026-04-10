@@ -43,6 +43,14 @@ func TestCacheFollowStoreID(t *testing.T) {
 	assert.NotEqual(t, "cachefollow:gpt-5", id)
 }
 
+func TestCacheFollowUserStoreID(t *testing.T) {
+	t.Parallel()
+
+	id := CacheFollowUserStoreID("gpt-5", "user-123", CacheKeyTypeStable)
+	assert.Contains(t, id, "cachefollow_user:")
+	assert.NotEqual(t, "cachefollow_user:user-123", id)
+}
+
 func TestGetStoreIgnoresExpired(t *testing.T) {
 	withTestStoreDB(t, func() {
 		_, err := SaveStore(&StoreV2{
@@ -160,7 +168,7 @@ func TestCacheGetStoreCachesNotFoundLocally(t *testing.T) {
 
 func TestSaveStoreWithOptionSkipsUpdateWithinMinInterval(t *testing.T) {
 	withTestStoreDB(t, func() {
-		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeLast)
+		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeRecent)
 		createdAt := time.Now().Add(-5 * time.Second)
 
 		initial, err := SaveStore(&StoreV2{
@@ -237,7 +245,7 @@ func TestSaveIfNotExistStoreUsesCachedExistingFastPath(t *testing.T) {
 
 func TestSaveStoreWithOptionUsesCachedFastPathWithinMinInterval(t *testing.T) {
 	withTestStoreDB(t, func() {
-		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeLast)
+		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeRecent)
 		now := time.Now()
 
 		existing, err := SaveStore(&StoreV2{
@@ -287,7 +295,7 @@ func TestSaveStoreWithOptionUsesCachedFastPathWithinMinInterval(t *testing.T) {
 
 func TestSaveStoreWithOptionUpdatesAfterMinIntervalAndPreservesCreatedAt(t *testing.T) {
 	withTestStoreDB(t, func() {
-		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeLast)
+		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeRecent)
 		createdAt := time.Now().Add(-time.Minute)
 		initialUpdatedAt := time.Now().Add(-30 * time.Second)
 

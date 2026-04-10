@@ -88,7 +88,7 @@ func (d doResponseFunc) DoResponse(
 	return d.fn(meta, store, c, resp)
 }
 
-func TestDoResponseRecordsPromptCacheStoreOnly(t *testing.T) {
+func TestDoResponseRecordsPromptAndGenericMappingsForResponses(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -142,8 +142,8 @@ func TestDoResponseRecordsPromptCacheStoreOnly(t *testing.T) {
 
 	require.Nil(t, relayErr)
 	assert.Equal(t, int64(6), int64(result.Usage.CachedTokens))
-	require.Len(t, store.savedIfNotExist, 1)
-	require.Len(t, store.saved, 1)
+	require.Len(t, store.savedIfNotExist, 2)
+	require.Len(t, store.saved, 2)
 	assert.Equal(
 		t,
 		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeStable),
@@ -151,8 +151,18 @@ func TestDoResponseRecordsPromptCacheStoreOnly(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeLast),
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
+		store.savedIfNotExist[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
+		store.saved[1].ID,
 	)
 	assert.True(t, store.savedIfNotExist[0].ExpiresAt.After(start.Add(24*time.Hour-time.Second)))
 	assert.True(t, store.savedIfNotExist[0].ExpiresAt.Before(end.Add(24*time.Hour+time.Second)))
@@ -217,16 +227,93 @@ func TestDoResponseRecordsCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeLast),
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
 	)
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.After(start.Add(defaultStoreTTL-time.Second)))
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.Before(end.Add(defaultStoreTTL+time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(defaultStoreTTL-time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultStoreTTL+time.Second)))
+	assert.True(
+		t,
+		store.savedIfNotExist[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)),
+	)
+	assert.True(
+		t,
+		store.savedIfNotExist[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)),
+	)
+	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)))
+	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)))
 }
 
-func TestDoResponseRecordsPromptCacheStoreForChatCompletions(t *testing.T) {
+func TestDoResponseRecordsUserAndGenericCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		nil,
+	)
+
+	store := &recordingStore{}
+	requestMeta := &meta.Meta{
+		Mode:        mode.ChatCompletions,
+		OriginModel: "gpt-5",
+		User:        "user-1",
+		ModelConfig: model.ModelConfig{
+			Model: "gpt-5",
+			Plugin: map[string]map[string]any{
+				PluginName: {"enable": true},
+			},
+		},
+		Group:   model.GroupCache{ID: "group-1"},
+		Token:   model.TokenCache{ID: 7},
+		Channel: meta.ChannelMeta{ID: 9},
+	}
+
+	_, relayErr := (&Plugin{}).DoResponse(
+		requestMeta,
+		store,
+		c,
+		&http.Response{StatusCode: http.StatusOK},
+		doResponseFunc{
+			fn: func(_ *meta.Meta, _ adaptor.Store, c *gin.Context, _ *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+				c.Status(http.StatusOK)
+				_, _ = c.Writer.Write([]byte(`{"id":"chatcmpl-1"}`))
+
+				return adaptor.DoResponseResult{
+					Usage: model.Usage{CachedTokens: 4},
+				}, nil
+			},
+		},
+	)
+
+	require.Nil(t, relayErr)
+	require.Len(t, store.savedIfNotExist, 2)
+	require.Len(t, store.saved, 2)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeStable),
+		store.savedIfNotExist[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
+		store.savedIfNotExist[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeRecent),
+		store.saved[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
+		store.saved[1].ID,
+	)
+}
+
+func TestDoResponseRecordsPromptAndGenericMappingsForChatCompletions(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -275,8 +362,8 @@ func TestDoResponseRecordsPromptCacheStoreForChatCompletions(t *testing.T) {
 	end := time.Now()
 
 	require.Nil(t, relayErr)
-	require.Len(t, store.savedIfNotExist, 1)
-	require.Len(t, store.saved, 1)
+	require.Len(t, store.savedIfNotExist, 2)
+	require.Len(t, store.saved, 2)
 	assert.Equal(
 		t,
 		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeStable),
@@ -284,16 +371,32 @@ func TestDoResponseRecordsPromptCacheStoreForChatCompletions(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeLast),
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
+		store.savedIfNotExist[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
 	)
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.After(start.Add(defaultStoreTTL-time.Second)))
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.Before(end.Add(defaultStoreTTL+time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(defaultStoreTTL-time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultStoreTTL+time.Second)))
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
+		store.saved[1].ID,
+	)
+	assert.True(
+		t,
+		store.savedIfNotExist[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)),
+	)
+	assert.True(
+		t,
+		store.savedIfNotExist[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)),
+	)
+	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)))
+	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)))
 }
 
-func TestDoResponseSkipsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupportedPromptStoreMode(
+func TestDoResponseRecordsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupportedPromptStoreMode(
 	t *testing.T,
 ) {
 	t.Parallel()
@@ -313,6 +416,7 @@ func TestDoResponseSkipsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupportedP
 		Mode:           mode.Gemini,
 		OriginModel:    "gemini-2.5-pro",
 		PromptCacheKey: "cache-key",
+		User:           "user-1",
 		ModelConfig: model.ModelConfig{
 			Model: "gemini-2.5-pro",
 			Plugin: map[string]map[string]any{
@@ -342,8 +446,28 @@ func TestDoResponseSkipsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupportedP
 	)
 
 	require.Nil(t, relayErr)
-	assert.Empty(t, store.savedIfNotExist)
-	assert.Empty(t, store.saved)
+	require.Len(t, store.savedIfNotExist, 2)
+	require.Len(t, store.saved, 2)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gemini-2.5-pro", "user-1", model.CacheKeyTypeStable),
+		store.savedIfNotExist[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gemini-2.5-pro", model.CacheKeyTypeStable),
+		store.savedIfNotExist[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gemini-2.5-pro", "user-1", model.CacheKeyTypeRecent),
+		store.saved[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gemini-2.5-pro", model.CacheKeyTypeRecent),
+		store.saved[1].ID,
+	)
 }
 
 func TestDoResponseRecordsWhenOnlyCacheCreationTokensExist(t *testing.T) {
@@ -401,8 +525,94 @@ func TestDoResponseRecordsWhenOnlyCacheCreationTokensExist(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeLast),
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
+	)
+}
+
+func TestDoResponseRecordsPromptUserAndGenericMappingsTogether(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/responses", nil)
+
+	store := &recordingStore{}
+	requestMeta := &meta.Meta{
+		Mode:           mode.Responses,
+		OriginModel:    "gpt-5",
+		PromptCacheKey: "cache-key",
+		User:           "user-1",
+		ModelConfig: model.ModelConfig{
+			Model: "gpt-5",
+			Plugin: map[string]map[string]any{
+				PluginName: {"enable": true},
+			},
+		},
+		Group:   model.GroupCache{ID: "group-1"},
+		Token:   model.TokenCache{ID: 7},
+		Channel: meta.ChannelMeta{ID: 9},
+	}
+
+	_, relayErr := (&Plugin{}).DoResponse(
+		requestMeta,
+		store,
+		c,
+		&http.Response{StatusCode: http.StatusOK},
+		doResponseFunc{
+			fn: func(_ *meta.Meta, _ adaptor.Store, c *gin.Context, _ *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+				c.Status(http.StatusOK)
+				_, _ = c.Writer.Write(
+					[]byte(
+						`data: {"type":"response.created","response":{"prompt_cache_retention":"24h"}}` + "\n\n",
+					),
+				)
+				_, _ = c.Writer.Write(
+					[]byte(
+						`data: {"type":"response.completed","response":{"usage":{"input_tokens_details":{"cached_tokens":6}}}}` + "\n\n",
+					),
+				)
+
+				return adaptor.DoResponseResult{
+					Usage: model.Usage{CachedTokens: 6},
+				}, nil
+			},
+		},
+	)
+
+	require.Nil(t, relayErr)
+	require.Len(t, store.savedIfNotExist, 3)
+	require.Len(t, store.saved, 3)
+	assert.Equal(
+		t,
+		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeStable),
+		store.savedIfNotExist[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeStable),
+		store.savedIfNotExist[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
+		store.savedIfNotExist[2].ID,
+	)
+	assert.Equal(
+		t,
+		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeRecent),
+		store.saved[0].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeRecent),
+		store.saved[1].ID,
+	)
+	assert.Equal(
+		t,
+		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
+		store.saved[2].ID,
 	)
 }
 
@@ -543,7 +753,7 @@ func TestDoResponseSkipsWhenPluginDisabled(t *testing.T) {
 	assert.Empty(t, store.saved)
 }
 
-func TestDoResponseSkipsUpdatingLastStoreWithinWindow(t *testing.T) {
+func TestDoResponseSkipsUpdatingRecentStoreWithinWindow(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -556,11 +766,11 @@ func TestDoResponseSkipsUpdatingLastStoreWithinWindow(t *testing.T) {
 		nil,
 	)
 
-	lastID := model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeLast)
+	recentID := model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent)
 	store := &recordingStore{
 		stores: map[string]adaptor.StoreCache{
-			lastID: {
-				ID:        lastID,
+			recentID: {
+				ID:        recentID,
 				GroupID:   "group-1",
 				TokenID:   7,
 				ChannelID: 5,
@@ -605,4 +815,32 @@ func TestDoResponseSkipsUpdatingLastStoreWithinWindow(t *testing.T) {
 	require.Nil(t, relayErr)
 	require.Len(t, store.savedIfNotExist, 1)
 	assert.Empty(t, store.saved)
+}
+
+func TestConfigFollowedChannelTiming(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, defaultFollowedChannelTTL, Config{}.GetFollowedChannelTTL())
+	assert.Equal(
+		t,
+		5*time.Minute,
+		Config{FollowedChannelTTLSeconds: 300}.GetFollowedChannelTTL(),
+	)
+	assert.Equal(
+		t,
+		defaultFollowedChannelTTL,
+		Config{FollowedChannelTTLSeconds: -1}.GetFollowedChannelTTL(),
+	)
+
+	assert.Equal(t, defaultRecentChannelUpdateDebounce, Config{}.GetRecentChannelUpdateDebounce())
+	assert.Equal(
+		t,
+		45*time.Second,
+		Config{RecentChannelUpdateDebounceSeconds: 45}.GetRecentChannelUpdateDebounce(),
+	)
+	assert.Equal(
+		t,
+		defaultRecentChannelUpdateDebounce,
+		Config{RecentChannelUpdateDebounceSeconds: -1}.GetRecentChannelUpdateDebounce(),
+	)
 }

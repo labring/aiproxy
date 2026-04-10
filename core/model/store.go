@@ -23,13 +23,14 @@ const (
 	StorePrefixVideoGeneration = "video_generation"
 	StorePrefixPromptCacheKey  = "prompt_cache_key"
 	StorePrefixCacheFollow     = "cachefollow"
+	StorePrefixCacheFollowUser = "cachefollow_user"
 )
 
 type CacheKeyType string
 
 const (
 	CacheKeyTypeStable CacheKeyType = "stable"
-	CacheKeyTypeLast   CacheKeyType = "last"
+	CacheKeyTypeRecent CacheKeyType = "recent"
 )
 
 type SaveStoreOption struct {
@@ -325,4 +326,8 @@ func PromptCacheStoreID(modelName, promptCacheKey string, keyType CacheKeyType) 
 
 func CacheFollowStoreID(modelName string, keyType CacheKeyType) string {
 	return HashedStoreID(StorePrefixCacheFollow, string(keyType), modelName)
+}
+
+func CacheFollowUserStoreID(modelName, user string, keyType CacheKeyType) string {
+	return HashedStoreID(StorePrefixCacheFollowUser, string(keyType), modelName, user)
 }

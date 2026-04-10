@@ -440,7 +440,13 @@
       },
       "cacheFollowPlugin": {
         "title": "缓存跟随插件",
-        "description": "支持基于 prompt_cache_key 的定向渠道跟随，以及无 cache key 时的通用缓存渠道跟随，用于提高上游缓存命中率。默认关闭。"
+        "description": "支持基于 prompt_cache_key 的定向渠道跟随，以及无 cache key 时的通用缓存渠道跟随，用于提高上游缓存命中率。默认关闭。",
+        "followedChannelTTLSeconds": "跟随渠道保留时长（秒）",
+        "followedChannelTTLSecondsPlaceholder": "留空则使用默认值 180",
+        "followedChannelTTLSecondsDescription": "控制已记住的缓存有效渠道保留多久。对 user 范围和通用范围始终生效；对于 prompt_cache_key，请求若上游没有返回更具体的 retention，也会使用这个值。",
+        "recentChannelUpdateDebounceSeconds": "最近渠道更新时间去抖窗口（秒）",
+        "recentChannelUpdateDebounceSecondsPlaceholder": "留空则使用默认值 30",
+        "recentChannelUpdateDebounceSecondsDescription": "控制同一作用域下 recent 渠道映射的最小刷新间隔，用于限制频繁更新 recent 记录，同时保留对上游最近路由变化的跟随能力。"
       },
       "webSearchPlugin": {
         "title": "网络搜索插件",
@@ -875,7 +881,10 @@
     "9": "音频",
     "10": "重排序",
     "11": "PDF解析",
-    "13": "视频生成"
+    "12": "Anthropic",
+    "13": "视频生成",
+    "16": "Responses",
+    "21": "Gemini"
   },
   "group": {
     "management": "组别管理",

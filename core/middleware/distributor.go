@@ -554,6 +554,7 @@ func NewMetaByContext(c *gin.Context,
 	generationID := GetGenerationID(c)
 	responseID := GetResponseID(c)
 	promptCacheKey := GetPromptCacheKey(c)
+	user := GetRequestUser(c)
 	requestServiceTier := GetRequestServiceTier(c)
 
 	opts = append(
@@ -567,6 +568,7 @@ func NewMetaByContext(c *gin.Context,
 		meta.WithGenerationID(generationID),
 		meta.WithResponseID(responseID),
 		meta.WithPromptCacheKey(promptCacheKey),
+		meta.WithUser(user),
 		meta.WithRequestServiceTier(requestServiceTier),
 	)
 

@@ -485,8 +485,9 @@ func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
 
 	group := middleware.GetGroup(c)
 	token := middleware.GetToken(c)
-	preferChannelIDs := make([]int, 0, 4)
-	seen := make(map[int]struct{}, 4)
+	user := middleware.GetRequestUser(c)
+	preferChannelIDs := make([]int, 0, 6)
+	seen := make(map[int]struct{}, 6)
 
 	appendChannelID := func(storeID string) {
 		if storeID == "" {
@@ -519,20 +520,19 @@ func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
 				model.PromptCacheStoreID(
 					modelName,
 					promptCacheKey,
-					model.CacheKeyTypeLast,
+					model.CacheKeyTypeRecent,
 				),
 			)
-
-			if len(preferChannelIDs) == 0 {
-				return nil
-			}
-
-			return preferChannelIDs
 		}
 	}
 
+	if user != "" {
+		appendChannelID(model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeStable))
+		appendChannelID(model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeRecent))
+	}
+
 	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable))
-	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeLast))
+	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeRecent))
 
 	if len(preferChannelIDs) == 0 {
 		return nil

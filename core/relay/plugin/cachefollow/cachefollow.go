@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	defaultStoreTTL       = 3 * time.Minute
-	lastStoreUpdateWindow = 15 * time.Second
+	defaultFollowedChannelTTL          = 3 * time.Minute
+	defaultRecentChannelUpdateDebounce = 30 * time.Second
 )
 
 var _ plugin.Plugin = (*Plugin)(nil)
@@ -42,15 +42,15 @@ func (p *Plugin) getConfig(meta *meta.Meta) (*Config, error) {
 	return pluginConfig, nil
 }
 
-func getStoreTTL(retention string) time.Duration {
+func getFollowedChannelTTL(retention string, defaultTTL time.Duration) time.Duration {
 	retention = strings.TrimSpace(strings.ToLower(retention))
 	if retention == "" || retention == "in-memory" || retention == "in_memory" {
-		return defaultStoreTTL
+		return defaultTTL
 	}
 
 	ttl, err := time.ParseDuration(retention)
 	if err != nil || ttl <= 0 {
-		return defaultStoreTTL
+		return defaultTTL
 	}
 
 	return ttl
@@ -171,7 +171,7 @@ func saveStableStoreMapping(
 	})
 }
 
-func saveLastStoreMapping(
+func saveRecentStoreMapping(
 	store adaptor.Store,
 	id string,
 	meta *meta.Meta,
@@ -217,12 +217,12 @@ func savePromptCacheMappings(
 		return err
 	}
 
-	return saveLastStoreMapping(
+	return saveRecentStoreMapping(
 		store,
 		model.PromptCacheStoreID(
 			meta.OriginModel,
 			meta.PromptCacheKey,
-			model.CacheKeyTypeLast,
+			model.CacheKeyTypeRecent,
 		),
 		meta,
 		expiresAt,
@@ -236,6 +236,27 @@ func saveCacheFollowMappings(
 	expiresAt time.Time,
 	minInterval time.Duration,
 ) error {
+	if meta.User != "" {
+		if err := saveStableStoreMapping(
+			store,
+			model.CacheFollowUserStoreID(meta.OriginModel, meta.User, model.CacheKeyTypeStable),
+			meta,
+			expiresAt,
+		); err != nil {
+			return err
+		}
+
+		if err := saveRecentStoreMapping(
+			store,
+			model.CacheFollowUserStoreID(meta.OriginModel, meta.User, model.CacheKeyTypeRecent),
+			meta,
+			expiresAt,
+			minInterval,
+		); err != nil {
+			return err
+		}
+	}
+
 	if err := saveStableStoreMapping(
 		store,
 		model.CacheFollowStoreID(meta.OriginModel, model.CacheKeyTypeStable),
@@ -245,9 +266,9 @@ func saveCacheFollowMappings(
 		return err
 	}
 
-	return saveLastStoreMapping(
+	return saveRecentStoreMapping(
 		store,
-		model.CacheFollowStoreID(meta.OriginModel, model.CacheKeyTypeLast),
+		model.CacheFollowStoreID(meta.OriginModel, model.CacheKeyTypeRecent),
 		meta,
 		expiresAt,
 		minInterval,
@@ -279,13 +300,19 @@ func (p *Plugin) DoResponse(
 	resp *http.Response,
 	do adaptor.DoResponse,
 ) (adaptor.DoResponseResult, adaptor.Error) {
+	if !supportsCacheFollowStore(meta.Mode) {
+		return do.DoResponse(meta, store, c, resp)
+	}
+
 	pluginConfig, err := p.getConfig(meta)
 	if err != nil || !pluginConfig.Enable {
 		return do.DoResponse(meta, store, c, resp)
 	}
 
+	supportsPromptCache := supportsPromptCacheStore(meta.Mode)
+
 	var retentionWriter *retentionResponseWriter
-	if meta.PromptCacheKey != "" && supportsPromptCacheStore(meta.Mode) {
+	if meta.PromptCacheKey != "" && supportsPromptCache {
 		retentionWriter = &retentionResponseWriter{ResponseWriter: c.Writer}
 
 		c.Writer = retentionWriter
@@ -299,43 +326,32 @@ func (p *Plugin) DoResponse(
 		return result, relayErr
 	}
 
-	log := common.GetLogger(c)
-
-	if meta.PromptCacheKey != "" && supportsPromptCacheStore(meta.Mode) {
+	if meta.PromptCacheKey != "" && supportsPromptCache {
 		retention := ""
 		if retentionWriter != nil {
 			retention = retentionWriter.retention
 		}
 
-		expiresAt := time.Now().Add(getStoreTTL(retention))
+		expiresAt := time.Now().
+			Add(getFollowedChannelTTL(retention, pluginConfig.GetFollowedChannelTTL()))
 		if err := savePromptCacheMappings(
 			store,
 			meta,
 			expiresAt,
-			lastStoreUpdateWindow,
+			pluginConfig.GetRecentChannelUpdateDebounce(),
 		); err != nil {
-			log.Warnf("save prompt cache key store failed: %v", err)
+			common.GetLogger(c).Warnf("save prompt cache key store failed: %v", err)
 		}
-
-		return result, relayErr
 	}
 
-	if meta.PromptCacheKey != "" {
-		return result, relayErr
-	}
-
-	if !supportsCacheFollowStore(meta.Mode) {
-		return result, relayErr
-	}
-
-	expiresAt := time.Now().Add(defaultStoreTTL)
+	expiresAt := time.Now().Add(pluginConfig.GetFollowedChannelTTL())
 	if err := saveCacheFollowMappings(
 		store,
 		meta,
 		expiresAt,
-		lastStoreUpdateWindow,
+		pluginConfig.GetRecentChannelUpdateDebounce(),
 	); err != nil {
-		log.Warnf("save cachefollow store failed: %v", err)
+		common.GetLogger(c).Warnf("save cachefollow store failed: %v", err)
 	}
 
 	return result, relayErr

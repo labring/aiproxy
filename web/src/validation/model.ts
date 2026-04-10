@@ -35,6 +35,8 @@ const pluginSchema = z.object({
     }).optional(),
     cachefollow: z.object({
         enable: z.boolean(),
+        followed_channel_ttl_seconds: z.number().nonnegative('Followed channel TTL must be a non-negative number').optional(),
+        recent_channel_update_debounce_seconds: z.number().nonnegative('Recent channel update debounce must be a non-negative number').optional(),
     }).optional(),
     "web-search": z.object({
         enable: z.boolean(),
