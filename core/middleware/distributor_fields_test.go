@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/middleware"
+	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ func TestRequestFieldExtractorsFromJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "cache-key-1", promptCacheKey)
 
-	user, err := middleware.GetRequestUserFromJSON(body)
+	user, err := middleware.GetRequestUserFromJSON(body, mode.ChatCompletions)
 	require.NoError(t, err)
 	assert.Equal(t, "user-1", user)
 
@@ -60,7 +61,7 @@ func TestRequestFieldExtractorsFromJSONMissingFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, promptCacheKey)
 
-	user, err := middleware.GetRequestUserFromJSON(body)
+	user, err := middleware.GetRequestUserFromJSON(body, mode.ChatCompletions)
 	require.NoError(t, err)
 	assert.Empty(t, user)
 

@@ -792,7 +792,7 @@ func GetPromptCacheKeyFromJSON(body []byte) (string, error) {
 
 func getRequestServiceTier(c *gin.Context, m mode.Mode) (string, error) {
 	switch m {
-	case mode.ChatCompletions, mode.Responses:
+	case mode.ChatCompletions, mode.Completions, mode.Responses, mode.Anthropic, mode.Gemini:
 	default:
 		return "", nil
 	}
@@ -802,7 +802,18 @@ func getRequestServiceTier(c *gin.Context, m mode.Mode) (string, error) {
 		return "", fmt.Errorf("get request service_tier failed: %w", err)
 	}
 
-	return getStringFieldFromNode(node, "service_tier", "get request service_tier failed")
+	return getRequestServiceTierFromNode(node, m)
+}
+
+func getRequestServiceTierFromNode(node *ast.Node, m mode.Mode) (string, error) {
+	switch m {
+	case mode.Gemini:
+		return getStringFieldFromNode(node, "serviceTier", "get request serviceTier failed")
+	case mode.ChatCompletions, mode.Completions, mode.Responses, mode.Anthropic:
+		return getStringFieldFromNode(node, "service_tier", "get request service_tier failed")
+	default:
+		return "", nil
+	}
 }
 
 func GetRequestServiceTier(c *gin.Context) string {
@@ -826,19 +837,37 @@ func getRequestUser(c *gin.Context, m mode.Mode) (string, error) {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		return getStringFieldFromNode(node, "user", "get request user failed")
+		return getRequestUserFromNode(node, m)
 	default:
 		return "", nil
 	}
 }
 
-func GetRequestUserFromJSON(body []byte) (string, error) {
+func GetRequestUserFromJSON(body []byte, m mode.Mode) (string, error) {
 	node, err := sonic.Get(body)
 	if err != nil {
 		return "", fmt.Errorf("get request user failed: %w", err)
 	}
 
-	return getStringFieldFromNode(&node, "user", "get request user failed")
+	return getRequestUserFromNode(&node, m)
+}
+
+func getRequestUserFromNode(node *ast.Node, m mode.Mode) (string, error) {
+	if m == mode.Anthropic {
+		userIDNode := node.GetByPath("metadata", "user_id")
+		if userIDNode != nil && userIDNode.Valid() && userIDNode.TypeSafe() != ast.V_NULL {
+			userID, err := userIDNode.String()
+			if err != nil {
+				return "", fmt.Errorf("get request user failed: %w", err)
+			}
+
+			if userID != "" {
+				return userID, nil
+			}
+		}
+	}
+
+	return getStringFieldFromNode(node, "user", "get request user failed")
 }
 
 func getRequestMetadata(c *gin.Context, m mode.Mode) (map[string]string, error) {
