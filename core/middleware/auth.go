@@ -207,7 +207,9 @@ func GetModelCaches(c *gin.Context) *model.ModelCaches {
 }
 
 func SetLogFieldsFromMeta(m *meta.Meta, fields logrus.Fields) {
-	SetLogServiceTierField(fields, m.RequestServiceTier)
+	SetLogServiceTier(fields, m.RequestServiceTier)
+	SetLogPromptCacheKey(fields, m.PromptCacheKey)
+	SetLogRequestUser(fields, m.User)
 
 	SetLogRequestIDField(fields, m.RequestID)
 
@@ -220,12 +222,28 @@ func SetLogFieldsFromMeta(m *meta.Meta, fields logrus.Fields) {
 	SetLogChannelFields(fields, m.Channel)
 }
 
-func SetLogServiceTierField(fields logrus.Fields, serviceTier string) {
+func SetLogServiceTier(fields logrus.Fields, serviceTier string) {
 	if serviceTier == "" {
 		return
 	}
 
 	fields["service_tier"] = serviceTier
+}
+
+func SetLogPromptCacheKey(fields logrus.Fields, promptCacheKey string) {
+	if promptCacheKey == "" {
+		return
+	}
+
+	fields["prompt_cache_key"] = promptCacheKey
+}
+
+func SetLogRequestUser(fields logrus.Fields, user string) {
+	if user == "" {
+		return
+	}
+
+	fields["user"] = user
 }
 
 func SetLogModeField(fields logrus.Fields, mode mode.Mode) {
