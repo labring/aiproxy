@@ -111,6 +111,11 @@ if [[ "${RESTART_ONLY}" == "0" && "${NO_PULL}" == "0" ]]; then
   CURRENT_BRANCH=$(git branch --show-current)
   info "Branch: ${CURRENT_BRANCH}"
 
+  # Detect stuck rebase from a previous failed deploy
+  if [[ -d ".git/rebase-merge" || -d ".git/rebase-apply" ]]; then
+    fail "Git rebase in progress — resolve manually: git rebase --abort"
+  fi
+
   # Check for uncommitted changes
   if ! git diff --quiet || ! git diff --cached --quiet; then
     warn "Uncommitted changes detected — stashing..."
@@ -120,8 +125,9 @@ if [[ "${RESTART_ONLY}" == "0" && "${NO_PULL}" == "0" ]]; then
     STASHED=0
   fi
 
-  # When running under sudo, SSH agent forwarding is lost.
-  if git pull --rebase origin "${CURRENT_BRANCH}"; then
+  # Use --ff-only to avoid rebase conflicts that can leave git in a stuck state.
+  # When running under sudo, SSH agent forwarding is lost — retry with explicit SSH key.
+  if git pull --ff-only origin "${CURRENT_BRANCH}"; then
     pass "Code updated"
   else
     warn "git pull failed — retrying with explicit SSH key..."
@@ -133,9 +139,11 @@ if [[ "${RESTART_ONLY}" == "0" && "${NO_PULL}" == "0" ]]; then
       fi
     done
     if [[ -z "${SSH_KEY}" ]]; then
-      fail "git pull failed and no SSH key found for retry. Use --no-pull and pull manually."
+      fail "git pull --ff-only failed and no SSH key found for retry. Use --no-pull and pull manually."
     fi
-    GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --rebase origin "${CURRENT_BRANCH}"
+    if ! GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --ff-only origin "${CURRENT_BRANCH}"; then
+      fail "git pull --ff-only failed — branch has diverged. Resolve manually or use --no-pull."
+    fi
     pass "Code updated (via explicit SSH key: ${SSH_KEY})"
   fi
 
@@ -189,6 +197,11 @@ fi
 # ── Step 3: Restart service ────────────────────────────────────
 info "Step 3/4: Restarting service..."
 
+# Safety: refuse to start legacy mode if a zero-downtime container exists
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^aiproxy-active$'; then
+  fail "Found zero-downtime container (aiproxy-active) still running. Stop it first:\n  docker stop aiproxy-active && docker rm aiproxy-active\nOr use zero-downtime mode (without --legacy)."
+fi
+
 # Ensure infra (postgres, redis) is running
 ${COMPOSE_CMD} up -d pgsql redis
 info "Waiting for database and Redis..."
@@ -236,7 +249,9 @@ fi
 # ── Post-deploy cleanup check ─────────────────────────────────
 if [[ -f "${SCRIPT_DIR}/post-deploy-cleanup.sh" ]]; then
   info "Running post-deploy disk cleanup check..."
-  bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto || true
+  if ! bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto; then
+    warn "Post-deploy cleanup had issues — check disk space manually"
+  fi
 fi
 
 # ── Summary ────────────────────────────────────────────────────

@@ -20,6 +20,15 @@
 
 set -euo pipefail
 
+# Prevent overlapping runs — the recovery wait loop (up to 70s) can outlast
+# the 1-minute cron interval. flock ensures only one instance runs at a time.
+LOCK_FILE="/tmp/wireguard-health.lock"
+exec 200>"${LOCK_FILE}"
+if ! flock -n 200; then
+  echo "$(date -Iseconds) Another instance running, skipping" >> /var/log/wireguard-health.log 2>/dev/null || true
+  exit 0
+fi
+
 PEER_IP="${PEER_IP:-10.0.0.1}"
 DB_HOST="${DB_HOST:-${PEER_IP}}"
 DB_USER="${DB_USER:-postgres}"
@@ -31,9 +40,13 @@ HOSTNAME=$(hostname)
 send_alert() {
   local msg="$1"
   if [[ -n "${FEISHU_WEBHOOK}" ]]; then
+    # Escape JSON special characters to prevent malformed payloads
+    local escaped="${msg//\\/\\\\}"
+    escaped="${escaped//\"/\\\"}"
+    escaped="${escaped//$'\n'/\\n}"
     curl -sf -X POST "${FEISHU_WEBHOOK}" \
       -H 'Content-Type: application/json' \
-      -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"${msg}\"}}" \
+      -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"${escaped}\"}}" \
       >/dev/null 2>&1 || true
   fi
   echo "[ALERT] ${msg}" >&2
@@ -80,10 +93,31 @@ fi
 
 if [[ -f "${RECOVERY_FLAG}" ]]; then
   rm -f "${RECOVERY_FLAG}"
-  echo "$(date -Iseconds) DB recovered — restarting aiproxy-active to refresh connection pool" >> /var/log/wireguard-health.log 2>/dev/null || true
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^aiproxy-active$'; then
-    docker restart aiproxy-active
-    send_alert "[${HOSTNAME}] WireGuard/DB recovered — aiproxy-active container restarted to refresh connection pool."
+  echo "$(date -Iseconds) DB recovered — waiting for connection pool to auto-recover" >> /var/log/wireguard-health.log 2>/dev/null || true
+
+  # GORM uses database/sql connection pool with ConnMaxLifetime=60s.
+  # Stale connections are recycled on next use — new connections will reach the recovered DB.
+  # /api/health does a real DB ping (unlike /api/status which is always 200).
+  # Wait up to 70s (> ConnMaxLifetime) checking every 10s.
+  RECOVERED=0
+  ACTIVE_PORT=$(cat /data/aiproxy/.active-port 2>/dev/null || echo "3000")
+  for _attempt in 1 2 3 4 5 6 7; do
+    sleep 10
+    if curl -sf "http://localhost:${ACTIVE_PORT}/api/health" >/dev/null 2>&1; then
+      RECOVERED=1
+      break
+    fi
+  done
+
+  if [[ "${RECOVERED}" == "1" ]]; then
+    echo "$(date -Iseconds) Connection pool auto-recovered, no restart needed" >> /var/log/wireguard-health.log 2>/dev/null || true
+    send_alert "[${HOSTNAME}] WireGuard/DB recovered — connection pool auto-recovered, no restart needed."
+  else
+    echo "$(date -Iseconds) Connection pool did NOT recover after 70s — restarting container" >> /var/log/wireguard-health.log 2>/dev/null || true
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^aiproxy-active$'; then
+      send_alert "[${HOSTNAME}] ⚠️ WireGuard/DB recovered but connection pool stuck after 70s — restarting container (will cause ~10s downtime)"
+      docker restart aiproxy-active
+    fi
   fi
 fi
 

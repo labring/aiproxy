@@ -316,6 +316,23 @@ fi
 
 pass "Pre-flight checks passed"
 
+# Disk space check — docker build --no-cache needs ~2GB, ensure headroom
+AVAIL_KB=$(df /data --output=avail 2>/dev/null | tail -1 | tr -d ' ' || echo "999999999")
+if [[ ${AVAIL_KB} -lt 5242880 ]]; then
+  warn "Disk space low ($(df -h /data --output=avail 2>/dev/null | tail -1 | tr -d ' ') available, need 5GB)"
+  info "Running emergency cleanup..."
+  docker image prune -f 2>/dev/null || true
+  docker builder prune -f 2>/dev/null || true
+  docker container prune -f 2>/dev/null || true
+  AVAIL_KB=$(df /data --output=avail 2>/dev/null | tail -1 | tr -d ' ' || echo "999999999")
+  if [[ ${AVAIL_KB} -lt 3145728 ]]; then
+    fail "Insufficient disk space for build (need 3GB, have $(df -h /data --output=avail 2>/dev/null | tail -1 | tr -d ' ')). Free disk manually."
+  fi
+  pass "Disk freed — continuing build"
+else
+  pass "Disk space OK ($(df -h /data --output=avail 2>/dev/null | tail -1 | tr -d ' ') available)"
+fi
+
 # ══════════════════════════════════════════════════════════════
 # PHASE 1: Build
 # ══════════════════════════════════════════════════════════════
@@ -327,6 +344,11 @@ if [[ "${NO_PULL}" == "0" ]]; then
   CURRENT_BRANCH=$(git branch --show-current)
   info "Branch: ${CURRENT_BRANCH}"
 
+  # Detect stuck rebase from a previous failed deploy
+  if [[ -d ".git/rebase-merge" || -d ".git/rebase-apply" ]]; then
+    fail "Git rebase in progress — resolve manually: git rebase --abort"
+  fi
+
   if ! git diff --quiet || ! git diff --cached --quiet; then
     warn "Uncommitted changes detected — stashing..."
     git stash push -m "deploy-auto-stash-$(date +%Y%m%d-%H%M%S)"
@@ -335,9 +357,9 @@ if [[ "${NO_PULL}" == "0" ]]; then
     STASHED=0
   fi
 
-  # When running under sudo, SSH agent forwarding is lost.
-  # Try normal pull first; if it fails (e.g., SSH permission denied), retry with explicit SSH key.
-  if git pull --rebase origin "${CURRENT_BRANCH}"; then
+  # Use --ff-only to avoid rebase conflicts that can leave git in a stuck state.
+  # When running under sudo, SSH agent forwarding is lost — retry with explicit SSH key.
+  if git pull --ff-only origin "${CURRENT_BRANCH}"; then
     pass "Code updated"
   else
     warn "git pull failed — retrying with explicit SSH key..."
@@ -349,9 +371,11 @@ if [[ "${NO_PULL}" == "0" ]]; then
       fi
     done
     if [[ -z "${SSH_KEY}" ]]; then
-      fail "git pull failed and no SSH key found for retry. Use --no-pull and pull manually."
+      fail "git pull --ff-only failed and no SSH key found for retry. Use --no-pull and pull manually."
     fi
-    GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --rebase origin "${CURRENT_BRANCH}"
+    if ! GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --ff-only origin "${CURRENT_BRANCH}"; then
+      fail "git pull --ff-only failed — branch has diverged. Resolve manually or use --no-pull."
+    fi
     pass "Code updated (via explicit SSH key: ${SSH_KEY})"
   fi
 
@@ -532,9 +556,16 @@ info "Phase 5/5: Finalizing..."
 echo "${CANARY_PORT}" | sudo tee "${STATE_FILE}" > /dev/null
 pass "State file updated: active port = ${CANARY_PORT}"
 
-# Rename canary to active
-docker rename aiproxy-canary "aiproxy-active" 2>/dev/null || true
-pass "Container renamed to aiproxy-active"
+# Rename canary to active — ensure the name is free first (rm may have failed in Phase 4)
+if docker ps -a --format '{{.Names}}' | grep -q '^aiproxy-active$'; then
+  warn "Stale aiproxy-active container still exists — removing..."
+  docker rm -f aiproxy-active 2>/dev/null || true
+fi
+if ! docker rename aiproxy-canary "aiproxy-active" 2>/dev/null; then
+  warn "Container rename failed — canary is still serving as 'aiproxy-canary' (not critical)"
+else
+  pass "Container renamed to aiproxy-active"
+fi
 
 # Clean up backup
 sudo rm -f "${UPSTREAM_CONF}.bak"
@@ -546,7 +577,9 @@ TRAFFIC_SWITCHED=0
 # ── Post-deploy cleanup check ────────────────────────────────
 if [[ -f "${SCRIPT_DIR}/post-deploy-cleanup.sh" ]]; then
   info "Running post-deploy disk cleanup check..."
-  bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto || true
+  if ! bash "${SCRIPT_DIR}/post-deploy-cleanup.sh" --auto; then
+    warn "Post-deploy cleanup had issues — check disk space manually"
+  fi
 fi
 
 # ── Summary ───────────────────────────────────────────────────

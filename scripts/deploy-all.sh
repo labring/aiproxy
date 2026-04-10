@@ -25,6 +25,10 @@ warn() { printf "\033[33m!\033[0m %s\n" "$*"; }
 send_feishu() {
   local msg="$1"
   if [[ -n "${FEISHU_WEBHOOK}" ]]; then
+    # Escape JSON special characters to prevent malformed payloads
+    msg="${msg//\\/\\\\}"
+    msg="${msg//\"/\\\"}"
+    msg="${msg//$'\n'/\\n}"
     curl -sf -X POST "${FEISHU_WEBHOOK}" \
       -H 'Content-Type: application/json' \
       -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"${msg}\"}}" \
@@ -72,7 +76,9 @@ for entry in "${NODES[@]}"; do
   info "Deploying ${NODE_TYPE} node (${HOST})..."
   info "------------------------------------------"
 
-  if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "${HOST}" \
+  if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+      -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+      "${HOST}" \
     "cd ${REPO_PATH} && \
      sudo GIT_SSH_COMMAND='ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no' \
      ADMIN_KEY='${ADMIN_KEY}' \
