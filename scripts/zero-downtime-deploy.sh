@@ -38,7 +38,13 @@ ENV_FILE_PATH="/data/aiproxy/.env"
 UPSTREAM_CONF="/etc/nginx/conf.d/aiproxy-upstream.conf"
 LOCK_FILE="/data/aiproxy/.deploy.lock"
 DRAIN_TIMEOUT=600
-HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-90}
+# Overseas nodes talk to DB via WireGuard tunnel (1-3s per query latency).
+# Startup runs many init queries, so overseas needs a much longer timeout.
+if [[ "${NODE_TYPE:-}" == "overseas" ]]; then
+  HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-600}
+else
+  HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-90}
+fi
 STABILIZE_WAIT=10
 
 # ── Flags ─────────────────────────────────────────────────────
