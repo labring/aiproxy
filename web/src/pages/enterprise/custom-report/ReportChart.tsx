@@ -378,7 +378,13 @@ export function ReportChart({
                     const singleGridTop = legendGridTop(numericMeasures.length)
 
                     option = {
-                        tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+                        tooltip: {
+                            trigger: "axis",
+                            axisPointer: { type: "shadow" },
+                            backgroundColor: isDark ? "rgba(30,30,40,0.95)" : "rgba(255,255,255,0.95)",
+                            borderColor: isDark ? "#444" : "#e5e7eb",
+                            textStyle: { color: isDark ? "#e5e7eb" : "#374151", fontSize: 12 },
+                        },
                         legend: wrapLegend(numericMeasures.map((m) => getLabel(m, lang)), theme.textColor),
                         grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", top: singleGridTop, containLabel: true },
                         xAxis: {
@@ -392,16 +398,29 @@ export function ReportChart({
                                 { type: "value", name: "%", max: 100, min: 0, nameTextStyle: { color: theme.subTextColor }, axisLabel: { color: theme.subTextColor }, splitLine: { show: false } },
                             ]
                             : { type: "value", axisLabel: { color: theme.subTextColor }, splitLine: { lineStyle: { color: theme.splitLineColor } } },
-                        series: numericMeasures.map((m, i) => ({
-                            name: getLabel(m, lang),
-                            type: seriesType,
-                            yAxisIndex: needDualAxis && PERCENTAGE_FIELDS.has(m) ? 1 : 0,
-                            data: rows.slice(0, 50).map((row) => Number(row[m] ?? 0)),
-                            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
-                            smooth: seriesType === "line",
-                            ...(isStacked ? { stack: "total" } : {}),
-                            ...(isArea ? { areaStyle: { opacity: 0.3 } } : {}),
-                        })),
+                        series: numericMeasures.map((m, i) => {
+                            const seriesData = rows.slice(0, 50).map((row) => Number(row[m] ?? 0))
+                            // Add average markLine for single-dimension line/bar charts
+                            const markLine = (seriesType === "line" || seriesType === "bar") && !isStacked && numericMeasures.length <= 2
+                                ? {
+                                    data: [{ type: "average" as const, name: "Avg" }],
+                                    lineStyle: { color: CHART_COLORS[i % CHART_COLORS.length], type: "dashed" as const, opacity: 0.5 },
+                                    label: { show: true, formatter: `{c}`, fontSize: 10, color: theme.subTextColor },
+                                    silent: true,
+                                }
+                                : undefined
+                            return {
+                                name: getLabel(m, lang),
+                                type: seriesType,
+                                yAxisIndex: needDualAxis && PERCENTAGE_FIELDS.has(m) ? 1 : 0,
+                                data: seriesData,
+                                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
+                                smooth: seriesType === "line",
+                                ...(isStacked ? { stack: "total" } : {}),
+                                ...(isArea ? { areaStyle: { opacity: 0.3 } } : {}),
+                                ...(markLine ? { markLine } : {}),
+                            }
+                        }),
                     }
                 }
                 break

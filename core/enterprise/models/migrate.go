@@ -58,6 +58,7 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 		&RejectedTenantLogin{},
 		&RolePermission{},
 		&QuotaAlertHistory{},
+		&ReportTemplate{},
 	); err != nil {
 		return err
 	}

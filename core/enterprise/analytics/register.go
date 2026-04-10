@@ -34,4 +34,10 @@ func RegisterRoutes(group *gin.RouterGroup, permMiddleware map[string]gin.Handle
 
 	crManage := analytics.Group("", permMiddleware["custom_report_manage"])
 	crManage.POST("/custom-report", HandleCustomReport)
+
+	// Report template CRUD
+	crView.GET("/custom-report/templates", HandleListTemplates)
+	crManage.POST("/custom-report/templates", HandleCreateTemplate)
+	crManage.PUT("/custom-report/templates/:id", HandleUpdateTemplate)
+	crManage.DELETE("/custom-report/templates/:id", HandleDeleteTemplate)
 }

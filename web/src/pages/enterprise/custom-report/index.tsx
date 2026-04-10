@@ -11,6 +11,7 @@ import {
     Columns2,
     Maximize2,
     X,
+    LayoutGrid,
 } from "lucide-react"
 import { useHasPermission } from "@/lib/permissions"
 import { Card, CardContent } from "@/components/ui/card"
@@ -33,14 +34,20 @@ import { ReportChart } from "./ReportChart"
 import { PivotTable } from "./PivotTable"
 import { SplitView } from "./SplitView"
 import { ChartTypePicker } from "./ChartTypePicker"
+import { DashboardGrid } from "./DashboardGrid"
+import { TemplateManager } from "./TemplateManager"
+import { SkeletonChart, EmptyState } from "./EmptyState"
+
+const DEFAULT_DIMS = ["department"]
+const DEFAULT_MEASURES = ["request_count", "used_amount"]
 
 export default function EnterpriseCustomReport() {
     const { t, i18n } = useTranslation()
     const lang = i18n.language
 
     // Config state
-    const [selectedDimensions, setSelectedDimensions] = useState<string[]>(["department"])
-    const [selectedMeasures, setSelectedMeasures] = useState<string[]>(["request_count", "used_amount"])
+    const [selectedDimensions, setSelectedDimensions] = useState<string[]>([...DEFAULT_DIMS])
+    const [selectedMeasures, setSelectedMeasures] = useState<string[]>([...DEFAULT_MEASURES])
     const [timeRange, setTimeRange] = useState<TimeRange>("last_week")
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>()
 
@@ -61,6 +68,7 @@ export default function EnterpriseCustomReport() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
     const [chartFullscreen, setChartFullscreen] = useState(false)
+    const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
     const dialogRef = useRef<HTMLDialogElement>(null)
 
     // Generate report mutation
@@ -100,10 +108,30 @@ export default function EnterpriseCustomReport() {
         mutateRef.current(req)
     }, [selectedDimensions, selectedMeasures, timeRange, customDateRange, filterDepts, filterModels, filterUsers, sortBy, sortOrder])
 
-    // Handle template click
+    // Handle preset template click
     const applyTemplate = useCallback((template: ReportTemplate) => {
         setSelectedDimensions(template.dimensions)
         setSelectedMeasures(template.measures)
+        setPivotMeasure("")
+    }, [])
+
+    // Handle saved template apply
+    const applySavedTemplate = useCallback((dims: string[], meas: string[], chartTypeVal?: string, viewModeVal?: string) => {
+        setSelectedDimensions(dims)
+        setSelectedMeasures(meas)
+        if (chartTypeVal) setChartType(chartTypeVal as ChartType)
+        if (viewModeVal) setViewMode(viewModeVal as ViewMode)
+        setPivotMeasure("")
+    }, [])
+
+    // Reset to defaults
+    const handleReset = useCallback(() => {
+        setSelectedDimensions([...DEFAULT_DIMS])
+        setSelectedMeasures([...DEFAULT_MEASURES])
+        setChartType("auto")
+        setViewMode("table")
+        setSortBy(undefined)
+        setSortOrder("desc")
         setPivotMeasure("")
     }, [])
 
@@ -189,6 +217,19 @@ export default function EnterpriseCustomReport() {
 
     const hasResults = reportData && reportData.rows.length > 0
 
+    // Template manager slot for ConfigPanel
+    const templateManagerSlot = (
+        <TemplateManager
+            onApply={applySavedTemplate}
+            currentDimensions={selectedDimensions}
+            currentMeasures={selectedMeasures}
+            currentChartType={chartType}
+            currentViewMode={viewMode}
+            saveDialogOpen={saveTemplateOpen}
+            onSaveDialogChange={setSaveTemplateOpen}
+        />
+    )
+
     // ConfigPanel content (shared between desktop sidebar and mobile sheet)
     const configContent = (
         <ConfigPanel
@@ -202,7 +243,10 @@ export default function EnterpriseCustomReport() {
                 applyTemplate(tpl)
                 setMobileSheetOpen(false)
             }}
+            onReset={handleReset}
+            onSaveTemplate={() => setSaveTemplateOpen(true)}
             isPending={mutation.isPending}
+            templateManagerSlot={templateManagerSlot}
         />
     )
 
@@ -279,8 +323,9 @@ export default function EnterpriseCustomReport() {
                         onFilterUsersChange={setFilterUsers}
                     />
 
-                    {/* Loading progress bar */}
-                    {mutation.isPending && (
+                    {/* Loading */}
+                    {mutation.isPending && !reportData && <SkeletonChart />}
+                    {mutation.isPending && reportData && (
                         <div className="h-0.5 w-full bg-[#6A6DE6]/20 rounded-full overflow-hidden">
                             <div className="h-full bg-[#6A6DE6] rounded-full animate-pulse w-2/3" />
                         </div>
@@ -303,13 +348,14 @@ export default function EnterpriseCustomReport() {
 
                             {/* Toolbar */}
                             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm flex flex-wrap items-center gap-2 py-1">
-                                {/* View mode switcher — with text labels */}
+                                {/* View mode switcher */}
                                 <div className="flex items-center border rounded-lg overflow-hidden">
                                     {([
                                         { mode: "table" as ViewMode, icon: Table2, labelKey: "enterprise.customReport.tableView" },
                                         { mode: "chart" as ViewMode, icon: BarChart3, labelKey: "enterprise.customReport.chartView" },
                                         ...(canPivot ? [{ mode: "pivot" as ViewMode, icon: Grid3X3, labelKey: "enterprise.customReport.pivotView" }] : []),
                                         { mode: "split" as ViewMode, icon: Columns2, labelKey: "enterprise.customReport.splitView" },
+                                        { mode: "dashboard" as ViewMode, icon: LayoutGrid, labelKey: "enterprise.customReport.dashboardView" },
                                     ]).map(({ mode, icon: Icon, labelKey }) => (
                                         <Button
                                             key={mode}
@@ -324,7 +370,7 @@ export default function EnterpriseCustomReport() {
                                     ))}
                                 </div>
 
-                                {/* Chart type picker (visible in chart and split modes) */}
+                                {/* Chart type picker (visible in chart, split, dashboard modes) */}
                                 {(viewMode === "chart" || viewMode === "split") && (
                                     <ChartTypePicker value={chartType} onChange={setChartType} />
                                 )}
@@ -401,6 +447,14 @@ export default function EnterpriseCustomReport() {
                                             onSort={handleSort}
                                         />
                                     )}
+                                    {viewMode === "dashboard" && (
+                                        <DashboardGrid
+                                            data={reportData}
+                                            dimensions={selectedDimensions}
+                                            measures={selectedMeasures}
+                                            lang={lang}
+                                        />
+                                    )}
                                 </CardContent>
                             </Card>
                         </>
@@ -416,20 +470,7 @@ export default function EnterpriseCustomReport() {
                     )}
 
                     {/* Initial state */}
-                    {!reportData && !mutation.isPending && (
-                        <Card className="shadow-sm border-0">
-                            <CardContent className="py-12 text-center text-muted-foreground">
-                                <FileBarChart className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                                <p className="text-sm">
-                                    {selectedDimensions.length === 0
-                                        ? t("enterprise.customReport.selectDimension")
-                                        : selectedMeasures.length === 0
-                                          ? t("enterprise.customReport.selectMeasure")
-                                          : t("enterprise.customReport.generate")}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
+                    {!reportData && !mutation.isPending && <EmptyState />}
                 </div>
             </div>
 

@@ -650,7 +650,11 @@
         "tokens": "Tokens",
         "cost": "Cost",
         "performance": "Performance",
-        "computed": "Computed"
+        "efficiency": "Efficiency",
+        "per_user": "Per User",
+        "rates": "Rates",
+        "cost_structure": "Cost Structure",
+        "statistics": "Statistics"
       },
       "templates": {
         "title": "Quick Start",
@@ -687,7 +691,18 @@
       "radarChart": "Radar",
       "columnVisibility": "Columns",
       "allLevel1Departments": "All Divisions",
-      "allLevel2Departments": "All Sub-depts"
+      "allLevel2Departments": "All Sub-depts",
+      "dashboardView": "Dashboard",
+      "searchMeasures": "Search measures...",
+      "selectedMeasures": "Selected",
+      "saveTemplate": "Save Template",
+      "reset": "Reset",
+      "myTemplates": "My Templates",
+      "templateName": "Template name",
+      "deleteTemplate": "Delete Template",
+      "deleteTemplateConfirm": "Are you sure you want to delete this template?",
+      "emptyState": "Select dimensions and measures to auto-generate a report",
+      "page": "Page"
     },
     "accessControl": {
       "title": "Access Control",

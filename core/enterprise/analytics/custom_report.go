@@ -60,10 +60,12 @@ var baseMeasures = map[string]string{
 	"status_5xx":            "SUM(status5xx_count)",
 	"status_429":            "SUM(status429_count)",
 	"cache_hit_count":       "SUM(cache_hit_count)",
+	"cache_creation_count":  "SUM(cache_creation_count)",
 	"input_tokens":          "SUM(input_tokens)",
 	"output_tokens":         "SUM(output_tokens)",
 	"total_tokens":          "SUM(total_tokens)",
 	"cached_tokens":         "SUM(cached_tokens)",
+	"reasoning_tokens":      "SUM(reasoning_tokens)",
 	"image_input_tokens":    "SUM(image_input_tokens)",
 	"audio_input_tokens":    "SUM(audio_input_tokens)",
 	"web_search_count":      "SUM(web_search_count)",
@@ -71,6 +73,12 @@ var baseMeasures = map[string]string{
 	"input_amount":          "SUM(input_amount)",
 	"output_amount":         "SUM(output_amount)",
 	"cached_amount":         "SUM(cached_amount)",
+	"image_input_amount":    "SUM(image_input_amount)",
+	"audio_input_amount":    "SUM(audio_input_amount)",
+	"image_output_amount":   "SUM(image_output_amount)",
+	"reasoning_amount":      "SUM(reasoning_amount)",
+	"cache_creation_amount": "SUM(cache_creation_amount)",
+	"web_search_amount":     "SUM(web_search_amount)",
 	"total_time_ms":         "SUM(total_time_milliseconds)",
 	"total_ttfb_ms":         "SUM(total_ttfb_milliseconds)",
 	"unique_models":         "COUNT(DISTINCT model)",
@@ -81,58 +89,122 @@ var baseMeasures = map[string]string{
 
 // computedMeasures lists measures that are derived from base measures.
 var computedMeasures = map[string][]string{
-	"success_rate":        {"status_2xx", "request_count"},
-	"error_rate":          {"status_4xx", "status_5xx", "request_count"},
-	"throttle_rate":       {"status_429", "request_count"},
-	"cache_hit_rate":      {"cache_hit_count", "request_count"},
-	"avg_tokens_per_req":  {"total_tokens", "request_count"},
-	"avg_cost_per_req":    {"used_amount", "request_count"},
-	"avg_latency":         {"total_time_ms", "request_count"},
-	"avg_ttfb":            {"total_ttfb_ms", "request_count"},
+	// Rate metrics
+	"success_rate":   {"status_2xx", "request_count"},
+	"error_rate":     {"status_4xx", "status_5xx", "request_count"},
+	"exception_rate": {"exception_count", "request_count"},
+	"throttle_rate":  {"status_429", "request_count"},
+	"cache_hit_rate": {"cache_hit_count", "request_count"},
+	"retry_rate":     {"retry_count", "request_count"},
+
+	// Per-request efficiency
+	"avg_tokens_per_req":    {"total_tokens", "request_count"},
+	"avg_input_per_req":     {"input_tokens", "request_count"},
+	"avg_output_per_req":    {"output_tokens", "request_count"},
+	"avg_cached_per_req":    {"cached_tokens", "request_count"},
+	"avg_reasoning_per_req": {"reasoning_tokens", "request_count"},
+	"avg_cost_per_req":      {"used_amount", "request_count"},
+	"avg_latency":           {"total_time_ms", "request_count"},
+	"avg_ttfb":              {"total_ttfb_ms", "request_count"},
+
+	// Throughput
+	"tokens_per_second": {"total_tokens", "total_time_ms"},
+	"output_speed":      {"output_tokens", "total_time_ms"},
+
+	// Per-user averages
+	"avg_tokens_per_user":   {"total_tokens", "active_users"},
+	"avg_cost_per_user":     {"used_amount", "active_users"},
+	"avg_requests_per_user": {"request_count", "active_users"},
+
+	// Cost structure
 	"output_input_ratio":  {"output_tokens", "input_tokens"},
 	"cost_per_1k_tokens":  {"used_amount", "total_tokens"},
-	"retry_rate":             {"retry_count", "request_count"},
-	"reconciliation_tokens":  {"input_tokens", "output_tokens", "cached_tokens", "cache_creation_tokens"},
+	"cost_per_input_1k":   {"input_amount", "input_tokens"},
+	"cost_per_output_1k":  {"output_amount", "output_tokens"},
+	"input_cost_pct":      {"input_amount", "used_amount"},
+	"output_cost_pct":     {"output_amount", "used_amount"},
+	"cache_savings_pct":   {"cached_amount", "used_amount"},
+
+	// Misc
+	"reconciliation_tokens": {"input_tokens", "output_tokens", "cached_tokens", "cache_creation_tokens"},
 }
 
 // measureLabels provides human-readable labels for measures.
 var measureLabels = map[string]string{
-	"request_count":         "请求数",
-	"retry_count":           "重试次数",
-	"exception_count":       "异常次数",
-	"status_2xx":            "成功请求数",
-	"status_4xx":            "客户端错误数",
-	"status_5xx":            "服务端错误数",
-	"status_429":            "限流请求数",
-	"cache_hit_count":       "缓存命中数",
+	// Base: requests
+	"request_count":        "请求数",
+	"retry_count":          "重试次数",
+	"exception_count":      "异常次数",
+	"status_2xx":           "成功请求数",
+	"status_4xx":           "客户端错误数",
+	"status_5xx":           "服务端错误数",
+	"status_429":           "限流请求数",
+	"cache_hit_count":      "缓存命中数",
+	"cache_creation_count": "缓存创建次数",
+
+	// Base: tokens
 	"input_tokens":          "输入 Token",
 	"output_tokens":         "输出 Token",
 	"total_tokens":          "总 Token",
 	"cached_tokens":         "缓存 Token",
+	"reasoning_tokens":      "推理 Token",
 	"image_input_tokens":    "图片输入 Token",
 	"audio_input_tokens":    "音频输入 Token",
+	"image_output_tokens":   "图片输出 Token",
+	"cache_creation_tokens": "缓存创建 Token",
 	"web_search_count":      "联网搜索次数",
+
+	// Base: cost
 	"used_amount":           "总费用",
 	"input_amount":          "输入费用",
 	"output_amount":         "输出费用",
 	"cached_amount":         "缓存费用",
+	"image_input_amount":    "图片输入费用",
+	"audio_input_amount":    "音频输入费用",
+	"image_output_amount":   "图片输出费用",
+	"reasoning_amount":      "推理费用",
+	"cache_creation_amount": "缓存创建费用",
+	"web_search_amount":     "联网搜索费用",
 	"total_time_ms":         "总耗时(ms)",
 	"total_ttfb_ms":         "总首Token耗时(ms)",
-	"unique_models":         "使用模型数",
-	"active_users":          "活跃用户数",
-	"success_rate":          "成功率 (%)",
-	"error_rate":            "错误率 (%)",
-	"throttle_rate":         "限流率 (%)",
-	"cache_hit_rate":        "缓存命中率 (%)",
+
+	// Base: stats
+	"unique_models": "使用模型数",
+	"active_users":  "活跃用户数",
+
+	// Computed: rates
+	"success_rate":   "成功率 (%)",
+	"error_rate":     "错误率 (%)",
+	"exception_rate": "异常率 (%)",
+	"throttle_rate":  "限流率 (%)",
+	"cache_hit_rate": "缓存命中率 (%)",
+	"retry_rate":     "重试率 (%)",
+
+	// Computed: per-request efficiency
 	"avg_tokens_per_req":    "平均每请求 Token",
+	"avg_input_per_req":     "平均输入 Token/请求",
+	"avg_output_per_req":    "平均输出 Token/请求",
+	"avg_cached_per_req":    "平均缓存 Token/请求",
+	"avg_reasoning_per_req": "平均推理 Token/请求",
 	"avg_cost_per_req":      "平均单次费用",
 	"avg_latency":           "平均响应时间 (ms)",
 	"avg_ttfb":              "平均首Token时间 (ms)",
+	"tokens_per_second":     "Token 吞吐量 (/s)",
+	"output_speed":          "输出速度 (token/s)",
+
+	// Computed: per-user averages
+	"avg_tokens_per_user":   "人均 Token",
+	"avg_cost_per_user":     "人均费用",
+	"avg_requests_per_user": "人均请求数",
+
+	// Computed: cost structure
 	"output_input_ratio":    "输出/输入比",
 	"cost_per_1k_tokens":    "千Token成本",
-	"retry_rate":            "重试率 (%)",
-	"image_output_tokens":   "图片输出 Token",
-	"cache_creation_tokens": "缓存创建 Token",
+	"cost_per_input_1k":     "千输入Token成本",
+	"cost_per_output_1k":    "千输出Token成本",
+	"input_cost_pct":        "输入费用占比 (%)",
+	"output_cost_pct":       "输出费用占比 (%)",
+	"cache_savings_pct":     "缓存费用占比 (%)",
 	"reconciliation_tokens": "对账 Token (不含缓存)",
 }
 
@@ -431,34 +503,42 @@ func resolveGroupIDs(
 
 // rawRow holds a single row from the SQL aggregation query.
 type rawRow struct {
-	GroupID       string  `gorm:"column:group_id"`
-	Model         string  `gorm:"column:model"`
-	TimeKey       int64   `gorm:"column:time_key"`
-	RequestCount  int64   `gorm:"column:request_count"`
-	RetryCount    int64   `gorm:"column:retry_count"`
-	ExceptionCnt  int64   `gorm:"column:exception_count"`
-	Status2xx     int64   `gorm:"column:status_2xx"`
-	Status4xx     int64   `gorm:"column:status_4xx"`
-	Status5xx     int64   `gorm:"column:status_5xx"`
-	Status429     int64   `gorm:"column:status_429"`
-	CacheHitCnt   int64   `gorm:"column:cache_hit_count"`
-	InputTokens   int64   `gorm:"column:input_tokens"`
-	OutputTokens  int64   `gorm:"column:output_tokens"`
-	TotalTokens   int64   `gorm:"column:total_tokens"`
-	CachedTokens  int64   `gorm:"column:cached_tokens"`
-	ImgInTokens   int64   `gorm:"column:image_input_tokens"`
-	AudioInTokens int64   `gorm:"column:audio_input_tokens"`
-	WebSearchCnt  int64   `gorm:"column:web_search_count"`
-	UsedAmount    float64 `gorm:"column:used_amount"`
-	InputAmount   float64 `gorm:"column:input_amount"`
-	OutputAmount  float64 `gorm:"column:output_amount"`
-	CachedAmount  float64 `gorm:"column:cached_amount"`
-	TotalTimeMs   int64   `gorm:"column:total_time_ms"`
-	TotalTtfbMs   int64   `gorm:"column:total_ttfb_ms"`
-	UniqueModels  int64   `gorm:"column:unique_models"`
-	ActiveUsers   int64   `gorm:"column:active_users"`
-	ImgOutTokens  int64   `gorm:"column:image_output_tokens"`
-	CacheCrTokens int64   `gorm:"column:cache_creation_tokens"`
+	GroupID        string  `gorm:"column:group_id"`
+	Model          string  `gorm:"column:model"`
+	TimeKey        int64   `gorm:"column:time_key"`
+	RequestCount   int64   `gorm:"column:request_count"`
+	RetryCount     int64   `gorm:"column:retry_count"`
+	ExceptionCnt   int64   `gorm:"column:exception_count"`
+	Status2xx      int64   `gorm:"column:status_2xx"`
+	Status4xx      int64   `gorm:"column:status_4xx"`
+	Status5xx      int64   `gorm:"column:status_5xx"`
+	Status429      int64   `gorm:"column:status_429"`
+	CacheHitCnt    int64   `gorm:"column:cache_hit_count"`
+	CacheCrCnt     int64   `gorm:"column:cache_creation_count"`
+	InputTokens    int64   `gorm:"column:input_tokens"`
+	OutputTokens   int64   `gorm:"column:output_tokens"`
+	TotalTokens    int64   `gorm:"column:total_tokens"`
+	CachedTokens   int64   `gorm:"column:cached_tokens"`
+	ReasonTokens   int64   `gorm:"column:reasoning_tokens"`
+	ImgInTokens    int64   `gorm:"column:image_input_tokens"`
+	AudioInTokens  int64   `gorm:"column:audio_input_tokens"`
+	WebSearchCnt   int64   `gorm:"column:web_search_count"`
+	UsedAmount     float64 `gorm:"column:used_amount"`
+	InputAmount    float64 `gorm:"column:input_amount"`
+	OutputAmount   float64 `gorm:"column:output_amount"`
+	CachedAmount   float64 `gorm:"column:cached_amount"`
+	ImgInAmount    float64 `gorm:"column:image_input_amount"`
+	AudioInAmount  float64 `gorm:"column:audio_input_amount"`
+	ImgOutAmount   float64 `gorm:"column:image_output_amount"`
+	ReasonAmount   float64 `gorm:"column:reasoning_amount"`
+	CacheCrAmount  float64 `gorm:"column:cache_creation_amount"`
+	WebSearchAmt   float64 `gorm:"column:web_search_amount"`
+	TotalTimeMs    int64   `gorm:"column:total_time_ms"`
+	TotalTtfbMs    int64   `gorm:"column:total_ttfb_ms"`
+	UniqueModels   int64   `gorm:"column:unique_models"`
+	ActiveUsers    int64   `gorm:"column:active_users"`
+	ImgOutTokens   int64   `gorm:"column:image_output_tokens"`
+	CacheCrTokens  int64   `gorm:"column:cache_creation_tokens"`
 }
 
 func executeQuery(
@@ -548,39 +628,11 @@ func buildSelectParts(dimensions []string, requiredBase map[string]bool) []strin
 		}
 	}
 
-	// Add aggregation columns based on required measures
-	aggMap := map[string]string{
-		"request_count":         "SUM(request_count) as request_count",
-		"retry_count":           "SUM(retry_count) as retry_count",
-		"exception_count":       "SUM(exception_count) as exception_count",
-		"status_2xx":            "SUM(status2xx_count) as status_2xx",
-		"status_4xx":            "SUM(status4xx_count) as status_4xx",
-		"status_5xx":            "SUM(status5xx_count) as status_5xx",
-		"status_429":            "SUM(status429_count) as status_429",
-		"cache_hit_count":       "SUM(cache_hit_count) as cache_hit_count",
-		"input_tokens":          "SUM(input_tokens) as input_tokens",
-		"output_tokens":         "SUM(output_tokens) as output_tokens",
-		"total_tokens":          "SUM(total_tokens) as total_tokens",
-		"cached_tokens":         "SUM(cached_tokens) as cached_tokens",
-		"image_input_tokens":    "SUM(image_input_tokens) as image_input_tokens",
-		"audio_input_tokens":    "SUM(audio_input_tokens) as audio_input_tokens",
-		"web_search_count":      "SUM(web_search_count) as web_search_count",
-		"used_amount":           "SUM(used_amount) as used_amount",
-		"input_amount":          "SUM(input_amount) as input_amount",
-		"output_amount":         "SUM(output_amount) as output_amount",
-		"cached_amount":         "SUM(cached_amount) as cached_amount",
-		"total_time_ms":         "SUM(total_time_milliseconds) as total_time_ms",
-		"total_ttfb_ms":         "SUM(total_ttfb_milliseconds) as total_ttfb_ms",
-		"unique_models":         "COUNT(DISTINCT model) as unique_models",
-		"active_users":          "COUNT(DISTINCT group_id) as active_users",
-		"image_output_tokens":   "SUM(image_output_tokens) as image_output_tokens",
-		"cache_creation_tokens": "SUM(cache_creation_tokens) as cache_creation_tokens",
-	}
-
+	// Derive SELECT expressions from baseMeasures (single source of truth).
 	added := make(map[string]bool)
 	for measure := range requiredBase {
-		if expr, ok := aggMap[measure]; ok && !added[measure] {
-			parts = append(parts, expr)
+		if expr, ok := baseMeasures[measure]; ok && !added[measure] {
+			parts = append(parts, expr+" as "+measure)
 			added[measure] = true
 		}
 	}
@@ -835,6 +887,14 @@ func mergeRawRows(dst, src *rawRow) {
 	dst.UniqueModels += src.UniqueModels
 	dst.ImgOutTokens += src.ImgOutTokens
 	dst.CacheCrTokens += src.CacheCrTokens
+	dst.CacheCrCnt += src.CacheCrCnt
+	dst.ReasonTokens += src.ReasonTokens
+	dst.ImgInAmount += src.ImgInAmount
+	dst.AudioInAmount += src.AudioInAmount
+	dst.ImgOutAmount += src.ImgOutAmount
+	dst.ReasonAmount += src.ReasonAmount
+	dst.CacheCrAmount += src.CacheCrAmount
+	dst.WebSearchAmt += src.WebSearchAmt
 }
 
 func fillBaseMeasures(row map[string]interface{}, r rawRow, measures []string) {
@@ -856,6 +916,8 @@ func fillBaseMeasures(row map[string]interface{}, r rawRow, measures []string) {
 			row[m] = r.Status429
 		case "cache_hit_count":
 			row[m] = r.CacheHitCnt
+		case "cache_creation_count":
+			row[m] = r.CacheCrCnt
 		case "input_tokens":
 			row[m] = r.InputTokens
 		case "output_tokens":
@@ -864,6 +926,8 @@ func fillBaseMeasures(row map[string]interface{}, r rawRow, measures []string) {
 			row[m] = r.TotalTokens
 		case "cached_tokens":
 			row[m] = r.CachedTokens
+		case "reasoning_tokens":
+			row[m] = r.ReasonTokens
 		case "image_input_tokens":
 			row[m] = r.ImgInTokens
 		case "audio_input_tokens":
@@ -878,6 +942,18 @@ func fillBaseMeasures(row map[string]interface{}, r rawRow, measures []string) {
 			row[m] = r.OutputAmount
 		case "cached_amount":
 			row[m] = r.CachedAmount
+		case "image_input_amount":
+			row[m] = r.ImgInAmount
+		case "audio_input_amount":
+			row[m] = r.AudioInAmount
+		case "image_output_amount":
+			row[m] = r.ImgOutAmount
+		case "reasoning_amount":
+			row[m] = r.ReasonAmount
+		case "cache_creation_amount":
+			row[m] = r.CacheCrAmount
+		case "web_search_amount":
+			row[m] = r.WebSearchAmt
 		case "total_time_ms":
 			row[m] = r.TotalTimeMs
 		case "total_ttfb_ms":
@@ -921,6 +997,36 @@ func computeDerivedMeasures(row map[string]interface{}, r rawRow, measures []str
 			row[m] = safePercent(float64(r.RetryCount), float64(r.RequestCount))
 		case "reconciliation_tokens":
 			row[m] = max(0, r.InputTokens-r.CachedTokens-r.CacheCrTokens) + r.OutputTokens
+		case "exception_rate":
+			row[m] = safePercent(float64(r.ExceptionCnt), float64(r.RequestCount))
+		case "avg_input_per_req":
+			row[m] = safeDivide(float64(r.InputTokens), float64(r.RequestCount))
+		case "avg_output_per_req":
+			row[m] = safeDivide(float64(r.OutputTokens), float64(r.RequestCount))
+		case "avg_cached_per_req":
+			row[m] = safeDivide(float64(r.CachedTokens), float64(r.RequestCount))
+		case "avg_reasoning_per_req":
+			row[m] = safeDivide(float64(r.ReasonTokens), float64(r.RequestCount))
+		case "tokens_per_second":
+			row[m] = safeDivide(float64(r.TotalTokens), float64(r.TotalTimeMs)/1000)
+		case "output_speed":
+			row[m] = safeDivide(float64(r.OutputTokens), float64(r.TotalTimeMs)/1000)
+		case "avg_tokens_per_user":
+			row[m] = safeDivide(float64(r.TotalTokens), float64(r.ActiveUsers))
+		case "avg_cost_per_user":
+			row[m] = safeDivide(r.UsedAmount, float64(r.ActiveUsers))
+		case "avg_requests_per_user":
+			row[m] = safeDivide(float64(r.RequestCount), float64(r.ActiveUsers))
+		case "input_cost_pct":
+			row[m] = safePercent(r.InputAmount, r.UsedAmount)
+		case "output_cost_pct":
+			row[m] = safePercent(r.OutputAmount, r.UsedAmount)
+		case "cache_savings_pct":
+			row[m] = safePercent(r.CachedAmount, r.UsedAmount)
+		case "cost_per_input_1k":
+			row[m] = safeDivide(r.InputAmount, float64(r.InputTokens)) * 1000
+		case "cost_per_output_1k":
+			row[m] = safeDivide(r.OutputAmount, float64(r.OutputTokens)) * 1000
 		}
 	}
 }

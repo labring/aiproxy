@@ -747,9 +747,13 @@
       "categories": {
         "requests": "请求与状态",
         "tokens": "Token 用量",
-        "cost": "费用",
+        "cost": "费用明细",
         "performance": "性能",
-        "computed": "计算指标"
+        "efficiency": "效率指标",
+        "per_user": "人效指标",
+        "rates": "比率指标",
+        "cost_structure": "成本结构",
+        "statistics": "统计"
       },
       "templates": {
         "title": "快速开始",
@@ -786,7 +790,18 @@
       "radarChart": "雷达图",
       "columnVisibility": "显示列",
       "allLevel1Departments": "全部一级部门",
-      "allLevel2Departments": "全部二级部门"
+      "allLevel2Departments": "全部二级部门",
+      "dashboardView": "仪表盘",
+      "searchMeasures": "搜索指标...",
+      "selectedMeasures": "已选",
+      "saveTemplate": "保存模板",
+      "reset": "重置",
+      "myTemplates": "我的模板",
+      "templateName": "模板名称",
+      "deleteTemplate": "删除模板",
+      "deleteTemplateConfirm": "确定要删除此模板吗？",
+      "emptyState": "选择维度和度量，即可自动生成报表",
+      "page": "页"
     },
     "accessControl": {
       "title": "访问控制",

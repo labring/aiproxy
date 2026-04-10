@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Settings2 } from "lucide-react"
+import { Settings2, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -28,27 +28,29 @@ function getHeatColor(value: number, min: number, max: number, key: string): str
     const ratio = (value - min) / (max - min)
 
     if (PERCENTAGE_FIELDS.has(key)) {
-        // For rates: success_rate green→red inverted, error/throttle green→red normal
         if (key === "success_rate" || key === "cache_hit_rate") {
-            // High is good: green
             const r = Math.round(255 - ratio * 200)
             const g = Math.round(55 + ratio * 200)
             return `rgba(${r}, ${g}, 100, 0.12)`
         }
-        // High is bad: red
         const r = Math.round(55 + ratio * 200)
         const g = Math.round(255 - ratio * 200)
         return `rgba(${r}, ${g}, 100, 0.12)`
     }
 
     if (COST_FIELDS.has(key)) {
-        // Purple gradient for cost
         return `rgba(106, 109, 230, ${0.05 + ratio * 0.15})`
     }
 
-    // Default: neutral blue gradient
     return `rgba(59, 130, 246, ${0.04 + ratio * 0.12})`
 }
+
+function getDataBarWidth(value: number, max: number): number {
+    if (max <= 0) return 0
+    return Math.max(0, Math.min(100, (value / max) * 100))
+}
+
+const PAGE_SIZE = 50
 
 // ─── ReportTable ────────────────────────────────────────────────────────────
 
@@ -68,16 +70,18 @@ export function ReportTable({
     const { i18n, t } = useTranslation()
     const lang = i18n.language
 
-    // Sort rows by time dimension if present (when no explicit sort applied)
     const rows = sortBy ? data.rows : sortRowsByTime(data.rows, dimensions)
-
-    // Column visibility: dimension columns always visible
     const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
+    const [page, setPage] = useState(0)
 
     const dimensionSet = new Set(dimensions)
     const visibleColumns = data.columns.filter((col) => !hiddenColumns.has(col.key))
 
-    // Precompute column ranges for heat coloring
+    // Pagination
+    const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+    const pagedRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+    // Precompute column ranges for heat coloring and data bars
     const columnRanges = new Map<string, { min: number; max: number }>()
     for (const col of data.columns) {
         if (dimensionSet.has(col.key)) continue
@@ -97,12 +101,17 @@ export function ReportTable({
     const handleSort = (key: string) => {
         const newOrder = sortBy === key && sortOrder === "desc" ? "asc" : "desc"
         onSort(key, newOrder)
+        setPage(0)
     }
 
     return (
         <div>
-            {/* Column visibility control */}
-            <div className="flex justify-end px-4 py-2 border-b">
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+                <span className="text-xs text-muted-foreground">
+                    {rows.length} {t("enterprise.customReport.totalRows")}
+                    {totalPages > 1 && ` · ${t("enterprise.customReport.page", "Page")} ${page + 1}/${totalPages}`}
+                </span>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
@@ -138,13 +147,11 @@ export function ReportTable({
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b bg-muted/40">
-                            {/* Row number */}
                             <th className="px-3 py-3 text-center font-medium text-muted-foreground w-10 whitespace-nowrap sticky left-0 bg-muted/40 z-10">
                                 #
                             </th>
                             {visibleColumns.map((col, colIdx) => {
                                 const isDimension = dimensionSet.has(col.key)
-                                // First dimension column is sticky
                                 const isFirstDim = isDimension && colIdx === 0
                                 return (
                                     <th
@@ -166,14 +173,13 @@ export function ReportTable({
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map((row, i) => (
+                        {pagedRows.map((row, i) => (
                             <tr
-                                key={i}
+                                key={page * PAGE_SIZE + i}
                                 className="border-b last:border-0 hover:bg-muted/20 transition-colors"
                             >
-                                {/* Row number */}
                                 <td className="px-3 py-2.5 text-center text-xs text-muted-foreground sticky left-0 bg-background z-10">
-                                    {i + 1}
+                                    {page * PAGE_SIZE + i + 1}
                                 </td>
                                 {visibleColumns.map((col, colIdx) => {
                                     const isDimension = dimensionSet.has(col.key)
@@ -184,15 +190,27 @@ export function ReportTable({
                                         ? getHeatColor(numVal, range.min, range.max, col.key)
                                         : undefined
 
+                                    // Data bar for numeric non-dimension columns
+                                    const showDataBar = range && !Number.isNaN(numVal) && !isDimension && !PERCENTAGE_FIELDS.has(col.key)
+                                    const barWidth = showDataBar ? getDataBarWidth(numVal, range.max) : 0
+
                                     return (
                                         <td
                                             key={col.key}
-                                            className={`px-4 py-2.5 whitespace-nowrap ${
+                                            className={`px-4 py-2.5 whitespace-nowrap relative ${
                                                 isFirstDim ? "sticky left-10 bg-background z-10 font-medium" : ""
                                             }`}
-                                            style={bgColor ? { backgroundColor: bgColor } : undefined}
+                                            style={bgColor && !showDataBar ? { backgroundColor: bgColor } : undefined}
                                         >
-                                            {formatCellValue(col.key, row[col.key])}
+                                            {showDataBar && barWidth > 0 && (
+                                                <div
+                                                    className="absolute inset-y-0 left-0 bg-[#6A6DE6]/8 dark:bg-[#6A6DE6]/12 transition-all"
+                                                    style={{ width: `${barWidth}%` }}
+                                                />
+                                            )}
+                                            <span className="relative">
+                                                {formatCellValue(col.key, row[col.key])}
+                                            </span>
                                         </td>
                                     )
                                 })}
@@ -201,6 +219,35 @@ export function ReportTable({
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-2 border-t">
+                    <span className="text-xs text-muted-foreground">
+                        {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, rows.length)} / {rows.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => setPage((p) => Math.max(0, p - 1))}
+                            disabled={page === 0}
+                        >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                            disabled={page >= totalPages - 1}
+                        >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

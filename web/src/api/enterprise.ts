@@ -305,6 +305,30 @@ export interface FieldCatalog {
     computed_measures: { key: string; label: string; type: string }[]
 }
 
+export interface SavedTemplate {
+    id: number
+    name: string
+    created_by: string
+    dimensions: string   // JSON array string
+    measures: string     // JSON array string
+    chart_type: string
+    view_mode: string
+    sort_by: string
+    sort_order: string
+    created_at: string
+    updated_at: string
+}
+
+export interface CreateTemplateRequest {
+    name: string
+    dimensions: string[]
+    measures: string[]
+    chart_type?: string
+    view_mode?: string
+    sort_by?: string
+    sort_order?: string
+}
+
 // Feishu Sync Status
 export interface SyncStatus {
     last_sync_at: string
@@ -723,6 +747,23 @@ export const enterpriseApi = {
 
     generateCustomReport: (req: CustomReportRequest): Promise<CustomReportResponse> => {
         return post<CustomReportResponse>('/enterprise/analytics/custom-report', req)
+    },
+
+    // Report Template CRUD
+    listReportTemplates: (): Promise<SavedTemplate[]> => {
+        return get<SavedTemplate[]>('/enterprise/analytics/custom-report/templates')
+    },
+
+    createReportTemplate: (req: CreateTemplateRequest): Promise<SavedTemplate> => {
+        return post<SavedTemplate>('/enterprise/analytics/custom-report/templates', req)
+    },
+
+    updateReportTemplate: (id: number, req: Partial<CreateTemplateRequest>): Promise<SavedTemplate> => {
+        return put<SavedTemplate>(`/enterprise/analytics/custom-report/templates/${id}`, req)
+    },
+
+    deleteReportTemplate: (id: number): Promise<void> => {
+        return del<void>(`/enterprise/analytics/custom-report/templates/${id}`)
     },
 
     // Tenant Whitelist Management
