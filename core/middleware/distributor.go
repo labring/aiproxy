@@ -440,6 +440,7 @@ func distribute(c *gin.Context, mode mode.Mode) {
 	}
 
 	c.Set(RequestUser, user)
+	SetLogRequestUser(log.Data, user)
 
 	promptCacheKey, err := getPromptCacheKey(c, mode)
 	if err != nil {
@@ -453,6 +454,7 @@ func distribute(c *gin.Context, mode mode.Mode) {
 	}
 
 	c.Set(PromptCacheKey, promptCacheKey)
+	SetLogPromptCacheKey(log.Data, promptCacheKey)
 
 	requestServiceTier, err := getRequestServiceTier(c, mode)
 	if err != nil {
@@ -466,6 +468,7 @@ func distribute(c *gin.Context, mode mode.Mode) {
 	}
 
 	c.Set(RequestServiceTier, requestServiceTier)
+	SetLogServiceTier(log.Data, requestServiceTier)
 
 	metadata, err := getRequestMetadata(c, mode)
 	if err != nil {
