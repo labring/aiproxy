@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Hash, DollarSign, BarChart2, Users, Activity, Zap, Timer, Percent, TrendingUp } from "lucide-react"
 import type { CustomReportResponse } from "@/api/enterprise"
@@ -37,6 +37,8 @@ const ICON_COLOR_MAP: Record<string, string> = {
     unique_models:  "text-violet-600 dark:text-violet-400",
 }
 
+const formatTotalRows = (n: number) => Math.round(n).toLocaleString()
+
 function formatKpiValue(key: string, n: number): string {
     if (COST_FIELDS.has(key)) return `¥${n.toFixed(4)}`
     if (PERCENTAGE_FIELDS.has(key)) return `${n.toFixed(2)}%`
@@ -55,10 +57,14 @@ export function KpiSummaryRow({
 }) {
     const { t, i18n } = useTranslation()
     const lang = i18n.language
-    const kpis = computeKpis(data.rows, measures, lang)
+    const kpis = useMemo(() => computeKpis(data.rows, measures, lang), [data.rows, measures, lang])
     const totalRows = data.total
 
-    const formatTotal = useCallback((n: number) => Math.round(n).toLocaleString(), [])
+    // Pre-create stable formatter references for AnimatedNumber (avoids hooks-in-loop)
+    const formatters = useMemo(
+        () => new Map(kpis.map((kpi) => [kpi.key, (n: number) => formatKpiValue(kpi.key, n)])),
+        [kpis],
+    )
 
     return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -68,7 +74,7 @@ export function KpiSummaryRow({
                     <div>
                         <p className="text-xs text-muted-foreground">{t("enterprise.customReport.totalRows")}</p>
                         <p className="text-xl font-bold mt-0.5 tabular-nums">
-                            <AnimatedNumber value={totalRows} format={formatTotal} />
+                            <AnimatedNumber value={totalRows} format={formatTotalRows} />
                         </p>
                     </div>
                     <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#6A6DE6]/20 to-[#8A8DF7]/10 flex items-center justify-center">
@@ -82,7 +88,7 @@ export function KpiSummaryRow({
                 const Icon = ICON_MAP[kpi.key] ?? BarChart2
                 const gradient = GRADIENT_MAP[kpi.key] ?? "from-[#6A6DE6]/20 to-[#8A8DF7]/10"
                 const iconColor = ICON_COLOR_MAP[kpi.key] ?? "text-[#6A6DE6]"
-                const formatter = useCallback((n: number) => formatKpiValue(kpi.key, n), [kpi.key])
+                const formatter = formatters.get(kpi.key)!
 
                 return (
                     <div

@@ -212,10 +212,7 @@ export function formatCellValue(key: string, value: unknown): string {
     if (key.endsWith("_rate") || key.endsWith("_pct")) return `${n.toFixed(2)}%`
 
     // cost fields
-    if (key.includes("amount") || key === "avg_cost_per_req" || key === "avg_cost_per_user"
-        || key === "cost_per_1k_tokens" || key === "cost_per_input_1k" || key === "cost_per_output_1k") {
-        return `¥${n.toFixed(4)}`
-    }
+    if (COST_FIELDS.has(key)) return `¥${n.toFixed(4)}`
 
     // latency
     if (key.includes("latency") || key.includes("ttfb") || key.includes("time_ms")) {
@@ -337,24 +334,26 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
 // ─── Category metadata ─────────────────────────────────────────────────────
 
 export interface CategoryMeta {
-    key: string
-    labelZh: string
-    labelEn: string
     color: string       // tailwind bg class
     textColor: string   // tailwind text class
 }
 
 export const CATEGORY_META: Record<string, CategoryMeta> = {
-    requests:       { key: "requests",       labelZh: "请求与状态",   labelEn: "Requests",       color: "bg-blue-100 dark:bg-blue-900/30",     textColor: "text-blue-700 dark:text-blue-300" },
-    tokens:         { key: "tokens",         labelZh: "Token 用量",   labelEn: "Tokens",         color: "bg-emerald-100 dark:bg-emerald-900/30", textColor: "text-emerald-700 dark:text-emerald-300" },
-    cost:           { key: "cost",           labelZh: "费用明细",     labelEn: "Cost",           color: "bg-amber-100 dark:bg-amber-900/30",     textColor: "text-amber-700 dark:text-amber-300" },
-    performance:    { key: "performance",    labelZh: "性能",         labelEn: "Performance",    color: "bg-red-100 dark:bg-red-900/30",         textColor: "text-red-700 dark:text-red-300" },
-    efficiency:     { key: "efficiency",     labelZh: "效率指标",     labelEn: "Efficiency",     color: "bg-violet-100 dark:bg-violet-900/30",   textColor: "text-violet-700 dark:text-violet-300" },
-    per_user:       { key: "per_user",       labelZh: "人效指标",     labelEn: "Per User",       color: "bg-pink-100 dark:bg-pink-900/30",       textColor: "text-pink-700 dark:text-pink-300" },
-    rates:          { key: "rates",          labelZh: "比率指标",     labelEn: "Rates",          color: "bg-cyan-100 dark:bg-cyan-900/30",       textColor: "text-cyan-700 dark:text-cyan-300" },
-    cost_structure: { key: "cost_structure", labelZh: "成本结构",     labelEn: "Cost Structure", color: "bg-orange-100 dark:bg-orange-900/30",   textColor: "text-orange-700 dark:text-orange-300" },
-    statistics:     { key: "statistics",     labelZh: "统计",         labelEn: "Statistics",     color: "bg-gray-100 dark:bg-gray-800/30",       textColor: "text-gray-700 dark:text-gray-300" },
+    requests:       { color: "bg-blue-100 dark:bg-blue-900/30",     textColor: "text-blue-700 dark:text-blue-300" },
+    tokens:         { color: "bg-emerald-100 dark:bg-emerald-900/30", textColor: "text-emerald-700 dark:text-emerald-300" },
+    cost:           { color: "bg-amber-100 dark:bg-amber-900/30",     textColor: "text-amber-700 dark:text-amber-300" },
+    performance:    { color: "bg-red-100 dark:bg-red-900/30",         textColor: "text-red-700 dark:text-red-300" },
+    efficiency:     { color: "bg-violet-100 dark:bg-violet-900/30",   textColor: "text-violet-700 dark:text-violet-300" },
+    per_user:       { color: "bg-pink-100 dark:bg-pink-900/30",       textColor: "text-pink-700 dark:text-pink-300" },
+    rates:          { color: "bg-cyan-100 dark:bg-cyan-900/30",       textColor: "text-cyan-700 dark:text-cyan-300" },
+    cost_structure: { color: "bg-orange-100 dark:bg-orange-900/30",   textColor: "text-orange-700 dark:text-orange-300" },
+    statistics:     { color: "bg-gray-100 dark:bg-gray-800/30",       textColor: "text-gray-700 dark:text-gray-300" },
 }
+
+// ─── Default selections ────────────────────────────────────────────────────
+
+export const DEFAULT_DIMS = ["department"]
+export const DEFAULT_MEASURES = ["request_count", "used_amount"]
 
 // ─── Chart colors ───────────────────────────────────────────────────────────
 

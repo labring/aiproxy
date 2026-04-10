@@ -219,9 +219,3 @@ export function TemplateManager({
         </>
     )
 }
-
-// Export a hook-like function to open the save dialog from parent
-export function useTemplateManager() {
-    const [saveOpen, setSaveOpen] = useState(false)
-    return { saveOpen, openSave: () => setSaveOpen(true), closeSave: () => setSaveOpen(false) }
-}

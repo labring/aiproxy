@@ -21,6 +21,8 @@ import {
     CATEGORIES,
     CATEGORY_META,
     REPORT_TEMPLATES,
+    DEFAULT_DIMS,
+    DEFAULT_MEASURES,
     getLabel,
     type FieldDef,
     type ReportTemplate,
@@ -84,9 +86,6 @@ export interface ConfigPanelProps {
     isPending: boolean
     templateManagerSlot?: React.ReactNode
 }
-
-const DEFAULT_DIMS = ["department"]
-const DEFAULT_MEASURES = ["request_count", "used_amount"]
 
 export function ConfigPanel({
     collapsed,
@@ -294,7 +293,7 @@ export function ConfigPanel({
                                         : <ChevronRight className="w-3 h-3 text-muted-foreground/60" />
                                     }
                                     <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta?.textColor ?? "text-muted-foreground/60"}`}>
-                                        {lang.startsWith("zh") ? meta?.labelZh : meta?.labelEn}
+                                        {t(`enterprise.customReport.categories.${category}` as never)}
                                     </span>
                                     {selectedCount > 0 && (
                                         <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 ml-auto">

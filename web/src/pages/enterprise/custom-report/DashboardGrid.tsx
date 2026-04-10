@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { CustomReportResponse } from "@/api/enterprise"
@@ -30,6 +30,16 @@ export function DashboardGrid({
             chartType: "auto" as ChartType,
         })),
     )
+
+    // Reconcile card measures when available measures change
+    useEffect(() => {
+        setCards((prev) =>
+            prev.map((c, i) => ({
+                ...c,
+                measure: measures.includes(c.measure) ? c.measure : (measures[i] ?? measures[0] ?? ""),
+            })),
+        )
+    }, [measures])
 
     const updateCard = (idx: number, updates: Partial<DashboardCardConfig>) => {
         setCards((prev) => prev.map((c, i) => (i === idx ? { ...c, ...updates } : c)))

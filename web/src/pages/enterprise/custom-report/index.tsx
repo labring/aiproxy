@@ -25,7 +25,7 @@ import {
 } from "@/api/enterprise"
 import { type TimeRange, getTimeRange } from "@/lib/enterprise"
 
-import { type ChartType, type ViewMode, type ReportTemplate, TIME_DIMENSIONS } from "./types"
+import { type ChartType, type ViewMode, type ReportTemplate, TIME_DIMENSIONS, DEFAULT_DIMS, DEFAULT_MEASURES } from "./types"
 import { ConfigPanel } from "./ConfigPanel"
 import { FilterBar } from "./FilterBar"
 import { KpiSummaryRow } from "./KpiSummaryRow"
@@ -37,9 +37,6 @@ import { ChartTypePicker } from "./ChartTypePicker"
 import { DashboardGrid } from "./DashboardGrid"
 import { TemplateManager } from "./TemplateManager"
 import { SkeletonChart, EmptyState } from "./EmptyState"
-
-const DEFAULT_DIMS = ["department"]
-const DEFAULT_MEASURES = ["request_count", "used_amount"]
 
 export default function EnterpriseCustomReport() {
     const { t, i18n } = useTranslation()

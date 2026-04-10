@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Settings2, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -74,7 +74,10 @@ export function ReportTable({
     const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
     const [page, setPage] = useState(0)
 
-    const dimensionSet = new Set(dimensions)
+    // Reset page when data changes
+    useEffect(() => setPage(0), [data])
+
+    const dimensionSet = useMemo(() => new Set(dimensions), [dimensions])
     const visibleColumns = data.columns.filter((col) => !hiddenColumns.has(col.key))
 
     // Pagination
@@ -82,12 +85,15 @@ export function ReportTable({
     const pagedRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
     // Precompute column ranges for heat coloring and data bars
-    const columnRanges = new Map<string, { min: number; max: number }>()
-    for (const col of data.columns) {
-        if (dimensionSet.has(col.key)) continue
-        const range = getColumnRange(rows, col.key)
-        if (range) columnRanges.set(col.key, range)
-    }
+    const columnRanges = useMemo(() => {
+        const ranges = new Map<string, { min: number; max: number }>()
+        for (const col of data.columns) {
+            if (dimensionSet.has(col.key)) continue
+            const range = getColumnRange(rows, col.key)
+            if (range) ranges.set(col.key, range)
+        }
+        return ranges
+    }, [data.columns, rows, dimensionSet])
 
     const toggleColumn = (key: string) => {
         setHiddenColumns((prev) => {
