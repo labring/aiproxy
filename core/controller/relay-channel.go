@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"strconv"
 
@@ -22,6 +23,13 @@ const (
 	// maxRetryErrorRate is the maximum error rate threshold for channel retry selection
 	// Channels with error rate higher than this will be filtered out during retry
 	maxRetryErrorRate = 0.75
+	// errorRatePenaltyBase smooths low-error channels so tiny differences near zero
+	// do not create outsized weight gaps.
+	errorRatePenaltyBase = 0.10
+	// errorRatePenalty controls how aggressively unhealthy channels are down-weighted.
+	// With base=0.10 and alpha=2, low-error channels remain relatively close while
+	// medium/high-error channels are penalized much more strongly.
+	errorRatePenalty = 2.0
 )
 
 func GetChannelFromHeader(
@@ -192,16 +200,30 @@ func getAvailableChannels(
 	return migratedChannels, nil
 }
 
-func getPriority(channel *model.Channel, errorRate float64) int32 {
-	priority := channel.GetPriority()
+func getPriorityWeight(channel *model.Channel, errorRate float64) float64 {
+	priority := float64(channel.GetPriority())
+	if priority <= 0 {
+		return 0
+	}
 
 	if errorRate > 1 {
 		errorRate = 1
-	} else if errorRate < 0.1 {
-		errorRate = 0.1
+	} else if errorRate < 0 {
+		errorRate = 0
 	}
 
-	return int32(float64(priority) / errorRate)
+	// Weight starts from configured priority and is then reduced by a smoothed
+	// error-rate penalty, which keeps low-error channels stable while still
+	// strongly penalizing unhealthy channels.
+	return priority / math.Pow(errorRate+errorRatePenaltyBase, errorRatePenalty)
+}
+
+func getChannelErrorRate(errorRates map[int64]float64, channelID int64) float64 {
+	if errorRates == nil {
+		return 0
+	}
+
+	return errorRates[channelID]
 }
 
 func pickChannel(
@@ -224,22 +246,22 @@ func pickChannel(
 		return channels[0], nil
 	}
 
-	var totalWeight int32
+	var totalWeight float64
 
-	cachedPrioritys := make([]int32, len(channels))
+	cachedWeights := make([]float64, len(channels))
 	for i, ch := range channels {
-		priority := getPriority(ch, errorRates[int64(ch.ID)])
-		totalWeight += priority
-		cachedPrioritys[i] = priority
+		weight := getPriorityWeight(ch, getChannelErrorRate(errorRates, int64(ch.ID)))
+		totalWeight += weight
+		cachedWeights[i] = weight
 	}
 
 	if totalWeight == 0 {
 		return channels[rand.IntN(len(channels))], nil
 	}
 
-	r := rand.Int32N(totalWeight)
+	r := rand.Float64() * totalWeight
 	for i, ch := range channels {
-		r -= cachedPrioritys[i]
+		r -= cachedWeights[i]
 		if r < 0 {
 			return ch, nil
 		}
@@ -353,7 +375,6 @@ type initialChannel struct {
 	designatedChannel bool
 	preferChannelIDs  []int
 	ignoreChannelIDs  map[int64]struct{}
-	errorRates        map[int64]float64
 	migratedChannels  []*model.Channel
 }
 
@@ -403,6 +424,11 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 
 	ignoreChannelIDs, err := monitor.GetBannedChannelsMapWithModel(c.Request.Context(), modelName)
 	if err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+
 		log.Errorf("get %s auto banned channels failed: %+v", modelName, err)
 	}
 
@@ -410,6 +436,11 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 
 	errorRates, err := monitor.GetModelChannelErrorRate(c.Request.Context(), modelName)
 	if err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+
 		log.Errorf("get channel model error rates failed: %+v", err)
 	}
 
@@ -436,7 +467,6 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		channel:          channel,
 		preferChannelIDs: preferChannelIDs,
 		ignoreChannelIDs: ignoreChannelIDs,
-		errorRates:       errorRates,
 		migratedChannels: migratedChannels,
 	}, nil
 }
@@ -571,7 +601,19 @@ func getWebSearchChannel(
 	return channel, nil
 }
 
-func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.Channel, error) {
+func getRetryChannel(
+	ctx context.Context,
+	state *retryState,
+	currentRetry, totalRetries int,
+) (*model.Channel, error) {
+	errorRates, err := monitor.GetModelChannelErrorRate(ctx, state.meta.OriginModel)
+	if err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+	}
+
 	if state.exhausted {
 		if state.lastHasPermissionChannel == nil {
 			return nil, ErrChannelsExhausted
@@ -580,7 +622,7 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 		// Check if lastHasPermissionChannel has high error rate
 		// If so, return exhausted to prevent retrying with a bad channel
 		channelID := int64(state.lastHasPermissionChannel.ID)
-		if errorRate, ok := state.errorRates[channelID]; ok && errorRate > maxRetryErrorRate {
+		if errorRate := getChannelErrorRate(errorRates, channelID); errorRate > maxRetryErrorRate {
 			return nil, ErrChannelsExhausted
 		}
 
@@ -592,7 +634,7 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 			state.migratedChannels,
 			state.meta.Mode,
 			state.preferChannelIDs,
-			state.errorRates,
+			errorRates,
 			maxRetryErrorRate,
 			state.ignoreChannelIDs,
 			state.failedChannelIDs,
@@ -608,7 +650,7 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 		newChannel, err := pickChannel(
 			state.migratedChannels,
 			state.meta.Mode,
-			state.errorRates,
+			errorRates,
 			maxRetryErrorRate,
 			state.ignoreChannelIDs,
 			state.failedChannelIDs,
@@ -627,7 +669,7 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 	newChannel, err := pickChannel(
 		state.migratedChannels,
 		state.meta.Mode,
-		state.errorRates,
+		errorRates,
 		maxRetryErrorRate,
 		ignoreChannelIDs...,
 	)
@@ -638,7 +680,7 @@ func getRetryChannel(state *retryState, currentRetry, totalRetries int) (*model.
 
 		// Check if lastHasPermissionChannel has high error rate before using it
 		channelID := int64(state.lastHasPermissionChannel.ID)
-		if errorRate, ok := state.errorRates[channelID]; ok && errorRate > maxRetryErrorRate {
+		if errorRate := getChannelErrorRate(errorRates, channelID); errorRate > maxRetryErrorRate {
 			return nil, ErrChannelsExhausted
 		}
 

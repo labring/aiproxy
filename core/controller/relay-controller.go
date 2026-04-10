@@ -400,7 +400,6 @@ type retryState struct {
 	lastHasPermissionChannel *model.Channel
 	preferChannelIDs         []int
 	ignoreChannelIDs         map[int64]struct{}
-	errorRates               map[int64]float64
 	exhausted                bool
 	failedChannelIDs         map[int64]struct{} // Track all failed channels in this request
 
@@ -455,7 +454,6 @@ func initRetryState(
 		retryTimes:       retryTimes,
 		preferChannelIDs: channel.preferChannelIDs,
 		ignoreChannelIDs: channel.ignoreChannelIDs,
-		errorRates:       channel.errorRates,
 		meta:             meta,
 		result:           result,
 		price:            price,
@@ -547,7 +545,7 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 	i := 0
 
 	for {
-		newChannel, err := getRetryChannel(state, i, state.retryTimes)
+		newChannel, err := getRetryChannel(c.Request.Context(), state, i, state.retryTimes)
 		if err == nil {
 			err = prepareRetry(c)
 		}

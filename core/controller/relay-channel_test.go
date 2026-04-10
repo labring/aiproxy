@@ -2,6 +2,7 @@
 package controller
 
 import (
+	"context"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
@@ -134,7 +135,6 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 
 		return &retryState{
 			preferChannelIDs: []int{2},
-			errorRates:       map[int64]float64{},
 			meta: meta.NewMeta(
 				ch1,
 				mode.Responses,
@@ -151,7 +151,7 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 
 		state := newRetryState()
 
-		channel, err := getRetryChannel(state, 0, 2)
+		channel, err := getRetryChannel(context.Background(), state, 0, 2)
 		require.NoError(t, err)
 		assert.Equal(t, 2, channel.ID)
 	})
@@ -162,7 +162,7 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 		state := newRetryState()
 
 		state.failedChannelIDs = map[int64]struct{}{2: {}}
-		channel, err := getRetryChannel(state, 0, 2)
+		channel, err := getRetryChannel(context.Background(), state, 0, 2)
 		require.NoError(t, err)
 		assert.Equal(t, 1, channel.ID)
 	})
@@ -177,7 +177,6 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 			state.preferChannelIDs = nil
 			state.failedChannelIDs = map[int64]struct{}{1: {}, 2: {}}
 			state.ignoreChannelIDs = nil
-			state.errorRates = map[int64]float64{}
 			state.meta = meta.NewMeta(
 				state.migratedChannels[0],
 				mode.Responses,
@@ -185,11 +184,109 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 				model.ModelConfig{},
 			)
 
-			channel, err := getRetryChannel(state, 1, 2)
+			channel, err := getRetryChannel(context.Background(), state, 1, 2)
 			require.NoError(t, err)
 			assert.Contains(t, []int{1, 2}, channel.ID)
 		},
 	)
+}
+
+func TestGetPriorityWeight(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{Priority: 10}
+
+	t.Run("applies stronger than linear penalty for higher error rates", func(t *testing.T) {
+		t.Parallel()
+
+		lowErrorWeight := getPriorityWeight(channel, 0.05)
+		highErrorWeight := getPriorityWeight(channel, 0.5)
+
+		assert.InDelta(t, 444.444444, lowErrorWeight, 0.0001)
+		assert.InDelta(t, 27.777778, highErrorWeight, 0.0001)
+		assert.Greater(t, lowErrorWeight/highErrorWeight, 10.0)
+	})
+
+	t.Run(
+		"uses base smoothing for low error rates and clamps very high error rates",
+		func(t *testing.T) {
+			t.Parallel()
+
+			assert.InDelta(t, 1000.0, getPriorityWeight(channel, 0), 0.0001)
+			assert.InDelta(t, 826.446281, getPriorityWeight(channel, 0.01), 0.0001)
+			assert.Equal(t, getPriorityWeight(channel, 2), getPriorityWeight(channel, 1))
+		},
+	)
+}
+
+func TestGetPriorityWeightHandlesNilErrorRatesMap(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{Priority: 10}
+
+	assert.InDelta(t, 1000.0, getPriorityWeight(channel, getChannelErrorRate(nil, 123)), 0.0001)
+}
+
+func TestGetChannelWithFallbackHandlesNilInputs(t *testing.T) {
+	t.Parallel()
+
+	mc := &model.ModelCaches{
+		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
+			model.ChannelDefaultSet: {
+				"gpt-5": {
+					{
+						ID:       1,
+						Type:     model.ChannelTypeOpenAI,
+						Status:   model.ChannelStatusEnabled,
+						Priority: 10,
+					},
+				},
+			},
+		},
+	}
+
+	channel, migratedChannels, err := getChannelWithFallback(
+		mc,
+		[]string{model.ChannelDefaultSet},
+		"gpt-5",
+		mode.Responses,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, migratedChannels, 1)
+	require.NotNil(t, channel)
+	assert.Equal(t, 1, channel.ID)
+}
+
+func TestGetRetryChannelHandlesNilInputs(t *testing.T) {
+	t.Parallel()
+
+	ch1 := &model.Channel{
+		ID:       1,
+		Type:     model.ChannelTypeOpenAI,
+		Status:   model.ChannelStatusEnabled,
+		Priority: 10,
+	}
+
+	state := &retryState{
+		preferChannelIDs: nil,
+		ignoreChannelIDs: nil,
+		meta: meta.NewMeta(
+			ch1,
+			mode.Responses,
+			"gpt-5",
+			model.ModelConfig{},
+		),
+		migratedChannels: []*model.Channel{ch1},
+		failedChannelIDs: map[int64]struct{}{},
+	}
+
+	channel, err := getRetryChannel(context.Background(), state, 0, 1)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 1, channel.ID)
 }
 
 func TestGetPreferChannelIDs(t *testing.T) {
