@@ -306,7 +306,7 @@ export function ModelTable() {
                     variant="outline"
                     className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    <span>{setName}</span>
+                    <span>{setName || "default"}</span>
                     <span className="ml-1 text-[11px] opacity-80">
                       {t("model.channelCount", { count: channels.length })}
                     </span>

@@ -51,7 +51,7 @@ func GetConsumptionRanking(c *gin.Context) {
 		timezone = "Local"
 	}
 
-	startTime, endTime := utils.ParseTimeRange(c, 0)
+	startTime, endTime := utils.ParseTimeRange(c, -1)
 
 	rankingType := normalizeConsumptionRankingType(
 		c.DefaultQuery("type", string(model.ConsumptionRankingTypeGroup)),

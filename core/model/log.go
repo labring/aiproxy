@@ -1034,7 +1034,7 @@ func SearchLogs(
 	g.Go(func() error {
 		var err error
 
-		models, err = GetUsedModels(startTimestamp, endTimestamp)
+		models, err = GetUsedModels(channelID, startTimestamp, endTimestamp)
 		return err
 	})
 

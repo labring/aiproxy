@@ -49,6 +49,11 @@ const formatTimestamp = (timestamp: number): string => {
     return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
 }
 
+const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
+    if (!timestamp || timestamp <= 0) return neverLabel
+    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+}
+
 export function GroupTable() {
     const { t } = useTranslation()
 
@@ -177,6 +182,39 @@ export function GroupTable() {
             ),
         },
         {
+            accessorKey: 'available_sets',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.availableSets")}</div>,
+            cell: ({ row }) => {
+                const availableSets = row.original.available_sets || []
+                return (
+                    <button
+                        type="button"
+                        className="flex max-w-[280px] flex-wrap gap-1 text-left"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            openEditDialog(row.original)
+                        }}
+                    >
+                        {availableSets.length === 0 ? (
+                            <Badge variant="secondary" className="cursor-pointer">
+                                default
+                            </Badge>
+                        ) : (
+                            availableSets.map((item) => (
+                                <Badge
+                                    key={`${row.original.id}-${item}`}
+                                    variant="secondary"
+                                    className="max-w-full cursor-pointer break-all"
+                                >
+                                    {item}
+                                </Badge>
+                            ))
+                        )}
+                    </button>
+                )
+            },
+        },
+        {
             accessorKey: 'request_count',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.requestCount")}</div>,
             cell: ({ row }) => (
@@ -224,7 +262,7 @@ export function GroupTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.accessedAt")}</div>,
             cell: ({ row }) => (
                 <div className="text-sm text-muted-foreground">
-                    {formatTimestamp(row.original.accessed_at)}
+                    {formatAccessedAt(row.original.accessed_at, t("token.never"))}
                 </div>
             ),
         },
