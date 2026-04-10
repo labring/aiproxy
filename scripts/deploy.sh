@@ -120,8 +120,24 @@ if [[ "${RESTART_ONLY}" == "0" && "${NO_PULL}" == "0" ]]; then
     STASHED=0
   fi
 
-  git pull --rebase origin "${CURRENT_BRANCH}"
-  pass "Code updated"
+  # When running under sudo, SSH agent forwarding is lost.
+  if git pull --rebase origin "${CURRENT_BRANCH}"; then
+    pass "Code updated"
+  else
+    warn "git pull failed — retrying with explicit SSH key..."
+    SSH_KEY=""
+    for key in /home/*/.ssh/id_ed25519 /home/*/.ssh/id_rsa /root/.ssh/id_ed25519; do
+      if [[ -f "${key}" ]]; then
+        SSH_KEY="${key}"
+        break
+      fi
+    done
+    if [[ -z "${SSH_KEY}" ]]; then
+      fail "git pull failed and no SSH key found for retry. Use --no-pull and pull manually."
+    fi
+    GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --rebase origin "${CURRENT_BRANCH}"
+    pass "Code updated (via explicit SSH key: ${SSH_KEY})"
+  fi
 
   if [[ "${STASHED}" == "1" ]]; then
     warn "Restoring stashed changes..."

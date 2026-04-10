@@ -381,10 +381,16 @@ type GroupCache struct {
 }
 
 func (g *GroupCache) GetAvailableSets() []string {
-	if len(g.AvailableSets) == 0 {
-		return []string{ChannelDefaultSet}
+	if len(g.AvailableSets) > 0 {
+		return g.AvailableSets
 	}
-	return g.AvailableSets
+	if nodeSet := config.GetNodeChannelSet(); nodeSet != "" {
+		if nodeSet == ChannelDefaultSet {
+			return []string{ChannelDefaultSet}
+		}
+		return []string{nodeSet, ChannelDefaultSet}
+	}
+	return []string{ChannelDefaultSet}
 }
 
 func (g *Group) ToGroupCache() *GroupCache {

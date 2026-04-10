@@ -305,6 +305,29 @@ elif [[ "${NODE_TYPE}" == "domestic" ]]; then
   fi
 fi
 
+# Verify Docker container networking (DNS + outbound)
+# iptables NAT MASQUERADE rules can be lost after firewall changes or WireGuard reconfiguration,
+# causing containers to lose DNS resolution and outbound connectivity.
+if ! docker run --rm alpine:3.21 sh -c 'wget -q --timeout=5 -O /dev/null http://www.baidu.com 2>/dev/null' 2>/dev/null; then
+  warn "Docker container networking broken (DNS or outbound failed)"
+  warn "Attempting auto-fix: adding iptables NAT MASQUERADE rule..."
+
+  # Find Docker bridge subnet
+  DOCKER_SUBNET=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || echo "172.17.0.0/16")
+  sudo iptables -t nat -A POSTROUTING -s "${DOCKER_SUBNET}" ! -o docker0 -j MASQUERADE
+
+  # Verify fix
+  if docker run --rm alpine:3.21 sh -c 'wget -q --timeout=5 -O /dev/null http://www.baidu.com 2>/dev/null' 2>/dev/null; then
+    pass "Docker networking restored (added MASQUERADE for ${DOCKER_SUBNET})"
+    warn "Note: this iptables rule is not persistent — it will be lost on reboot."
+    warn "Docker restart will auto-rebuild rules. To persist: install iptables-persistent."
+  else
+    fail "Docker container networking still broken after fix attempt. Check iptables and Docker daemon."
+  fi
+else
+  pass "Docker container networking OK"
+fi
+
 pass "Pre-flight checks passed"
 
 # ══════════════════════════════════════════════════════════════
@@ -326,8 +349,25 @@ if [[ "${NO_PULL}" == "0" ]]; then
     STASHED=0
   fi
 
-  git pull --rebase origin "${CURRENT_BRANCH}"
-  pass "Code updated"
+  # When running under sudo, SSH agent forwarding is lost.
+  # Try normal pull first; if it fails (e.g., SSH permission denied), retry with explicit SSH key.
+  if git pull --rebase origin "${CURRENT_BRANCH}"; then
+    pass "Code updated"
+  else
+    warn "git pull failed — retrying with explicit SSH key..."
+    SSH_KEY=""
+    for key in /home/*/.ssh/id_ed25519 /home/*/.ssh/id_rsa /root/.ssh/id_ed25519; do
+      if [[ -f "${key}" ]]; then
+        SSH_KEY="${key}"
+        break
+      fi
+    done
+    if [[ -z "${SSH_KEY}" ]]; then
+      fail "git pull failed and no SSH key found for retry. Use --no-pull and pull manually."
+    fi
+    GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" git pull --rebase origin "${CURRENT_BRANCH}"
+    pass "Code updated (via explicit SSH key: ${SSH_KEY})"
+  fi
 
   if [[ "${STASHED}" == "1" ]]; then
     warn "Restoring stashed changes..."

@@ -294,3 +294,12 @@ func SetFuzzyTokenThreshold(threshold int64) {
 	threshold = env.Int64("FUZZY_TOKEN_THRESHOLD", threshold)
 	fuzzyTokenThreshold.Store(threshold)
 }
+
+// nodeChannelSet is the server-level default channel set.
+// Overseas nodes set NODE_CHANNEL_SET=overseas so requests
+// prefer overseas channels with automatic fallback to default.
+var nodeChannelSet = env.String("NODE_CHANNEL_SET", "")
+
+func GetNodeChannelSet() string {
+	return nodeChannelSet
+}
