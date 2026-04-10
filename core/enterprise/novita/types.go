@@ -196,7 +196,8 @@ type SyncSummary struct {
 
 // ChannelsInfo contains information about Novita channels.
 type ChannelsInfo struct {
-	Novita ChannelInfo `json:"novita"`
+	Novita     ChannelInfo `json:"novita"`
+	Multimodal ChannelInfo `json:"multimodal,omitempty"`
 }
 
 // ChannelInfo represents channel status.
@@ -271,4 +272,116 @@ type ModelCoverageResult struct {
 	Total     int                 `json:"total"`
 	Covered   int                 `json:"covered"`
 	Uncovered []ModelCoverageItem `json:"uncovered"`
+}
+
+// ── Multimodal API types ──────────────────────────────────────────────────
+// Same API structure as PPIO (domain: api-server.novita.ai).
+
+// multimodalPriceDivisor converts the batch-price API's basePrice0 field
+// to USD/request.  basePrice0 / multimodalPriceDivisor = $/request.
+const multimodalPriceDivisor = 100_000
+
+// NovitaMultimodalModel represents a model from the multimodal-model/list API.
+type NovitaMultimodalModel struct {
+	FusionConfig NovitaMMFusionConfig `json:"fusionConfig"`
+	ModelConfig  NovitaMMModelConfig  `json:"modelConfig"`
+}
+
+// NovitaMMFusionConfig holds display metadata for a multimodal model.
+type NovitaMMFusionConfig struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Series      string `json:"series"`
+	Description string `json:"description"`
+}
+
+// NovitaMMModelConfig holds billing and routing config for a multimodal model.
+type NovitaMMModelConfig struct {
+	Config      NovitaMMConfigDetail `json:"config"`
+	SKUMappings []NovitaSKUMapping   `json:"skuMappings"`
+}
+
+// NovitaMMConfigDetail holds the inner config block (category, billing type).
+type NovitaMMConfigDetail struct {
+	Category string `json:"category"` // "video_gen", "image_gen", "audio_gen"
+}
+
+// NovitaSKUMapping maps a SKU code to its CEL matching expression.
+type NovitaSKUMapping struct {
+	SKUCode string `json:"skuCode"`
+	CELExpr string `json:"celExpr"`
+}
+
+// NovitaMultimodalListResponse is the response from the multimodal-model/list API.
+type NovitaMultimodalListResponse struct {
+	Configs []NovitaMultimodalModel `json:"configs"`
+	Total   int                     `json:"total"`
+}
+
+// NovitaBatchPriceRequest is the request body for the batch-price API.
+type NovitaBatchPriceRequest struct {
+	BusinessType string   `json:"businessType"`
+	ProductIDs   []string `json:"productIds"`
+}
+
+// NovitaBatchPriceResponse is the response from the batch-price API.
+type NovitaBatchPriceResponse struct {
+	Products []NovitaProductPrice `json:"products"`
+}
+
+// NovitaProductPrice represents a single product's pricing from the batch-price API.
+type NovitaProductPrice struct {
+	ProductID       string `json:"productId"`
+	ProductCategory string `json:"productCategory"`
+	BasePrice0      string `json:"basePrice0"` // string; parse to int64
+}
+
+// collectSKUCodes returns all SKU codes from a multimodal model's SKU mappings.
+func (m *NovitaMultimodalModel) collectSKUCodes() []string {
+	codes := make([]string, len(m.ModelConfig.SKUMappings))
+	for i, s := range m.ModelConfig.SKUMappings {
+		codes[i] = s.SKUCode
+	}
+
+	return codes
+}
+
+// minSKUPrice returns the minimum non-zero price across all of this model's SKUs.
+// skuPrices maps skuCode → raw basePrice0 value from the batch-price API.
+// Returns price in USD/request (raw / multimodalPriceDivisor), converted to CNY
+// using the given exchange rate.
+func (m *NovitaMultimodalModel) minSKUPrice(skuPrices map[string]int64, exchangeRate float64) float64 {
+	var minRaw int64
+
+	for _, sku := range m.ModelConfig.SKUMappings {
+		raw, ok := skuPrices[sku.SKUCode]
+		if !ok || raw <= 0 {
+			continue
+		}
+
+		if minRaw == 0 || raw < minRaw {
+			minRaw = raw
+		}
+	}
+
+	if minRaw == 0 {
+		return 0
+	}
+
+	return float64(minRaw) / multimodalPriceDivisor * exchangeRate
+}
+
+// multimodalCategoryToModelType maps the multimodal API's category field to
+// model_type strings used by modeFromEndpoints.
+func multimodalCategoryToModelType(category string) string {
+	switch category {
+	case "image_gen":
+		return "image"
+	case "video_gen":
+		return "video"
+	case "audio_gen":
+		return "audio"
+	default:
+		return "video"
+	}
 }

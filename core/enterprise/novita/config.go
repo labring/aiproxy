@@ -17,7 +17,7 @@ const (
 	optionKeyNovitaAPIBase       = "NovitaAPIBase"
 	optionKeyNovitaMgmtToken     = "NovitaMgmtToken"
 	optionKeyNovitaExchangeRate  = "NovitaExchangeRate"
-	defaultNovitaExchangeRate    = 7.2
+	defaultNovitaExchangeRate    = 7.0
 )
 
 var novitaOptionKeys = []string{

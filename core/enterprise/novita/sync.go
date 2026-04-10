@@ -17,6 +17,7 @@ import (
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
 )
 
@@ -101,6 +102,21 @@ func ExecuteSync(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("transaction failed: %w", err)
+	}
+
+	// Step 3.5: Sync multimodal models from the dedicated console API.
+	if cfg.MgmtToken != "" {
+		synccommon.SendProgress(progressCallback, "multimodal", "同步多模态模型（图像/视频/音频）...", 75, nil)
+
+		mmAdded, mmUpdated, mmErr := syncMultimodalModels(ctx, client, cfg.MgmtToken, exchangeRate)
+		if mmErr != nil {
+			log.Printf("Novita sync: multimodal sync failed (non-fatal): %v", mmErr)
+			result.Errors = append(result.Errors, fmt.Sprintf("multimodal sync: %v", mmErr))
+		} else {
+			if mmAdded > 0 || mmUpdated > 0 {
+				log.Printf("Novita sync: multimodal models added=%d updated=%d", mmAdded, mmUpdated)
+			}
+		}
 	}
 
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
@@ -405,18 +421,24 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
-	if err := model.DB.Select("model", "config").
+	if err := model.DB.Select("model", "type", "config").
 		Where("owner = ?", string(model.ModelOwnerNovita)).
 		Find(&localModels).Error; err != nil {
 		return ChannelsInfo{}, fmt.Errorf("failed to query local Novita models: %w", err)
 	}
 
-	var anthropicModels, openaiModels []string
+	var anthropicModels, openaiModels, multimodalModels []string
 
 	for _, mc := range localModels {
 		// Skip models whose stored status indicates they are not available.
 		// Safety net for models synced before the status filter was added.
 		if status, ok := model.GetModelConfigInt(mc.Config, "status"); ok && status != NovitaModelStatusAvailable {
+			continue
+		}
+
+		// PPIONative models (image/video/audio) go to the multimodal channel.
+		if mc.Type == mode.PPIONative {
+			multimodalModels = append(multimodalModels, mc.Model)
 			continue
 		}
 
@@ -431,12 +453,13 @@ func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allow
 
 	slices.Sort(anthropicModels)
 	slices.Sort(openaiModels)
+	slices.Sort(multimodalModels)
 
-	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
+	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, multimodalModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
 }
 
 func ensureNovitaChannelsFromModels(
-	anthropicModels, openaiModels []string,
+	anthropicModels, openaiModels, multimodalModels []string,
 	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
@@ -456,7 +479,7 @@ func ensureNovitaChannelsFromModels(
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
 		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
-		created, createErr := createNovitaChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels)
+		created, createErr := createNovitaChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels, multimodalModels)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -470,13 +493,13 @@ func ensureNovitaChannelsFromModels(
 	info.Novita.Exists = true
 	info.Novita.ID = channels[0].ID
 
+	// Track whether a multimodal channel exists so we can create one if needed.
+	hasMultimodal := false
+
 	for i := range channels {
-		if channels[i].Type == model.ChannelTypeAnthropic {
+		switch channels[i].Type {
+		case model.ChannelTypeAnthropic:
 			channels[i].Models = synccommon.MergeModels(channels[i].Models, anthropicModels)
-			// Ensure recommended defaults for Novita's Anthropic endpoint:
-			// skip_image_conversion — Novita natively supports URL image sources
-			// disable_context_management — Novita rejects the beta field with 400
-			// pure_passthrough — forward requests verbatim without body transformation
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -487,15 +510,25 @@ func ensureNovitaChannelsFromModels(
 				channels[i].Configs["disable_context_management"] = true
 			}
 			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
-		} else {
+
+		case model.ChannelTypeNovitaMultimodal:
+			hasMultimodal = true
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, multimodalModels)
+			if channels[i].Configs == nil {
+				channels[i].Configs = make(model.ChannelConfigs)
+			}
+			// Multimodal channel always allows passthrough for auto-discovery.
+			channels[i].Configs[model.ChannelConfigAllowPassthroughUnknown] = true
+
+		default:
+			// ChannelTypeNovita (OpenAI-compatible)
 			channels[i].Models = synccommon.MergeModels(channels[i].Models, openaiModels)
-			// Write path_base_map so the passthrough adaptor can route
-			// Responses API requests to the correct base URL.
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
 			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
-				"/v1/responses": novitaResponsesBase(channels[i].BaseURL),
+				"/v1/responses":  novitaResponsesBase(channels[i].BaseURL),
+				"/v1/web-search": novitaWebSearchBase(channels[i].BaseURL),
 			}
 			channels[i].Configs.SetOrInit(model.ChannelConfigAllowPassthroughUnknown, allowPassthroughUnknown, false)
 		}
@@ -505,13 +538,21 @@ func ensureNovitaChannelsFromModels(
 		}
 	}
 
+	// If no multimodal channel exists yet, create one now.
+	if !hasMultimodal && autoCreate && cfg.APIKey != "" {
+		mlCh := newNovitaMultimodalChannel(cfg.APIKey, multimodalModels)
+		if err := model.DB.Create(&mlCh).Error; err != nil {
+			log.Printf("Novita sync: failed to create multimodal channel: %v", err)
+		}
+	}
+
 	return info, nil
 }
 
-// createNovitaChannels creates the OpenAI-compatible channel and, if there are
-// anthropic-endpoint models, an Anthropic-compatible channel as well.
-// Both channels share the same API key from the Novita config.
-func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels []string) ([]model.Channel, error) {
+// createNovitaChannels creates the OpenAI-compatible channel, Anthropic channel
+// (if there are anthropic-endpoint models), and a multimodal channel.
+// All channels share the same API key from the Novita config.
+func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels, multimodalModels []string) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultNovitaAPIBase
@@ -529,7 +570,8 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 			Status:  model.ChannelStatusEnabled,
 			Configs: model.ChannelConfigs{
 				model.ChannelConfigPathBaseMapKey: map[string]string{
-					"/v1/responses": novitaResponsesBase(openaiBase),
+					"/v1/responses":  novitaResponsesBase(openaiBase),
+					"/v1/web-search": novitaWebSearchBase(openaiBase),
 				},
 				model.ChannelConfigAllowPassthroughUnknown: allowPassthroughUnknown,
 			},
@@ -549,7 +591,6 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 				Key:     cfg.APIKey,
 				Models:  anthropicModels,
 				Status:  model.ChannelStatusEnabled,
-				// See ensureNovitaChannelsFromModels for rationale on each key.
 				Configs: model.ChannelConfigs{
 					"skip_image_conversion":      true,
 					"disable_context_management": true,
@@ -564,6 +605,16 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 			created = append(created, anthropicCh)
 		}
 
+		// Always create the multimodal channel so auto-discovery can work even
+		// before any multimodal models are synced from the management API.
+		multimodalCh := newNovitaMultimodalChannel(cfg.APIKey, multimodalModels)
+
+		if err := tx.Create(&multimodalCh).Error; err != nil {
+			return fmt.Errorf("failed to create Novita multimodal channel: %w", err)
+		}
+
+		created = append(created, multimodalCh)
+
 		return nil
 	})
 	if err != nil {
@@ -575,6 +626,118 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 	return created, nil
 }
 
+// newNovitaMultimodalChannel builds the Channel struct for a Novita native
+// multimodal channel, extracted to avoid duplicating the literal.
+func newNovitaMultimodalChannel(apiKey string, models []string) model.Channel {
+	return model.Channel{
+		Name:    "Novita (Multimodal)",
+		Type:    model.ChannelTypeNovitaMultimodal,
+		BaseURL: DefaultNovitaMultimodalBase,
+		Key:     apiKey,
+		Models:  models,
+		Status:  model.ChannelStatusEnabled,
+		Configs: model.ChannelConfigs{
+			model.ChannelConfigAllowPassthroughUnknown: true,
+		},
+	}
+}
+
+// syncMultimodalModels fetches multimodal models (image/video/audio) from
+// the Novita console API and their SKU-based pricing from the batch-price API,
+// then creates or updates ModelConfig entries with PerRequestPrice.
+func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken string, exchangeRate float64) (added, updated int, err error) {
+	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
+	if err != nil {
+		return 0, 0, fmt.Errorf("fetch multimodal models: %w", err)
+	}
+
+	if len(mmModels) == 0 {
+		return 0, 0, nil
+	}
+
+	// Collect all SKU codes for batch price lookup
+	var allSKUs []string
+	for i := range mmModels {
+		allSKUs = append(allSKUs, mmModels[i].collectSKUCodes()...)
+	}
+
+	// Fetch batch pricing
+	skuPrices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, allSKUs)
+	if priceErr != nil {
+		log.Printf("Novita sync: multimodal price fetch failed (non-fatal, using zero prices): %v", priceErr)
+
+		skuPrices = make(map[string]int64)
+	}
+
+	// Create/update ModelConfig for each multimodal model
+	for i := range mmModels {
+		mm := &mmModels[i]
+		modelName := mm.FusionConfig.Name
+
+		if modelName == "" {
+			continue
+		}
+
+		minPrice := mm.minSKUPrice(skuPrices, exchangeRate)
+		modelType := multimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+
+		rawConfig := map[string]any{
+			"model_type":   modelType,
+			"category":     mm.ModelConfig.Config.Category,
+			"display_name": mm.FusionConfig.DisplayName,
+			"description":  mm.FusionConfig.Description,
+		}
+
+		if mm.FusionConfig.Series != "" {
+			rawConfig["series"] = mm.FusionConfig.Series
+		}
+
+		configData := synccommon.ToModelConfigKeys(rawConfig)
+
+		var existing model.ModelConfig
+		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
+			existing.Owner = model.ModelOwnerNovita
+			existing.Type = modeFromEndpoints(modelType, nil)
+			existing.Config = configData
+
+			if minPrice > 0 {
+				existing.Price.PerRequestPrice = model.ZeroNullFloat64(minPrice)
+			}
+
+			if txErr := model.DB.Save(&existing).Error; txErr != nil {
+				log.Printf("Novita sync: failed to update multimodal model %s: %v", modelName, txErr)
+
+				continue
+			}
+
+			updated++
+		} else {
+			mc := model.ModelConfig{
+				Model:  modelName,
+				Owner:  model.ModelOwnerNovita,
+				Type:   modeFromEndpoints(modelType, nil),
+				RPM:    60,
+				TPM:    1000000,
+				Config: configData,
+			}
+
+			if minPrice > 0 {
+				mc.Price.PerRequestPrice = model.ZeroNullFloat64(minPrice)
+			}
+
+			if txErr := model.DB.Create(&mc).Error; txErr != nil {
+				log.Printf("Novita sync: failed to create multimodal model %s: %v", modelName, txErr)
+
+				continue
+			}
+
+			added++
+		}
+	}
+
+	return added, updated, nil
+}
+
 // novitaResponsesBase derives the Responses API base URL from an OpenAI channel's BaseURL.
 // Mirrors the same logic in relay/adaptor/novita so both code paths stay in sync.
 func novitaResponsesBase(channelBaseURL string) string {
@@ -583,6 +746,15 @@ func novitaResponsesBase(channelBaseURL string) string {
 	}
 
 	return "https://api.novita.ai/openai/v1"
+}
+
+// novitaWebSearchBase derives the web-search base URL by replacing /v3/openai with /v3.
+func novitaWebSearchBase(channelBaseURL string) string {
+	if r := strings.Replace(channelBaseURL, "/v3/openai", "/v3", 1); r != channelBaseURL {
+		return r
+	}
+
+	return "https://api.novita.ai/v3"
 }
 
 // StartSyncScheduler starts a background goroutine that syncs Novita models daily at 02:15.

@@ -55,12 +55,12 @@ type channelItem struct {
 // novitaChannelWhere is the shared WHERE clause for finding Novita channels
 // (by channel type OR base_url containing "novita").
 func novitaChannelWhere() string {
-	return "type = ? OR base_url " + common.LikeOp() + " ?"
+	return "type IN (?, ?) OR base_url " + common.LikeOp() + " ?"
 }
 
 // novitaChannelArgs returns the args for novitaChannelWhere.
 func novitaChannelArgs() []any {
-	return []any{model.ChannelTypeNovita, "%novita%"}
+	return []any{model.ChannelTypeNovita, model.ChannelTypeNovitaMultimodal, "%novita%"}
 }
 
 // ListChannelsHandler handles GET /api/enterprise/novita/channels.

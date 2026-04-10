@@ -29,6 +29,7 @@ import (
 	_ "github.com/labring/aiproxy/core/relay/adaptor/mistral"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/moonshot"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/novita"
+	_ "github.com/labring/aiproxy/core/relay/adaptor/novitaml"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/ollama"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/openai"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/openrouter"

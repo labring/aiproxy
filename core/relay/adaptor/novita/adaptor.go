@@ -1,6 +1,8 @@
 package novita
 
 import (
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -25,10 +27,50 @@ const (
 	baseURL = "https://api.novita.ai/v3/openai"
 	// Novita serves Responses API at /openai/v1, same layout as PPIO.
 	responsesBaseURL = "https://api.novita.ai/openai/v1"
+	// Novita web-search lives at /v3/web-search (not under /v3/openai/).
+	webSearchBaseURL = "https://api.novita.ai/v3"
+
+	// PathPrefixWebSearch is the path_base_map key for web-search base URL override.
+	PathPrefixWebSearch = "/v1/web-search"
 )
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
+}
+
+// ConvertRequest overrides passthrough for WebSearch: strips the "model" field
+// which Novita's /v3/web-search endpoint does not accept.
+func (a *Adaptor) ConvertRequest(
+	m *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	if m.Mode == mode.WebSearch {
+		return openai.ConvertWebSearchRequest(m, req)
+	}
+
+	return a.Adaptor.ConvertRequest(m, store, req)
+}
+
+// DoResponse delegates to the passthrough adaptor for full zero-copy relay.
+// For web-search the upstream may carry no usage, so we fall back to counting
+// 1 per successful request.
+func (a *Adaptor) DoResponse(
+	m *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	result, err := a.Adaptor.DoResponse(m, store, c, resp)
+	if err != nil {
+		return result, err
+	}
+
+	if m.Mode == mode.WebSearch && result.Usage.WebSearchCount == 0 {
+		result.Usage.WebSearchCount = 1
+	}
+
+	return result, nil
 }
 
 // GetRequestURL builds the upstream URL with Novita-specific path handling.
@@ -42,21 +84,37 @@ func (a *Adaptor) GetRequestURL(
 	store adaptor.Store,
 	c *gin.Context,
 ) (adaptor.RequestURL, error) {
-	// If path_base_map is configured, let the passthrough base handle it.
-	if _, ok := m.ChannelConfigs[model.ChannelConfigPathBaseMapKey]; ok {
-		return a.Adaptor.GetRequestURL(m, store, c)
-	}
+	// If path_base_map is configured, let the passthrough base handle it
+	// (except for WebSearch which needs model-specific path routing).
+	pbm := passthrough.GetPathBaseMap(m.ChannelConfigs)
 
-	// Legacy fallback: derive Responses API base URL from channel BaseURL.
 	switch m.Mode {
 	case mode.Responses,
 		mode.ResponsesGet,
 		mode.ResponsesDelete,
 		mode.ResponsesCancel,
 		mode.ResponsesInputItems:
+		if len(pbm) > 0 {
+			return a.Adaptor.GetRequestURL(m, store, c)
+		}
+
+		// Legacy fallback: derive Responses API base URL from channel BaseURL.
 		rb := responsesBase(m.Channel.BaseURL)
 
 		return openai.ResponsesURL(rb, m.Mode, m.ResponseID)
+
+	case mode.WebSearch:
+		wb := pbm[PathPrefixWebSearch]
+		if wb == "" {
+			wb = WebSearchBase(m.Channel.BaseURL)
+		}
+
+		u, err := url.JoinPath(wb, "/web-search")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{Method: http.MethodPost, URL: u}, nil
 
 	default:
 		return a.Adaptor.GetRequestURL(m, store, c)
@@ -95,4 +153,13 @@ func responsesBase(channelBaseURL string) string {
 	}
 
 	return responsesBaseURL
+}
+
+// WebSearchBase derives the web-search base URL by replacing /v3/openai with /v3.
+func WebSearchBase(channelBaseURL string) string {
+	if r := strings.Replace(channelBaseURL, "/v3/openai", "/v3", 1); r != channelBaseURL {
+		return r
+	}
+
+	return webSearchBaseURL
 }

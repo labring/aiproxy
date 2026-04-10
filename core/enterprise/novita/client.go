@@ -3,6 +3,7 @@
 package novita
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -24,6 +26,12 @@ const (
 	// novitaMgmtEndpoint is the management API endpoint providing full model catalog
 	// with richer data (RPM/TPM, cache pricing, tiered billing).
 	novitaMgmtEndpoint = "https://api-server.novita.ai/v1/product/model/list"
+	// DefaultNovitaMultimodalBase is the base URL for Novita native multimodal channels.
+	DefaultNovitaMultimodalBase = "https://api.novita.ai"
+	// novitaMultimodalModelsEndpoint is the multimodal model catalog API.
+	novitaMultimodalModelsEndpoint = "https://api-server.novita.ai/v1/product/multimodal-model/list"
+	// novitaBatchPriceEndpoint is the SKU-based batch pricing API.
+	novitaBatchPriceEndpoint = "https://api-server.novita.ai/v1/product/batch-price"
 	// DefaultTimeout is the HTTP client timeout.
 	defaultNovitaTimeout = 30 * time.Second
 	// maxResponseSize caps the body we read from Novita API (50 MB).
@@ -233,4 +241,107 @@ func (c *NovitaClient) FetchAllModelsMerged(ctx context.Context, mgmtToken strin
 	}
 
 	return v2Models, nil
+}
+
+// ── Multimodal API (api-server.novita.ai) ────────────────────────────────
+
+// FetchMultimodalModels fetches all multimodal models (image/video/audio) from
+// the Novita console API. Requires the mgmt console token for authentication.
+func (c *NovitaClient) FetchMultimodalModels(ctx context.Context, mgmtToken string) ([]NovitaMultimodalModel, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, novitaMultimodalModelsEndpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+mgmtToken)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch multimodal models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("multimodal API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var listResp NovitaMultimodalListResponse
+	if err := json.Unmarshal(body, &listResp); err != nil {
+		return nil, fmt.Errorf("failed to parse multimodal response: %w", err)
+	}
+
+	return listResp.Configs, nil
+}
+
+// FetchMultimodalPrices fetches batch SKU pricing for the given SKU codes.
+// Returns a map of skuCode → raw basePrice0 value (divide by multimodalPriceDivisor for USD/request).
+func (c *NovitaClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string, skuCodes []string) (map[string]int64, error) {
+	if len(skuCodes) == 0 {
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
+	defer cancel()
+
+	reqBody := NovitaBatchPriceRequest{
+		BusinessType: "model_api",
+		ProductIDs:   skuCodes,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal batch-price request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, novitaBatchPriceEndpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+mgmtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch batch prices: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("batch-price API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var priceResp NovitaBatchPriceResponse
+	if err := json.Unmarshal(body, &priceResp); err != nil {
+		return nil, fmt.Errorf("failed to parse batch-price response: %w", err)
+	}
+
+	result := make(map[string]int64, len(priceResp.Products))
+	for _, p := range priceResp.Products {
+		if p.BasePrice0 == "" || p.BasePrice0 == "0" {
+			continue
+		}
+
+		raw, err := strconv.ParseInt(p.BasePrice0, 10, 64)
+		if err == nil && raw > 0 {
+			result[p.ProductID] = raw
+		}
+	}
+
+	return result, nil
 }

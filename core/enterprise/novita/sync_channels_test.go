@@ -64,6 +64,7 @@ func TestEnsureNovitaChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 	info, err := ensureNovitaChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
+		nil, // multimodalModels
 		false,
 		&purePassthrough,
 		&allowUnknown,

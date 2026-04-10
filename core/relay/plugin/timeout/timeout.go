@@ -29,7 +29,7 @@ func NewTimeoutPlugin() plugin.Plugin {
 // Update this when adding new passthrough-based adaptors.
 func isPassthroughChannel(chType model.ChannelType) bool {
 	switch chType {
-	case model.ChannelTypePPIO, model.ChannelTypePPIOMultimodal, model.ChannelTypeNovita:
+	case model.ChannelTypePPIO, model.ChannelTypePPIOMultimodal, model.ChannelTypeNovita, model.ChannelTypeNovitaMultimodal:
 		return true
 	default:
 		return false

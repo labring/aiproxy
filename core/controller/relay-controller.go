@@ -56,13 +56,18 @@ type RelayController struct {
 // function parameter named "mode" shadows the "mode" package import.
 const unknownMode = mode.Unknown
 
-// PassthroughSuccessHook is called in a background goroutine the first time a
-// request for an unregistered (passthrough-unknown) model succeeds. The hook
-// receives the channel ID, channel type, and the original model name.
-// It is intended for auto-discovery: the enterprise PPIO package registers a
-// handler here to look up the model's pricing and create a ModelConfig entry.
-// The hook is nil by default (no-op).
-var PassthroughSuccessHook func(ctx context.Context, channelID int, channelType model.ChannelType, modelName string)
+// passthroughSuccessHooks is a chain of hooks called in background goroutines
+// when a passthrough-unknown model request succeeds for the first time.
+// Each hook receives the channel ID, channel type, and the original model name.
+// Enterprise packages (PPIO, Novita) register handlers via
+// RegisterPassthroughSuccessHook to auto-discover pricing and register models.
+var passthroughSuccessHooks []func(ctx context.Context, channelID int, channelType model.ChannelType, modelName string)
+
+// RegisterPassthroughSuccessHook appends a hook to the passthrough success chain.
+// Must be called during init() — not safe for concurrent use.
+func RegisterPassthroughSuccessHook(fn func(ctx context.Context, channelID int, channelType model.ChannelType, modelName string)) {
+	passthroughSuccessHooks = append(passthroughSuccessHooks, fn)
+}
 
 var adaptorStore adaptor.Store = &storeImpl{}
 
@@ -289,7 +294,7 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	if result.Error == nil &&
 		meta.ChannelConfigs.GetBool(model.ChannelConfigAllowPassthroughUnknown) &&
 		meta.ModelConfig.Type == unknownMode {
-		if h := PassthroughSuccessHook; h != nil {
+		for _, h := range passthroughSuccessHooks {
 			go h(context.Background(), meta.Channel.ID, meta.Channel.Type, meta.OriginModel)
 		}
 	}

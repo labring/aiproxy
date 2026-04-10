@@ -59,6 +59,9 @@ const (
 	// Request paths are forwarded verbatim: /v3/{model-id} for sync models,
 	// /v3/async/{model-id} for async models.
 	ChannelTypePPIOMultimodal ChannelType = 55
+	// ChannelTypeNovitaMultimodal is for Novita native multimodal endpoints.
+	// Same API structure as PPIO multimodal (domain: api.novita.ai).
+	ChannelTypeNovitaMultimodal ChannelType = 56
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -105,4 +108,5 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeFake:                    "fake",
 	ChannelTypePPIO:                    "ppio",
 	ChannelTypePPIOMultimodal:          "ppio multimodal",
+	ChannelTypeNovitaMultimodal:        "海外 multimodal",
 }

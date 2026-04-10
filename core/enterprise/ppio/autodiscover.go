@@ -21,7 +21,7 @@ import (
 var discoverGroup singleflight.Group
 
 func init() {
-	controller.PassthroughSuccessHook = onPassthroughFirstSuccess
+	controller.RegisterPassthroughSuccessHook(onPassthroughFirstSuccess)
 }
 
 // onPassthroughFirstSuccess is called (in a background goroutine) after a
