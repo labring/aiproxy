@@ -235,6 +235,7 @@ func saveCacheFollowMappings(
 	meta *meta.Meta,
 	expiresAt time.Time,
 	minInterval time.Duration,
+	enableGenericFollow bool,
 ) error {
 	if meta.User != "" {
 		if err := saveStableStoreMapping(
@@ -255,6 +256,10 @@ func saveCacheFollowMappings(
 		); err != nil {
 			return err
 		}
+	}
+
+	if !enableGenericFollow {
+		return nil
 	}
 
 	if err := saveStableStoreMapping(
@@ -350,6 +355,7 @@ func (p *Plugin) DoResponse(
 		meta,
 		expiresAt,
 		pluginConfig.GetRecentChannelUpdateDebounce(),
+		pluginConfig.EnableGenericFollow,
 	); err != nil {
 		common.GetLogger(c).Warnf("save cachefollow store failed: %v", err)
 	}

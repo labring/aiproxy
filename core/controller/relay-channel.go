@@ -459,10 +459,10 @@ func supportsCacheFollowMode(m mode.Mode) bool {
 	}
 }
 
-func isCacheFollowEnabled(c *gin.Context) bool {
+func getCacheFollowConfig(c *gin.Context) (cachefollow.Config, bool) {
 	v, ok := c.Get(middleware.ModelConfig)
 	if !ok {
-		return false
+		return cachefollow.Config{}, false
 	}
 
 	modelConfig, ok := v.(model.ModelConfig)
@@ -472,14 +472,19 @@ func isCacheFollowEnabled(c *gin.Context) bool {
 
 	pluginConfig := cachefollow.Config{}
 	if err := modelConfig.LoadPluginConfig(cachefollow.PluginName, &pluginConfig); err != nil {
-		return false
+		return cachefollow.Config{}, false
 	}
 
-	return pluginConfig.Enable
+	if !pluginConfig.Enable {
+		return cachefollow.Config{}, false
+	}
+
+	return pluginConfig, true
 }
 
 func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
-	if !supportsCacheFollowMode(m) || !isCacheFollowEnabled(c) {
+	pluginConfig, ok := getCacheFollowConfig(c)
+	if !supportsCacheFollowMode(m) || !ok {
 		return nil
 	}
 
@@ -531,8 +536,10 @@ func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
 		appendChannelID(model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeRecent))
 	}
 
-	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable))
-	appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeRecent))
+	if pluginConfig.EnableGenericFollow {
+		appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable))
+		appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeRecent))
+	}
 
 	if len(preferChannelIDs) == 0 {
 		return nil

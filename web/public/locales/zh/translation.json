@@ -440,10 +440,12 @@
       },
       "cacheFollowPlugin": {
         "title": "缓存跟随插件",
-        "description": "支持基于 prompt_cache_key 的定向渠道跟随，以及无 cache key 时的通用缓存渠道跟随，用于提高上游缓存命中率。默认关闭。",
+        "description": "默认支持基于 prompt_cache_key 的定向渠道跟随，以及 user 范围的缓存渠道跟随，用于提高上游缓存命中率。通用缓存渠道跟随需要显式开启。默认关闭。",
+        "enableGenericFollow": "启用通用缓存渠道跟随",
+        "enableGenericFollowDescription": "开启 group + token + model 这一层通用范围的缓存渠道跟随。只有在没有 prompt_cache_key 映射和 user 范围映射可用时，才会额外尝试这层通用跟随。适合每个用户或租户都有独立 group/token 的场景；如果很多人共用同一个 group/token，或通过全局 admin key 承载流量，则不建议开启，否则这部分请求可能都会跟随到同一个已记住渠道，削弱负载均衡。",
         "followedChannelTTLSeconds": "跟随渠道保留时长（秒）",
         "followedChannelTTLSecondsPlaceholder": "留空则使用默认值 180",
-        "followedChannelTTLSecondsDescription": "控制已记住的缓存有效渠道保留多久。对 user 范围和通用范围始终生效；对于 prompt_cache_key，请求若上游没有返回更具体的 retention，也会使用这个值。",
+        "followedChannelTTLSecondsDescription": "控制已记住的缓存有效渠道保留多久。对 user 范围始终生效；对通用范围则仅在启用了通用缓存渠道跟随后生效；对于 prompt_cache_key，请求若上游没有返回更具体的 retention，也会使用这个值。",
         "recentChannelUpdateDebounceSeconds": "最近渠道更新时间去抖窗口（秒）",
         "recentChannelUpdateDebounceSecondsPlaceholder": "留空则使用默认值 30",
         "recentChannelUpdateDebounceSecondsDescription": "控制同一作用域下 recent 渠道映射的最小刷新间隔，用于限制频繁更新 recent 记录，同时保留对上游最近路由变化的跟随能力。"

@@ -226,7 +226,7 @@ func TestGetPreferChannelIDs(t *testing.T) {
 			},
 		})
 
-		assert.Equal(t, []int{11, 22}, getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions))
+		assert.Equal(t, []int{11}, getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions))
 	})
 }
 
@@ -268,7 +268,7 @@ func TestGetPreferChannelIDsDeduplicatesPromptCacheAndCacheFollow(t *testing.T) 
 	})
 }
 
-func TestGetPreferChannelIDsFallsBackToUserAndCacheFollowWhenPromptCacheKeyExists(t *testing.T) {
+func TestGetPreferChannelIDsFallsBackToUserWhenPromptCacheKeyExists(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	withTestStoreDB(t, func() {
@@ -303,7 +303,7 @@ func TestGetPreferChannelIDsFallsBackToUserAndCacheFollowWhenPromptCacheKeyExist
 			},
 		})
 
-		assert.Equal(t, []int{33, 22}, getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions))
+		assert.Equal(t, []int{33}, getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions))
 	})
 }
 
@@ -359,7 +359,7 @@ func TestGetPreferChannelIDsReadsStableBeforeRecent(t *testing.T) {
 		c.Set(middleware.ModelConfig, model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				"cachefollow": {"enable": true},
+				"cachefollow": {"enable": true, "enable_generic_follow": true},
 			},
 		})
 
@@ -429,7 +429,7 @@ func TestGetPreferChannelIDsReadsPromptThenUserThenGeneric(t *testing.T) {
 		c.Set(middleware.ModelConfig, model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				"cachefollow": {"enable": true},
+				"cachefollow": {"enable": true, "enable_generic_follow": true},
 			},
 		})
 
@@ -438,6 +438,43 @@ func TestGetPreferChannelIDsReadsPromptThenUserThenGeneric(t *testing.T) {
 			[]int{11, 12, 21, 22, 31, 32},
 			getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions),
 		)
+	})
+}
+
+func TestGetPreferChannelIDsReadsGenericOnlyWhenExplicitlyEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	withTestStoreDB(t, func() {
+		_, err := model.SaveStore(&model.StoreV2{
+			ID:        model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
+			GroupID:   "group-1",
+			TokenID:   7,
+			ChannelID: 31,
+			Model:     "gpt-5",
+		})
+		require.NoError(t, err)
+
+		_, err = model.SaveStore(&model.StoreV2{
+			ID:        model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
+			GroupID:   "group-1",
+			TokenID:   7,
+			ChannelID: 32,
+			Model:     "gpt-5",
+		})
+		require.NoError(t, err)
+
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set(middleware.Group, model.GroupCache{ID: "group-1"})
+		c.Set(middleware.Token, model.TokenCache{ID: 7})
+		c.Set(middleware.ModelConfig, model.ModelConfig{
+			Model: "gpt-5",
+			Plugin: map[string]map[string]any{
+				"cachefollow": {"enable": true, "enable_generic_follow": true},
+			},
+		})
+
+		assert.Equal(t, []int{31, 32}, getPreferChannelIDs(c, "gpt-5", mode.ChatCompletions))
 	})
 }
 

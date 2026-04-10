@@ -97,9 +97,9 @@ const MANAGED_PLUGIN_KEYS = {
     ]),
     cachefollow: new Set([
         'enable',
+        'enable_generic_follow',
         'followed_channel_ttl_seconds',
         'recent_channel_update_debounce_seconds',
-        'last_store_update_window',
     ]),
     'web-search': new Set([
         'enable',
@@ -115,6 +115,10 @@ const MANAGED_PLUGIN_KEYS = {
     'think-split': new Set(['enable']),
     'stream-fake': new Set(['enable']),
 } as const
+
+const DROPPED_CACHEFOLLOW_PLUGIN_KEYS = new Set([
+    'last_store_update_window',
+])
 
 const KNOWN_CONFIG_KEYS = new Set([
     'max_input_tokens',
@@ -469,6 +473,9 @@ export function ModelForm({
             Object.assign(pluginData, {
                 cachefollow: {
                     enable: true,
+                    ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                        enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                    }),
                     ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
                         followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
                     }),
@@ -582,11 +589,16 @@ export function ModelForm({
         if (data.plugin?.cachefollow?.enable) {
             const existingCacheFollowPlugin = (baseModelConfig?.plugin?.cachefollow || {}) as Record<string, unknown>
             const preservedCacheFollowPluginFields = Object.fromEntries(
-                Object.entries(existingCacheFollowPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS.cachefollow.has(key))
+                Object.entries(existingCacheFollowPlugin).filter(
+                    ([key]) => !MANAGED_PLUGIN_KEYS.cachefollow.has(key) && !DROPPED_CACHEFOLLOW_PLUGIN_KEYS.has(key)
+                )
             )
             mergedPlugin.cachefollow = {
                 ...preservedCacheFollowPluginFields,
                 enable: true,
+                ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                    enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                }),
                 ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
                     followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
                 }),
@@ -1489,6 +1501,25 @@ export function ModelForm({
 
                         {cacheFollowEnabled && (
                             <div className="pl-8 pb-4 space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable_generic_follow"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-start space-x-3 rounded-md border p-4">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value ?? false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                            <div className="space-y-1 leading-none">
+                                                <FormLabel>{t("model.dialog.cacheFollowPlugin.enableGenericFollow")}</FormLabel>
+                                                <FormDescription>{t("model.dialog.cacheFollowPlugin.enableGenericFollowDescription")}</FormDescription>
+                                            </div>
+                                        </FormItem>
+                                    )}
+                                />
+
                                 <FormField
                                     control={form.control}
                                     name="plugin.cachefollow.followed_channel_ttl_seconds"

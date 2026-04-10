@@ -107,6 +107,7 @@ type CachePlugin = {
 
 type CacheFollowPlugin = {
     enable: boolean
+    enable_generic_follow?: boolean
     followed_channel_ttl_seconds?: number
     recent_channel_update_debounce_seconds?: number
 }

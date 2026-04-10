@@ -4,16 +4,18 @@
 
 `cachefollow` is used to improve upstream cache hit rate.
 
-It supports two main cache-follow behaviors:
+By default, it enables:
 
 - `prompt_cache_key`-based targeted channel follow
-- generic cache-follow when no cache key is provided
+- user-scoped cache-follow
 
-When the request includes a `user` field, it also records an additional user-scoped cache-follow mapping.
+Generic cache-follow is **not** enabled by default. It must be explicitly enabled through `enable_generic_follow`.
 
 The plugin is disabled by default and must be explicitly enabled in the model configuration.
 
 ## Configuration Example
+
+Default behavior, with only `prompt_cache_key` and `user` scopes enabled:
 
 ```json
 {
@@ -29,12 +31,30 @@ The plugin is disabled by default and must be explicitly enabled in the model co
 }
 ```
 
+If you also want generic cache-follow:
+
+```json
+{
+  "model": "gpt-5",
+  "type": 1,
+  "plugin": {
+    "cachefollow": {
+      "enable": true,
+      "enable_generic_follow": true,
+      "followed_channel_ttl_seconds": 180,
+      "recent_channel_update_debounce_seconds": 30
+    }
+  }
+}
+```
+
 ## Configuration Fields
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enable` | `bool` | `false` | Supports `prompt_cache_key`-based targeted channel follow and generic cache-follow when no cache key is provided, helping improve upstream cache hit rate. Disabled by default. |
-| `followed_channel_ttl_seconds` | `integer` | `180` | Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped and generic entries, and also applies to `prompt_cache_key` entries when the upstream does not return a more specific retention. |
+| `enable` | `bool` | `false` | Supports `prompt_cache_key`-based targeted channel follow and user-scoped cache-follow by default, helping improve upstream cache hit rate. Disabled by default. |
+| `enable_generic_follow` | `bool` | `false` | Enables generic cache-follow for the model-level scope. This is only used when no `prompt_cache_key` mapping or user-scoped mapping is available. Recommended when each user effectively has an isolated `group` and `token`; not recommended when many users share the same `group` and `token` scope. |
+| `followed_channel_ttl_seconds` | `integer` | `180` | Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped entries, applies to generic entries only when generic follow is enabled, and also applies to `prompt_cache_key` entries when the upstream does not return a more specific retention. |
 | `recent_channel_update_debounce_seconds` | `integer` | `30` | Controls the minimum refresh interval for the `recent` channel mapping in the same scope, reducing noisy `recent` updates while still following recent upstream routing changes. |
 
 ## Scopes and Priority
@@ -43,7 +63,7 @@ When the plugin is enabled, channel selection tries remembered cache-effective c
 
 1. `prompt_cache_key` scope
 2. `user` scope
-3. generic scope
+3. generic scope, only when `enable_generic_follow = true`
 4. normal channel selection if none of the remembered channels can be used
 
 Each scope keeps two remembered channels:
@@ -51,7 +71,12 @@ Each scope keeps two remembered channels:
 - `stable`: the first cache-effective channel observed in that scope
 - `recent`: the most recently observed cache-effective channel in that scope
 
-So a single request can contribute up to 6 preferred channels:
+So a single request can contribute:
+
+- up to 4 preferred channels by default
+- up to 6 preferred channels when `enable_generic_follow = true`
+
+Full order when generic follow is enabled:
 
 1. `prompt_cache_key stable`
 2. `prompt_cache_key recent`
@@ -82,6 +107,17 @@ In practice:
 
 - `stable` is better for long-lived cache affinity
 - `recent` is better for following recent upstream routing changes
+
+Typical `recent` scenarios:
+
+- the previously preferred channel now has an error rate above the selection threshold, so traffic moves to another healthy cache-effective channel
+- the previously preferred channel is disabled or deleted, so selection falls through to another available channel and the `recent` mapping eventually follows it
+- the previously preferred channel becomes banned by monitor, so requests stop using it and `recent` can move to the next cache-effective channel once a new successful request is observed
+
+This is why `recent` is debounced instead of frozen:
+
+- it avoids noisy writes under high traffic
+- it still allows the remembered routing to adapt when the upstream routing reality changes
 
 ## When a Channel Is Recorded
 
@@ -143,20 +179,53 @@ If not configured, it uses the default `180s`.
 
 ### Generic Scope
 
-As long as the current mode supports `cachefollow` and the request satisfies the recording conditions, the plugin records:
+Generic scope is only active when:
+
+- `enable_generic_follow = true`
+
+When enabled, and the current mode supports `cachefollow`, and the request satisfies the recording conditions, the plugin records:
 
 - `generic stable`
 - `generic recent`
 
-This scope also always uses:
+This scope also uses:
 
 - `followed_channel_ttl_seconds`
 
 If not configured, it uses the default `180s`.
 
+## When to Enable Generic Follow
+
+Generic follow is keyed by:
+
+- `group`
+- `token`
+- `model`
+
+That means it works well when this scope is already narrow enough.
+
+Recommended cases:
+
+- public cloud or multi-tenant deployments where each user or tenant has its own `group` and `token`
+- environments where a single `group + token + model` scope naturally represents one isolated traffic source
+
+In those cases, generic follow can improve cache affinity without causing unrelated traffic to collapse onto the same channel.
+
+Avoid enabling generic follow when:
+
+- many users share the same `group` and `token`
+- traffic is carried through a single global admin key
+- you rely on broad load balancing inside one large shared `group + token + model` scope
+
+Typical bad case:
+
+- all traffic uses one shared admin key, with no meaningful `group` or `token` isolation between users
+
+In that setup, enabling generic follow means requests in that shared scope can all converge on the same remembered channel. That weakens load balancing and can over-concentrate traffic on one channel.
+
 ## Supported Modes
 
-Modes that support generic and user-scoped cache-follow:
+Modes that support user-scoped cache-follow:
 
 - `responses`
 - `chat.completions`
@@ -168,9 +237,11 @@ Modes that additionally support `prompt_cache_key`-scoped targeted follow:
 - `responses`
 - `chat.completions`
 
+Generic scope follows the same mode support as user scope, but only when `enable_generic_follow = true`.
+
 This means:
 
-- `gemini` and `anthropic` only record user-scoped and generic mappings
+- `gemini` and `anthropic` can record user-scoped and generic mappings
 - even if a request includes `prompt_cache_key`, unsupported modes do not record `prompt_cache_key` scope
 
 ## Channel Fallback Rules
@@ -193,25 +264,10 @@ This also means:
 - disabled channels automatically stop being used
 - unhealthy channels are not forced back in just because they previously had a cache hit
 
-## Full Selection Order Example
-
-If a request includes both:
-
-- `prompt_cache_key`
-- `user`
-
-then the selection order is:
-
-1. `prompt_cache_key stable`
-2. `prompt_cache_key recent`
-3. `user stable`
-4. `user recent`
-5. `generic stable`
-6. `generic recent`
-7. normal channel selection if none of the above can be used
-
 ## Notes
 
 - disabling the plugin also disables reading cache-follow mappings during channel selection
+- by default, only `prompt_cache_key` and `user` mappings are read and written
+- generic mappings are only read and written when `enable_generic_follow = true`
 - the plugin only affects channel preference; it does not modify the request body
 - `recent_channel_update_debounce_seconds` only affects `recent` refresh frequency and does not affect `stable`

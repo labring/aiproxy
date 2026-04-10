@@ -104,7 +104,7 @@ func TestDoResponseRecordsPromptAndGenericMappingsForResponses(t *testing.T) {
 		ModelConfig: model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				PluginName: {"enable": true},
+				PluginName: {"enable": true, "enable_generic_follow": true},
 			},
 		},
 		Group:   model.GroupCache{ID: "group-1"},
@@ -170,7 +170,7 @@ func TestDoResponseRecordsPromptAndGenericMappingsForResponses(t *testing.T) {
 	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(24*time.Hour+time.Second)))
 }
 
-func TestDoResponseRecordsCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
+func TestDoResponseSkipsGenericCacheFollowWhenPromptCacheKeyAbsentByDefault(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -198,7 +198,6 @@ func TestDoResponseRecordsCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
 		Channel: meta.ChannelMeta{ID: 9},
 	}
 
-	start := time.Now()
 	_, relayErr := (&Plugin{}).DoResponse(
 		requestMeta,
 		store,
@@ -215,34 +214,12 @@ func TestDoResponseRecordsCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
 			},
 		},
 	)
-	end := time.Now()
-
 	require.Nil(t, relayErr)
-	require.Len(t, store.savedIfNotExist, 1)
-	require.Len(t, store.saved, 1)
-	assert.Equal(
-		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
-		store.savedIfNotExist[0].ID,
-	)
-	assert.Equal(
-		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
-		store.saved[0].ID,
-	)
-	assert.True(
-		t,
-		store.savedIfNotExist[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)),
-	)
-	assert.True(
-		t,
-		store.savedIfNotExist[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)),
-	)
-	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(defaultFollowedChannelTTL-time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)))
+	assert.Empty(t, store.savedIfNotExist)
+	assert.Empty(t, store.saved)
 }
 
-func TestDoResponseRecordsUserAndGenericCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
+func TestDoResponseRecordsUserCacheFollowWhenPromptCacheKeyAbsent(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -289,8 +266,8 @@ func TestDoResponseRecordsUserAndGenericCacheFollowWhenPromptCacheKeyAbsent(t *t
 	)
 
 	require.Nil(t, relayErr)
-	require.Len(t, store.savedIfNotExist, 2)
-	require.Len(t, store.saved, 2)
+	require.Len(t, store.savedIfNotExist, 1)
+	require.Len(t, store.saved, 1)
 	assert.Equal(
 		t,
 		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeStable),
@@ -298,18 +275,8 @@ func TestDoResponseRecordsUserAndGenericCacheFollowWhenPromptCacheKeyAbsent(t *t
 	)
 	assert.Equal(
 		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
-		store.savedIfNotExist[1].ID,
-	)
-	assert.Equal(
-		t,
 		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
-	)
-	assert.Equal(
-		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
-		store.saved[1].ID,
 	)
 }
 
@@ -334,7 +301,7 @@ func TestDoResponseRecordsPromptAndGenericMappingsForChatCompletions(t *testing.
 		ModelConfig: model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				PluginName: {"enable": true},
+				PluginName: {"enable": true, "enable_generic_follow": true},
 			},
 		},
 		Group:   model.GroupCache{ID: "group-1"},
@@ -396,7 +363,7 @@ func TestDoResponseRecordsPromptAndGenericMappingsForChatCompletions(t *testing.
 	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(defaultFollowedChannelTTL+time.Second)))
 }
 
-func TestDoResponseRecordsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupportedPromptStoreMode(
+func TestDoResponseRecordsUserAndGenericCacheFollowWhenExplicitlyEnabledOnUnsupportedPromptStoreMode(
 	t *testing.T,
 ) {
 	t.Parallel()
@@ -420,7 +387,7 @@ func TestDoResponseRecordsGenericCacheFollowWhenPromptCacheKeyExistsOnUnsupporte
 		ModelConfig: model.ModelConfig{
 			Model: "gemini-2.5-pro",
 			Plugin: map[string]map[string]any{
-				PluginName: {"enable": true},
+				PluginName: {"enable": true, "enable_generic_follow": true},
 			},
 		},
 		Group:   model.GroupCache{ID: "group-1"},
@@ -490,7 +457,7 @@ func TestDoResponseRecordsWhenOnlyCacheCreationTokensExist(t *testing.T) {
 		ModelConfig: model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				PluginName: {"enable": true},
+				PluginName: {"enable": true, "enable_generic_follow": true},
 			},
 		},
 		Group:   model.GroupCache{ID: "group-1"},
@@ -530,7 +497,7 @@ func TestDoResponseRecordsWhenOnlyCacheCreationTokensExist(t *testing.T) {
 	)
 }
 
-func TestDoResponseRecordsPromptUserAndGenericMappingsTogether(t *testing.T) {
+func TestDoResponseRecordsPromptAndUserMappingsTogetherByDefault(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -582,8 +549,8 @@ func TestDoResponseRecordsPromptUserAndGenericMappingsTogether(t *testing.T) {
 	)
 
 	require.Nil(t, relayErr)
-	require.Len(t, store.savedIfNotExist, 3)
-	require.Len(t, store.saved, 3)
+	require.Len(t, store.savedIfNotExist, 2)
+	require.Len(t, store.saved, 2)
 	assert.Equal(
 		t,
 		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeStable),
@@ -596,11 +563,6 @@ func TestDoResponseRecordsPromptUserAndGenericMappingsTogether(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeStable),
-		store.savedIfNotExist[2].ID,
-	)
-	assert.Equal(
-		t,
 		model.PromptCacheStoreID("gpt-5", "cache-key", model.CacheKeyTypeRecent),
 		store.saved[0].ID,
 	)
@@ -608,11 +570,6 @@ func TestDoResponseRecordsPromptUserAndGenericMappingsTogether(t *testing.T) {
 		t,
 		model.CacheFollowUserStoreID("gpt-5", "user-1", model.CacheKeyTypeRecent),
 		store.saved[1].ID,
-	)
-	assert.Equal(
-		t,
-		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
-		store.saved[2].ID,
 	)
 }
 
@@ -787,7 +744,7 @@ func TestDoResponseSkipsUpdatingRecentStoreWithinWindow(t *testing.T) {
 		ModelConfig: model.ModelConfig{
 			Model: "gpt-5",
 			Plugin: map[string]map[string]any{
-				PluginName: {"enable": true},
+				PluginName: {"enable": true, "enable_generic_follow": true},
 			},
 		},
 		Group:   model.GroupCache{ID: "group-1"},
@@ -819,6 +776,9 @@ func TestDoResponseSkipsUpdatingRecentStoreWithinWindow(t *testing.T) {
 
 func TestConfigFollowedChannelTiming(t *testing.T) {
 	t.Parallel()
+
+	assert.False(t, Config{}.EnableGenericFollow)
+	assert.True(t, Config{EnableGenericFollow: true}.EnableGenericFollow)
 
 	assert.Equal(t, defaultFollowedChannelTTL, Config{}.GetFollowedChannelTTL())
 	assert.Equal(

@@ -451,10 +451,12 @@
       },
       "cacheFollowPlugin": {
         "title": "Cache Follow Plugin",
-        "description": "Supports prompt_cache_key-based channel affinity and generic cache-follow when no cache key is provided, helping improve upstream cache hit rate. Disabled by default.",
+        "description": "Supports prompt_cache_key-based targeted channel follow and user-scoped cache-follow by default, helping improve upstream cache hit rate. Generic cache-follow can be enabled explicitly when needed. Disabled by default.",
+        "enableGenericFollow": "Enable Generic Follow",
+        "enableGenericFollowDescription": "Enables generic cache-follow for the group + token + model scope when no prompt_cache_key or user-scoped mapping is available. Recommended when each user or tenant has an isolated group/token. Do not enable it when many users share the same group/token or a global admin key, otherwise requests in that shared scope may converge on one remembered channel and reduce load balancing.",
         "followedChannelTTLSeconds": "Followed Channel TTL (seconds)",
         "followedChannelTTLSecondsPlaceholder": "Leave empty to use the default value 180",
-        "followedChannelTTLSecondsDescription": "Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped and generic entries, and also applies to prompt_cache_key entries when the upstream does not return a more specific retention.",
+        "followedChannelTTLSecondsDescription": "Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped entries, applies to generic entries only when generic follow is enabled, and also applies to prompt_cache_key entries when the upstream does not return a more specific retention.",
         "recentChannelUpdateDebounceSeconds": "Recent Channel Update Debounce (seconds)",
         "recentChannelUpdateDebounceSecondsPlaceholder": "Leave empty to use the default value 30",
         "recentChannelUpdateDebounceSecondsDescription": "Controls the minimum refresh interval for the recent channel mapping in the same scope, reducing noisy recent writes while still following upstream routing changes."
