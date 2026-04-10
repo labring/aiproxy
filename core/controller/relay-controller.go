@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
@@ -268,9 +269,11 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	}
 
 	gbc := middleware.GetGroupBalanceConsumerFromContext(c)
-	if !gbc.CheckBalance(
+	requiredBalance := math.Max(
 		consume.CalculateAmount(http.StatusOK, meta.RequestUsage, price, meta.RequestServiceTier),
-	) {
+		middleware.GroupMinimumBalance,
+	)
+	if !gbc.CheckBalance(requiredBalance) {
 		middleware.AbortLogWithMessageWithMode(mode, c,
 			http.StatusForbidden,
 			fmt.Sprintf("group (%s) balance not enough", gbc.Group),
