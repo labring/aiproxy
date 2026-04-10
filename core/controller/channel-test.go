@@ -273,9 +273,10 @@ func processTestResult(
 	mc *model.ModelCaches,
 	channel *model.Channel,
 	modelName string,
+	saveToDB bool,
 	returnSuccess, successResponseBody bool,
 ) *TestResult {
-	ct, err := testSingleModel(mc, channel, modelName, true)
+	ct, err := testSingleModel(mc, channel, modelName, saveToDB)
 
 	e := &utils.UnsupportedModelTypeError{}
 	if errors.As(err, &e) {
@@ -378,7 +379,14 @@ func TestChannelModels(c *gin.Context) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			result := processTestResult(mc, channel, model, returnSuccess, successResponseBody)
+			result := processTestResult(
+				mc,
+				channel,
+				model,
+				true,
+				returnSuccess,
+				successResponseBody,
+			)
 			if result == nil {
 				return
 			}
@@ -498,7 +506,7 @@ func TestAllChannels(c *gin.Context) {
 				defer wg.Done()
 				defer func() { <-semaphore }()
 
-				result := processTestResult(mc, ch, model, returnSuccess, successResponseBody)
+				result := processTestResult(mc, ch, model, true, returnSuccess, successResponseBody)
 				if result == nil {
 					return
 				}
@@ -733,9 +741,11 @@ func TestChannelPreview(c *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			stream			query		bool	false	"Stream mode (SSE)"
-//	@Param			request	body		TestChannelRequest	true	"Channel test request"
-//	@Success		200		{object}	middleware.APIResponse{data=[]TestResult}
+//	@Param			return_success	query		bool				false	"Return success"
+//	@Param			success_body	query		bool				false	"Success body"
+//	@Param			stream			query		bool				false	"Stream mode (SSE)"
+//	@Param			request			body		TestChannelRequest	true	"Channel test request"
+//	@Success		200				{object}	middleware.APIResponse{data=[]TestResult}
 //	@Router			/api/channel/test-all [post]
 func TestChannelPreviewAll(c *gin.Context) {
 	var req TestChannelRequest
@@ -764,6 +774,8 @@ func TestChannelPreviewAll(c *gin.Context) {
 	// 获取模型缓存
 	mc := model.LoadModelCaches()
 
+	returnSuccess := c.Query("return_success") == "true"
+	successResponseBody := c.Query("success_body") == "true"
 	isStream := c.Query("stream") == "true"
 
 	results := make([]*TestResult, 0)
@@ -789,30 +801,20 @@ func TestChannelPreviewAll(c *gin.Context) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			ct, err := testSingleModel(mc, channel, model, false)
-			result := &TestResult{
-				Success: err == nil,
+			result := processTestResult(
+				mc,
+				channel,
+				model,
+				false,
+				returnSuccess,
+				successResponseBody,
+			)
+			if result == nil {
+				return
 			}
 
-			if err != nil {
-				result.Message = fmt.Sprintf(
-					"failed to test channel %s model %s: %s",
-					req.Name,
-					model,
-					err.Error(),
-				)
-
+			if !result.Success || (result.Data != nil && !result.Data.Success) {
 				hasError.Store(true)
-			} else {
-				// 不返回成功响应的敏感信息
-				if ct.Success {
-					ct.Response = ""
-				}
-
-				result.Data = ct
-				if !ct.Success {
-					hasError.Store(true)
-				}
 			}
 
 			resultsMutex.Lock()

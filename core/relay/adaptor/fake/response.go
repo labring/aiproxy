@@ -429,7 +429,7 @@ func writeResponses(
 	respObj := buildResponseObject(meta, cfg, reqCtx, usage, responseID, storeResponse)
 	if storeResponse {
 		_ = store.SaveStore(adaptor.StoreCache{
-			ID:        responseID,
+			ID:        model.ResponseStoreID(responseID),
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,

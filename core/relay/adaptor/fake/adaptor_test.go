@@ -31,6 +31,14 @@ func (noopStore) SaveStore(adaptor.StoreCache) error {
 	return nil
 }
 
+func (noopStore) SaveStoreWithOption(adaptor.StoreCache, adaptor.SaveStoreOption) error {
+	return nil
+}
+
+func (noopStore) SaveIfNotExistStore(adaptor.StoreCache) error {
+	return nil
+}
+
 type recordingStore struct {
 	saved []adaptor.StoreCache
 }
@@ -40,6 +48,19 @@ func (s *recordingStore) GetStore(string, int, string) (adaptor.StoreCache, erro
 }
 
 func (s *recordingStore) SaveStore(cache adaptor.StoreCache) error {
+	s.saved = append(s.saved, cache)
+	return nil
+}
+
+func (s *recordingStore) SaveStoreWithOption(
+	cache adaptor.StoreCache,
+	_ adaptor.SaveStoreOption,
+) error {
+	s.saved = append(s.saved, cache)
+	return nil
+}
+
+func (s *recordingStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
@@ -417,7 +438,7 @@ func TestFakeAdaptorResponsesForAllModes(t *testing.T) {
 				store, ok := result.store.(*recordingStore)
 				require.True(t, ok)
 				require.Len(t, store.saved, 1)
-				assert.Equal(t, "resp_test_create", store.saved[0].ID)
+				assert.Equal(t, model.ResponseStoreID("resp_test_create"), store.saved[0].ID)
 			},
 		},
 		{

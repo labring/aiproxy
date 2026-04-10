@@ -139,6 +139,19 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                                 </button>
                             ) : '-'}
                         </div>
+                        <div className="min-w-0">
+                            <span className="font-medium">{t('log.promptCacheKey')}:</span>{' '}
+                            {log.prompt_cache_key ? (
+                                <button
+                                    type="button"
+                                    className="font-mono text-xs cursor-pointer text-left max-w-full truncate align-middle underline-offset-4 transition-colors hover:text-primary hover:underline"
+                                    title={log.prompt_cache_key}
+                                    onClick={() => copyToClipboard(log.prompt_cache_key)}
+                                >
+                                    {truncateMiddle(log.prompt_cache_key, 10, 10)}
+                                </button>
+                            ) : '-'}
+                        </div>
                         <div><span className="font-medium">{t('log.group')}:</span> {log.group || '-'}</div>
                         <div><span className="font-medium">{t('log.keyName')}:</span> {log.token_name || '-'}</div>
                         <div className="min-w-0">
@@ -168,6 +181,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                             ) : '-'}
                         </div>
                         <div><span className="font-medium">{t('log.mode')}:</span> {t(`modeType.${log.mode}`, { defaultValue: log.mode?.toString() || '-' })}</div>
+                        <div><span className="font-medium">{t('log.statusCode')}:</span> {log.code || '-'}</div>
                         <div><span className="font-medium">{t('log.serviceTier')}:</span> {log.service_tier || '-'}</div>
                         <div><span className="font-medium">{t('log.user')}:</span> {log.user || '-'}</div>
                         <div><span className="font-medium">{t('log.ip')}:</span> {log.ip || '-'}</div>

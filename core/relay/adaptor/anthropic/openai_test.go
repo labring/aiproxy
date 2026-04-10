@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 )
 
 func TestModelDefaultMaxTokens(t *testing.T) {
@@ -173,4 +175,58 @@ func TestResponse2OpenAI(t *testing.T) {
 			convey.So(resp.Choices[0].Message.Content, convey.ShouldEqual, "Hello")
 		})
 	})
+}
+
+func TestOpenAIConvertRequest_DisableAutoImageURLToBase64(t *testing.T) {
+	channel := &model.Channel{
+		Configs: model.ChannelConfigs{
+			"disable_auto_image_url_to_base64": true,
+		},
+	}
+	m := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"claude-sonnet-4-20250514",
+		model.ModelConfig{},
+	)
+
+	reqBody := relaymodel.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []relaymodel.Message{
+			{
+				Role: "user",
+				Content: []relaymodel.MessageContent{
+					{
+						Type: relaymodel.ContentTypeImageURL,
+						ImageURL: &relaymodel.ImageURL{
+							URL: "https://example.com/test.png",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := sonic.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(data),
+	)
+	require.NoError(t, err)
+
+	claudeReq, err := anthropic.OpenAIConvertRequest(m, req)
+	require.NoError(t, err)
+	require.Len(t, claudeReq.Messages, 1)
+	require.Len(t, claudeReq.Messages[0].Content, 1)
+	require.NotNil(t, claudeReq.Messages[0].Content[0].Source)
+	require.Equal(
+		t,
+		relaymodel.ClaudeImageSourceTypeURL,
+		claudeReq.Messages[0].Content[0].Source.Type,
+	)
+	require.Equal(t, "https://example.com/test.png", claudeReq.Messages[0].Content[0].Source.URL)
 }

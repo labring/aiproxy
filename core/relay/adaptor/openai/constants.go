@@ -242,6 +242,7 @@ var responsesOnlyModels = map[string]struct{}{
 	"gpt-53-codex":      {},
 	"gpt-52-codex":      {},
 	"gpt-51-codex":      {},
+	"gpt-51-codex-max":  {},
 	"gpt-51-codex-mini": {},
 	"gpt-5-codex":       {},
 	"gpt-5-pro":         {},

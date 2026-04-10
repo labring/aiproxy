@@ -120,6 +120,7 @@ func (c *toolMemoryCache) startCleanupOnStart() {
 
 func CacheSetTools(mcpID string, updatedAt int64, tools []mcp.Tool) error {
 	key := getToolCacheKey(mcpID, updatedAt)
+	toolMemCache.set(key, tools)
 
 	if common.RedisEnabled {
 		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
@@ -134,13 +135,16 @@ func CacheSetTools(mcpID string, updatedAt int64, tools []mcp.Tool) error {
 		return err
 	}
 
-	toolMemCache.set(key, tools)
-
 	return nil
 }
 
 func CacheGetTools(mcpID string, updatedAt int64) ([]mcp.Tool, bool) {
 	key := getToolCacheKey(mcpID, updatedAt)
+
+	item, exists := toolMemCache.get(key)
+	if exists {
+		return item, true
+	}
 
 	if common.RedisEnabled {
 		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
@@ -152,13 +156,9 @@ func CacheGetTools(mcpID string, updatedAt int64) ([]mcp.Tool, bool) {
 		if err != nil {
 			log.Errorf("failed to get tools cache from redis (%s): %v", key, err)
 		} else {
+			toolMemCache.set(key, tools)
 			return tools, true
 		}
-	}
-
-	item, exists := toolMemCache.get(key)
-	if exists {
-		return item, true
 	}
 
 	return nil, false

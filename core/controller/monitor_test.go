@@ -146,6 +146,7 @@ func TestCollectGroupTokenOverviewMetrics(t *testing.T) {
 
 func seedGroupMetricFixture(t *testing.T, ctx context.Context) {
 	t.Helper()
+	waitForFreshSecond()
 
 	for range 2 {
 		_, _, _ = reqlimit.PushGroupModelRequest(ctx, "g1", "m1", 0)
@@ -174,6 +175,11 @@ func seedGroupMetricFixture(t *testing.T, ctx context.Context) {
 		_, _, _ = reqlimit.PushGroupModelTokensRequest(ctx, "g2", "m3", 0, 50)
 		_, _, _ = reqlimit.PushGroupModelTokennameTokensRequest(ctx, "g2", "m3", "t3", 50)
 	}
+}
+
+func waitForFreshSecond() {
+	nextSecond := time.Now().Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(nextSecond) + 50*time.Millisecond)
 }
 
 func withRedisForControllerTest(t *testing.T, client *redis.Client, fn func(*gin.Context)) {

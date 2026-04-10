@@ -33,12 +33,20 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	textRequest.Model = meta.ActualModel
 	meta.Set("stream", textRequest.Stream)
 
-	systemContent, contents, imageTasks := buildContents(textRequest)
+	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+
+	systemContent, contents, imageTasks := buildContents(
+		textRequest,
+		!disableAutoImageURLToBase64,
+	)
 
 	// Process image tasks concurrently
 	if len(imageTasks) > 0 {
-		if err := processImageTasks(req.Context(), imageTasks); err != nil {
-			return adaptor.ConvertResult{}, err
+		if err := processImageTasks(
+			req.Context(),
+			imageTasks,
+		); err != nil {
+			common.GetLoggerFromReq(req).Warnf("process gemini image tasks failed: %v", err)
 		}
 	}
 

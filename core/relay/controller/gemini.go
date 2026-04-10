@@ -30,7 +30,7 @@ func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, e
 				totalTokens += countTokensForText(part.Text, mc.Model)
 			}
 			// Count images in system instruction
-			if part.InlineData != nil {
+			if part.InlineData != nil || part.FileData != nil {
 				imageCount++
 			}
 		}
@@ -43,7 +43,7 @@ func GetGeminiRequestUsage(c *gin.Context, mc model.ModelConfig) (model.Usage, e
 				totalTokens += countTokensForText(part.Text, mc.Model)
 			}
 			// Count images
-			if part.InlineData != nil {
+			if part.InlineData != nil || part.FileData != nil {
 				imageCount++
 			}
 			// Function calls and responses also consume tokens

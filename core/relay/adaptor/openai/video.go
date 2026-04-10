@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -96,7 +97,7 @@ func VideoHandler(
 	}
 
 	err = store.SaveStore(adaptor.StoreCache{
-		ID:        id,
+		ID:        model.VideoJobStoreID(id),
 		GroupID:   meta.Group.ID,
 		TokenID:   meta.Token.ID,
 		ChannelID: meta.Channel.ID,
@@ -165,7 +166,7 @@ func VideoGetJobsHandler(
 		}
 
 		err = store.SaveStore(adaptor.StoreCache{
-			ID:        id,
+			ID:        model.VideoGenerationStoreID(id),
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,

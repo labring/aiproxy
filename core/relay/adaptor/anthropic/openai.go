@@ -45,6 +45,11 @@ func stopReasonClaude2OpenAI(reason string) string {
 
 //nolint:gocyclo
 func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.ClaudeRequest, error) {
+	adaptorConfig := Config{}
+	if err := meta.ChannelConfigs.LoadConfig(&adaptorConfig); err != nil {
+		return nil, err
+	}
+
 	var textRequest relaymodel.ClaudeOpenAIRequest
 
 	err := common.UnmarshalRequestReusable(req, &textRequest)
@@ -170,6 +175,8 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 		claudeRequest.ToolChoice = claudeToolChoice
 	}
 
+	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+
 	var imageTasks []*relaymodel.ClaudeContent
 
 	hasToolCalls := false
@@ -225,11 +232,14 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 					content.Text = part.Text
 				case relaymodel.ContentTypeImageURL:
 					content.Type = relaymodel.ClaudeContentTypeImage
+
 					content.Source = &relaymodel.ClaudeImageSource{
 						Type: relaymodel.ClaudeImageSourceTypeURL,
 						URL:  part.ImageURL.URL,
 					}
-					imageTasks = append(imageTasks, &content)
+					if !disableAutoImageURLToBase64 {
+						imageTasks = append(imageTasks, &content)
+					}
 				}
 
 				contents = append(contents, content)

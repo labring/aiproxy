@@ -396,6 +396,10 @@ export function ModelTable() {
           enabledPlugins.push(t("model.cachePlugin"));
         }
 
+        if (plugin.cachefollow?.enable) {
+          enabledPlugins.push(t("model.cacheFollowPlugin"));
+        }
+
         if (plugin["web-search"]?.enable) {
           enabledPlugins.push(t("model.webSearchPlugin"));
         }

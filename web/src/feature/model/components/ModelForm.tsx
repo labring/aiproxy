@@ -29,7 +29,16 @@ import { modelCreateSchema } from '@/validation/model'
 import { useCreateModel, useUpdateModel } from '../hooks'
 import { useTranslation } from 'react-i18next'
 import { ModelCreateForm } from '@/validation/model'
-import { Plugin, EngineConfig, ModelPrice, ModelCreateRequest, ModelConfig, ModelConfigDetail } from '@/types/model'
+import {
+    Plugin,
+    EngineConfig,
+    ModelPrice,
+    ModelCreateRequest,
+    ModelConfig,
+    ModelConfigDetail,
+    MODEL_TYPE_OPTIONS,
+    STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES,
+} from '@/types/model'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { useState } from 'react'
@@ -86,6 +95,12 @@ const MANAGED_PLUGIN_KEYS = {
         'add_cache_hit_header',
         'cache_hit_header',
     ]),
+    cachefollow: new Set([
+        'enable',
+        'enable_generic_follow',
+        'followed_channel_ttl_seconds',
+        'recent_channel_update_debounce_seconds',
+    ]),
     'web-search': new Set([
         'enable',
         'force_search',
@@ -101,6 +116,10 @@ const MANAGED_PLUGIN_KEYS = {
     'stream-fake': new Set(['enable']),
 } as const
 
+const DROPPED_CACHEFOLLOW_PLUGIN_KEYS = new Set([
+    'last_store_update_window',
+])
+
 const KNOWN_CONFIG_KEYS = new Set([
     'max_input_tokens',
     'max_output_tokens',
@@ -113,7 +132,7 @@ const KNOWN_CONFIG_KEYS = new Set([
     'support_voices',
 ])
 
-const STREAM_TIMEOUT_SUPPORTED_TYPES = new Set([1, 2, 12, 16, 21])
+const STREAM_TIMEOUT_SUPPORTED_TYPES = new Set<number>(STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES)
 
 interface ModelFormProps {
     mode?: 'create' | 'update'
@@ -223,6 +242,7 @@ export function ModelForm({
             price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
+                cachefollow: { enable: false, ...defaultValues.plugin?.cachefollow },
                 "web-search": { enable: false, search_from: [], ...defaultValues.plugin?.["web-search"] },
                 "think-split": { enable: false, ...defaultValues.plugin?.["think-split"] },
                 "stream-fake": { enable: false, ...defaultValues.plugin?.["stream-fake"] },
@@ -233,6 +253,7 @@ export function ModelForm({
     // Watch plugin enable states
     const watchedType = form.watch('type')
     const cacheEnabled = form.watch('plugin.cache.enable')
+    const cacheFollowEnabled = form.watch('plugin.cachefollow.enable')
     const webSearchEnabled = form.watch('plugin.web-search.enable')
     const searchEngines = form.watch('plugin.web-search.search_from') || []
 
@@ -448,6 +469,23 @@ export function ModelForm({
             })
         }
 
+        if (data.plugin?.cachefollow?.enable) {
+            Object.assign(pluginData, {
+                cachefollow: {
+                    enable: true,
+                    ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                        enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                    }),
+                    ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
+                        followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
+                    }),
+                    ...(data.plugin.cachefollow.recent_channel_update_debounce_seconds !== undefined && {
+                        recent_channel_update_debounce_seconds: data.plugin.cachefollow.recent_channel_update_debounce_seconds,
+                    }),
+                }
+            })
+        }
+
         // Web search plugin - 如果开启，必须有 enable 和 search_from，其他字段可选
         if (data.plugin?.["web-search"]?.enable && data.plugin["web-search"].search_from && data.plugin["web-search"].search_from.length > 0) {
             // Clean up search engines - remove empty spec objects
@@ -530,7 +568,7 @@ export function ModelForm({
 
         const existingPlugin = (baseModelConfig?.plugin || {}) as Record<string, unknown>
         const mergedPlugin: Record<string, unknown> = Object.fromEntries(
-            Object.entries(existingPlugin).filter(([key]) => !['cache', 'web-search', 'think-split', 'stream-fake'].includes(key))
+            Object.entries(existingPlugin).filter(([key]) => !['cache', 'cachefollow', 'web-search', 'think-split', 'stream-fake'].includes(key))
         )
 
         if (data.plugin?.cache?.enable) {
@@ -545,6 +583,28 @@ export function ModelForm({
                 ...(data.plugin.cache.item_max_size !== undefined && { item_max_size: data.plugin.cache.item_max_size }),
                 ...(data.plugin.cache.add_cache_hit_header !== undefined && { add_cache_hit_header: data.plugin.cache.add_cache_hit_header }),
                 ...(data.plugin.cache.cache_hit_header !== undefined && { cache_hit_header: data.plugin.cache.cache_hit_header }),
+            }
+        }
+
+        if (data.plugin?.cachefollow?.enable) {
+            const existingCacheFollowPlugin = (baseModelConfig?.plugin?.cachefollow || {}) as Record<string, unknown>
+            const preservedCacheFollowPluginFields = Object.fromEntries(
+                Object.entries(existingCacheFollowPlugin).filter(
+                    ([key]) => !MANAGED_PLUGIN_KEYS.cachefollow.has(key) && !DROPPED_CACHEFOLLOW_PLUGIN_KEYS.has(key)
+                )
+            )
+            mergedPlugin.cachefollow = {
+                ...preservedCacheFollowPluginFields,
+                enable: true,
+                ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                    enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                }),
+                ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
+                    followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
+                }),
+                ...(data.plugin.cachefollow.recent_channel_update_debounce_seconds !== undefined && {
+                    recent_channel_update_debounce_seconds: data.plugin.cachefollow.recent_channel_update_debounce_seconds,
+                }),
             }
         }
 
@@ -809,7 +869,7 @@ export function ModelForm({
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13].map((type) => (
+                                        {MODEL_TYPE_OPTIONS.map((type) => (
                                             <SelectItem key={type} value={String(type)}>
                                                 {t(`modeType.${type}` as never)}
                                             </SelectItem>
@@ -1412,6 +1472,95 @@ export function ModelForm({
                                 )}
                             </Collapsible>
                         </div>
+
+                        <hr className="border-border" />
+
+                        {/* Cache Follow Plugin */}
+                        <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center space-x-3">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-center space-x-2">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <div>
+                                    <Label className="text-sm font-medium">{t("model.dialog.cacheFollowPlugin.title")}</Label>
+                                    <p className="text-xs text-muted-foreground">{t("model.dialog.cacheFollowPlugin.description")}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {cacheFollowEnabled && (
+                            <div className="pl-8 pb-4 space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable_generic_follow"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-start space-x-3 rounded-md border p-4">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value ?? false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                            <div className="space-y-1 leading-none">
+                                                <FormLabel>{t("model.dialog.cacheFollowPlugin.enableGenericFollow")}</FormLabel>
+                                                <FormDescription>{t("model.dialog.cacheFollowPlugin.enableGenericFollowDescription")}</FormDescription>
+                                            </div>
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.followed_channel_ttl_seconds"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.cacheFollowPlugin.followedChannelTTLSeconds")}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder={t("model.dialog.cacheFollowPlugin.followedChannelTTLSecondsPlaceholder")}
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.cacheFollowPlugin.followedChannelTTLSecondsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.recent_channel_update_debounce_seconds"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSeconds")}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder={t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSecondsPlaceholder")}
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSecondsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
 
                         <hr className="border-border" />
 

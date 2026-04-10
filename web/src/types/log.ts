@@ -71,6 +71,7 @@ export interface LogRecord {
   request_at: string
   request_detail: LogRequestDetail
   request_id: string
+  prompt_cache_key?: string
   upstream_id: string
   retry_at: string
   retry_times: number

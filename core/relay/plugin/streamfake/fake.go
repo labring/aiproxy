@@ -215,12 +215,20 @@ func (rw *fakeStreamResponseWriter) WriteString(s string) (int, error) {
 // parseStreamingData extracts individual chunks from streaming response
 func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 	if render.IsValidSSEData(data) {
-		return nil
+		data = render.ExtractSSEData(data)
+		if len(data) == 0 || render.IsSSEDone(data) {
+			return nil
+		}
 	}
 
 	node, err := sonic.Get(data)
-	if err != nil {
-		return err
+	if err != nil || !node.Valid() {
+		return nil
+	}
+
+	choicesNode := node.Get("choices")
+	if err := choicesNode.Check(); err != nil {
+		return nil
 	}
 
 	rw.lastChunk = &node
@@ -240,11 +248,6 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 		if err := promptFilterResultsNode.Check(); err == nil {
 			rw.promptFilterResults = promptFilterResultsNode
 		}
-	}
-
-	choicesNode := node.Get("choices")
-	if err := choicesNode.Check(); err != nil {
-		return err
 	}
 
 	return choicesNode.ForEach(func(_ ast.Sequence, choiceNode *ast.Node) bool {

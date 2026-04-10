@@ -83,8 +83,15 @@ export interface ModelConfig {
 
 export type ModelSaveRequest = Omit<ModelConfig, 'created_at' | 'updated_at'>
 
+export const MODEL_TYPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 21] as const
+
+export const STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES = [1, 2, 12, 16, 21] as const
+
+export type ModelTypeOption = (typeof MODEL_TYPE_OPTIONS)[number]
+
 type Plugin = {
     cache: CachePlugin // 缓存插件
+    cachefollow: CacheFollowPlugin // 缓存跟随插件
     "web-search": WebSearchPlugin // 网络搜索插件
     "think-split": ThinkSplitPlugin // 思考拆分插件
     "stream-fake": StreamFakePlugin // 流式伪装插件
@@ -96,6 +103,13 @@ type CachePlugin = {
     item_max_size?: number
     add_cache_hit_header?: boolean
     cache_hit_header?: string
+}
+
+type CacheFollowPlugin = {
+    enable: boolean
+    enable_generic_follow?: boolean
+    followed_channel_ttl_seconds?: number
+    recent_channel_update_debounce_seconds?: number
 }
 
 type WebSearchPlugin = {
@@ -174,6 +188,7 @@ export interface ModelCreateRequest {
 export type {
     Plugin,
     CachePlugin,
+    CacheFollowPlugin,
     WebSearchPlugin,
     ThinkSplitPlugin,
     StreamFakePlugin,

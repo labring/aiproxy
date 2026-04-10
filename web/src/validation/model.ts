@@ -33,6 +33,12 @@ const pluginSchema = z.object({
         add_cache_hit_header: z.boolean().optional(),
         cache_hit_header: z.string().optional(),
     }).optional(),
+    cachefollow: z.object({
+        enable: z.boolean(),
+        enable_generic_follow: z.boolean().optional(),
+        followed_channel_ttl_seconds: z.number().nonnegative('Followed channel TTL must be a non-negative number').optional(),
+        recent_channel_update_debounce_seconds: z.number().nonnegative('Recent channel update debounce must be a non-negative number').optional(),
+    }).optional(),
     "web-search": z.object({
         enable: z.boolean(),
         force_search: z.boolean().optional(),

@@ -95,11 +95,13 @@ export function GroupTable() {
     )
     // Open create group dialog
     const openCreateDialog = () => {
+        setGroupDialogOpen(false)
         setEditingGroup(null)
         setCreateGroupDialogOpen(true)
     }
 
     const openEditDialog = (group: Group) => {
+        setGroupDialogOpen(false)
         setEditingGroup(group)
         setCreateGroupDialogOpen(true)
     }
@@ -112,12 +114,14 @@ export function GroupTable() {
 
     // Open delete dialog
     const openDeleteDialog = (groupId: string) => {
+        setGroupDialogOpen(false)
         setSelectedGroupId(groupId)
         setDeleteDialogOpen(true)
     }
 
     // Open token creation dialog
     const openTokenDialog = (groupId: string) => {
+        setGroupDialogOpen(false)
         setSelectedGroupId(groupId)
         setTokenDialogOpen(true)
     }
@@ -227,50 +231,52 @@ export function GroupTable() {
         {
             id: 'actions',
             cell: ({ row }) => (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                            onClick={() => openEditDialog(row.original)}
-                        >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t("group.edit")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => openTokenDialog(row.original.id)}
-                        >
-                            <Key className="mr-2 h-4 w-4" />
-                            {t("group.createKey")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => handleStatusChange(row.original.id, row.original.status)}
-                            disabled={isStatusUpdating}
-                        >
-                            {row.original.status === 2 ? (
-                                <>
-                                    <Power className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-500" />
-                                    {t("group.enable")}
-                                </>
-                            ) : (
-                                <>
-                                    <PowerOff className="mr-2 h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-                                    {t("group.disable")}
-                                </>
-                            )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => openDeleteDialog(row.original.id)}
-                            className="text-destructive"
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {t("group.delete")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <div onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onClick={() => openEditDialog(row.original)}
+                            >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                {t("group.edit")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => openTokenDialog(row.original.id)}
+                            >
+                                <Key className="mr-2 h-4 w-4" />
+                                {t("group.createKey")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleStatusChange(row.original.id, row.original.status)}
+                                disabled={isStatusUpdating}
+                            >
+                                {row.original.status === 2 ? (
+                                    <>
+                                        <Power className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+                                        {t("group.enable")}
+                                    </>
+                                ) : (
+                                    <>
+                                        <PowerOff className="mr-2 h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+                                        {t("group.disable")}
+                                    </>
+                                )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => openDeleteDialog(row.original.id)}
+                                className="text-destructive"
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {t("group.delete")}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             ),
         },
     ], [t, isStatusUpdating, runtimeMetrics])

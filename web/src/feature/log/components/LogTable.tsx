@@ -192,12 +192,17 @@ export function LogTable({
                     const code = info.getValue()
                     const isSuccess = code === 200
                     return (
-                        <Badge
-                            variant={isSuccess ? 'secondary' : 'destructive'}
-                            className={isSuccess ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : ''}
-                        >
-                            {isSuccess ? t('log.success') : t('log.failed')}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge
+                                variant={isSuccess ? 'secondary' : 'destructive'}
+                                className={isSuccess ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : ''}
+                            >
+                                {isSuccess ? t('log.success') : t('log.failed')}
+                            </Badge>
+                            <span className="font-mono text-xs text-muted-foreground">
+                                {code || '-'}
+                            </span>
+                        </div>
                     )
                 },
                 size: 80,

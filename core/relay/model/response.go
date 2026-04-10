@@ -225,58 +225,60 @@ type ResponseUsage struct {
 
 // Response represents an OpenAI response object
 type Response struct {
-	ID                 string             `json:"id"`
-	Object             string             `json:"object"`
-	CreatedAt          int64              `json:"created_at"`
-	Status             ResponseStatus     `json:"status"`
-	Error              *ResponseError     `json:"error"`
-	IncompleteDetails  *IncompleteDetails `json:"incomplete_details"`
-	Instructions       *string            `json:"instructions"`
-	MaxOutputTokens    *int               `json:"max_output_tokens"`
-	Model              string             `json:"model"`
-	Output             []OutputItem       `json:"output"`
-	ParallelToolCalls  bool               `json:"parallel_tool_calls"`
-	PreviousResponseID *string            `json:"previous_response_id"`
-	Reasoning          ResponseReasoning  `json:"reasoning"`
-	Store              bool               `json:"store"`
-	Temperature        float64            `json:"temperature"`
-	Text               ResponseText       `json:"text"`
-	ToolChoice         any                `json:"tool_choice"`
-	Tools              []ResponseTool     `json:"tools"`
-	TopP               float64            `json:"top_p"`
-	Truncation         string             `json:"truncation"`
-	Usage              *ResponseUsage     `json:"usage"`
-	ServiceTier        *string            `json:"service_tier,omitempty"`
-	User               *string            `json:"user"`
-	Metadata           map[string]any     `json:"metadata"`
+	ID                   string             `json:"id"`
+	Object               string             `json:"object"`
+	CreatedAt            int64              `json:"created_at"`
+	Status               ResponseStatus     `json:"status"`
+	Error                *ResponseError     `json:"error"`
+	IncompleteDetails    *IncompleteDetails `json:"incomplete_details"`
+	Instructions         *string            `json:"instructions"`
+	MaxOutputTokens      *int               `json:"max_output_tokens"`
+	Model                string             `json:"model"`
+	Output               []OutputItem       `json:"output"`
+	ParallelToolCalls    bool               `json:"parallel_tool_calls"`
+	PreviousResponseID   *string            `json:"previous_response_id"`
+	PromptCacheRetention *string            `json:"prompt_cache_retention,omitempty"`
+	Reasoning            ResponseReasoning  `json:"reasoning"`
+	Store                bool               `json:"store"`
+	Temperature          float64            `json:"temperature"`
+	Text                 ResponseText       `json:"text"`
+	ToolChoice           any                `json:"tool_choice"`
+	Tools                []ResponseTool     `json:"tools"`
+	TopP                 float64            `json:"top_p"`
+	Truncation           string             `json:"truncation"`
+	Usage                *ResponseUsage     `json:"usage"`
+	ServiceTier          *string            `json:"service_tier,omitempty"`
+	User                 *string            `json:"user"`
+	Metadata             map[string]any     `json:"metadata"`
 }
 
 // CreateResponseRequest represents a request to create a response
 type CreateResponseRequest struct {
-	Model              string         `json:"model"`
-	Input              any            `json:"input"`
-	Background         *bool          `json:"background,omitempty"`
-	Conversation       any            `json:"conversation,omitempty"` // string or object
-	Include            []string       `json:"include,omitempty"`
-	Instructions       *string        `json:"instructions,omitempty"`
-	MaxOutputTokens    *int           `json:"max_output_tokens,omitempty"`
-	MaxToolCalls       *int           `json:"max_tool_calls,omitempty"`
-	Metadata           map[string]any `json:"metadata,omitempty"`
-	ParallelToolCalls  *bool          `json:"parallel_tool_calls,omitempty"`
-	PreviousResponseID *string        `json:"previous_response_id,omitempty"`
-	PromptCacheKey     *string        `json:"prompt_cache_key,omitempty"`
-	SafetyIdentifier   *string        `json:"safety_identifier,omitempty"`
-	ServiceTier        *string        `json:"service_tier,omitempty"`
-	Store              *bool          `json:"store,omitempty"`
-	Stream             bool           `json:"stream,omitempty"`
-	Temperature        *float64       `json:"temperature,omitempty"`
-	Text               *ResponseText  `json:"text,omitempty"`
-	ToolChoice         any            `json:"tool_choice,omitempty"`
-	Tools              []ResponseTool `json:"tools,omitempty"`
-	TopLogprobs        *int           `json:"top_logprobs,omitempty"`
-	TopP               *float64       `json:"top_p,omitempty"`
-	Truncation         *string        `json:"truncation,omitempty"`
-	User               *string        `json:"user,omitempty"` // Deprecated, use prompt_cache_key
+	Model                string         `json:"model"`
+	Input                any            `json:"input"`
+	Background           *bool          `json:"background,omitempty"`
+	Conversation         any            `json:"conversation,omitempty"` // string or object
+	Include              []string       `json:"include,omitempty"`
+	Instructions         *string        `json:"instructions,omitempty"`
+	MaxOutputTokens      *int           `json:"max_output_tokens,omitempty"`
+	MaxToolCalls         *int           `json:"max_tool_calls,omitempty"`
+	Metadata             map[string]any `json:"metadata,omitempty"`
+	ParallelToolCalls    *bool          `json:"parallel_tool_calls,omitempty"`
+	PreviousResponseID   *string        `json:"previous_response_id,omitempty"`
+	PromptCacheKey       *string        `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention *string        `json:"prompt_cache_retention,omitempty"`
+	SafetyIdentifier     *string        `json:"safety_identifier,omitempty"`
+	ServiceTier          *string        `json:"service_tier,omitempty"`
+	Store                *bool          `json:"store,omitempty"`
+	Stream               bool           `json:"stream,omitempty"`
+	Temperature          *float64       `json:"temperature,omitempty"`
+	Text                 *ResponseText  `json:"text,omitempty"`
+	ToolChoice           any            `json:"tool_choice,omitempty"`
+	Tools                []ResponseTool `json:"tools,omitempty"`
+	TopLogprobs          *int           `json:"top_logprobs,omitempty"`
+	TopP                 *float64       `json:"top_p,omitempty"`
+	Truncation           *string        `json:"truncation,omitempty"`
+	User                 *string        `json:"user,omitempty"` // Deprecated, use prompt_cache_key
 }
 
 // InputItemList represents a list of input items
