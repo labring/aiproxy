@@ -22,6 +22,7 @@ func SetAPIRouter(router *gin.Engine) {
 
 	healthRouter := api.Group("")
 	healthRouter.GET("/status", controller.GetStatus)
+	healthRouter.GET("/health", controller.GetHealth)
 
 	apiRouter := api.Group("")
 	apiRouter.Use(adminAuth)
