@@ -7,6 +7,11 @@ import (
 
 // https://novita.ai/llm-api
 
+const (
+	ModelNovitaWebSearch    = "novita-web-search"
+	ModelNovitaTavilySearch = "novita-tavily-search"
+)
+
 var ModelList = []model.ModelConfig{
 	{
 		Model: "meta-llama/llama-3-8b-instruct",
@@ -42,5 +47,19 @@ var ModelList = []model.ModelConfig{
 		Model: "microsoft/wizardlm-2-8x22b",
 		Type:  mode.ChatCompletions,
 		Owner: model.ModelOwnerMicrosoft,
+	},
+
+	// Web Search (virtual model for Novita's standalone web-search API)
+	{
+		Model: ModelNovitaWebSearch,
+		Type:  mode.WebSearch,
+		Owner: model.ModelOwnerNovita,
+	},
+
+	// Tavily Search (virtual model for Novita's Tavily search API)
+	{
+		Model: ModelNovitaTavilySearch,
+		Type:  mode.WebSearch,
+		Owner: model.ModelOwnerNovita,
 	},
 }

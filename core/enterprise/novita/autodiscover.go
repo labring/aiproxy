@@ -73,7 +73,6 @@ func doDiscoverChat(ctx context.Context, modelName string) {
 		return
 	}
 
-	// Add model to appropriate channels
 	addModelToNovitaChannels(modelName, remoteModel)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
@@ -245,7 +244,7 @@ func registerFallbackModel(modelName string) {
 		return
 	}
 
-	addModelToOpenAIChannel(modelName)
+	addModelToFirstChannelByType(modelName, model.ChannelTypeNovita)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
 		log.Printf("novita autodiscover: cache refresh failed after registering %s: %v", modelName, err)
@@ -275,17 +274,18 @@ func registerMultimodalFallback(modelName string) {
 // addModelToNovitaChannels adds a model to the appropriate Novita channels
 // (OpenAI and optionally Anthropic) based on its endpoint configuration.
 func addModelToNovitaChannels(modelName string, remoteModel *NovitaModelV2) {
-	addModelToOpenAIChannel(modelName)
+	addModelToFirstChannelByType(modelName, model.ChannelTypeNovita)
 
 	if remoteModel != nil && slices.Contains(remoteModel.Endpoints, "anthropic") {
 		addModelToAnthropicChannel(modelName)
 	}
 }
 
-// addModelToOpenAIChannel adds a model to the first Novita OpenAI channel.
-func addModelToOpenAIChannel(modelName string) {
+// addModelToFirstChannelByType adds a model to the first channel of the given type.
+// Silently returns if no such channel exists or the model is already present.
+func addModelToFirstChannelByType(modelName string, channelType model.ChannelType) {
 	var ch model.Channel
-	if err := model.DB.Where("type = ?", model.ChannelTypeNovita).First(&ch).Error; err != nil {
+	if err := model.DB.Where("type = ?", channelType).First(&ch).Error; err != nil {
 		return
 	}
 
@@ -296,11 +296,13 @@ func addModelToOpenAIChannel(modelName string) {
 	ch.Models = append(ch.Models, modelName)
 
 	if err := model.DB.Save(&ch).Error; err != nil {
-		log.Printf("novita autodiscover: failed to add %s to OpenAI channel: %v", modelName, err)
+		log.Printf("novita autodiscover: failed to add %s to channel type %d: %v", modelName, channelType, err)
 	}
 }
 
 // addModelToAnthropicChannel adds a model to the first Novita Anthropic channel.
+// Uses novitaChannelWhere because Anthropic channels share ChannelTypeAnthropic
+// with non-Novita channels, so we filter by base_url as well.
 func addModelToAnthropicChannel(modelName string) {
 	var channels []model.Channel
 	if err := model.DB.Where(novitaChannelWhere(), novitaChannelArgs()...).
@@ -321,28 +323,10 @@ func addModelToAnthropicChannel(modelName string) {
 	}
 }
 
-// addModelToMultimodalChannel adds a model to the first Novita multimodal channel.
-func addModelToMultimodalChannel(modelName string) {
-	var ch model.Channel
-	if err := model.DB.Where("type = ?", model.ChannelTypeNovitaMultimodal).First(&ch).Error; err != nil {
-		return
-	}
-
-	if slices.Contains(ch.Models, modelName) {
-		return
-	}
-
-	ch.Models = append(ch.Models, modelName)
-
-	if err := model.DB.Save(&ch).Error; err != nil {
-		log.Printf("novita autodiscover: failed to add %s to multimodal channel: %v", modelName, err)
-	}
-}
-
 // finalizeMultimodalDiscovery adds the model to the multimodal channel and
 // refreshes the cache. Called after successful model registration.
 func finalizeMultimodalDiscovery(modelName, source string) {
-	addModelToMultimodalChannel(modelName)
+	addModelToFirstChannelByType(modelName, model.ChannelTypeNovitaMultimodal)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
 		log.Printf("novita autodiscover: cache refresh failed after registering %s: %v", modelName, err)

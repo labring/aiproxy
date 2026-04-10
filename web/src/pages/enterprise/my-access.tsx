@@ -79,7 +79,6 @@ function typeNameLabel(t: (k: never) => string, name: string): string {
 // Owners not listed here fall back to CSS `capitalize` (first-letter uppercase).
 const OWNER_DISPLAY_NAMES: Record<string, string> = {
     ppio: "PPIO",
-    novita: "海外",
     baai: "BAAI",
     xai: "xAI",
     chatglm: "ChatGLM",
@@ -766,7 +765,7 @@ const SORT_COLUMNS: { field: ModelSortField; labelKey: string }[] = [
     { field: "output_price", labelKey: "enterprise.myAccess.outputPrice" },
 ]
 
-function ModelGroupSection({ groups, baseUrl, ownerBaseUrls }: { groups: ModelGroupInfo[]; baseUrl: string; ownerBaseUrls?: Record<string, string> }) {
+function ModelGroupSection({ groups, baseUrl, ownerBaseUrls, localOwner }: { groups: ModelGroupInfo[]; baseUrl: string; ownerBaseUrls?: Record<string, string>; localOwner?: string }) {
     const { t } = useTranslation()
     const [search, setSearch] = useState("")
     const [endpointFilter, setEndpointFilter] = useState("all")
@@ -805,8 +804,6 @@ function ModelGroupSection({ groups, baseUrl, ownerBaseUrls }: { groups: ModelGr
     }, [groups])
 
     const filteredGroups = useMemo(() => {
-        // Owner display priority: PPIO first, then Novita, then others alphabetically
-        const OWNER_ORDER: Record<string, number> = { ppio: 0, novita: 1 }
         return groups.map(g => {
             const models = g.models.filter(m => {
                 const matchSearch = !search || m.model.toLowerCase().includes(search.toLowerCase())
@@ -822,12 +819,13 @@ function ModelGroupSection({ groups, baseUrl, ownerBaseUrls }: { groups: ModelGr
             }
             return { ...g, models }
         }).filter(g => g.models.length > 0).sort((a, b) => {
-            const oa = OWNER_ORDER[a.owner.toLowerCase()] ?? 99
-            const ob = OWNER_ORDER[b.owner.toLowerCase()] ?? 99
-            if (oa !== ob) return oa - ob
+            // Local owner (matching current node) sorts first
+            const aLocal = localOwner && a.owner.toLowerCase() === localOwner.toLowerCase() ? 0 : 1
+            const bLocal = localOwner && b.owner.toLowerCase() === localOwner.toLowerCase() ? 0 : 1
+            if (aLocal !== bLocal) return aLocal - bLocal
             return a.owner.localeCompare(b.owner)
         })
-    }, [groups, search, endpointFilter, sortField, sortDirection])
+    }, [groups, search, endpointFilter, sortField, sortDirection, localOwner])
 
     const toggleOwner = (owner: string) => {
         setOpenOwners(prev => {
@@ -1447,7 +1445,7 @@ export default function MyAccessPage() {
             </Card>
 
             {/* Available Models */}
-            <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} ownerBaseUrls={ownerBaseUrls} />
+            <ModelGroupSection groups={modelGroups} baseUrl={baseUrl} ownerBaseUrls={ownerBaseUrls} localOwner={data?.local_owner} />
 
             {/* Quick Start */}
             <QuickStartSection baseUrl={baseUrl} />

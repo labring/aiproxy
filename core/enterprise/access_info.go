@@ -218,6 +218,7 @@ type ModelGroupInfo struct {
 type MyAccessResponse struct {
 	BaseURL       string            `json:"base_url"`
 	OwnerBaseURLs map[string]string `json:"owner_base_urls,omitempty"`
+	LocalOwner    string            `json:"local_owner,omitempty"`
 	GroupID       string            `json:"group_id"`
 	Tokens        []MyTokenInfo     `json:"tokens"`
 	ModelGroups   []ModelGroupInfo  `json:"model_groups"`
@@ -431,9 +432,19 @@ func GetMyAccess(c *gin.Context) {
 		})
 	}
 
+	ownerURLs := loadOwnerBaseURLs()
+	var localOwner string
+	for owner, url := range ownerURLs {
+		if url == baseURL {
+			localOwner = owner
+			break
+		}
+	}
+
 	middleware.SuccessResponse(c, MyAccessResponse{
 		BaseURL:       baseURL,
-		OwnerBaseURLs: loadOwnerBaseURLs(),
+		OwnerBaseURLs: ownerURLs,
+		LocalOwner:    localOwner,
 		GroupID:       groupID,
 		Tokens:        tokenInfos,
 		ModelGroups:   modelGroups,

@@ -588,7 +588,7 @@ ENTERPRISE_BASE_URL=https://apiproxy.paigod.work/v1
 # [可选] 多地域接入地址（两个节点配置相同值）
 # 设置后「我的接入」页面各渠道分组显示对应 Base URL，方便用户就近选择。
 # 格式：JSON，key=渠道 owner（与模型分组名称一致），value=Base URL
-# ENTERPRISE_BASE_URLS={"ppio":"https://apiproxy.paigod.work/v1","novita":"https://apiproxy.pplabs.tech/v1"}
+# ENTERPRISE_BASE_URLS={"ppio":"https://apiproxy.paigod.work/v1","海外":"https://apiproxy.pplabs.tech/v1"}
 
 # ============================
 # 可选配置
@@ -1855,7 +1855,7 @@ tail -50 /var/log/wireguard-health.log
 | `FEISHU_FRONTEND_URL` | 企业版必填 | - | 前端基础 URL（必须 `ai.paigod.work`） |
 | `FEISHU_ALLOWED_TENANTS` | 否 | 允许所有 | 租户白名单，`*` 或逗号分隔 |
 | `ENTERPRISE_BASE_URL` | 企业版必填 | 请求 Host + `/v1` | 「我的接入」页面展示的公网 Base URL（如 `https://apiproxy.paigod.work/v1`） |
-| `ENTERPRISE_BASE_URLS` | 否 | - | 多地域接入地址 JSON，按渠道 owner 映射（如 `{"ppio":"https://apiproxy.paigod.work/v1","novita":"https://apiproxy.pplabs.tech/v1"}`）。设置后「我的接入」页面各渠道分组显示对应地址。**两个节点必须配置相同值** |
+| `ENTERPRISE_BASE_URLS` | 否 | - | 多地域接入地址 JSON，key 为渠道 owner（即 `ChannelType.String()`），value 为 Base URL（如 `{"ppio":"https://apiproxy.paigod.work/v1","海外":"https://apiproxy.pplabs.tech/v1"}`）。设置后「我的接入」页面各渠道分组显示对应地址。**两个节点必须配置相同值** |
 | `NOTIFY_FEISHU_WEBHOOK` | 否 | - | 飞书 Bot Webhook URL |
 | `NODE_CHANNEL_SET` | 否 | 空 | 服务器级默认渠道集（如 `overseas`），优先匹配该 Set 的渠道，fallback 到 default |
 | `NODE_TYPE` | 否 | `domestic` | 构建时指定节点类型，控制 Dockerfile 镜像源（`domestic`/`overseas`）+ 海外自动 HEALTH_TIMEOUT=600s |

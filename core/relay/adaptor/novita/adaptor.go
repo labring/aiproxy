@@ -109,7 +109,24 @@ func (a *Adaptor) GetRequestURL(
 			wb = WebSearchBase(m.Channel.BaseURL)
 		}
 
-		u, err := url.JoinPath(wb, "/web-search")
+		// Route by model name: tavily uses a different upstream path.
+		pathSuffix := "/web-search"
+		if m.ActualModel == ModelNovitaTavilySearch {
+			pathSuffix = "/tavily/search"
+		}
+
+		u, err := url.JoinPath(wb, pathSuffix)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{Method: http.MethodPost, URL: u}, nil
+
+	case mode.Anthropic, mode.Gemini:
+		// Request already converted to OpenAI format by the relay controller;
+		// route to /chat/completions instead of the client's original path
+		// (e.g. /v1/messages for Anthropic, /v1/generateContent for Gemini).
+		u, err := url.JoinPath(m.Channel.BaseURL, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}

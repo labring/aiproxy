@@ -467,6 +467,7 @@ export interface ModelGroupInfo {
 export interface MyAccessResponse {
     base_url: string
     owner_base_urls?: Record<string, string>
+    local_owner?: string
     group_id: string
     tokens: MyTokenInfo[]
     model_groups: ModelGroupInfo[]

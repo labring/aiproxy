@@ -23,6 +23,9 @@ var modelTypeToMode = map[string]mode.Mode{
 	"tts":        mode.AudioSpeech,
 	"stt":        mode.AudioTranscription,
 	"image":      mode.ImagesGenerations,
+	"video":      mode.PPIONative,
+	"audio":      mode.PPIONative,
+	"web_search": mode.WebSearch,
 }
 
 var endpointToMode = map[string]mode.Mode{
@@ -122,6 +125,12 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 
 	if opts.DeleteUnmatchedModel {
 		for modelID := range localModelMap {
+			// Skip virtual models (e.g. novita-web-search) that are not sourced from
+			// the remote model catalog and should never be deleted.
+			if localModelMap[modelID].Type == mode.WebSearch {
+				continue
+			}
+
 			if _, exists := remoteModelMap[modelID]; !exists {
 				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
 					ModelID:   modelID,
