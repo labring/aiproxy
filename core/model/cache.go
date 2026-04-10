@@ -1211,21 +1211,9 @@ func initializeModelConfigCache() (ModelConfigCache, error) {
 func initializeChannelModels(channel *Channel) {
 	if len(channel.Models) == 0 {
 		channel.Models = config.GetDefaultChannelModels()[int(channel.Type)]
-		return
 	}
-
-	findedModels, missingModels, err := GetModelConfigWithModels(channel.Models)
-	if err != nil {
-		return
-	}
-
-	if len(missingModels) > 0 {
-		slices.Sort(missingModels)
-		log.Errorf("model config not found: %v", missingModels)
-	}
-
-	slices.Sort(findedModels)
-	channel.Models = findedModels
+	// Channel models are preserved as-is from the DB. The distribute middleware
+	// falls back to NewDefaultModelConfig for models without a config entry.
 }
 
 func initializeChannelModelMapping(channel *Channel) {

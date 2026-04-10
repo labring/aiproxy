@@ -305,27 +305,13 @@ elif [[ "${NODE_TYPE}" == "domestic" ]]; then
   fi
 fi
 
-# Verify Docker container networking (DNS + outbound)
-# iptables NAT MASQUERADE rules can be lost after firewall changes or WireGuard reconfiguration,
-# causing containers to lose DNS resolution and outbound connectivity.
-if ! docker run --rm alpine:3.21 sh -c 'wget -q --timeout=5 -O /dev/null http://www.baidu.com 2>/dev/null' 2>/dev/null; then
-  warn "Docker container networking broken (DNS or outbound failed)"
-  warn "Attempting auto-fix: adding iptables NAT MASQUERADE rule..."
-
-  # Find Docker bridge subnet
-  DOCKER_SUBNET=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || echo "172.17.0.0/16")
+# Verify Docker bridge MASQUERADE rule (needed for docker build to pull packages).
+# This rule can be lost after firewall changes; aiproxy containers use --network host and are unaffected.
+DOCKER_SUBNET=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || echo "172.17.0.0/16")
+if ! sudo iptables -t nat -C POSTROUTING -s "${DOCKER_SUBNET}" ! -o docker0 -j MASQUERADE 2>/dev/null; then
+  warn "Docker bridge MASQUERADE rule missing — adding for ${DOCKER_SUBNET}"
   sudo iptables -t nat -A POSTROUTING -s "${DOCKER_SUBNET}" ! -o docker0 -j MASQUERADE
-
-  # Verify fix
-  if docker run --rm alpine:3.21 sh -c 'wget -q --timeout=5 -O /dev/null http://www.baidu.com 2>/dev/null' 2>/dev/null; then
-    pass "Docker networking restored (added MASQUERADE for ${DOCKER_SUBNET})"
-    warn "Note: this iptables rule is not persistent — it will be lost on reboot."
-    warn "Docker restart will auto-rebuild rules. To persist: install iptables-persistent."
-  else
-    fail "Docker container networking still broken after fix attempt. Check iptables and Docker daemon."
-  fi
-else
-  pass "Docker container networking OK"
+  pass "Docker bridge MASQUERADE rule restored"
 fi
 
 pass "Pre-flight checks passed"

@@ -4,7 +4,11 @@
 // and Novita sync implementations.
 package synccommon
 
-import "github.com/labring/aiproxy/core/model"
+import (
+	"slices"
+
+	"github.com/labring/aiproxy/core/model"
+)
 
 // SyncProgressEvent represents a progress event sent via SSE during a model sync.
 // Shared by all provider sync implementations to ensure a consistent wire format.
@@ -66,6 +70,28 @@ func ToModelConfigKeys(m map[string]any) map[model.ModelConfigKey]any {
 	}
 
 	return out
+}
+
+// MergeModels returns the sorted union of existing and incoming model lists.
+// Existing models are preserved even if absent from incoming, preventing
+// accidental removal when upstream temporarily delists a model.
+func MergeModels(existing, incoming []string) []string {
+	seen := make(map[string]struct{}, len(existing)+len(incoming))
+	for _, m := range existing {
+		seen[m] = struct{}{}
+	}
+	for _, m := range incoming {
+		seen[m] = struct{}{}
+	}
+
+	merged := make([]string, 0, len(seen))
+	for m := range seen {
+		merged = append(merged, m)
+	}
+
+	slices.Sort(merged)
+
+	return merged
 }
 
 // AdjustTierBounds returns the effective [minTokens, maxTokens] for a tiered-billing

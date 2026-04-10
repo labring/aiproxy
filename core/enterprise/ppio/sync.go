@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/common/env"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
@@ -546,7 +547,7 @@ func ensurePPIOChannelsFromModels(
 	for i := range channels {
 		switch channels[i].Type {
 		case model.ChannelTypeAnthropic:
-			channels[i].Models = anthropicModels
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, anthropicModels)
 			// Ensure recommended defaults for PPIO's Anthropic endpoint:
 			// skip_image_conversion — PPIO natively supports URL image sources
 			// disable_context_management — PPIO rejects the beta field with 400
@@ -564,7 +565,7 @@ func ensurePPIOChannelsFromModels(
 
 		case model.ChannelTypePPIOMultimodal:
 			hasMultimodal = true
-			channels[i].Models = multimodalModels
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, multimodalModels)
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -574,7 +575,7 @@ func ensurePPIOChannelsFromModels(
 
 		default:
 			// ChannelTypePPIO (OpenAI-compatible)
-			channels[i].Models = openaiModels
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, openaiModels)
 			// Write path_base_map so the passthrough adaptor can route
 			// Responses API and web-search to their respective base URLs
 			// without depending on BaseURL string matching at request time.
@@ -990,7 +991,13 @@ func countEffectiveTiers(tiers []TieredBillingConfig) int {
 // StartSyncScheduler starts a background goroutine that syncs PPIO models daily at 02:00.
 // It runs the first sync at the next 02:00 local time, then every 24 hours thereafter.
 // A Feishu webhook notification is sent after each run summarising changes.
+// Set DISABLE_PPIO_AUTO_SYNC=true to disable.
 func StartSyncScheduler(ctx context.Context) {
+	if env.Bool("DISABLE_PPIO_AUTO_SYNC", false) {
+		log.Printf("PPIO sync scheduler: disabled via DISABLE_PPIO_AUTO_SYNC")
+		return
+	}
+
 	go func() {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, now.Location())

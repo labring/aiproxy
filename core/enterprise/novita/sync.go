@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/common/env"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
@@ -471,7 +472,7 @@ func ensureNovitaChannelsFromModels(
 
 	for i := range channels {
 		if channels[i].Type == model.ChannelTypeAnthropic {
-			channels[i].Models = anthropicModels
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, anthropicModels)
 			// Ensure recommended defaults for Novita's Anthropic endpoint:
 			// skip_image_conversion — Novita natively supports URL image sources
 			// disable_context_management — Novita rejects the beta field with 400
@@ -487,7 +488,7 @@ func ensureNovitaChannelsFromModels(
 			}
 			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
 		} else {
-			channels[i].Models = openaiModels
+			channels[i].Models = synccommon.MergeModels(channels[i].Models, openaiModels)
 			// Write path_base_map so the passthrough adaptor can route
 			// Responses API requests to the correct base URL.
 			if channels[i].Configs == nil {
@@ -587,7 +588,13 @@ func novitaResponsesBase(channelBaseURL string) string {
 // StartSyncScheduler starts a background goroutine that syncs Novita models daily at 02:15.
 // Offset by 15 minutes from PPIO to avoid simultaneous heavy sync loads.
 // A Feishu webhook notification is sent after each run summarising changes.
+// Set DISABLE_NOVITA_AUTO_SYNC=true to disable.
 func StartSyncScheduler(ctx context.Context) {
+	if env.Bool("DISABLE_NOVITA_AUTO_SYNC", false) {
+		log.Printf("Novita sync scheduler: disabled via DISABLE_NOVITA_AUTO_SYNC")
+		return
+	}
+
 	go func() {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 2, 15, 0, 0, now.Location())
