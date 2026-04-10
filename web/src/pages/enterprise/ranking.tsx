@@ -264,19 +264,15 @@ export default function EnterpriseRanking() {
         queryFn: () => enterpriseApi.getUserRanking(departmentFilter, 0, start, end),
     })
 
-    const rows: RankingRow[] = useMemo(
-        () => {
-            const raw = rankingData?.ranking || []
-            const sliced = limit > 0 && raw.length > limit ? raw.slice(0, limit) : raw
-            return sliced.map(deriveRow)
-        },
-        [rankingData, limit],
+    const allRows: RankingRow[] = useMemo(
+        () => (rankingData?.ranking || []).map(deriveRow),
+        [rankingData],
     )
 
     const sortedRows = useMemo(() => {
-        if (!rows.length) return rows
+        if (!allRows.length) return allRows
 
-        const sorted = [...rows].sort((a, b) => {
+        const sorted = [...allRows].sort((a, b) => {
             const field = sortField
             if (field === "user_name" || field === "department_name") {
                 const av = field === "department_name"
@@ -294,14 +290,18 @@ export default function EnterpriseRanking() {
             return sortDirection === "asc" ? aNum - bNum : bNum - aNum
         })
 
+        // Apply limit AFTER sorting so changing the limit doesn't
+        // alter the visible ranking order.
+        const sliced = limit > 0 && sorted.length > limit ? sorted.slice(0, limit) : sorted
+
         // Re-assign rank numbers to match current display order so that
         // the gold/silver/bronze badges always correspond to the visible
         // top-3, regardless of which column the user sorts by.
-        for (let i = 0; i < sorted.length; i++) {
-            sorted[i] = { ...sorted[i], rank: i + 1 }
+        for (let i = 0; i < sliced.length; i++) {
+            sliced[i] = { ...sliced[i], rank: i + 1 }
         }
-        return sorted
-    }, [rows, sortField, sortDirection])
+        return sliced
+    }, [allRows, sortField, sortDirection, limit])
 
 
     const handleSort = useCallback((field: SortField) => {
@@ -375,7 +375,7 @@ export default function EnterpriseRanking() {
                     <Trophy className="h-5 w-5 text-yellow-500" />
                     <h1 className="text-2xl font-bold">{t("enterprise.ranking.title")}</h1>
                     <Badge variant="secondary" className="ml-1 tabular-nums">
-                        {isLoading ? "..." : t("enterprise.ranking.totalCount", { count: rows.length })}
+                        {isLoading ? "..." : t("enterprise.ranking.totalCount", { count: sortedRows.length })}
                     </Badge>
                 </div>
 
