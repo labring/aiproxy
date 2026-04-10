@@ -296,7 +296,6 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 			result,
 			0,
 			true,
-			middleware.GetRequestUser(c),
 			middleware.GetRequestMetadata(c),
 		)
 
@@ -324,7 +323,6 @@ func recordResult(
 	result *controller.HandleResult,
 	retryTimes int,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
 ) {
 	code := http.StatusOK
@@ -383,10 +381,8 @@ func recordResult(
 		retryTimes,
 		detail,
 		downstreamResult,
-		user,
 		metadata,
 		result.UpstreamID,
-		meta.RequestServiceTier,
 	)
 }
 
@@ -502,7 +498,6 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 					state.result,
 					i,
 					true,
-					middleware.GetRequestUser(c),
 					middleware.GetRequestMetadata(c),
 				)
 			}
@@ -518,7 +513,6 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 				state.result,
 				i,
 				false,
-				middleware.GetRequestUser(c),
 				middleware.GetRequestMetadata(c),
 			)
 			state.meta = nil
@@ -566,7 +560,6 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 				state.result,
 				i+1,
 				true,
-				middleware.GetRequestUser(c),
 				middleware.GetRequestMetadata(c),
 			)
 

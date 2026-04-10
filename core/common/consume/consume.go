@@ -33,10 +33,8 @@ func AsyncConsume(
 	retryTimes int,
 	requestDetail *model.RequestDetail,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
 	upstreamID string,
-	serviceTier string,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
@@ -65,10 +63,8 @@ func AsyncConsume(
 		retryTimes,
 		requestDetail,
 		downstreamResult,
-		user,
 		metadata,
 		upstreamID,
-		serviceTier,
 	)
 }
 
@@ -86,16 +82,14 @@ func Consume(
 	retryTimes int,
 	requestDetail *model.RequestDetail,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
 	upstreamID string,
-	serviceTier string,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
 	}
 
-	amountDetail := CalculateAmountDetail(code, usage, modelPrice, serviceTier)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice, meta.RequestServiceTier)
 	if downstreamResult {
 		// TODO: add record actual consume amount
 		_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
@@ -107,7 +101,7 @@ func Consume(
 		)
 	}
 
-	selectedModelPrice := modelPrice.SelectConditionalPrice(usage, serviceTier)
+	selectedModelPrice := modelPrice.SelectConditionalPrice(usage, meta.RequestServiceTier)
 	selectedModelPrice.ConditionalPrices = nil
 
 	err := recordConsume(
@@ -123,10 +117,8 @@ func Consume(
 		amountDetail,
 		retryTimes,
 		downstreamResult,
-		user,
 		metadata,
 		upstreamID,
-		serviceTier,
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())

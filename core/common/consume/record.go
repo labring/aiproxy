@@ -20,12 +20,10 @@ func recordConsume(
 	amount model.Amount,
 	retryTimes int,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
 	upstreamID string,
-	serviceTier string,
 ) error {
-	summaryServiceTier := serviceTier
+	summaryServiceTier := meta.RequestServiceTier
 	if !meta.ModelConfig.ShouldSummaryServiceTier() {
 		summaryServiceTier = ""
 	}
@@ -55,11 +53,11 @@ func recordConsume(
 		usage,
 		modelPrice,
 		amount,
-		user,
+		meta.User,
 		metadata,
 		meta.PromptCacheKey,
 		upstreamID,
-		serviceTier,
+		meta.RequestServiceTier,
 		summaryServiceTier,
 		summaryClaudeLongContext,
 	)
