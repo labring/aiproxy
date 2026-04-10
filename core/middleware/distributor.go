@@ -251,6 +251,7 @@ func GetGroupBalanceConsumer(
 
 const (
 	GroupBalanceNotEnough = "group_balance_not_enough"
+	GroupMinimumBalance   = 0.3
 )
 
 func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
@@ -296,7 +297,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 		)
 	}
 
-	if !gbc.CheckBalance(0) {
+	if !gbc.CheckBalance(GroupMinimumBalance) {
 		AbortLogWithMessage(
 			c,
 			http.StatusForbidden,
