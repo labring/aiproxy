@@ -309,6 +309,7 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 		meta,
 		result,
 		price,
+		time.Now(),
 	)
 
 	// Retry loop
@@ -408,7 +409,19 @@ type retryState struct {
 	requestUsage     model.Usage
 	result           *controller.HandleResult
 	migratedChannels []*model.Channel
+	channelRetryInfo map[int]channelRetryInfo
 }
+
+type channelRetryInfo struct {
+	failures  int
+	lastEndAt time.Time
+}
+
+const (
+	relayRetryBaseDelay = time.Second
+	relayRetryMaxDelay  = 5 * time.Second
+	relayRetryMaxJitter = time.Second
+)
 
 func handleRelayResult(
 	c *gin.Context,
@@ -436,6 +449,7 @@ func initRetryState(
 	meta *meta.Meta,
 	result *controller.HandleResult,
 	price model.Price,
+	initialEndAt time.Time,
 ) *retryState {
 	state := &retryState{
 		retryTimes:       retryTimes,
@@ -448,10 +462,14 @@ func initRetryState(
 		requestUsage:     meta.RequestUsage,
 		migratedChannels: channel.migratedChannels,
 		failedChannelIDs: make(map[int64]struct{}),
+		channelRetryInfo: make(map[int]channelRetryInfo),
 	}
 
 	// Record initial failed channel
 	state.failedChannelIDs[int64(meta.Channel.ID)] = struct{}{}
+	if shouldBackoffStatus(result.Error.StatusCode()) {
+		state.recordChannelFailure(meta.Channel.ID, initialEndAt)
+	}
 
 	if channel.designatedChannel {
 		state.exhausted = true
@@ -470,6 +488,58 @@ func initRetryState(
 	return state
 }
 
+func (s *retryState) recordChannelFailure(channelID int, endAt time.Time) {
+	if s.channelRetryInfo == nil {
+		s.channelRetryInfo = make(map[int]channelRetryInfo)
+	}
+
+	info := s.channelRetryInfo[channelID]
+	info.failures++
+	info.lastEndAt = endAt
+	s.channelRetryInfo[channelID] = info
+}
+
+func calculateRelayBackoffDelay(failures int, jitter time.Duration) time.Duration {
+	if failures <= 0 {
+		return 0
+	}
+
+	if jitter < 0 {
+		jitter = 0
+	}
+
+	if jitter > relayRetryMaxJitter {
+		jitter = relayRetryMaxJitter
+	}
+
+	delay := time.Duration(failures)*relayRetryBaseDelay + jitter
+	if delay > relayRetryMaxDelay {
+		return relayRetryMaxDelay
+	}
+
+	return delay
+}
+
+func (s *retryState) remainingRelayDelay(
+	channelID int,
+	now time.Time,
+	jitter time.Duration,
+) time.Duration {
+	info, ok := s.channelRetryInfo[channelID]
+	if !ok || info.failures <= 0 || info.lastEndAt.IsZero() {
+		return 0
+	}
+
+	requiredDelay := calculateRelayBackoffDelay(info.failures, jitter)
+
+	elapsed := now.Sub(info.lastEndAt)
+	if elapsed >= requiredDelay {
+		return 0
+	}
+
+	return requiredDelay - elapsed
+}
+
 func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayController RelayHandler) {
 	log := common.GetLogger(c)
 
@@ -477,9 +547,6 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 	i := 0
 
 	for {
-		lastStatusCode := state.result.Error.StatusCode()
-		lastChannelID := state.meta.Channel.ID
-
 		newChannel, err := getRetryChannel(state, i, state.retryTimes)
 		if err == nil {
 			err = prepareRetry(c)
@@ -528,10 +595,7 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 			state.retryTimes-i,
 		)
 
-		// Check if we should delay (using the same channel)
-		if shouldDelay(lastStatusCode, lastChannelID, newChannel.ID) {
-			relayDelay()
-		}
+		relayDelay(state, newChannel.ID)
 
 		state.meta = NewMetaByContext(
 			c,
@@ -544,6 +608,9 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 		var retry bool
 
 		state.result, retry = RelayHelper(c, state.meta, relayController)
+		if state.result.Error != nil && shouldBackoffStatus(state.result.Error.StatusCode()) {
+			state.recordChannelFailure(newChannel.ID, time.Now())
+		}
 
 		done := handleRetryResult(c, retry, newChannel, state)
 
@@ -621,20 +688,20 @@ func handleRetryResult(
 	return false
 }
 
-// shouldDelay checks if we need to add a delay before retrying
-// Only adds delay when retrying with the same channel for rate limiting issues
-func shouldDelay(statusCode, lastChannelID, newChannelID int) bool {
-	if lastChannelID != newChannelID {
-		return false
-	}
-
-	// Only delay for rate limiting or service unavailable errors
+func shouldBackoffStatus(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests ||
 		statusCode == http.StatusServiceUnavailable
 }
 
-func relayDelay() {
-	time.Sleep(time.Duration(rand.Float64()*float64(time.Second)) + time.Second)
+func relayDelay(state *retryState, channelID int) {
+	jitter := time.Duration(rand.Int64N(int64(relayRetryMaxJitter)))
+
+	delay := state.remainingRelayDelay(channelID, time.Now(), jitter)
+	if delay <= 0 {
+		return
+	}
+
+	time.Sleep(delay)
 }
 
 func RelayNotImplemented(c *gin.Context) {

@@ -4,6 +4,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -139,9 +140,8 @@ func withTestPostgresStoreDB(t *testing.T, fn func()) {
 	require.NoError(t, err)
 
 	dsn := fmt.Sprintf(
-		"postgres://postgres:postgres@%s:%s/aiproxy_test?sslmode=disable&TimeZone=UTC",
-		host,
-		port.Port(),
+		"postgres://postgres:postgres@%s/aiproxy_test?sslmode=disable&TimeZone=UTC",
+		net.JoinHostPort(host, port.Port()),
 	)
 
 	db, err := OpenPostgreSQL(dsn)

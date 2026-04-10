@@ -3,6 +3,7 @@ package model
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
 
@@ -66,7 +67,7 @@ func withTestStoreCacheRedisEnv(t *testing.T, fn func(context.Context, *redis.Cl
 	require.NoError(t, err)
 
 	client := redis.NewClient(&redis.Options{
-		Addr: host + ":" + port.Port(),
+		Addr: net.JoinHostPort(host, port.Port()),
 		DB:   0,
 	})
 	require.NoError(t, client.Ping(ctx).Err())
