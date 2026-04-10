@@ -15,10 +15,11 @@ import (
 
 // ComparePPIOModels compares remote PPIO models (V1) with local database models
 func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, error) {
-	// Fetch local models owned by PPIO
+	// Fetch ALL local models (not filtered by owner) so we can detect
+	// cross-owner models shared with other providers (e.g. Novita).
 	var localModels []model.ModelConfig
 
-	err := model.DB.Where("owner = ?", string(model.ModelOwnerPPIO)).Find(&localModels).Error
+	err := model.DB.Find(&localModels).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
@@ -68,8 +69,11 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 				NewConfig: buildModelConfigMap(&remoteModel),
 			})
 			diff.Summary.ToAdd++
+		} else if localModel.Owner != model.ModelOwnerPPIO {
+			// Model exists but owned by another provider — skip
+			diff.Summary.CrossOwner++
 		} else {
-			// Model exists - check if needs update
+			// Model exists with our owner - check if needs update
 			changes := compareModelConfigs(localModel, &remoteModel)
 			if len(changes) > 0 {
 				diff.Changes.Update = append(diff.Changes.Update, ModelDiff{
@@ -85,13 +89,18 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 	}
 
 	// Find models to delete (only if DeleteUnmatchedModel is enabled)
+	// Only consider models owned by PPIO for deletion.
 	if opts.DeleteUnmatchedModel {
-		for modelID := range localModelMap {
+		for modelID, mc := range localModelMap {
+			if mc.Owner != model.ModelOwnerPPIO {
+				continue
+			}
+
 			if _, exists := remoteModelMap[modelID]; !exists {
 				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
 					ModelID:   modelID,
 					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(localModelMap[modelID]),
+					OldConfig: buildLocalModelConfigMap(mc),
 				})
 				diff.Summary.ToDelete++
 			}
@@ -106,10 +115,11 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 
 // ComparePPIOModelsV2 compares remote PPIO models (V2) with local database models
 func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDiff, error) {
-	// Fetch local models owned by PPIO
+	// Fetch ALL local models (not filtered by owner) so we can detect
+	// cross-owner models shared with other providers (e.g. Novita).
 	var localModels []model.ModelConfig
 
-	err := model.DB.Where("owner = ?", string(model.ModelOwnerPPIO)).Find(&localModels).Error
+	err := model.DB.Find(&localModels).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
@@ -156,6 +166,9 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 				NewConfig: buildModelV2ConfigMap(&remoteModel),
 			})
 			diff.Summary.ToAdd++
+		} else if localModel.Owner != model.ModelOwnerPPIO {
+			// Model exists but owned by another provider — skip
+			diff.Summary.CrossOwner++
 		} else {
 			changes := compareModelConfigsV2(localModel, &remoteModel)
 			if len(changes) > 0 {
@@ -172,13 +185,18 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 	}
 
 	// Find models to delete (only if DeleteUnmatchedModel is enabled)
+	// Only consider models owned by PPIO for deletion.
 	if opts.DeleteUnmatchedModel {
-		for modelID := range localModelMap {
+		for modelID, mc := range localModelMap {
+			if mc.Owner != model.ModelOwnerPPIO {
+				continue
+			}
+
 			if _, exists := remoteModelMap[modelID]; !exists {
 				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
 					ModelID:   modelID,
 					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(localModelMap[modelID]),
+					OldConfig: buildLocalModelConfigMap(mc),
 				})
 				diff.Summary.ToDelete++
 			}
@@ -442,7 +460,8 @@ func Diagnostic(ctx context.Context) (*DiagnosticResult, error) {
 
 	remoteCount := diff.Summary.TotalModels
 
-	// Count local models
+	// Count local models owned by PPIO (for display purposes; the comparison
+	// above queries all models to correctly detect cross-owner overlap).
 	var localCount int64
 
 	err = model.DB.Model(&model.ModelConfig{}).

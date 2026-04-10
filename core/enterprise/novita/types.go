@@ -192,6 +192,7 @@ type SyncSummary struct {
 	ToAdd       int `json:"to_add"`
 	ToUpdate    int `json:"to_update"`
 	ToDelete    int `json:"to_delete"`
+	CrossOwner  int `json:"cross_owner,omitempty"` // models owned by another provider, skipped
 }
 
 // ChannelsInfo contains information about Novita channels.

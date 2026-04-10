@@ -245,6 +245,29 @@ func loadOwnerBaseURLs() map[string]string {
 	return ownerBaseURLsMap
 }
 
+// allEnabledSetsDefaultFirst returns all set names from the model cache,
+// with "default" guaranteed first so that domestic channels take priority
+// for models available in multiple sets.
+func allEnabledSetsDefaultFirst(modelsBySet map[string][]string) []string {
+	sets := make([]string, 0, len(modelsBySet))
+	hasDefault := false
+	for set := range modelsBySet {
+		if set == model.ChannelDefaultSet {
+			hasDefault = true
+			continue
+		}
+		sets = append(sets, set)
+	}
+	sort.Strings(sets)
+	if hasDefault {
+		sets = append([]string{model.ChannelDefaultSet}, sets...)
+	}
+	if len(sets) == 0 {
+		return []string{model.ChannelDefaultSet}
+	}
+	return sets
+}
+
 // GetMyAccess returns the user's access info including tokens and available models.
 func GetMyAccess(c *gin.Context) {
 	feishuUser := GetEnterpriseUser(c)
@@ -312,7 +335,16 @@ func GetMyAccess(c *gin.Context) {
 
 		group, err := model.CacheGetGroup(groupID)
 		if err == nil {
-			groupSets = group.GetAvailableSets()
+			// Show models from ALL sets so users see their full access across
+			// all regions (domestic + overseas). Respect group-level explicit
+			// sets if configured by admin; otherwise use all enabled sets
+			// instead of the node-level GetAvailableSets() which would hide
+			// overseas-only models when viewed from the domestic node.
+			if len(group.AvailableSets) > 0 {
+				groupSets = group.AvailableSets
+			} else {
+				groupSets = allEnabledSetsDefaultFirst(modelCaches.EnabledModelsBySet)
+			}
 			tokenCache.SetAvailableSets(groupSets)
 			tokenCache.SetModelsBySet(modelCaches.EnabledModelsBySet)
 

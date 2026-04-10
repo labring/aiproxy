@@ -119,9 +119,15 @@ func ExecuteSync(
 		}
 	}
 
+	// Pass remote model IDs so cross-owner shared models are included in channels.
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg)
+	remoteIDs := make([]string, 0, len(allModels))
+	for i := range allModels {
+		remoteIDs = append(remoteIDs, allModels[i].ID)
+	}
+
+	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, remoteIDs)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
@@ -250,8 +256,14 @@ func createModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) er
 		tpm = int64(m.TPM)
 	}
 
+	// Check if model already exists (possibly with a different owner).
+	// Novita has lower priority than PPIO, so it cannot claim PPIO-owned models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
+		if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
+			return nil // lower-priority provider cannot claim
+		}
+
 		existing.Owner = model.ModelOwnerNovita
 		existing.Config = configData
 		existing.Type = modeFromEndpoints(m.ModelType, m.Endpoints)
@@ -282,6 +294,11 @@ func updateModelConfigV2(tx *gorm.DB, m *NovitaModelV2, exchangeRate float64) er
 	if err := tx.Where("model = ?", m.ID).
 		First(&existing).Error; err != nil {
 		return err
+	}
+
+	// Only update models we own or can claim via priority
+	if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
+		return nil
 	}
 
 	existing.Owner = model.ModelOwnerNovita
@@ -409,10 +426,16 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 	return cfg
 }
 
-// EnsureNovitaChannels queries all local ModelConfig entries owned by Novita,
-// partitions them by endpoint compatibility, and writes the lists into the
-// corresponding Novita channels. When autoCreate is true and no Novita channels
-// exist, it creates them automatically using the API key from cfg.
+// EnsureNovitaChannels queries local ModelConfig entries and partitions them
+// by endpoint compatibility, then writes the lists into the corresponding
+// Novita channels. When autoCreate is true and no Novita channels exist, it
+// creates them automatically using the API key from cfg.
+//
+// remoteModelIDs is optional: when provided (during sync), the query includes
+// both Novita-owned models AND cross-owner models whose name appears in the
+// remote list. This ensures shared models (e.g. owned by PPIO) are still
+// included in Novita channels. When omitted (startup refresh), only
+// Novita-owned models are used.
 //
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
@@ -421,12 +444,18 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 // allowPassthroughUnknown controls the allow_passthrough_unknown config on the
 // OpenAI channel. When true, requests for models not in the model list are
 // forwarded to this channel as a fallback (billed at zero cost).
-func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult) (ChannelsInfo, error) {
+func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult, remoteModelIDs ...[]string) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
-	if err := model.DB.Select("model", "type", "config").
-		Where("owner = ?", string(model.ModelOwnerNovita)).
-		Find(&localModels).Error; err != nil {
+	query := model.DB.Select("model", "type", "config")
+	if len(remoteModelIDs) > 0 && len(remoteModelIDs[0]) > 0 {
+		// Include both Novita-owned models and cross-owner models in the remote list
+		query = query.Where("owner = ? OR model IN ?", string(model.ModelOwnerNovita), remoteModelIDs[0])
+	} else {
+		query = query.Where("owner = ?", string(model.ModelOwnerNovita))
+	}
+
+	if err := query.Find(&localModels).Error; err != nil {
 		return ChannelsInfo{}, fmt.Errorf("failed to query local Novita models: %w", err)
 	}
 
@@ -699,6 +728,11 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 
 		var existing model.ModelConfig
 		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
+			// Only update if we own or can claim via priority
+			if existing.Owner != model.ModelOwnerNovita && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerNovita) {
+				continue
+			}
+
 			existing.Owner = model.ModelOwnerNovita
 			existing.Type = modeFromEndpoints(modelType, nil)
 			existing.Config = configData

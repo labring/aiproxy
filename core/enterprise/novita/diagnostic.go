@@ -69,9 +69,11 @@ func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 
 // CompareNovitaModelsV2 compares remote V2 models with local database models.
 func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, exchangeRate float64) (*SyncDiff, error) {
+	// Fetch ALL local models (not filtered by owner) so we can detect
+	// cross-owner models shared with other providers (e.g. PPIO).
 	var localModels []model.ModelConfig
 
-	err := model.DB.Where("owner = ?", string(model.ModelOwnerNovita)).Find(&localModels).Error
+	err := model.DB.Find(&localModels).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
@@ -108,6 +110,9 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 				NewConfig: buildModelConfigMapV2(&remoteModel, exchangeRate),
 			})
 			diff.Summary.ToAdd++
+		} else if localModel.Owner != model.ModelOwnerNovita {
+			// Model exists but owned by another provider (e.g. PPIO) — skip
+			diff.Summary.CrossOwner++
 		} else {
 			changes := compareModelConfigsV2(localModel, &remoteModel, exchangeRate)
 			if len(changes) > 0 {
@@ -123,11 +128,16 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 		}
 	}
 
+	// Only consider models owned by Novita for deletion.
 	if opts.DeleteUnmatchedModel {
-		for modelID := range localModelMap {
+		for modelID, mc := range localModelMap {
+			if mc.Owner != model.ModelOwnerNovita {
+				continue
+			}
+
 			// Skip virtual models (e.g. novita-web-search) that are not sourced from
 			// the remote model catalog and should never be deleted.
-			if localModelMap[modelID].Type == mode.WebSearch {
+			if mc.Type == mode.WebSearch {
 				continue
 			}
 
@@ -135,7 +145,7 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
 					ModelID:   modelID,
 					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(localModelMap[modelID]),
+					OldConfig: buildLocalModelConfigMap(mc),
 				})
 				diff.Summary.ToDelete++
 			}
@@ -315,6 +325,8 @@ func Diagnostic(ctx context.Context) (*DiagnosticResult, error) {
 
 	remoteCount := diff.Summary.TotalModels
 
+	// Count local models owned by Novita (for display purposes; the comparison
+	// above queries all models to correctly detect cross-owner overlap).
 	var localCount int64
 
 	err = model.DB.Model(&model.ModelConfig{}).

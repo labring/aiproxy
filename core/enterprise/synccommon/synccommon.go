@@ -94,6 +94,20 @@ func MergeModels(existing, incoming []string) []string {
 	return merged
 }
 
+// ownerPriority defines sync priority: higher value = higher priority.
+// PPIO is the primary domestic provider (CNY prices), so it takes precedence
+// over Novita (USD→CNY converted prices) for shared models.
+var ownerPriority = map[model.ModelOwner]int{
+	model.ModelOwnerPPIO:   2,
+	model.ModelOwnerNovita: 1,
+}
+
+// CanClaimOwnership returns true if newOwner can take ownership from existingOwner.
+// A provider can claim if it has strictly higher priority than the current owner.
+func CanClaimOwnership(existingOwner, newOwner model.ModelOwner) bool {
+	return ownerPriority[newOwner] > ownerPriority[existingOwner]
+}
+
 // AdjustTierBounds returns the effective [minTokens, maxTokens] for a tiered-billing
 // tier, bumping minTokens by 1 when it overlaps with prevMax (the previous tier's max).
 //

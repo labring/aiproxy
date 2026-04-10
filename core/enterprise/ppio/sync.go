@@ -209,10 +209,16 @@ func ExecuteSync( //nolint:cyclop
 		}
 	}
 
-	// Step 4: Ensure channels exist (reads from local DB, not remote list)
+	// Step 4: Ensure channels exist
+	// Pass remote model IDs so cross-owner shared models are included in channels.
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg)
+	remoteIDs := make([]string, 0, len(allModels))
+	for i := range allModels {
+		remoteIDs = append(remoteIDs, allModels[i].ID)
+	}
+
+	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, remoteIDs)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -408,7 +414,11 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 
 		var existing model.ModelConfig
 		if txErr := model.DB.Where("model = ?", modelName).First(&existing).Error; txErr == nil {
-			// Update existing — only overwrite PPIO-managed fields
+			// Only update if we own or can claim via priority
+			if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+				continue
+			}
+
 			existing.Owner = model.ModelOwnerPPIO
 			existing.Type = inferModeFromPPIO(modelType, nil)
 			existing.Config = configData
@@ -452,10 +462,16 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 	return added, updated, nil
 }
 
-// EnsurePPIOChannels queries all local ModelConfig entries owned by PPIO,
-// partitions them by endpoint compatibility, and writes the lists into the
-// corresponding PPIO channels. When autoCreate is true and no PPIO channels
-// exist, it creates them automatically using the API key from cfg.
+// EnsurePPIOChannels queries local ModelConfig entries and partitions them by
+// endpoint compatibility, then writes the lists into the corresponding PPIO
+// channels. When autoCreate is true and no PPIO channels exist, it creates
+// them automatically using the API key from cfg.
+//
+// remoteModelIDs is optional: when provided (during sync), the query includes
+// both PPIO-owned models AND cross-owner models whose name appears in the
+// remote list. This ensures shared models (e.g. owned by Novita) are still
+// included in PPIO channels. When omitted (startup refresh), only PPIO-owned
+// models are used.
 //
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
@@ -465,12 +481,18 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 // allowPassthroughUnknown controls the allow_passthrough_unknown config on the
 // OpenAI channel. When true, requests for models not in the model list are
 // forwarded to this channel as a fallback (billed at zero cost).
-func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult) (ChannelsInfo, error) {
+func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult, remoteModelIDs ...[]string) (ChannelsInfo, error) {
 	var localModels []model.ModelConfig
 
-	if err := model.DB.Select("model", "type", "config").
-		Where("owner = ?", string(model.ModelOwnerPPIO)).
-		Find(&localModels).Error; err != nil {
+	query := model.DB.Select("model", "type", "config")
+	if len(remoteModelIDs) > 0 && len(remoteModelIDs[0]) > 0 {
+		// Include both PPIO-owned models and cross-owner models in the remote list
+		query = query.Where("owner = ? OR model IN ?", string(model.ModelOwnerPPIO), remoteModelIDs[0])
+	} else {
+		query = query.Where("owner = ?", string(model.ModelOwnerPPIO))
+	}
+
+	if err := query.Find(&localModels).Error; err != nil {
 		return ChannelsInfo{}, fmt.Errorf("failed to query local PPIO models: %w", err)
 	}
 
@@ -729,9 +751,14 @@ func RecordSyncHistory(opts SyncOptions, result *SyncResult) error {
 func createModelConfig(tx *gorm.DB, ppioModel *PPIOModel) error {
 	configData := synccommon.ToModelConfigKeys(buildConfigFromPPIOModel(ppioModel))
 
-	// Check if model already exists (possibly with a different owner)
+	// Check if model already exists (possibly with a different owner).
+	// PPIO has higher priority than Novita, so it can claim cross-owner models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", ppioModel.ID).First(&existing).Error; err == nil {
+		if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+			return nil // lower-priority provider cannot claim
+		}
+
 		existing.Owner = model.ModelOwnerPPIO
 		existing.Config = configData
 		existing.Type = inferModeFromPPIO(ppioModel.ModelType, ppioModel.Endpoints)
@@ -796,12 +823,13 @@ func createModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 	}
 
 	// Check if model already exists (possibly with a different owner).
-	// ModelConfig primary key is `model` alone (no composite with owner),
-	// so we must handle the case where e.g. "deepseek/deepseek-r1" exists
-	// with owner "deepseek" and the PPIO V2 API also returns it.
+	// PPIO has higher priority than Novita, so it can claim cross-owner models.
 	var existing model.ModelConfig
 	if err := tx.Where("model = ?", m.ID).First(&existing).Error; err == nil {
-		// Model exists — update it in place and claim ownership for PPIO
+		if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+			return nil // lower-priority provider cannot claim
+		}
+
 		existing.Owner = model.ModelOwnerPPIO
 		existing.Config = configData
 		existing.Type = inferModeFromPPIO(m.ModelType, m.Endpoints)
@@ -833,6 +861,11 @@ func updateModelConfigV2(tx *gorm.DB, m *PPIOModelV2) error {
 		First(&existing).
 		Error; err != nil {
 		return err
+	}
+
+	// Only update models we own or can claim via priority
+	if existing.Owner != model.ModelOwnerPPIO && !synccommon.CanClaimOwnership(existing.Owner, model.ModelOwnerPPIO) {
+		return nil
 	}
 
 	existing.Owner = model.ModelOwnerPPIO
