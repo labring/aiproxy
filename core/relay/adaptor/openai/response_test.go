@@ -12,6 +12,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,9 +96,10 @@ func TestResponseHandlerPromptCacheRetention(t *testing.T) {
 				Header:     make(http.Header),
 			}
 
-			_, err := ResponseHandler(meta, store, c, resp)
+			result, err := ResponseHandler(meta, store, c, resp)
 			require.Nil(t, err)
 			require.Len(t, store.savedIfNotExist, tt.expectStoreWrites)
+			assert.Equal(t, "resp_123", result.UpstreamID)
 		})
 	}
 }
@@ -132,7 +134,8 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 		Header:     make(http.Header),
 	}
 
-	_, err := ResponseStreamHandler(meta, store, c, resp)
+	result, err := ResponseStreamHandler(meta, store, c, resp)
 	require.Nil(t, err)
 	require.Empty(t, store.savedIfNotExist)
+	assert.Equal(t, "resp_123", result.UpstreamID)
 }

@@ -108,10 +108,10 @@ func ResponseHandler(
 	if response.Usage != nil {
 		usage := response.Usage.ToModelUsage()
 
-		return adaptor.DoResponseResult{Usage: usage}, nil
+		return adaptor.DoResponseResult{Usage: usage, UpstreamID: response.ID}, nil
 	}
 
-	return adaptor.DoResponseResult{}, nil
+	return adaptor.DoResponseResult{UpstreamID: response.ID}, nil
 }
 
 // ResponseStreamHandler handles streaming response
@@ -188,12 +188,12 @@ func ResponseStreamHandler(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{Usage: usage, UpstreamID: responseID}, nil
 }
 
 // GetResponseHandler handles GET /v1/responses/{response_id}
 func GetResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
@@ -212,7 +212,7 @@ func GetResponseHandler(
 
 // DeleteResponseHandler handles DELETE /v1/responses/{response_id}
 func DeleteResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
@@ -232,7 +232,7 @@ func DeleteResponseHandler(
 
 // CancelResponseHandler handles POST /v1/responses/{response_id}/cancel
 func CancelResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
@@ -251,7 +251,7 @@ func CancelResponseHandler(
 
 // GetInputItemsHandler handles GET /v1/responses/{response_id}/input_items
 func GetInputItemsHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
