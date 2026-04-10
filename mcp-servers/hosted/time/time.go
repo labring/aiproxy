@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/bytedance/sonic"
 	mcpservers "github.com/labring/aiproxy/mcp-servers"
