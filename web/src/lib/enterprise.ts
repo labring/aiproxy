@@ -79,11 +79,10 @@ export function formatNumber(n: number): string {
 }
 
 export function formatAmount(n: number): string {
-    if (n === 0) return "¥0.00"
+    if (n === 0) return "¥0.0000"
     const abs = Math.abs(n)
     if (abs < 0.0001) return `¥${n.toExponential(2)}`
-    if (abs < 0.01) return `¥${n.toFixed(4)}`
-    return `¥${n.toFixed(2)}`
+    return `¥${n.toFixed(4)}`
 }
 
 export function formatRate(n: number): string {
