@@ -872,48 +872,51 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 	}
 
 	// Tiered billing → ConditionalPrices
-	if m.IsTieredBilling && len(m.TieredBillingConfigs) > 0 {
-		conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
+	if !m.IsTieredBilling || len(m.TieredBillingConfigs) == 0 {
+		price.ConditionalPrices = nil
+		return
+	}
 
-		var prevMax int64
+	conditionalPrices := make([]model.ConditionalPrice, 0, len(m.TieredBillingConfigs))
 
-		for _, tier := range m.TieredBillingConfigs {
-			minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
-			prevMax = tier.MaxTokens
+	var prevMax int64
 
-			if maxTokens > 0 && minTokens > maxTokens {
-				continue // degenerate tier after boundary adjustment
-			}
+	for _, tier := range m.TieredBillingConfigs {
+		minTokens, maxTokens := synccommon.AdjustTierBounds(tier.MinTokens, tier.MaxTokens, prevMax)
+		prevMax = tier.MaxTokens
 
-			cp := model.ConditionalPrice{
-				Condition: model.PriceCondition{
-					InputTokenMin: minTokens,
-					InputTokenMax: maxTokens,
-				},
-				Price: model.Price{
-					InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
-					InputPriceUnit:  model.ZeroNullInt64(1),
-					OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
-					OutputPriceUnit: model.ZeroNullInt64(1),
-				},
-			}
-
-			// Tier-level cache pricing
-			if tier.CacheReadInputPricing.PricePerM > 0 {
-				cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken())
-				cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
-			}
-
-			if tier.CacheCreationInputPricing.PricePerM > 0 {
-				cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
-				cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
-			}
-
-			conditionalPrices = append(conditionalPrices, cp)
+		if maxTokens > 0 && minTokens > maxTokens {
+			continue // degenerate tier after boundary adjustment
 		}
 
-		price.ConditionalPrices = conditionalPrices
+		cp := model.ConditionalPrice{
+			Condition: model.PriceCondition{
+				InputTokenMin: minTokens,
+				InputTokenMax: maxTokens,
+			},
+			Price: model.Price{
+				InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken()),
+				InputPriceUnit:  model.ZeroNullInt64(1),
+				OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken()),
+				OutputPriceUnit: model.ZeroNullInt64(1),
+			},
+		}
+
+		// Tier-level cache pricing
+		if tier.CacheReadInputPricing.PricePerM > 0 {
+			cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken())
+			cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
+		}
+
+		if tier.CacheCreationInputPricing.PricePerM > 0 {
+			cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
+			cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
+		}
+
+		conditionalPrices = append(conditionalPrices, cp)
 	}
+
+	price.ConditionalPrices = conditionalPrices
 }
 
 // buildConfigFromPPIOModelV2 builds model config map from a V2 PPIO model

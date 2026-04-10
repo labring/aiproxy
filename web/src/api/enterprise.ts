@@ -461,6 +461,7 @@ export interface ModelAccessInfo {
 
 export interface ModelGroupInfo {
     owner: string
+    display_name?: string
     models: ModelAccessInfo[]
 }
 

@@ -211,8 +211,9 @@ func getSupportedEndpoints(modelType mode.Mode) []string {
 }
 
 type ModelGroupInfo struct {
-	Owner  string            `json:"owner"`
-	Models []ModelAccessInfo `json:"models"`
+	Owner       string            `json:"owner"`
+	DisplayName string            `json:"display_name,omitempty"`
+	Models      []ModelAccessInfo `json:"models"`
 }
 
 type MyAccessResponse struct {
@@ -334,6 +335,7 @@ func GetMyAccess(c *gin.Context) {
 	}
 
 	modelProvider := make(map[string]string, len(availableModels))
+	ownerDisplayName := make(map[string]string) // owner (type string) → channel custom name
 	for _, set := range groupSets {
 		chMap := modelCaches.EnabledModel2ChannelsBySet[set]
 		for _, modelName := range availableModels {
@@ -343,7 +345,11 @@ func GetMyAccess(c *gin.Context) {
 
 			if chs, ok := chMap[modelName]; ok && len(chs) > 0 {
 				// Channels are already sorted by priority (highest first)
-				modelProvider[modelName] = chs[0].Type.String()
+				owner := chs[0].Type.String()
+				modelProvider[modelName] = owner
+				if _, exists := ownerDisplayName[owner]; !exists && chs[0].Name != "" {
+					ownerDisplayName[owner] = chs[0].Name
+				}
 			}
 		}
 	}
@@ -427,8 +433,9 @@ func GetMyAccess(c *gin.Context) {
 		})
 
 		modelGroups = append(modelGroups, ModelGroupInfo{
-			Owner:  owner,
-			Models: models,
+			Owner:       owner,
+			DisplayName: ownerDisplayName[owner],
+			Models:      models,
 		})
 	}
 

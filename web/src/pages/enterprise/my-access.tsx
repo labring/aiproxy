@@ -882,7 +882,7 @@ function ModelGroupSection({ groups, baseUrl, ownerBaseUrls, localOwner }: { gro
                             <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted">
                                 <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
                                     {openOwners.has(group.owner) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                    <span>{ownerDisplayName(group.owner)}</span>
+                                    <span>{group.display_name || ownerDisplayName(group.owner)}</span>
                                     <Badge variant="secondary" className="ml-1 text-xs">
                                         {t("enterprise.myAccess.modelCount", { count: group.models.length })}
                                     </Badge>
