@@ -9,11 +9,20 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 const (
 	GroupCacheKey = "group:%s"
 )
+
+func getGroupCacheKey(id string) string {
+	return common.RedisKeyf(GroupCacheKey, id)
+}
+
+func updateGroupLocalCache(id string, update func(*GroupCache) bool) {
+	cacheUpdateModelLocal(getGroupCacheKey(id), cloneGroupCache, update)
+}
 
 type GroupCache struct {
 	ID            string                   `json:"-"              redis:"-"`
@@ -56,6 +65,8 @@ func (g *Group) ToGroupCache() *GroupCache {
 }
 
 func CacheDeleteGroup(id string) error {
+	cacheDeleteModelLocal(getGroupCacheKey(id))
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -74,6 +85,11 @@ var updateGroupRPMRatioScript = redis.NewScript(`
 `)
 
 func CacheUpdateGroupRPMRatio(id string, rpmRatio float64) error {
+	updateGroupLocalCache(id, func(group *GroupCache) bool {
+		group.RPMRatio = rpmRatio
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -97,6 +113,11 @@ var updateGroupTPMRatioScript = redis.NewScript(`
 `)
 
 func CacheUpdateGroupTPMRatio(id string, tpmRatio float64) error {
+	updateGroupLocalCache(id, func(group *GroupCache) bool {
+		group.TPMRatio = tpmRatio
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -120,6 +141,11 @@ var updateGroupStatusScript = redis.NewScript(`
 `)
 
 func CacheUpdateGroupStatus(id string, status int) error {
+	updateGroupLocalCache(id, func(group *GroupCache) bool {
+		group.Status = status
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -136,6 +162,77 @@ func CacheUpdateGroupStatus(id string, status int) error {
 }
 
 func CacheSetGroup(group *GroupCache) error {
+	key := getGroupCacheKey(group.ID)
+	cacheSetModelLocal(key, group, cloneGroupCache)
+	return cacheSetGroupRedis(group)
+}
+
+func CacheGetGroup(id string) (*GroupCache, error) {
+	cacheKey := getGroupCacheKey(id)
+	if groupCache, notFound, ok := cacheGetModelLocal(cacheKey, cloneGroupCache); ok {
+		if notFound {
+			return nil, NotFoundError(ErrGroupNotFound)
+		}
+
+		return groupCache, nil
+	}
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		groupCache := &GroupCache{}
+
+		err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupCache)
+		if err == nil && groupCache.Status != 0 {
+			groupCache.ID = id
+			cacheSetModelLocal(cacheKey, groupCache, cloneGroupCache)
+			return groupCache, nil
+		} else if err != nil && !errors.Is(err, redis.Nil) {
+			log.Errorf("get group (%s) from redis error: %s", id, err.Error())
+		}
+	}
+
+	groupCache, notFound, loaded, err := loadWithLocalKeyLock(
+		modelCacheLoadLocker,
+		cacheKey,
+		func() (*GroupCache, bool, bool) {
+			return cacheGetModelLocal(cacheKey, cloneGroupCache)
+		},
+		func() (*GroupCache, error) {
+			group, err := GetGroupByID(id, true)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetModelNotFoundLocalUnlocked(cacheKey)
+				}
+
+				return nil, err
+			}
+
+			gc := group.ToGroupCache()
+			cacheSetModelLocalUnlocked(cacheKey, gc, cloneGroupCache)
+
+			return gc, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if notFound {
+		return nil, NotFoundError(ErrGroupNotFound)
+	}
+
+	if loaded {
+		if err := cacheSetGroupRedis(groupCache); err != nil {
+			log.Error("redis set group error: " + err.Error())
+		}
+	}
+
+	return groupCache, nil
+}
+
+func cacheSetGroupRedis(group *GroupCache) error {
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -143,7 +240,7 @@ func CacheSetGroup(group *GroupCache) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	key := common.RedisKeyf(GroupCacheKey, group.ID)
+	key := getGroupCacheKey(group.ID)
 	pipe := common.RDB.Pipeline()
 	pipe.HSet(ctx, key, group)
 
@@ -152,44 +249,6 @@ func CacheSetGroup(group *GroupCache) error {
 	_, err := pipe.Exec(ctx)
 
 	return err
-}
-
-func CacheGetGroup(id string) (*GroupCache, error) {
-	if !common.RedisEnabled {
-		group, err := GetGroupByID(id, true)
-		if err != nil {
-			return nil, err
-		}
-
-		return group.ToGroupCache(), nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-	defer cancel()
-
-	cacheKey := common.RedisKeyf(GroupCacheKey, id)
-	groupCache := &GroupCache{}
-
-	err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupCache)
-	if err == nil && groupCache.Status != 0 {
-		groupCache.ID = id
-		return groupCache, nil
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get group (%s) from redis error: %s", id, err.Error())
-	}
-
-	group, err := GetGroupByID(id, true)
-	if err != nil {
-		return nil, err
-	}
-
-	gc := group.ToGroupCache()
-
-	if err := CacheSetGroup(gc); err != nil {
-		log.Error("redis set group error: " + err.Error())
-	}
-
-	return gc, nil
 }
 
 var updateGroupUsedAmountOnlyIncreaseScript = redis.NewScript(`
@@ -205,6 +264,16 @@ var updateGroupUsedAmountOnlyIncreaseScript = redis.NewScript(`
 `)
 
 func CacheUpdateGroupUsedAmountOnlyIncrease(id string, amount float64) error {
+	updateGroupLocalCache(id, func(group *GroupCache) bool {
+		if amount < group.UsedAmount {
+			return false
+		}
+
+		group.UsedAmount = amount
+
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}

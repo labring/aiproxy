@@ -21,7 +21,10 @@ const (
 	StoreCacheNotFoundKey = "storev2notfound:%s:%d:%s"
 )
 
-var storeLocalCache = gcache.New(2*time.Second, 5*time.Second)
+var (
+	storeLocalCache      = gcache.New(2*time.Second, 5*time.Second)
+	storeCacheLoadLocker = common.NewKeyedLocker()
+)
 
 type StoreCache struct {
 	ID        string    `json:"id"         redis:"i"`
@@ -106,6 +109,12 @@ func getStoreLocalTTL(store *StoreCache) time.Duration {
 }
 
 func cacheSetStoreLocal(key string, store *StoreCache) {
+	common.WithKeyLock(storeCacheLoadLocker, key, func() {
+		cacheSetStoreLocalUnlocked(key, store)
+	})
+}
+
+func cacheSetStoreLocalUnlocked(key string, store *StoreCache) {
 	ttl := getStoreLocalTTL(store)
 	if ttl <= 0 {
 		storeLocalCache.Delete(key)
@@ -116,6 +125,12 @@ func cacheSetStoreLocal(key string, store *StoreCache) {
 }
 
 func cacheSetStoreNotFoundLocal(key string) {
+	common.WithKeyLock(storeCacheLoadLocker, key, func() {
+		cacheSetStoreNotFoundLocalUnlocked(key)
+	})
+}
+
+func cacheSetStoreNotFoundLocalUnlocked(key string) {
 	storeLocalCache.Set(key, localStoreCacheItem{NotFound: true}, storeLocalMissTTL)
 }
 
@@ -259,33 +274,61 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 		}
 	}
 
-	store, err := GetStore(group, tokenID, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			cacheSetStoreNotFoundLocal(cacheKey)
-
-			if common.RedisEnabled {
-				ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-				defer cancel()
-
-				if cacheErr := cacheSetStoreNotFound(
-					ctx,
-					getStoreCacheNotFoundKey(group, tokenID, id),
-				); cacheErr != nil {
-					log.Error("redis set store not found cache error: " + cacheErr.Error())
+	storeCache, notFound, loaded, err := loadWithLocalKeyLock(
+		storeCacheLoadLocker,
+		cacheKey,
+		func() (*StoreCache, bool, bool) {
+			return cacheGetStoreLocal(cacheKey)
+		},
+		func() (*StoreCache, error) {
+			store, err := GetStore(group, tokenID, id)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetStoreNotFoundLocalUnlocked(cacheKey)
 				}
+
+				return nil, err
+			}
+
+			sc := store.ToStoreCache()
+			cacheSetStoreLocalUnlocked(cacheKey, sc)
+
+			return sc, nil
+		},
+	)
+	if err != nil {
+		if loaded && errors.Is(err, gorm.ErrRecordNotFound) && common.RedisEnabled {
+			ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+			defer cancel()
+
+			if cacheErr := cacheSetStoreNotFound(
+				ctx,
+				getStoreCacheNotFoundKey(group, tokenID, id),
+			); cacheErr != nil {
+				log.Error("redis set store not found cache error: " + cacheErr.Error())
 			}
 		}
 
 		return nil, err
 	}
 
-	sc := store.ToStoreCache()
-	cacheSetStoreLocal(cacheKey, sc)
-
-	if err := CacheSetStore(sc); err != nil {
-		log.Error("redis set store error: " + err.Error())
+	if notFound {
+		return nil, NotFoundError(ErrStoreNotFound)
 	}
 
-	return sc, nil
+	if loaded && common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		if err := cacheSetStore(
+			ctx,
+			cacheKey,
+			getStoreCacheNotFoundKey(group, tokenID, id),
+			storeCache,
+		); err != nil {
+			log.Error("redis set store error: " + err.Error())
+		}
+	}
+
+	return storeCache, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/env"
 	"github.com/labring/aiproxy/core/model"
+	gcache "github.com/patrickmn/go-cache"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
@@ -31,13 +32,17 @@ const (
 )
 
 var (
-	_                       GroupBalance = (*Sealos)(nil)
-	sealosHTTPClient                     = &http.Client{}
-	decimalBalancePrecision              = decimal.NewFromInt(balancePrecision)
-	minConsumeAmount                     = decimal.NewFromInt(1)
-	jwtToken                string
-	sealosRedisCacheEnable  = env.Bool("BALANCE_SEALOS_REDIS_CACHE_ENABLE", true)
-	sealosCacheExpire       = 3 * time.Minute
+	_                         GroupBalance = (*Sealos)(nil)
+	sealosHTTPClient                       = &http.Client{}
+	decimalBalancePrecision                = decimal.NewFromInt(balancePrecision)
+	minConsumeAmount                       = decimal.NewFromInt(1)
+	jwtToken                  string
+	sealosRedisCacheEnable    = env.Bool("BALANCE_SEALOS_REDIS_CACHE_ENABLE", true)
+	sealosCacheExpire         = 3 * time.Minute
+	sealosLocalBalanceCache   = gcache.New(2*time.Second, 5*time.Second)
+	sealosLocalRealNameCache  = gcache.New(2*time.Second, 5*time.Second)
+	sealosLocalBalanceLocker  = common.NewKeyedLocker()
+	sealosLocalRealNameLocker = common.NewKeyedLocker()
 )
 
 var (
@@ -114,7 +119,83 @@ type sealosCache struct {
 	Balance int64  `redis:"b"`
 }
 
+func sealosLocalBalanceKey(group string) string {
+	return "group:" + group
+}
+
+func sealosLocalRealNameKey(userUID string) string {
+	return "realname:" + userUID
+}
+
+func cacheSetGroupBalanceLocal(group string, balance int64, userUID string) {
+	common.WithKeyLock(sealosLocalBalanceLocker, sealosLocalBalanceKey(group), func() {
+		sealosLocalBalanceCache.Set(
+			sealosLocalBalanceKey(group),
+			sealosCache{Balance: balance, UserUID: userUID},
+			time.Second,
+		)
+	})
+}
+
+func cacheGetGroupBalanceLocal(group string) (*sealosCache, bool) {
+	v, ok := sealosLocalBalanceCache.Get(sealosLocalBalanceKey(group))
+	if !ok {
+		return nil, false
+	}
+
+	cache, ok := v.(sealosCache)
+	if !ok {
+		panic("sealos local balance cache type mismatch")
+	}
+
+	return &cache, true
+}
+
+func cacheDecreaseGroupBalanceLocal(group string, amount int64) {
+	common.WithKeyLock(sealosLocalBalanceLocker, sealosLocalBalanceKey(group), func() {
+		v, ok := sealosLocalBalanceCache.Get(sealosLocalBalanceKey(group))
+		if !ok {
+			return
+		}
+
+		cache, ok := v.(sealosCache)
+		if !ok {
+			panic("sealos local balance cache type mismatch")
+		}
+
+		cache.Balance -= amount
+		sealosLocalBalanceCache.Set(sealosLocalBalanceKey(group), cache, time.Second)
+	})
+}
+
+func cacheSetUserRealNameLocal(userUID string, realName bool) {
+	ttl := time.Second
+	if realName {
+		ttl = 5 * time.Second
+	}
+
+	common.WithKeyLock(sealosLocalRealNameLocker, sealosLocalRealNameKey(userUID), func() {
+		sealosLocalRealNameCache.Set(sealosLocalRealNameKey(userUID), realName, ttl)
+	})
+}
+
+func cacheGetUserRealNameLocal(userUID string) (bool, bool) {
+	v, ok := sealosLocalRealNameCache.Get(sealosLocalRealNameKey(userUID))
+	if !ok {
+		return false, false
+	}
+
+	realName, ok := v.(bool)
+	if !ok {
+		panic("sealos local real name cache type mismatch")
+	}
+
+	return realName, true
+}
+
 func cacheSetGroupBalance(ctx context.Context, group string, balance int64, userUID string) error {
+	cacheSetGroupBalanceLocal(group, balance, userUID)
+
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
 	}
@@ -136,6 +217,10 @@ func cacheSetGroupBalance(ctx context.Context, group string, balance int64, user
 }
 
 func cacheGetGroupBalance(ctx context.Context, group string) (*sealosCache, error) {
+	if cache, ok := cacheGetGroupBalanceLocal(group); ok {
+		return cache, nil
+	}
+
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil, redis.Nil
 	}
@@ -149,6 +234,8 @@ func cacheGetGroupBalance(ctx context.Context, group string) (*sealosCache, erro
 		return nil, err
 	}
 
+	cacheSetGroupBalanceLocal(group, cache.Balance, cache.UserUID)
+
 	return &cache, nil
 }
 
@@ -161,6 +248,8 @@ return redis.status_reply("ok")
 `)
 
 func cacheDecreaseGroupBalance(ctx context.Context, group string, amount int64) error {
+	cacheDecreaseGroupBalanceLocal(group, amount)
+
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
 	}
@@ -200,6 +289,10 @@ func (s *Sealos) GetGroupRemainBalance(
 }
 
 func cacheGetUserRealName(ctx context.Context, userUID string) (bool, error) {
+	if realName, ok := cacheGetUserRealNameLocal(userUID); ok {
+		return realName, nil
+	}
+
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return true, redis.Nil
 	}
@@ -212,10 +305,14 @@ func cacheGetUserRealName(ctx context.Context, userUID string) (bool, error) {
 		return false, err
 	}
 
+	cacheSetUserRealNameLocal(userUID, realName)
+
 	return realName, nil
 }
 
 func cacheSetUserRealName(ctx context.Context, userUID string, realName bool) error {
+	cacheSetUserRealNameLocal(userUID, realName)
+
 	if !common.RedisEnabled || !sealosRedisCacheEnable {
 		return nil
 	}

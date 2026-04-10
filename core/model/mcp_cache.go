@@ -9,6 +9,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 type GroupMCPCache struct {
@@ -35,7 +36,17 @@ const (
 	GroupMCPCacheKey = "group_mcp:%s:%s"
 )
 
+func getGroupMCPCacheKey(groupID, mcpID string) string {
+	return common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)
+}
+
+func updateGroupMCPLocalCache(groupID, mcpID string, update func(*GroupMCPCache) bool) {
+	cacheUpdateModelLocal(getGroupMCPCacheKey(groupID, mcpID), cloneGroupMCPCache, update)
+}
+
 func CacheDeleteGroupMCP(groupID, mcpID string) error {
+	cacheDeleteModelLocal(getGroupMCPCacheKey(groupID, mcpID))
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -43,10 +54,80 @@ func CacheDeleteGroupMCP(groupID, mcpID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	return common.RDB.Del(ctx, common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)).Err()
+	return common.RDB.Del(ctx, getGroupMCPCacheKey(groupID, mcpID)).Err()
 }
 
 func CacheSetGroupMCP(groupMCP *GroupMCPCache) error {
+	key := getGroupMCPCacheKey(groupMCP.GroupID, groupMCP.ID)
+	cacheSetModelLocal(key, groupMCP, cloneGroupMCPCache)
+	return cacheSetGroupMCPRedis(groupMCP)
+}
+
+func CacheGetGroupMCP(groupID, mcpID string) (*GroupMCPCache, error) {
+	cacheKey := getGroupMCPCacheKey(groupID, mcpID)
+	if groupMCPCache, notFound, ok := cacheGetModelLocal(cacheKey, cloneGroupMCPCache); ok {
+		if notFound {
+			return nil, NotFoundError(ErrGroupMCPNotFound)
+		}
+
+		return groupMCPCache, nil
+	}
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		groupMCPCache := &GroupMCPCache{}
+
+		err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupMCPCache)
+		if err == nil && groupMCPCache.ID != "" {
+			cacheSetModelLocal(cacheKey, groupMCPCache, cloneGroupMCPCache)
+			return groupMCPCache, nil
+		} else if err != nil && !errors.Is(err, redis.Nil) {
+			log.Errorf("get group mcp (%s:%s) from redis error: %s", groupID, mcpID, err.Error())
+		}
+	}
+
+	groupMCPCache, notFound, loaded, err := loadWithLocalKeyLock(
+		modelCacheLoadLocker,
+		cacheKey,
+		func() (*GroupMCPCache, bool, bool) {
+			return cacheGetModelLocal(cacheKey, cloneGroupMCPCache)
+		},
+		func() (*GroupMCPCache, error) {
+			groupMCP, err := GetGroupMCPByID(mcpID, groupID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetModelNotFoundLocalUnlocked(cacheKey)
+				}
+
+				return nil, err
+			}
+
+			gmc := groupMCP.ToGroupMCPCache()
+			cacheSetModelLocalUnlocked(cacheKey, gmc, cloneGroupMCPCache)
+
+			return gmc, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if notFound {
+		return nil, NotFoundError(ErrGroupMCPNotFound)
+	}
+
+	if loaded {
+		if err := cacheSetGroupMCPRedis(groupMCPCache); err != nil {
+			log.Error("redis set group mcp error: " + err.Error())
+		}
+	}
+
+	return groupMCPCache, nil
+}
+
+func cacheSetGroupMCPRedis(groupMCP *GroupMCPCache) error {
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -54,7 +135,7 @@ func CacheSetGroupMCP(groupMCP *GroupMCPCache) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	key := common.RedisKeyf(GroupMCPCacheKey, groupMCP.GroupID, groupMCP.ID)
+	key := getGroupMCPCacheKey(groupMCP.GroupID, groupMCP.ID)
 	pipe := common.RDB.Pipeline()
 	pipe.HSet(ctx, key, groupMCP)
 
@@ -65,43 +146,6 @@ func CacheSetGroupMCP(groupMCP *GroupMCPCache) error {
 	return err
 }
 
-func CacheGetGroupMCP(groupID, mcpID string) (*GroupMCPCache, error) {
-	if !common.RedisEnabled {
-		groupMCP, err := GetGroupMCPByID(mcpID, groupID)
-		if err != nil {
-			return nil, err
-		}
-
-		return groupMCP.ToGroupMCPCache(), nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-	defer cancel()
-
-	cacheKey := common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)
-	groupMCPCache := &GroupMCPCache{}
-
-	err := common.RDB.HGetAll(ctx, cacheKey).Scan(groupMCPCache)
-	if err == nil && groupMCPCache.ID != "" {
-		return groupMCPCache, nil
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get group mcp (%s:%s) from redis error: %s", groupID, mcpID, err.Error())
-	}
-
-	groupMCP, err := GetGroupMCPByID(mcpID, groupID)
-	if err != nil {
-		return nil, err
-	}
-
-	gmc := groupMCP.ToGroupMCPCache()
-
-	if err := CacheSetGroupMCP(gmc); err != nil {
-		log.Error("redis set group mcp error: " + err.Error())
-	}
-
-	return gmc, nil
-}
-
 var updateGroupMCPStatusScript = redis.NewScript(`
 	if redis.call("HExists", KEYS[1], "s") then
 		redis.call("HSet", KEYS[1], "s", ARGV[1])
@@ -110,6 +154,11 @@ var updateGroupMCPStatusScript = redis.NewScript(`
 `)
 
 func CacheUpdateGroupMCPStatus(groupID, mcpID string, status GroupMCPStatus) error {
+	updateGroupMCPLocalCache(groupID, mcpID, func(groupMCP *GroupMCPCache) bool {
+		groupMCP.Status = status
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -120,7 +169,7 @@ func CacheUpdateGroupMCPStatus(groupID, mcpID string, status GroupMCPStatus) err
 	return updateGroupMCPStatusScript.Run(
 		ctx,
 		common.RDB,
-		[]string{common.RedisKeyf(GroupMCPCacheKey, groupID, mcpID)},
+		[]string{getGroupMCPCacheKey(groupID, mcpID)},
 		status,
 	).Err()
 }
@@ -151,7 +200,17 @@ const (
 	PublicMCPCacheKey = "public_mcp:%s"
 )
 
+func getPublicMCPCacheKey(mcpID string) string {
+	return common.RedisKeyf(PublicMCPCacheKey, mcpID)
+}
+
+func updatePublicMCPLocalCache(mcpID string, update func(*PublicMCPCache) bool) {
+	cacheUpdateModelLocal(getPublicMCPCacheKey(mcpID), clonePublicMCPCache, update)
+}
+
 func CacheDeletePublicMCP(mcpID string) error {
+	cacheDeleteModelLocal(getPublicMCPCacheKey(mcpID))
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -159,10 +218,80 @@ func CacheDeletePublicMCP(mcpID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	return common.RDB.Del(ctx, common.RedisKeyf(PublicMCPCacheKey, mcpID)).Err()
+	return common.RDB.Del(ctx, getPublicMCPCacheKey(mcpID)).Err()
 }
 
 func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
+	key := getPublicMCPCacheKey(publicMCP.ID)
+	cacheSetModelLocal(key, publicMCP, clonePublicMCPCache)
+	return cacheSetPublicMCPRedis(publicMCP)
+}
+
+func CacheGetPublicMCP(mcpID string) (*PublicMCPCache, error) {
+	cacheKey := getPublicMCPCacheKey(mcpID)
+	if publicMCPCache, notFound, ok := cacheGetModelLocal(cacheKey, clonePublicMCPCache); ok {
+		if notFound {
+			return nil, NotFoundError(ErrPublicMCPNotFound)
+		}
+
+		return publicMCPCache, nil
+	}
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		publicMCPCache := &PublicMCPCache{}
+
+		err := common.RDB.HGetAll(ctx, cacheKey).Scan(publicMCPCache)
+		if err == nil && publicMCPCache.ID != "" {
+			cacheSetModelLocal(cacheKey, publicMCPCache, clonePublicMCPCache)
+			return publicMCPCache, nil
+		} else if err != nil && !errors.Is(err, redis.Nil) {
+			log.Errorf("get public mcp (%s) from redis error: %s", mcpID, err.Error())
+		}
+	}
+
+	publicMCPCache, notFound, loaded, err := loadWithLocalKeyLock(
+		modelCacheLoadLocker,
+		cacheKey,
+		func() (*PublicMCPCache, bool, bool) {
+			return cacheGetModelLocal(cacheKey, clonePublicMCPCache)
+		},
+		func() (*PublicMCPCache, error) {
+			publicMCP, err := GetPublicMCPByID(mcpID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetModelNotFoundLocalUnlocked(cacheKey)
+				}
+
+				return nil, err
+			}
+
+			pmc := publicMCP.ToPublicMCPCache()
+			cacheSetModelLocalUnlocked(cacheKey, pmc, clonePublicMCPCache)
+
+			return pmc, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if notFound {
+		return nil, NotFoundError(ErrPublicMCPNotFound)
+	}
+
+	if loaded {
+		if err := cacheSetPublicMCPRedis(publicMCPCache); err != nil {
+			log.Error("redis set public mcp error: " + err.Error())
+		}
+	}
+
+	return publicMCPCache, nil
+}
+
+func cacheSetPublicMCPRedis(publicMCP *PublicMCPCache) error {
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -170,7 +299,7 @@ func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	key := common.RedisKeyf(PublicMCPCacheKey, publicMCP.ID)
+	key := getPublicMCPCacheKey(publicMCP.ID)
 	pipe := common.RDB.Pipeline()
 	pipe.HSet(ctx, key, publicMCP)
 
@@ -181,43 +310,6 @@ func CacheSetPublicMCP(publicMCP *PublicMCPCache) error {
 	return err
 }
 
-func CacheGetPublicMCP(mcpID string) (*PublicMCPCache, error) {
-	if !common.RedisEnabled {
-		publicMCP, err := GetPublicMCPByID(mcpID)
-		if err != nil {
-			return nil, err
-		}
-
-		return publicMCP.ToPublicMCPCache(), nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-	defer cancel()
-
-	cacheKey := common.RedisKeyf(PublicMCPCacheKey, mcpID)
-	publicMCPCache := &PublicMCPCache{}
-
-	err := common.RDB.HGetAll(ctx, cacheKey).Scan(publicMCPCache)
-	if err == nil && publicMCPCache.ID != "" {
-		return publicMCPCache, nil
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get public mcp (%s) from redis error: %s", mcpID, err.Error())
-	}
-
-	publicMCP, err := GetPublicMCPByID(mcpID)
-	if err != nil {
-		return nil, err
-	}
-
-	pmc := publicMCP.ToPublicMCPCache()
-
-	if err := CacheSetPublicMCP(pmc); err != nil {
-		log.Error("redis set public mcp error: " + err.Error())
-	}
-
-	return pmc, nil
-}
-
 var updatePublicMCPStatusScript = redis.NewScript(`
 	if redis.call("HExists", KEYS[1], "s") then
 		redis.call("HSet", KEYS[1], "s", ARGV[1])
@@ -226,6 +318,11 @@ var updatePublicMCPStatusScript = redis.NewScript(`
 `)
 
 func CacheUpdatePublicMCPStatus(mcpID string, status PublicMCPStatus) error {
+	updatePublicMCPLocalCache(mcpID, func(publicMCP *PublicMCPCache) bool {
+		publicMCP.Status = status
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -236,7 +333,7 @@ func CacheUpdatePublicMCPStatus(mcpID string, status PublicMCPStatus) error {
 	return updatePublicMCPStatusScript.Run(
 		ctx,
 		common.RDB,
-		[]string{common.RedisKeyf(PublicMCPCacheKey, mcpID)},
+		[]string{getPublicMCPCacheKey(mcpID)},
 		status,
 	).Err()
 }
@@ -244,6 +341,10 @@ func CacheUpdatePublicMCPStatus(mcpID string, status PublicMCPStatus) error {
 const (
 	PublicMCPReusingParamCacheKey = "public_mcp_param:%s:%s"
 )
+
+func getPublicMCPReusingParamCacheKey(mcpID, groupID string) string {
+	return common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)
+}
 
 type PublicMCPReusingParamCache struct {
 	MCPID   string                   `json:"mcp_id"   redis:"m"`
@@ -260,6 +361,8 @@ func (p *PublicMCPReusingParam) ToPublicMCPReusingParamCache() PublicMCPReusingP
 }
 
 func CacheDeletePublicMCPReusingParam(mcpID, groupID string) error {
+	cacheDeleteModelLocal(getPublicMCPReusingParamCacheKey(mcpID, groupID))
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -267,27 +370,14 @@ func CacheDeletePublicMCPReusingParam(mcpID, groupID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	return common.RDB.Del(ctx, common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)).
+	return common.RDB.Del(ctx, getPublicMCPReusingParamCacheKey(mcpID, groupID)).
 		Err()
 }
 
 func CacheSetPublicMCPReusingParam(param PublicMCPReusingParamCache) error {
-	if !common.RedisEnabled {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-	defer cancel()
-
-	key := common.RedisKeyf(PublicMCPReusingParamCacheKey, param.MCPID, param.GroupID)
-	pipe := common.RDB.Pipeline()
-	pipe.HSet(ctx, key, param)
-
-	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
-	pipe.Expire(ctx, key, expireTime)
-	_, err := pipe.Exec(ctx)
-
-	return err
+	key := getPublicMCPReusingParamCacheKey(param.MCPID, param.GroupID)
+	cacheSetModelLocal(key, param, clonePublicMCPReusingParamCache)
+	return cacheSetPublicMCPReusingParamRedis(param)
 }
 
 func CacheGetPublicMCPReusingParam(mcpID, groupID string) (PublicMCPReusingParamCache, error) {
@@ -299,43 +389,92 @@ func CacheGetPublicMCPReusingParam(mcpID, groupID string) (PublicMCPReusingParam
 		}, nil
 	}
 
-	if !common.RedisEnabled {
-		param, err := GetPublicMCPReusingParam(mcpID, groupID)
-		if err != nil {
-			return PublicMCPReusingParamCache{}, err
+	cacheKey := getPublicMCPReusingParamCacheKey(mcpID, groupID)
+	if paramCache, notFound, ok := cacheGetModelLocal(
+		cacheKey,
+		clonePublicMCPReusingParamCache,
+	); ok {
+		if notFound {
+			return PublicMCPReusingParamCache{}, NotFoundError(ErrMCPReusingParamNotFound)
 		}
 
-		return param.ToPublicMCPReusingParamCache(), nil
+		return paramCache, nil
+	}
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		paramCache := PublicMCPReusingParamCache{}
+
+		err := common.RDB.HGetAll(ctx, cacheKey).Scan(&paramCache)
+		if err == nil && paramCache.MCPID != "" {
+			cacheSetModelLocal(cacheKey, paramCache, clonePublicMCPReusingParamCache)
+			return paramCache, nil
+		} else if err != nil && !errors.Is(err, redis.Nil) {
+			log.Errorf(
+				"get public mcp reusing param (%s:%s) from redis error: %s",
+				mcpID,
+				groupID,
+				err.Error(),
+			)
+		}
+	}
+
+	paramCache, notFound, loaded, err := loadWithLocalKeyLock(
+		modelCacheLoadLocker,
+		cacheKey,
+		func() (PublicMCPReusingParamCache, bool, bool) {
+			return cacheGetModelLocal(cacheKey, clonePublicMCPReusingParamCache)
+		},
+		func() (PublicMCPReusingParamCache, error) {
+			param, err := GetPublicMCPReusingParam(mcpID, groupID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetModelNotFoundLocalUnlocked(cacheKey)
+				}
+
+				return PublicMCPReusingParamCache{}, err
+			}
+
+			prc := param.ToPublicMCPReusingParamCache()
+			cacheSetModelLocalUnlocked(cacheKey, prc, clonePublicMCPReusingParamCache)
+
+			return prc, nil
+		},
+	)
+	if err != nil {
+		return PublicMCPReusingParamCache{}, err
+	}
+
+	if notFound {
+		return PublicMCPReusingParamCache{}, NotFoundError(ErrMCPReusingParamNotFound)
+	}
+
+	if loaded {
+		if err := cacheSetPublicMCPReusingParamRedis(paramCache); err != nil {
+			log.Error("redis set public mcp reusing param error: " + err.Error())
+		}
+	}
+
+	return paramCache, nil
+}
+
+func cacheSetPublicMCPReusingParamRedis(param PublicMCPReusingParamCache) error {
+	if !common.RedisEnabled {
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	cacheKey := common.RedisKeyf(PublicMCPReusingParamCacheKey, mcpID, groupID)
-	paramCache := PublicMCPReusingParamCache{}
+	key := getPublicMCPReusingParamCacheKey(param.MCPID, param.GroupID)
+	pipe := common.RDB.Pipeline()
+	pipe.HSet(ctx, key, param)
 
-	err := common.RDB.HGetAll(ctx, cacheKey).Scan(&paramCache)
-	if err == nil && paramCache.MCPID != "" {
-		return paramCache, nil
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf(
-			"get public mcp reusing param (%s:%s) from redis error: %s",
-			mcpID,
-			groupID,
-			err.Error(),
-		)
-	}
+	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
+	pipe.Expire(ctx, key, expireTime)
+	_, err := pipe.Exec(ctx)
 
-	param, err := GetPublicMCPReusingParam(mcpID, groupID)
-	if err != nil {
-		return PublicMCPReusingParamCache{}, err
-	}
-
-	prc := param.ToPublicMCPReusingParamCache()
-
-	if err := CacheSetPublicMCPReusingParam(prc); err != nil {
-		log.Error("redis set public mcp reusing param error: " + err.Error())
-	}
-
-	return prc, nil
+	return err
 }

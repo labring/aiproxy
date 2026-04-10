@@ -11,6 +11,9 @@ import (
 const redisTimeout = 2 * time.Second
 
 func SetIPBlackAnyWay(ip string, duration time.Duration) {
+	memSetIPBlack(ip, duration)
+	cacheSetIPBlackLocal(ip, true)
+
 	if common.RedisEnabled {
 		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 		defer cancel()
@@ -22,19 +25,25 @@ func SetIPBlackAnyWay(ip string, duration time.Duration) {
 
 		log.Errorf("failed to set IP %s black: %s", ip, err)
 	}
-
-	memSetIPBlack(ip, duration)
 }
 
 func GetIPIsBlockAnyWay(ctx context.Context, ip string) bool {
+	if ok, exists := cacheGetIPBlackLocal(ip); exists {
+		return ok
+	}
+
 	if common.RedisEnabled {
 		ok, err := redisGetIPIsBlock(ctx, ip)
 		if err == nil {
+			cacheSetIPBlackLocal(ip, ok)
 			return ok
 		}
 
 		log.Errorf("failed to get IP %s is block: %s", ip, err)
 	}
 
-	return memGetIPIsBlock(ip)
+	ok := memGetIPIsBlock(ip)
+	cacheSetIPBlackLocal(ip, ok)
+
+	return ok
 }

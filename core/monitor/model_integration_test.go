@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -183,6 +184,174 @@ func TestRedisMonitorCleansExpiredSlicesWithCachedTotals(t *testing.T) {
 	require.False(t, exists)
 }
 
+func TestRedisMonitorGetModelChannelErrorRateUsesLocalCache(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for i := range minRequestCount {
+		_, _, err := monitor.AddRequest(ctx, "model-local-rate", 505, i < 5, false, 0.3, 0)
+		require.NoError(t, err)
+	}
+
+	rates, err := monitor.GetModelChannelErrorRate(ctx, "model-local-rate")
+	require.NoError(t, err)
+	require.Contains(t, rates, int64(505))
+
+	require.NoError(t, redisClient.Del(ctx, buildStatsKey("model-local-rate", "505")).Err())
+
+	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate")
+	require.NoError(t, err)
+	require.Contains(t, rates, int64(505))
+}
+
+func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for i := range minRequestCount {
+		_, _, err := monitor.AddRequest(
+			ctx,
+			"model-local-rate-invalidate",
+			606,
+			i < 5,
+			false,
+			0.3,
+			0,
+		)
+		require.NoError(t, err)
+	}
+
+	rates, err := monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
+	require.NoError(t, err)
+	require.Contains(t, rates, int64(606))
+	require.InDelta(t, 0.25, rates[606], 0.01)
+
+	for i := range minRequestCount {
+		_, _, err = monitor.AddRequest(
+			ctx,
+			"model-local-rate-invalidate",
+			606,
+			i < 10,
+			false,
+			0.3,
+			0,
+		)
+		require.NoError(t, err)
+	}
+
+	require.NoError(
+		t,
+		redisClient.Del(ctx, buildStatsKey("model-local-rate-invalidate", "606")).Err(),
+	)
+
+	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
+	require.NoError(t, err)
+	require.Contains(t, rates, int64(606))
+	require.InDelta(t, 0.25, rates[606], 0.01)
+
+	time.Sleep(monitorLocalTTL + 150*time.Millisecond)
+
+	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
+	require.NoError(t, err)
+	require.NotContains(t, rates, int64(606))
+}
+
+func TestRedisMonitorGetBannedChannelsMapWithModelUsesLocalCache(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for range minRequestCount + 1 {
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned", 707, true, false, 0.3, 0.8)
+		require.NoError(t, err)
+	}
+
+	banned, err := monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned")
+	require.NoError(t, err)
+	require.Contains(t, banned, int64(707))
+
+	require.NoError(
+		t,
+		redisClient.Del(ctx, common.RedisKey("model:model-local-banned:channel:707:banned")).Err(),
+	)
+
+	banned, err = monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned")
+	require.NoError(t, err)
+	require.Contains(t, banned, int64(707))
+}
+
+func TestRedisMonitorGetBannedChannelsMapWithModelInvalidatesLocalCacheOnClear(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for range minRequestCount + 1 {
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned-clear", 808, true, false, 0.3, 0.8)
+		require.NoError(t, err)
+	}
+
+	banned, err := monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned-clear")
+	require.NoError(t, err)
+	require.Contains(t, banned, int64(808))
+
+	require.NoError(t, monitor.ClearChannelModelErrors(ctx, "model-local-banned-clear", 808))
+
+	banned, err = monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned-clear")
+	require.NoError(t, err)
+	require.NotContains(t, banned, int64(808))
+}
+
+func TestRedisMonitorGetBannedChannelsMapWithModelKeepsLocalCacheUntilTTL(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for range minRequestCount + 1 {
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.3, 0.8)
+		require.NoError(t, err)
+	}
+
+	banned, err := monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned-stale")
+	require.NoError(t, err)
+	require.Contains(t, banned, int64(909))
+
+	_, _, err = monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.3, 0.8)
+	require.NoError(t, err)
+
+	require.NoError(
+		t,
+		redisClient.Del(ctx, common.RedisKey("model:model-local-banned-stale:channel:909:banned")).
+			Err(),
+	)
+
+	banned, err = monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned-stale")
+	require.NoError(t, err)
+	require.Contains(t, banned, int64(909))
+
+	time.Sleep(monitorLocalTTL + 150*time.Millisecond)
+
+	banned, err = monitor.GetBannedChannelsMapWithModel(ctx, "model-local-banned-stale")
+	require.NoError(t, err)
+	require.NotContains(t, banned, int64(909))
+}
+
 func newTestRedisModelMonitor(client *redis.Client) *redisModelMonitor {
 	return newRedisModelMonitor(func() *redis.Client {
 		return client
@@ -191,6 +360,8 @@ func newTestRedisModelMonitor(client *redis.Client) *redisModelMonitor {
 
 func setupRedisForMonitorTest(t *testing.T, ctx context.Context) (*redis.Client, func()) {
 	t.Helper()
+
+	flushMonitorLocalCache()
 
 	req := testcontainers.ContainerRequest{
 		Image:        "redis:7-alpine",
@@ -235,6 +406,8 @@ func setupRedisForMonitorTest(t *testing.T, ctx context.Context) (*redis.Client,
 	require.NoError(t, client.Ping(ctx).Err())
 
 	cleanup := func() {
+		flushMonitorLocalCache()
+
 		_ = client.Close()
 		_ = container.Terminate(ctx)
 	}

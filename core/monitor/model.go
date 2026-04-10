@@ -278,42 +278,57 @@ func (m *redisModelMonitor) GetModelChannelErrorRate(
 	ctx context.Context,
 	model string,
 ) (map[int64]float64, error) {
-	rdb, err := m.rdb()
-	if err != nil {
-		return nil, err
+	if result, ok := getModelChannelErrorRateLocal(model); ok {
+		return result, nil
 	}
 
-	result := make(map[int64]float64)
-	pattern := buildStatsKey(model, "*")
-	now := time.Now().UnixMilli()
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		modelChannelErrorRateLocalCacheKey(model),
+		func() (map[int64]float64, bool) {
+			return getModelChannelErrorRateLocal(model)
+		},
+		func() (map[int64]float64, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return nil, err
+			}
 
-	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
-	for iter.Next(ctx) {
-		key := iter.Val()
+			result := make(map[int64]float64)
+			pattern := buildStatsKey(model, "*")
+			now := time.Now().UnixMilli()
 
-		_, channelID, ok := getModelChannelID(key)
-		if !ok {
-			continue
-		}
+			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
+			for iter.Next(ctx) {
+				key := iter.Val()
 
-		rate, err := getErrorRateScript.Run(
-			ctx,
-			rdb,
-			[]string{key},
-			now,
-		).Float64()
-		if err != nil {
-			return nil, err
-		}
+				_, channelID, ok := getModelChannelID(key)
+				if !ok {
+					continue
+				}
 
-		result[channelID] = rate
-	}
+				rate, err := getErrorRateScript.Run(
+					ctx,
+					rdb,
+					[]string{key},
+					now,
+				).Float64()
+				if err != nil {
+					return nil, err
+				}
 
-	if err := iter.Err(); err != nil {
-		return nil, err
-	}
+				result[channelID] = rate
+			}
 
-	return result, nil
+			if err := iter.Err(); err != nil {
+				return nil, err
+			}
+
+			setModelChannelErrorRateLocalUnlocked(model, result)
+
+			return result, nil
+		},
+	)
 }
 
 // GetBannedChannelsWithModel gets banned channels for a specific model
@@ -371,33 +386,48 @@ func (m *redisModelMonitor) GetBannedChannelsMapWithModel(
 	ctx context.Context,
 	model string,
 ) (map[int64]struct{}, error) {
-	rdb, err := m.rdb()
-	if err != nil {
-		return nil, err
+	if result, ok := getBannedChannelsLocal(model); ok {
+		return result, nil
 	}
 
-	result := make(map[int64]struct{})
-	prefix := modelKeyPrefix() + model + channelKeyPart
-	pattern := prefix + "*" + bannedKeySuffix
-	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		bannedChannelsLocalCacheKey(model),
+		func() (map[int64]struct{}, bool) {
+			return getBannedChannelsLocal(model)
+		},
+		func() (map[int64]struct{}, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return nil, err
+			}
 
-	for iter.Next(ctx) {
-		key := iter.Val()
-		channelIDStr := strings.TrimSuffix(strings.TrimPrefix(key, prefix), bannedKeySuffix)
+			result := make(map[int64]struct{})
+			prefix := modelKeyPrefix() + model + channelKeyPart
+			pattern := prefix + "*" + bannedKeySuffix
+			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
-		channelID, err := strconv.ParseInt(channelIDStr, 10, 64)
-		if err != nil {
-			continue
-		}
+			for iter.Next(ctx) {
+				key := iter.Val()
+				channelIDStr := strings.TrimSuffix(strings.TrimPrefix(key, prefix), bannedKeySuffix)
 
-		result[channelID] = struct{}{}
-	}
+				channelID, err := strconv.ParseInt(channelIDStr, 10, 64)
+				if err != nil {
+					continue
+				}
 
-	if err := iter.Err(); err != nil {
-		return nil, err
-	}
+				result[channelID] = struct{}{}
+			}
 
-	return result, nil
+			if err := iter.Err(); err != nil {
+				return nil, err
+			}
+
+			setBannedChannelsLocalUnlocked(model, result)
+
+			return result, nil
+		},
+	)
 }
 
 // ClearChannelModelErrors clears errors for a specific channel and model
@@ -419,12 +449,17 @@ func (m *redisModelMonitor) ClearChannelModelErrors(
 		return err
 	}
 
-	return clearChannelModelErrorsScript.Run(
+	err = clearChannelModelErrorsScript.Run(
 		ctx,
 		rdb,
 		[]string{common.RedisKeyPrefix(), model},
 		strconv.Itoa(channelID),
 	).Err()
+	if err == nil {
+		deleteMonitorModelLocal(model)
+	}
+
+	return err
 }
 
 // ClearChannelAllModelErrors clears all errors for a specific channel
@@ -442,12 +477,17 @@ func (m *redisModelMonitor) ClearChannelAllModelErrors(ctx context.Context, chan
 		return err
 	}
 
-	return clearChannelAllModelErrorsScript.Run(
+	err = clearChannelAllModelErrorsScript.Run(
 		ctx,
 		rdb,
 		[]string{common.RedisKeyPrefix()},
 		strconv.Itoa(channelID),
 	).Err()
+	if err == nil {
+		flushMonitorLocalCache()
+	}
+
+	return err
 }
 
 // ClearAllModelErrors clears all error records
@@ -465,7 +505,12 @@ func (m *redisModelMonitor) ClearAllModelErrors(ctx context.Context) error {
 		return err
 	}
 
-	return clearAllModelErrorsScript.Run(ctx, rdb, []string{common.RedisKeyPrefix()}).Err()
+	err = clearAllModelErrorsScript.Run(ctx, rdb, []string{common.RedisKeyPrefix()}).Err()
+	if err == nil {
+		flushMonitorLocalCache()
+	}
+
+	return err
 }
 
 // GetAllBannedModelChannels gets all banned channels for all models

@@ -11,11 +11,20 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 const (
 	TokenCacheKey = "token:%s"
 )
+
+func getTokenCacheKey(key string) string {
+	return common.RedisKeyf(TokenCacheKey, key)
+}
+
+func updateTokenLocalCache(key string, update func(*TokenCache) bool) {
+	cacheUpdateModelLocal(getTokenCacheKey(key), cloneTokenCache, update)
+}
 
 type TokenCache struct {
 	Group      string           `json:"group"       redis:"g"`
@@ -136,6 +145,8 @@ func (t *Token) ToTokenCache() *TokenCache {
 }
 
 func CacheDeleteToken(key string) error {
+	cacheDeleteModelLocal(getTokenCacheKey(key))
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -143,10 +154,81 @@ func CacheDeleteToken(key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	return common.RDB.Del(ctx, common.RedisKeyf(TokenCacheKey, key)).Err()
+	return common.RDB.Del(ctx, getTokenCacheKey(key)).Err()
 }
 
 func CacheSetToken(token *TokenCache) error {
+	key := getTokenCacheKey(token.Key)
+	cacheSetModelLocal(key, token, cloneTokenCache)
+	return cacheSetTokenRedis(token)
+}
+
+func CacheGetTokenByKey(key string) (*TokenCache, error) {
+	cacheKey := getTokenCacheKey(key)
+	if tokenCache, notFound, ok := cacheGetModelLocal(cacheKey, cloneTokenCache); ok {
+		if notFound {
+			return nil, NotFoundError(ErrTokenNotFound)
+		}
+
+		return tokenCache, nil
+	}
+
+	if common.RedisEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
+		defer cancel()
+
+		tokenCache := &TokenCache{}
+
+		err := common.RDB.HGetAll(ctx, cacheKey).Scan(tokenCache)
+		if err == nil && tokenCache.ID != 0 {
+			tokenCache.Key = key
+			cacheSetModelLocal(cacheKey, tokenCache, cloneTokenCache)
+			return tokenCache, nil
+		} else if err != nil && !errors.Is(err, redis.Nil) {
+			log.Errorf("get token (%s) from redis error: %s", key, err.Error())
+		}
+	}
+
+	tokenCache, notFound, loaded, err := loadWithLocalKeyLock(
+		modelCacheLoadLocker,
+		cacheKey,
+		func() (*TokenCache, bool, bool) {
+			return cacheGetModelLocal(cacheKey, cloneTokenCache)
+		},
+		func() (*TokenCache, error) {
+			token, err := GetTokenByKey(key)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					cacheSetModelNotFoundLocalUnlocked(cacheKey)
+				}
+
+				return nil, err
+			}
+
+			tc := token.ToTokenCache()
+			cacheSetModelLocalUnlocked(cacheKey, tc, cloneTokenCache)
+
+			return tc, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if notFound {
+		return nil, NotFoundError(ErrTokenNotFound)
+	}
+
+	if loaded {
+		if err := cacheSetTokenRedis(tokenCache); err != nil {
+			log.Error("redis set token error: " + err.Error())
+		}
+	}
+
+	return tokenCache, nil
+}
+
+func cacheSetTokenRedis(token *TokenCache) error {
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -154,7 +236,7 @@ func CacheSetToken(token *TokenCache) error {
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	key := common.RedisKeyf(TokenCacheKey, token.Key)
+	key := getTokenCacheKey(token.Key)
 	pipe := common.RDB.Pipeline()
 	pipe.HSet(ctx, key, token)
 
@@ -163,44 +245,6 @@ func CacheSetToken(token *TokenCache) error {
 	_, err := pipe.Exec(ctx)
 
 	return err
-}
-
-func CacheGetTokenByKey(key string) (*TokenCache, error) {
-	if !common.RedisEnabled {
-		token, err := GetTokenByKey(key)
-		if err != nil {
-			return nil, err
-		}
-
-		return token.ToTokenCache(), nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
-	defer cancel()
-
-	cacheKey := common.RedisKeyf(TokenCacheKey, key)
-	tokenCache := &TokenCache{}
-
-	err := common.RDB.HGetAll(ctx, cacheKey).Scan(tokenCache)
-	if err == nil && tokenCache.ID != 0 {
-		tokenCache.Key = key
-		return tokenCache, nil
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		log.Errorf("get token (%s) from redis error: %s", key, err.Error())
-	}
-
-	token, err := GetTokenByKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	tc := token.ToTokenCache()
-
-	if err := CacheSetToken(tc); err != nil {
-		log.Error("redis set token error: " + err.Error())
-	}
-
-	return tc, nil
 }
 
 var updateTokenUsedAmountOnlyIncreaseScript = redis.NewScript(`
@@ -216,6 +260,16 @@ var updateTokenUsedAmountOnlyIncreaseScript = redis.NewScript(`
 `)
 
 func CacheUpdateTokenUsedAmountOnlyIncrease(key string, amount float64) error {
+	updateTokenLocalCache(key, func(token *TokenCache) bool {
+		if amount < token.UsedAmount {
+			return false
+		}
+
+		token.UsedAmount = amount
+
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -226,7 +280,7 @@ func CacheUpdateTokenUsedAmountOnlyIncrease(key string, amount float64) error {
 	return updateTokenUsedAmountOnlyIncreaseScript.Run(
 		ctx,
 		common.RDB,
-		[]string{common.RedisKeyf(TokenCacheKey, key)},
+		[]string{getTokenCacheKey(key)},
 		amount,
 	).Err()
 }
@@ -236,6 +290,12 @@ func CacheResetTokenPeriodUsage(
 	periodLastUpdateTime time.Time,
 	periodLastUpdateAmount float64,
 ) error {
+	updateTokenLocalCache(key, func(token *TokenCache) bool {
+		token.PeriodLastUpdateTime = redisTime(periodLastUpdateTime)
+		token.PeriodLastUpdateAmount = periodLastUpdateAmount
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -243,7 +303,7 @@ func CacheResetTokenPeriodUsage(
 	ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 	defer cancel()
 
-	cacheKey := common.RedisKeyf(TokenCacheKey, key)
+	cacheKey := getTokenCacheKey(key)
 	pipe := common.RDB.Pipeline()
 	periodLastUpdateTimeBytes, _ := periodLastUpdateTime.MarshalBinary()
 	pipe.HSet(ctx, cacheKey, "plut", periodLastUpdateTimeBytes)
@@ -261,6 +321,11 @@ var updateTokenNameScript = redis.NewScript(`
 `)
 
 func CacheUpdateTokenName(key, name string) error {
+	updateTokenLocalCache(key, func(token *TokenCache) bool {
+		token.Name = name
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -271,7 +336,7 @@ func CacheUpdateTokenName(key, name string) error {
 	return updateTokenNameScript.Run(
 		ctx,
 		common.RDB,
-		[]string{common.RedisKeyf(TokenCacheKey, key)},
+		[]string{getTokenCacheKey(key)},
 		name,
 	).Err()
 }
@@ -284,6 +349,11 @@ var updateTokenStatusScript = redis.NewScript(`
 `)
 
 func CacheUpdateTokenStatus(key string, status int) error {
+	updateTokenLocalCache(key, func(token *TokenCache) bool {
+		token.Status = status
+		return true
+	})
+
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -294,7 +364,7 @@ func CacheUpdateTokenStatus(key string, status int) error {
 	return updateTokenStatusScript.Run(
 		ctx,
 		common.RDB,
-		[]string{common.RedisKeyf(TokenCacheKey, key)},
+		[]string{getTokenCacheKey(key)},
 		status,
 	).Err()
 }

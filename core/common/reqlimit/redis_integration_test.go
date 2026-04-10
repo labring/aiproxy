@@ -365,6 +365,7 @@ func setupRedisForReqLimitTest(t *testing.T, ctx context.Context) (*redis.Client
 		DB:   0,
 	})
 	require.NoError(t, client.Ping(ctx).Err())
+	waitForFreshSecond()
 
 	cleanup := func() {
 		_ = client.Close()
@@ -372,6 +373,11 @@ func setupRedisForReqLimitTest(t *testing.T, ctx context.Context) (*redis.Client
 	}
 
 	return client, cleanup
+}
+
+func waitForFreshSecond() {
+	nextSecond := time.Now().Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(nextSecond) + 50*time.Millisecond)
 }
 
 func seedRedisReqLimitRecord(
