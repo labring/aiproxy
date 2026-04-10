@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Bell, Save, AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react"
+import { Bell, Save, AlertTriangle, CheckCircle, Info, Loader2, Eye } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,50 @@ import { enterpriseApi, type QuotaNotifConfig, type QuotaAlertHistory } from "@/
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { useHasPermission } from "@/lib/permissions"
+
+const SAMPLE_VARS: Record<string, string> = {
+    "{name}": "张三",
+    "{usage_pct}": "85.2%",
+    "{period_quota}": "¥500.00",
+    "{period_type}": "月",
+    "{tier_threshold}": "70%",
+    "{admin_threshold}": "80%",
+    "{policy_name}": "标准额度策略",
+    "{tier1_ratio}": "80%",
+    "{tier2_ratio}": "60%",
+}
+
+function renderPreview(template: string): string {
+    let result = template
+    for (const [key, value] of Object.entries(SAMPLE_VARS)) {
+        result = result.replaceAll(key, value)
+    }
+    return result
+}
+
+function TemplatePreview({ title, body }: { title: string; body: string }) {
+    const { t } = useTranslation()
+    const [open, setOpen] = useState(false)
+    return (
+        <div className="mt-2">
+            <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setOpen(v => !v)}
+            >
+                <Eye className="w-3.5 h-3.5" />
+                {t("enterprise.notifications.previewTitle")}
+            </button>
+            {open && (
+                <div className="mt-2 rounded-md border bg-muted/30 p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">{t("enterprise.notifications.previewSample")}</p>
+                    <p className="text-sm font-medium">{renderPreview(title)}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{renderPreview(body)}</p>
+                </div>
+            )}
+        </div>
+    )
+}
 
 function NotifConfigTab() {
     const { t } = useTranslation()
@@ -91,7 +135,7 @@ function NotifConfigTab() {
                 { key: "tier2" as const, titleKey: "tier2_title" as const, bodyKey: "tier2_body" as const, color: "text-orange-600", label: t("enterprise.notifications.tier2Label") },
                 { key: "tier3" as const, titleKey: "tier3_title" as const, bodyKey: "tier3_body" as const, color: "text-red-600", label: t("enterprise.notifications.tier3Label") },
                 { key: "exhaust" as const, titleKey: "exhaust_title" as const, bodyKey: "exhaust_body" as const, color: "text-red-800", label: t("enterprise.notifications.exhaustLabel") },
-                { key: "policy_change" as const, titleKey: "policy_change_title" as const, bodyKey: "policy_change_body" as const, color: "text-blue-600", label: t("enterprise.notifications.policyChangeLabel" as never) },
+                { key: "policy_change" as const, titleKey: "policy_change_title" as const, bodyKey: "policy_change_body" as const, color: "text-blue-600", label: t("enterprise.notifications.policyChangeLabel") },
             ].map(({ titleKey, bodyKey, color, label }) => (
                 <Card key={titleKey}>
                     <CardHeader className="pb-3">
@@ -115,6 +159,7 @@ function NotifConfigTab() {
                                 disabled={!canManage}
                             />
                         </div>
+                        <TemplatePreview title={cfg[titleKey]} body={cfg[bodyKey]} />
                     </CardContent>
                 </Card>
             ))}
@@ -179,6 +224,7 @@ function NotifConfigTab() {
                             disabled={!canManage}
                         />
                     </div>
+                    <TemplatePreview title={cfg.admin_alert_title} body={cfg.admin_alert_body} />
                 </CardContent>
             </Card>
 
@@ -196,9 +242,9 @@ function NotifConfigTab() {
                         <code>{"{period_type}"}</code><span>{t("enterprise.notifications.varPeriodType")}</span>
                         <code>{"{tier_threshold}"}</code><span>{t("enterprise.notifications.varTierThreshold")}</span>
                         <code>{"{admin_threshold}"}</code><span>{t("enterprise.notifications.varAdminThreshold")}</span>
-                        <code>{"{policy_name}"}</code><span>{t("enterprise.notifications.varPolicyName" as never)}</span>
-                        <code>{"{tier1_ratio}"}</code><span>{t("enterprise.notifications.varTier1Ratio" as never)}</span>
-                        <code>{"{tier2_ratio}"}</code><span>{t("enterprise.notifications.varTier2Ratio" as never)}</span>
+                        <code>{"{policy_name}"}</code><span>{t("enterprise.notifications.varPolicyName")}</span>
+                        <code>{"{tier1_ratio}"}</code><span>{t("enterprise.notifications.varTier1Ratio")}</span>
+                        <code>{"{tier2_ratio}"}</code><span>{t("enterprise.notifications.varTier2Ratio")}</span>
                     </div>
                 </CardContent>
             </Card>
@@ -254,7 +300,7 @@ function AlertHistoryTab() {
             2: { label: t("enterprise.notifications.tierLevel2"), className: "bg-orange-100 text-orange-800" },
             3: { label: t("enterprise.notifications.tierLevel3"), className: "bg-red-100 text-red-800" },
             4: { label: t("enterprise.notifications.tierExhaust"), className: "bg-red-200 text-red-900" },
-            5: { label: t("enterprise.notifications.tierPolicyChange" as never), className: "bg-blue-100 text-blue-800" },
+            5: { label: t("enterprise.notifications.tierPolicyChange"), className: "bg-blue-100 text-blue-800" },
         }
         const cfg = configs[tier] || { label: `T${tier}`, className: "bg-gray-100 text-gray-800" }
         return <Badge className={cfg.className}>{cfg.label}</Badge>
@@ -284,7 +330,7 @@ function AlertHistoryTab() {
             {/* Filters */}
             <div className="flex items-center gap-3 flex-wrap">
                 <Input
-                    placeholder={t("enterprise.notifications.searchUser" as never)}
+                    placeholder={t("enterprise.notifications.searchUser")}
                     value={keyword}
                     onChange={(e) => { setKeyword(e.target.value); setPage(1) }}
                     className="w-48"
@@ -309,7 +355,7 @@ function AlertHistoryTab() {
                         <SelectItem value="2">{t("enterprise.notifications.tierLevel2")}</SelectItem>
                         <SelectItem value="3">{t("enterprise.notifications.tierLevel3")}</SelectItem>
                         <SelectItem value="4">{t("enterprise.notifications.tierExhaust")}</SelectItem>
-                        <SelectItem value="5">{t("enterprise.notifications.tierPolicyChange" as never)}</SelectItem>
+                        <SelectItem value="5">{t("enterprise.notifications.tierPolicyChange")}</SelectItem>
                     </SelectContent>
                 </Select>
                 <Select value={periodTypeFilter} onValueChange={v => { setPeriodTypeFilter(v); setPage(1) }}>
@@ -317,7 +363,7 @@ function AlertHistoryTab() {
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">{t("enterprise.notifications.allPeriods" as never)}</SelectItem>
+                        <SelectItem value="all">{t("enterprise.notifications.allPeriods")}</SelectItem>
                         <SelectItem value="daily">{t("enterprise.quota.daily")}</SelectItem>
                         <SelectItem value="weekly">{t("enterprise.quota.weekly")}</SelectItem>
                         <SelectItem value="monthly">{t("enterprise.quota.monthly")}</SelectItem>
