@@ -9,6 +9,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/clause"
 )
 
 func TestStoreIDNamespaces(t *testing.T) {
@@ -365,6 +366,36 @@ func TestSaveStorePreservesCreatedAtOnUpdate(t *testing.T) {
 		assert.WithinDuration(t, initial.CreatedAt, saved.CreatedAt, time.Second)
 		assert.True(t, saved.UpdatedAt.After(initial.UpdatedAt))
 	})
+}
+
+func TestStoreUpsertUpdateWhereQualifiesCurrentTableColumns(t *testing.T) {
+	t.Parallel()
+
+	cutoff := time.Now().Add(-time.Minute)
+	now := time.Now()
+
+	where := storeUpsertUpdateWhere(cutoff, now)
+	require.Len(t, where.Exprs, 1)
+
+	orExpr, ok := where.Exprs[0].(clause.OrConditions)
+	require.True(t, ok)
+	require.Len(t, orExpr.Exprs, 2)
+
+	updatedAtExpr, ok := orExpr.Exprs[0].(clause.Lte)
+	require.True(t, ok)
+	updatedAtColumn, ok := updatedAtExpr.Column.(clause.Column)
+	require.True(t, ok)
+	assert.Equal(t, clause.CurrentTable, updatedAtColumn.Table)
+	assert.Equal(t, "updated_at", updatedAtColumn.Name)
+	assert.Equal(t, cutoff, updatedAtExpr.Value)
+
+	expiresAtExpr, ok := orExpr.Exprs[1].(clause.Lte)
+	require.True(t, ok)
+	expiresAtColumn, ok := expiresAtExpr.Column.(clause.Column)
+	require.True(t, ok)
+	assert.Equal(t, clause.CurrentTable, expiresAtColumn.Table)
+	assert.Equal(t, "expires_at", expiresAtColumn.Name)
+	assert.Equal(t, now, expiresAtExpr.Value)
 }
 
 func withTestStoreDB(t *testing.T, fn func()) {

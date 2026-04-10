@@ -199,12 +199,7 @@ func saveStoreWithMinUpdateInterval(s *StoreV2, opt SaveStoreOption) (*StoreV2, 
 			"channel_id": s.ChannelID,
 			"model":      s.Model,
 		}),
-		Where: clause.Where{Exprs: []clause.Expression{
-			clause.Expr{
-				SQL:  "updated_at <= ? OR expires_at <= ?",
-				Vars: []any{cutoff, now},
-			},
-		}},
+		Where: storeUpsertUpdateWhere(cutoff, now),
 	}).Create(s)
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -252,6 +247,23 @@ func prepareStoreForSave(s *StoreV2, now time.Time) {
 
 	if s.ExpiresAt.IsZero() {
 		s.ExpiresAt = s.CreatedAt.Add(time.Hour * 24 * 30)
+	}
+}
+
+func storeUpsertUpdateWhere(cutoff, now time.Time) clause.Where {
+	return clause.Where{
+		Exprs: []clause.Expression{
+			clause.Or(
+				clause.Lte{
+					Column: clause.Column{Table: clause.CurrentTable, Name: "updated_at"},
+					Value:  cutoff,
+				},
+				clause.Lte{
+					Column: clause.Column{Table: clause.CurrentTable, Name: "expires_at"},
+					Value:  now,
+				},
+			),
+		},
 	}
 }
 
