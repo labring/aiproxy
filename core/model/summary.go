@@ -920,11 +920,11 @@ func getGroupChartData(
 }
 
 func GetUsedChannels(start, end time.Time) ([]int, error) {
-	return getLogGroupByValues[int]("channel_id", start, end)
+	return getLogGroupByValues[int]("channel_id", 0, start, end)
 }
 
-func GetUsedModels(start, end time.Time) ([]string, error) {
-	return getLogGroupByValues[string]("model", start, end)
+func GetUsedModels(channelID int, start, end time.Time) ([]string, error) {
+	return getLogGroupByValues[string]("model", channelID, start, end)
 }
 
 func GetGroupUsedModels(group, tokenName string, start, end time.Time) ([]string, error) {
@@ -937,6 +937,7 @@ func GetGroupUsedTokenNames(group string, start, end time.Time) ([]string, error
 
 func getLogGroupByValues[T cmp.Ordered](
 	field string,
+	channelID int,
 	start, end time.Time,
 ) ([]T, error) {
 	type Result struct {
@@ -951,6 +952,10 @@ func getLogGroupByValues[T cmp.Ordered](
 
 	query = LogDB.
 		Model(&Summary{})
+
+	if channelID != 0 {
+		query = query.Where("channel_id = ?", channelID)
+	}
 
 	switch {
 	case !start.IsZero() && !end.IsZero():
@@ -1218,7 +1223,7 @@ func GetDashboardData(
 	g.Go(func() error {
 		var err error
 
-		models, err = GetUsedModels(start, end)
+		models, err = GetUsedModels(channelID, start, end)
 		return err
 	})
 

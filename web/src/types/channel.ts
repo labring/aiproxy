@@ -12,6 +12,7 @@ export interface Channel {
     retry_count: number
     status: number
     created_at: number
+    accessed_at: number
     priority: number
     balance?: number
     used_amount?: number

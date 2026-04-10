@@ -228,11 +228,30 @@ func getGroupChartDataMinute(
 }
 
 func GetUsedChannelsMinute(start, end time.Time) ([]int, error) {
-	return getLogGroupByValuesMinute[int]("channel_id", start, end)
+	return getLogGroupByValuesMinute[int]("channel_id", 0, start, end)
 }
 
-func GetUsedModelsMinute(start, end time.Time) ([]string, error) {
-	return getLogGroupByValuesMinute[string]("model", start, end)
+func GetChannelLastRequestTimeMinute(channelID int) (time.Time, error) {
+	if channelID == 0 {
+		return time.Time{}, errors.New("channel id is required")
+	}
+
+	var summary SummaryMinute
+
+	err := LogDB.
+		Model(&SummaryMinute{}).
+		Where("channel_id = ?", channelID).
+		Order("minute_timestamp desc").
+		First(&summary).Error
+	if summary.Unique.MinuteTimestamp == 0 {
+		return time.Time{}, nil
+	}
+
+	return time.Unix(summary.Unique.MinuteTimestamp, 0), err
+}
+
+func GetUsedModelsMinute(channelID int, start, end time.Time) ([]string, error) {
+	return getLogGroupByValuesMinute[string]("model", channelID, start, end)
 }
 
 func GetGroupUsedModelsMinute(group, tokenName string, start, end time.Time) ([]string, error) {
@@ -245,6 +264,7 @@ func GetGroupUsedTokenNamesMinute(group string, start, end time.Time) ([]string,
 
 func getLogGroupByValuesMinute[T cmp.Ordered](
 	field string,
+	channelID int,
 	start, end time.Time,
 ) ([]T, error) {
 	type Result struct {
@@ -259,6 +279,10 @@ func getLogGroupByValuesMinute[T cmp.Ordered](
 
 	query = LogDB.
 		Model(&SummaryMinute{})
+
+	if channelID != 0 {
+		query = query.Where("channel_id = ?", channelID)
+	}
 
 	switch {
 	case !start.IsZero() && !end.IsZero():
@@ -405,7 +429,7 @@ func getDashboardDataMinute(
 	g.Go(func() error {
 		var err error
 
-		models, err = GetUsedModelsMinute(start, end)
+		models, err = GetUsedModelsMinute(channelID, start, end)
 		return err
 	})
 
@@ -589,7 +613,7 @@ func GetDashboardV2Data(
 	g.Go(func() error {
 		var err error
 
-		models, err = GetUsedModels(start, end)
+		models, err = GetUsedModels(channelID, start, end)
 		return err
 	})
 

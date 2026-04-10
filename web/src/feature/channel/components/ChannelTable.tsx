@@ -49,6 +49,17 @@ import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
+import { format } from 'date-fns'
+
+const formatTimestamp = (timestamp: number): string => {
+    if (!timestamp) return '-'
+    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+}
+
+const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
+    if (!timestamp || timestamp <= 0) return neverLabel
+    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+}
 
 export function ChannelTable() {
     const { t } = useTranslation()
@@ -546,6 +557,24 @@ export function ChannelTable() {
                     title={t("channel.viewDashboard")}
                 >
                     ${(row.original.used_amount || 0).toFixed(4)}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'created_at',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.createdAt")}</div>,
+            cell: ({ row }) => (
+                <div className="text-sm text-muted-foreground">
+                    {formatTimestamp(row.original.created_at)}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'accessed_at',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.accessedAt")}</div>,
+            cell: ({ row }) => (
+                <div className="text-sm text-muted-foreground">
+                    {formatAccessedAt(row.original.accessed_at, t("token.never"))}
                 </div>
             ),
         },

@@ -21,6 +21,11 @@ type GroupResponse struct {
 func (g *GroupResponse) MarshalJSON() ([]byte, error) {
 	type Alias model.Group
 
+	accessedAt := int64(0)
+	if !g.AccessedAt.IsZero() {
+		accessedAt = g.AccessedAt.UnixMilli()
+	}
+
 	return sonic.Marshal(&struct {
 		*Alias
 		CreatedAt  int64 `json:"created_at,omitempty"`
@@ -28,7 +33,7 @@ func (g *GroupResponse) MarshalJSON() ([]byte, error) {
 	}{
 		Alias:      (*Alias)(g.Group),
 		CreatedAt:  g.CreatedAt.UnixMilli(),
-		AccessedAt: g.AccessedAt.UnixMilli(),
+		AccessedAt: accessedAt,
 	})
 }
 

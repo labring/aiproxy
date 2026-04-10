@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
 import { useRef } from 'react'
 import { useBatchGroupTokenMetrics } from '@/feature/monitor/runtime-hooks'
+import { format } from 'date-fns'
 
 // 遮蔽 API Key，只显示前缀和最后4位
 const maskApiKey = (key: string): string => {
@@ -96,6 +97,16 @@ const formatRemainingTime = (targetDate: Date): string => {
         return `${hours}h ${minutes}m`
     }
     return `${minutes}m`
+}
+
+const formatTimestamp = (timestamp: number): string => {
+    if (!timestamp) return '-'
+    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+}
+
+const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
+    if (!timestamp || timestamp <= 0) return neverLabel
+    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
 }
 
 export function TokenTable() {
@@ -397,6 +408,24 @@ export function TokenTable() {
                     </div>
                 )
             },
+        },
+        {
+            accessorKey: 'created_at',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.createdAt")}</div>,
+            cell: ({ row }) => (
+                <div className="text-sm text-muted-foreground">
+                    {formatTimestamp(row.original.created_at)}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'accessed_at',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.accessedAt")}</div>,
+            cell: ({ row }) => (
+                <div className="text-sm text-muted-foreground">
+                    {formatAccessedAt(row.original.accessed_at, t("token.never"))}
+                </div>
+            ),
         },
         {
             accessorKey: 'status',
