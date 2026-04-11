@@ -719,7 +719,7 @@ func GetMyStats(c *gin.Context) {
 	policy, _ := quota.GetPolicyForUser(c.Request.Context(), feishuUser.OpenID)
 	if policy != nil && policy.PeriodQuota > 0 {
 		periodType := quota.PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
-		periodStart := currentPeriodStart(model.EmptyNullString(periodType))
+		periodStart := quota.PeriodStartByType(policy.PeriodType)
 
 		var periodUsed float64
 		if err := model.LogDB.
@@ -882,25 +882,6 @@ func computeComparisons(departmentID string, startTs, endTs int64) *UsageCompari
 	}
 
 	return comp
-}
-
-// currentPeriodStart returns the start of the current quota period based on period type.
-func currentPeriodStart(periodType model.EmptyNullString) time.Time {
-	now := time.Now()
-
-	switch periodType {
-	case model.PeriodTypeDaily:
-		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	case model.PeriodTypeWeekly:
-		weekday := int(now.Weekday())
-		if weekday == 0 {
-			weekday = 7 // Sunday = 7
-		}
-		monday := now.AddDate(0, 0, -(weekday - 1))
-		return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, now.Location())
-	default: // monthly or empty
-		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	}
 }
 
 // TokenPeriodStats holds per-token aggregated stats for a time period.

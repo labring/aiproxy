@@ -5,7 +5,6 @@ package quota
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/model"
@@ -13,12 +12,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// pendingSyncs tracks token IDs that already have an in-flight auto-sync goroutine,
-// preventing repeated goroutine spawns on every request for the same unsynced token.
-var pendingSyncs sync.Map
-
-// CheckQuotaTier evaluates the token's period usage against the quota policy
+// CheckQuotaTier evaluates the group's period usage against the quota policy
 // with multi-level priority: user policy > department policy > group policy.
+// Enterprise builds use group_summaries (Group-level) for usage calculation,
+// matching the display layer in access_info.go.
 // Returns: effectiveModel, rpmMultiplier, tpmMultiplier, blocked
 func CheckQuotaTier(
 	group model.GroupCache,
@@ -38,25 +35,19 @@ func CheckQuotaTier(
 			log.Errorf("failed to get multi-level quota policy for user %s: %v", feishuUser.OpenID, err)
 		}
 		if policy != nil {
-			// Pre-fix: ensure token has PeriodQuota from policy before any calculation.
-			// applyPolicyTiers receives token by value, so its internal fix won't propagate back.
-			if token.PeriodQuota <= 0 && policy.PeriodQuota > 0 {
-				token.PeriodQuota = policy.PeriodQuota
-			}
+			usageRatio := computeGroupUsageRatio(group.ID, policy)
+			effModel, rpmMul, tpmMul, blocked := applyPolicyTiers(policy, usageRatio, requestModel)
 
-			// Apply the user/department/group policy
-			effModel, rpmMul, tpmMul, blocked := applyPolicyTiers(policy, token, requestModel)
-			// Trigger async notification if usage entered a higher tier
-			usageRatio := computeUsageRatio(token)
+			policyPeriodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
 			tier := ComputeTier(policy, usageRatio, blocked)
 			if tier >= 2 {
 				go MaybeNotifyUser(
 					feishuUser.OpenID,
 					feishuUser.Name,
-					token.PeriodType,
+					policyPeriodType,
 					tier,
 					usageRatio,
-					token.PeriodQuota,
+					policy.PeriodQuota,
 					tierThreshold(policy, tier),
 				)
 			}
@@ -64,9 +55,9 @@ func CheckQuotaTier(
 			go MaybeNotifyAdmin(
 				feishuUser.OpenID,
 				feishuUser.Name,
-				token.PeriodType,
+				policyPeriodType,
 				usageRatio,
-				token.PeriodQuota,
+				policy.PeriodQuota,
 			)
 
 			return effModel, rpmMul, tpmMul, blocked
@@ -86,21 +77,18 @@ func CheckQuotaTier(
 		return requestModel, 1.0, 1.0, false
 	}
 
-	return applyPolicyTiers(policy, token, requestModel)
+	usageRatio := computeGroupUsageRatio(group.ID, policy)
+	return applyPolicyTiers(policy, usageRatio, requestModel)
 }
 
-// computeUsageRatio returns the fraction of the period quota that has been consumed.
-func computeUsageRatio(token model.TokenCache) float64 {
-	if token.PeriodQuota <= 0 {
+// computeGroupUsageRatio returns the fraction of the period quota consumed at Group level.
+func computeGroupUsageRatio(groupID string, policy *models.QuotaPolicy) float64 {
+	if policy.PeriodQuota <= 0 {
 		return 0
 	}
 
-	used := token.UsedAmount - token.PeriodLastUpdateAmount
-	if used < 0 {
-		used = 0
-	}
-
-	return used / token.PeriodQuota
+	periodUsed := getCachedGroupPeriodUsage(groupID, policy.PeriodType)
+	return periodUsed / policy.PeriodQuota
 }
 
 // ComputeTier returns the effective tier (1–4) for the given usage state.
@@ -134,39 +122,17 @@ func tierThreshold(policy *models.QuotaPolicy, tier int) float64 {
 	}
 }
 
-// applyPolicyTiers applies the tiered policy logic based on usage ratio.
-func applyPolicyTiers(policy *models.QuotaPolicy, token model.TokenCache, requestModel string) (string, float64, float64, bool) {
-	// If token has no PeriodQuota but the policy does, the token was never synced
-	// (e.g. user-created key). Use the policy's quota directly for enforcement,
-	// and trigger a one-shot async sync to fix the token record.
-	if token.PeriodQuota <= 0 && policy.PeriodQuota > 0 {
-		if _, alreadyPending := pendingSyncs.LoadOrStore(token.ID, struct{}{}); !alreadyPending {
-			go func() {
-				defer pendingSyncs.Delete(token.ID)
-				periodQuota := policy.PeriodQuota
-				periodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
-				if _, err := model.UpdateToken(token.ID, model.UpdateTokenRequest{
-					PeriodQuota: &periodQuota,
-					PeriodType:  &periodType,
-				}); err != nil {
-					log.Errorf("auto-sync policy to unsynced token %d: %v", token.ID, err)
-				}
-			}()
-		}
-		token.PeriodQuota = policy.PeriodQuota
-	}
-
-	// Guard against zero PeriodQuota to avoid division by zero
-	if token.PeriodQuota <= 0 {
+// applyPolicyTiers applies the tiered policy logic based on a pre-computed usage ratio.
+func applyPolicyTiers(policy *models.QuotaPolicy, usageRatio float64, requestModel string) (string, float64, float64, bool) {
+	// Guard against zero or no-limit policy
+	if policy.PeriodQuota <= 0 {
 		return requestModel, 1.0, 1.0, false
 	}
-
-	usageRatio := computeUsageRatio(token)
 
 	// Resolve model pricing once for price-based blocking.
 	// Normalize to ¥/M tokens so thresholds match the "my access" model price display.
 	var inputPrice, outputPrice float64
-	if mc := model.LoadModelCaches(); mc != nil {
+	if mc := model.LoadModelCaches(); mc != nil && mc.ModelConfig != nil {
 		if cfg, ok := mc.ModelConfig.GetModelConfig(requestModel); ok {
 			inputPrice = float64(cfg.Price.InputPrice) / float64(cfg.Price.GetInputPriceUnit()) * 1e6
 			outputPrice = float64(cfg.Price.OutputPrice) / float64(cfg.Price.GetOutputPriceUnit()) * 1e6
