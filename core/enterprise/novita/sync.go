@@ -793,16 +793,14 @@ func novitaWebSearchBase(channelBaseURL string) string {
 	return "https://api.novita.ai/v3"
 }
 
-// StartSyncScheduler starts a background goroutine that syncs Novita models daily at 02:15.
+// StartSyncScheduler starts a background goroutine that checks daily at 02:15
+// whether auto-sync is enabled, and if so, syncs Novita models.
 // Offset by 15 minutes from PPIO to avoid simultaneous heavy sync loads.
-// A Feishu webhook notification is sent after each run summarising changes.
-// Set DISABLE_NOVITA_AUTO_SYNC=true to disable.
+//
+// Two layers of control (both must allow for sync to run):
+//   - Environment variable DISABLE_NOVITA_AUTO_SYNC=true — hard override (ops level)
+//   - DB option NovitaAutoSyncEnabled — soft toggle (UI level, default off)
 func StartSyncScheduler(ctx context.Context) {
-	if env.Bool("DISABLE_NOVITA_AUTO_SYNC", false) {
-		log.Printf("Novita sync scheduler: disabled via DISABLE_NOVITA_AUTO_SYNC")
-		return
-	}
-
 	go func() {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 2, 15, 0, 0, now.Location())
@@ -812,7 +810,7 @@ func StartSyncScheduler(ctx context.Context) {
 		}
 
 		delay := next.Sub(now)
-		log.Printf("Novita sync scheduler: next run at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
+		log.Printf("Novita sync scheduler: next check at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
 
 		select {
 		case <-ctx.Done():
@@ -820,7 +818,7 @@ func StartSyncScheduler(ctx context.Context) {
 		case <-time.After(delay):
 		}
 
-		runNovitaDailySync(ctx)
+		novitaAutoSyncRun(ctx)
 
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -830,10 +828,24 @@ func StartSyncScheduler(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runNovitaDailySync(ctx)
+				novitaAutoSyncRun(ctx)
 			}
 		}
 	}()
+}
+
+func novitaAutoSyncRun(ctx context.Context) {
+	if env.Bool("DISABLE_NOVITA_AUTO_SYNC", false) {
+		log.Printf("Novita auto sync: skipped (disabled via env)")
+		return
+	}
+
+	if !IsAutoSyncEnabled() {
+		log.Printf("Novita auto sync: skipped (disabled in config)")
+		return
+	}
+
+	runNovitaDailySync(ctx)
 }
 
 // runNovitaDailySync performs one Novita model sync and sends a Feishu notification with the outcome.

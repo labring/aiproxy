@@ -12,6 +12,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/env"
 	"github.com/labring/aiproxy/core/model"
 )
 
@@ -110,11 +111,13 @@ func GetConfigHandler(c *gin.Context) {
 	}
 
 	successResponse(c, gin.H{
-		"channel_id":           cfg.ChannelID,
-		"api_key":              maskedKey,
-		"api_base":             cfg.APIBase,
-		"configured":           configured,
-		"mgmt_token_configured": cfg.MgmtToken != "",
+		"channel_id":              cfg.ChannelID,
+		"api_key":                 maskedKey,
+		"api_base":                cfg.APIBase,
+		"configured":              configured,
+		"mgmt_token_configured":   cfg.MgmtToken != "",
+		"auto_sync_enabled":       cfg.AutoSyncEnabled,
+		"auto_sync_force_disabled": env.Bool("DISABLE_PPIO_AUTO_SYNC", false),
 	})
 }
 
@@ -394,4 +397,23 @@ func HistoryHandler(c *gin.Context) {
 	}
 
 	successResponse(c, histories)
+}
+
+// UpdateAutoSyncHandler handles PUT /api/enterprise/ppio/auto-sync.
+func UpdateAutoSyncHandler(c *gin.Context) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := SetAutoSyncEnabled(req.Enabled); err != nil {
+		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save auto-sync setting: %v", err))
+		return
+	}
+
+	successResponse(c, gin.H{"enabled": req.Enabled})
 }

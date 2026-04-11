@@ -105,6 +105,8 @@ export interface PPIOConfig {
   api_base: string
   configured: boolean
   mgmt_token_configured: boolean
+  auto_sync_enabled: boolean
+  auto_sync_force_disabled: boolean
 }
 
 export interface PPIOChannelItem {

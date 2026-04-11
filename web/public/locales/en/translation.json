@@ -533,7 +533,12 @@
       "endpointChat": "OpenAI compatible (base_url: api.ppinfra.com/v3/openai)",
       "endpointAnthropic": "Claude native protocol (base_url: api.ppinfra.com/anthropic)",
       "endpointResponses": "OpenAI Responses API (/v1/responses)",
-      "endpointEmbeddings": "Text embeddings (/v1/embeddings)"
+      "endpointEmbeddings": "Text embeddings (/v1/embeddings)",
+      "autoSync": "Daily Auto Sync",
+      "autoSyncEnabled": "Daily auto sync enabled",
+      "autoSyncDisabled": "Daily auto sync disabled",
+      "autoSyncFailed": "Failed to update auto-sync setting",
+      "autoSyncForceDisabled": "Force-disabled via environment variable"
     },
     "novita": {
       "title": "Overseas Model Sync",
@@ -619,7 +624,12 @@
       "exchangeRateSave": "Save Rate",
       "exchangeRateSaved": "Exchange rate saved successfully",
       "exchangeRateConfigured": "Current rate",
-      "exchangeRateInvalid": "Please enter a valid exchange rate (greater than 0)"
+      "exchangeRateInvalid": "Please enter a valid exchange rate (greater than 0)",
+      "autoSync": "Daily Auto Sync",
+      "autoSyncEnabled": "Daily auto sync enabled",
+      "autoSyncDisabled": "Daily auto sync disabled",
+      "autoSyncFailed": "Failed to update auto-sync setting",
+      "autoSyncForceDisabled": "Force-disabled via environment variable"
     },
     "customReport": {
       "title": "Custom Report",

@@ -20,6 +20,7 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 	ppioManage.PUT("/api-key", UpdateAPIKeyHandler)
 	ppioManage.PUT("/config", UpdateConfigHandler)
 	ppioManage.PUT("/mgmt-token", UpdateMgmtTokenHandler)
+	ppioManage.PUT("/auto-sync", UpdateAutoSyncHandler)
 	ppioManage.POST("/sync/preview", PreviewHandler)
 	ppioManage.POST("/sync/execute", ExecuteHandler)
 }

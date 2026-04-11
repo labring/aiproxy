@@ -20,6 +20,7 @@ func RegisterRoutes(group *gin.RouterGroup, permMW map[string]gin.HandlerFunc) {
 	novitaManage.PUT("/config", UpdateConfigHandler)
 	novitaManage.PUT("/mgmt-token", UpdateMgmtTokenHandler)
 	novitaManage.PUT("/exchange-rate", UpdateExchangeRateHandler)
+	novitaManage.PUT("/auto-sync", UpdateAutoSyncHandler)
 	novitaManage.POST("/sync/preview", PreviewHandler)
 	novitaManage.POST("/sync/execute", ExecuteHandler)
 }

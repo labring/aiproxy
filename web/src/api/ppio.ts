@@ -126,6 +126,10 @@ export const ppioApi = {
     return () => controller.abort()
   },
 
+  updateAutoSync: async (enabled: boolean): Promise<void> => {
+    return put('/enterprise/ppio/auto-sync', { enabled })
+  },
+
   /**
    * 保存管理后台 Token（用于获取闭源模型）
    */

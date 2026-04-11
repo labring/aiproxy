@@ -201,6 +201,16 @@ export default function NovitaSyncPage() {
     }
   }
 
+  const toggleAutoSync = async (checked: boolean) => {
+    try {
+      await novitaApi.updateAutoSync(checked)
+      setConfig(prev => prev ? { ...prev, auto_sync_enabled: checked } : prev)
+      toast.success(t(checked ? 'enterprise.novita.autoSyncEnabled' : 'enterprise.novita.autoSyncDisabled'))
+    } catch {
+      toast.error(t('enterprise.novita.autoSyncFailed'))
+    }
+  }
+
   const saveDirectApiKey = async () => {
     if (!directApiKey.trim()) {
       toast.error(t('enterprise.novita.apiKeyRequired'))
@@ -330,9 +340,27 @@ export default function NovitaSyncPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">{t('enterprise.novita.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('enterprise.novita.description')}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t('enterprise.novita.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('enterprise.novita.description')}</p>
+        </div>
+        {config && canManage && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Label htmlFor="novita-auto-sync" className="text-sm text-muted-foreground cursor-pointer">
+              {t('enterprise.novita.autoSync')}
+            </Label>
+            <Switch
+              id="novita-auto-sync"
+              checked={config.auto_sync_enabled}
+              disabled={config.auto_sync_force_disabled}
+              onCheckedChange={toggleAutoSync}
+            />
+            {config.auto_sync_force_disabled && (
+              <span className="text-xs text-destructive">{t('enterprise.novita.autoSyncForceDisabled')}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* API Config Card */}

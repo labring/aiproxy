@@ -185,6 +185,16 @@ export default function PPIOSyncPage() {
     }
   }
 
+  const toggleAutoSync = async (checked: boolean) => {
+    try {
+      await ppioApi.updateAutoSync(checked)
+      setConfig(prev => prev ? { ...prev, auto_sync_enabled: checked } : prev)
+      toast.success(t(checked ? 'enterprise.ppio.autoSyncEnabled' : 'enterprise.ppio.autoSyncDisabled'))
+    } catch {
+      toast.error(t('enterprise.ppio.autoSyncFailed'))
+    }
+  }
+
   const saveDirectApiKey = async () => {
     if (!directApiKey.trim()) {
       toast.error(t('enterprise.ppio.apiKeyRequired'))
@@ -312,9 +322,27 @@ export default function PPIOSyncPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">{t('enterprise.ppio.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('enterprise.ppio.description')}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t('enterprise.ppio.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('enterprise.ppio.description')}</p>
+        </div>
+        {config && canManage && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Label htmlFor="ppio-auto-sync" className="text-sm text-muted-foreground cursor-pointer">
+              {t('enterprise.ppio.autoSync')}
+            </Label>
+            <Switch
+              id="ppio-auto-sync"
+              checked={config.auto_sync_enabled}
+              disabled={config.auto_sync_force_disabled}
+              onCheckedChange={toggleAutoSync}
+            />
+            {config.auto_sync_force_disabled && (
+              <span className="text-xs text-destructive">{t('enterprise.ppio.autoSyncForceDisabled')}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* API Config Card */}

@@ -12,20 +12,22 @@ import (
 )
 
 const (
-	optionKeyPPIOChannelID = "PPIOChannelID"
-	optionKeyPPIOAPIKey    = "PPIOAPIKey"
-	optionKeyPPIOAPIBase   = "PPIOAPIBase"
-	optionKeyPPIOMgmtToken = "PPIOMgmtToken"
+	optionKeyPPIOChannelID      = "PPIOChannelID"
+	optionKeyPPIOAPIKey         = "PPIOAPIKey"
+	optionKeyPPIOAPIBase        = "PPIOAPIBase"
+	optionKeyPPIOMgmtToken      = "PPIOMgmtToken"
+	optionKeyPPIOAutoSyncEnabled = "PPIOAutoSyncEnabled"
 )
 
-var ppioOptionKeys = []string{optionKeyPPIOChannelID, optionKeyPPIOAPIKey, optionKeyPPIOAPIBase, optionKeyPPIOMgmtToken}
+var ppioOptionKeys = []string{optionKeyPPIOChannelID, optionKeyPPIOAPIKey, optionKeyPPIOAPIBase, optionKeyPPIOMgmtToken, optionKeyPPIOAutoSyncEnabled}
 
 // PPIOConfigResult holds the current PPIO configuration.
 type PPIOConfigResult struct {
-	ChannelID int    `json:"channel_id"`
-	APIKey    string `json:"api_key"`
-	APIBase   string `json:"api_base"`
-	MgmtToken string `json:"mgmt_token,omitempty"`
+	ChannelID       int    `json:"channel_id"`
+	APIKey          string `json:"api_key"`
+	APIBase         string `json:"api_base"`
+	MgmtToken       string `json:"mgmt_token,omitempty"`
+	AutoSyncEnabled bool   `json:"auto_sync_enabled"`
 }
 
 // GetPPIOConfig reads PPIO configuration from the option table.
@@ -44,10 +46,34 @@ func GetPPIOConfig() (cfg PPIOConfigResult) {
 			cfg.APIBase = opt.Value
 		case optionKeyPPIOMgmtToken:
 			cfg.MgmtToken = opt.Value
+		case optionKeyPPIOAutoSyncEnabled:
+			cfg.AutoSyncEnabled = opt.Value == "true"
 		}
 	}
 
 	return cfg
+}
+
+// IsAutoSyncEnabled returns whether the daily auto-sync is enabled in the DB.
+func IsAutoSyncEnabled() bool {
+	var opt model.Option
+	if err := model.DB.Where("key = ?", optionKeyPPIOAutoSyncEnabled).First(&opt).Error; err != nil {
+		return false // not found → default off
+	}
+
+	return opt.Value == "true"
+}
+
+// SetAutoSyncEnabled persists the auto-sync toggle to the Option table.
+func SetAutoSyncEnabled(enabled bool) error {
+	val := "false"
+	if enabled {
+		val = "true"
+	}
+
+	return model.DB.Where("key = ?", optionKeyPPIOAutoSyncEnabled).
+		Assign(model.Option{Value: val}).
+		FirstOrCreate(&model.Option{Key: optionKeyPPIOAutoSyncEnabled}).Error
 }
 
 // SetPPIOMgmtToken persists the management console token to the Option table.

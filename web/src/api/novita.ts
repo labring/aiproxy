@@ -107,6 +107,10 @@ export const novitaApi = {
     return () => controller.abort()
   },
 
+  updateAutoSync: async (enabled: boolean): Promise<void> => {
+    return put('/enterprise/novita/auto-sync', { enabled })
+  },
+
   updateMgmtToken: async (token: string): Promise<void> => {
     return put('/enterprise/novita/mgmt-token', { token })
   },

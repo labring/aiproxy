@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	optionKeyNovitaChannelID     = "NovitaChannelID"
-	optionKeyNovitaAPIKey        = "NovitaAPIKey"
-	optionKeyNovitaAPIBase       = "NovitaAPIBase"
-	optionKeyNovitaMgmtToken     = "NovitaMgmtToken"
-	optionKeyNovitaExchangeRate  = "NovitaExchangeRate"
-	defaultNovitaExchangeRate    = 7.0
+	optionKeyNovitaChannelID        = "NovitaChannelID"
+	optionKeyNovitaAPIKey           = "NovitaAPIKey"
+	optionKeyNovitaAPIBase          = "NovitaAPIBase"
+	optionKeyNovitaMgmtToken        = "NovitaMgmtToken"
+	optionKeyNovitaExchangeRate     = "NovitaExchangeRate"
+	optionKeyNovitaAutoSyncEnabled  = "NovitaAutoSyncEnabled"
+	defaultNovitaExchangeRate       = 7.0
 )
 
 var novitaOptionKeys = []string{
@@ -26,15 +27,17 @@ var novitaOptionKeys = []string{
 	optionKeyNovitaAPIBase,
 	optionKeyNovitaMgmtToken,
 	optionKeyNovitaExchangeRate,
+	optionKeyNovitaAutoSyncEnabled,
 }
 
 // NovitaConfigResult holds the current Novita configuration.
 type NovitaConfigResult struct {
-	ChannelID    int     `json:"channel_id"`
-	APIKey       string  `json:"api_key"`
-	APIBase      string  `json:"api_base"`
-	MgmtToken    string  `json:"mgmt_token,omitempty"`
-	ExchangeRate float64 `json:"exchange_rate"` // USD→CNY exchange rate for price conversion
+	ChannelID       int     `json:"channel_id"`
+	APIKey          string  `json:"api_key"`
+	APIBase         string  `json:"api_base"`
+	MgmtToken       string  `json:"mgmt_token,omitempty"`
+	ExchangeRate    float64 `json:"exchange_rate"` // USD→CNY exchange rate for price conversion
+	AutoSyncEnabled bool    `json:"auto_sync_enabled"`
 }
 
 // GetNovitaConfig reads Novita configuration from the option table.
@@ -55,6 +58,8 @@ func GetNovitaConfig() (cfg NovitaConfigResult) {
 			cfg.MgmtToken = opt.Value
 		case optionKeyNovitaExchangeRate:
 			cfg.ExchangeRate, _ = strconv.ParseFloat(opt.Value, 64)
+		case optionKeyNovitaAutoSyncEnabled:
+			cfg.AutoSyncEnabled = opt.Value == "true"
 		}
 	}
 
@@ -63,6 +68,28 @@ func GetNovitaConfig() (cfg NovitaConfigResult) {
 	}
 
 	return cfg
+}
+
+// IsAutoSyncEnabled returns whether the daily auto-sync is enabled in the DB.
+func IsAutoSyncEnabled() bool {
+	var opt model.Option
+	if err := model.DB.Where("key = ?", optionKeyNovitaAutoSyncEnabled).First(&opt).Error; err != nil {
+		return false // not found → default off
+	}
+
+	return opt.Value == "true"
+}
+
+// SetAutoSyncEnabled persists the auto-sync toggle to the Option table.
+func SetAutoSyncEnabled(enabled bool) error {
+	val := "false"
+	if enabled {
+		val = "true"
+	}
+
+	return model.DB.Where("key = ?", optionKeyNovitaAutoSyncEnabled).
+		Assign(model.Option{Value: val}).
+		FirstOrCreate(&model.Option{Key: optionKeyNovitaAutoSyncEnabled}).Error
 }
 
 // SetNovitaMgmtToken persists the management token to the Option table.

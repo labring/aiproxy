@@ -106,6 +106,8 @@ export interface NovitaConfig {
   configured: boolean
   mgmt_token_configured: boolean
   exchange_rate: number
+  auto_sync_enabled: boolean
+  auto_sync_force_disabled: boolean
 }
 
 export interface NovitaChannelItem {

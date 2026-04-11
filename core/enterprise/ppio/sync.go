@@ -1021,16 +1021,13 @@ func countEffectiveTiers(tiers []TieredBillingConfig) int {
 	return count
 }
 
-// StartSyncScheduler starts a background goroutine that syncs PPIO models daily at 02:00.
-// It runs the first sync at the next 02:00 local time, then every 24 hours thereafter.
-// A Feishu webhook notification is sent after each run summarising changes.
-// Set DISABLE_PPIO_AUTO_SYNC=true to disable.
+// StartSyncScheduler starts a background goroutine that checks daily at 02:00
+// whether auto-sync is enabled, and if so, syncs PPIO models.
+//
+// Two layers of control (both must allow for sync to run):
+//   - Environment variable DISABLE_PPIO_AUTO_SYNC=true — hard override (ops level)
+//   - DB option PPIOAutoSyncEnabled — soft toggle (UI level, default off)
 func StartSyncScheduler(ctx context.Context) {
-	if env.Bool("DISABLE_PPIO_AUTO_SYNC", false) {
-		log.Printf("PPIO sync scheduler: disabled via DISABLE_PPIO_AUTO_SYNC")
-		return
-	}
-
 	go func() {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, now.Location())
@@ -1040,7 +1037,7 @@ func StartSyncScheduler(ctx context.Context) {
 		}
 
 		delay := next.Sub(now)
-		log.Printf("PPIO sync scheduler: next run at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
+		log.Printf("PPIO sync scheduler: next check at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
 
 		select {
 		case <-ctx.Done():
@@ -1048,7 +1045,7 @@ func StartSyncScheduler(ctx context.Context) {
 		case <-time.After(delay):
 		}
 
-		runPPIODailySync(ctx)
+		ppioAutoSyncRun(ctx)
 
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -1058,10 +1055,24 @@ func StartSyncScheduler(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runPPIODailySync(ctx)
+				ppioAutoSyncRun(ctx)
 			}
 		}
 	}()
+}
+
+func ppioAutoSyncRun(ctx context.Context) {
+	if env.Bool("DISABLE_PPIO_AUTO_SYNC", false) {
+		log.Printf("PPIO auto sync: skipped (disabled via env)")
+		return
+	}
+
+	if !IsAutoSyncEnabled() {
+		log.Printf("PPIO auto sync: skipped (disabled in config)")
+		return
+	}
+
+	runPPIODailySync(ctx)
 }
 
 // runPPIODailySync performs one PPIO model sync and sends a Feishu notification with the outcome.
