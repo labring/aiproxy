@@ -91,13 +91,13 @@ get_canary_port() {
   fi
 }
 
-# Find the running aiproxy Docker container listening on a given port.
+# Find the running Docker container listening on a given port.
 # With --network host, containers don't show port mappings in docker ps.
-# We find them by matching the LISTEN env var or container name pattern.
+# Strategy: check LISTEN env var across ALL running containers, then fall back to ss/PID lookup.
 find_container_on_port() {
   local port="$1"
-  # Check for containers with LISTEN env set to this port
-  for cid in $(docker ps -q --filter "ancestor=aiproxy:local" --filter "ancestor=aiproxy:rollback" 2>/dev/null); do
+  # Check ALL running containers for LISTEN env matching this port
+  for cid in $(docker ps -q 2>/dev/null); do
     local listen_val
     listen_val=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$cid" 2>/dev/null | grep "^LISTEN=" | head -1 | cut -d= -f2-)
     if [[ "${listen_val}" == "0.0.0.0:${port}" ]]; then
@@ -105,10 +105,18 @@ find_container_on_port() {
       return
     fi
   done
-  # Fallback: check named containers
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^aiproxy-active$'; then
-    echo "aiproxy-active"
-    return
+  # Fallback: use ss to find the PID, then match it to a container
+  local pid
+  pid=$(ss -tlnp "sport = :${port}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+  if [[ -n "${pid}" ]]; then
+    for cid in $(docker ps -q 2>/dev/null); do
+      local cpid
+      cpid=$(docker inspect --format '{{.State.Pid}}' "$cid" 2>/dev/null)
+      if [[ "${cpid}" == "${pid}" ]]; then
+        docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's|^/||'
+        return
+      fi
+    done
   fi
 }
 
@@ -284,15 +292,32 @@ fi
 # ══════════════════════════════════════════════════════════════
 info "Phase 0/5: Pre-flight checks..."
 
-# Verify the canary port is not already occupied
-if curl -sf "http://localhost:${CANARY_PORT}/api/status" >/dev/null 2>&1; then
-  fail "Port ${CANARY_PORT} is already in use — check for leftover containers or processes"
-fi
-
 # Clean up any leftover canary from a previous failed deploy
 if docker ps -a --format '{{.Names}}' | grep -q '^aiproxy-canary$'; then
   warn "Removing leftover canary container from previous deploy..."
   docker rm -f aiproxy-canary 2>/dev/null || true
+fi
+
+# Verify the canary port is not already occupied; auto-clean leftover containers
+if curl -sf "http://localhost:${CANARY_PORT}/api/status" >/dev/null 2>&1; then
+  LEFTOVER=$(find_container_on_port "${CANARY_PORT}")
+  if [[ -n "${LEFTOVER}" && "${LEFTOVER}" != "aiproxy-active" ]]; then
+    warn "Port ${CANARY_PORT} occupied by leftover container '${LEFTOVER}' — stopping it..."
+    docker stop --time=30 "${LEFTOVER}" 2>/dev/null || true
+    docker rm -f "${LEFTOVER}" 2>/dev/null || true
+    # Wait briefly for port release
+    for i in 1 2 3 4 5; do
+      if ! curl -sf "http://localhost:${CANARY_PORT}/api/status" >/dev/null 2>&1; then
+        pass "Leftover container '${LEFTOVER}' cleaned up, port ${CANARY_PORT} freed"
+        break
+      fi
+      sleep 1
+    done
+  fi
+  # Final check — fail if port is still occupied
+  if curl -sf "http://localhost:${CANARY_PORT}/api/status" >/dev/null 2>&1; then
+    fail "Port ${CANARY_PORT} is still in use after cleanup — check manually (ss -tlnp sport = :${CANARY_PORT})"
+  fi
 fi
 
 # Cross-check NODE_TYPE vs .env domain — catch misconfigurations early
@@ -579,6 +604,41 @@ sudo rm -f "${UPSTREAM_CONF}.bak"
 # Reset trap state — successful deploy
 CANARY_STARTED=0
 TRAFFIC_SWITCHED=0
+
+# ── Verify old port is released ────────────────────────────────
+OLD_PORT="${ACTIVE_PORT}"  # the port the old container was on (before this deploy)
+if curl -sf "http://localhost:${OLD_PORT}/api/status" >/dev/null 2>&1; then
+  warn "Old port ${OLD_PORT} is still occupied after drain — attempting cleanup..."
+  STALE=$(find_container_on_port "${OLD_PORT}")
+  if [[ -n "${STALE}" ]]; then
+    warn "Stopping stale container '${STALE}' on port ${OLD_PORT}..."
+    docker stop --time=30 "${STALE}" 2>/dev/null || true
+    docker rm -f "${STALE}" 2>/dev/null || true
+  fi
+  # Final check
+  sleep 2
+  if curl -sf "http://localhost:${OLD_PORT}/api/status" >/dev/null 2>&1; then
+    warn "⚠ Port ${OLD_PORT} still occupied — manual cleanup needed: ss -tlnp sport = :${OLD_PORT}"
+  else
+    pass "Old port ${OLD_PORT} successfully freed"
+  fi
+else
+  pass "Old port ${OLD_PORT} is clean"
+fi
+
+# ── Remove non-active aiproxy containers ──────────────────────
+for cid in $(docker ps -q 2>/dev/null); do
+  CNAME=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's|^/||')
+  if [[ "${CNAME}" == "aiproxy-active" || "${CNAME}" == "aiproxy-canary" ]]; then
+    continue
+  fi
+  # Check if this container is an aiproxy instance (has LISTEN env)
+  if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$cid" 2>/dev/null | grep -q "^LISTEN="; then
+    warn "Removing orphaned aiproxy container '${CNAME}'..."
+    docker stop --time=10 "${CNAME}" 2>/dev/null || true
+    docker rm -f "${CNAME}" 2>/dev/null || true
+  fi
+done
 
 # ── Post-deploy cleanup check ────────────────────────────────
 if [[ -f "${SCRIPT_DIR}/post-deploy-cleanup.sh" ]]; then
