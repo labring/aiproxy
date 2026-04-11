@@ -345,7 +345,12 @@
     "myAccess": {
       "title": "我的接入",
       "baseUrl": "Base URL",
+      "baseUrlTitle": "接入地址",
       "baseUrlHint": "各渠道专用接入地址见下方模型列表",
+      "baseUrlRegionWarning": "请根据使用的模型选择对应地区的接入地址",
+      "baseUrlRegionHint": "PPIO 模型使用国内地址，海外模型使用海外地址",
+      "regionDomestic": "国内",
+      "regionOverseas": "海外",
       "copied": "已复制到剪贴板",
       "apiKeys": "API Key 管理",
       "createKey": "创建 Key",

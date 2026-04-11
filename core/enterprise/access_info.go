@@ -218,6 +218,7 @@ type ModelGroupInfo struct {
 
 type MyAccessResponse struct {
 	BaseURL       string            `json:"base_url"`
+	SetBaseURLs   map[string]string `json:"set_base_urls,omitempty"`
 	OwnerBaseURLs map[string]string `json:"owner_base_urls,omitempty"`
 	LocalOwner    string            `json:"local_owner,omitempty"`
 	GroupID       string            `json:"group_id"`
@@ -225,25 +226,26 @@ type MyAccessResponse struct {
 	ModelGroups   []ModelGroupInfo  `json:"model_groups"`
 }
 
-var (
-	ownerBaseURLsOnce sync.Once
-	ownerBaseURLsMap  map[string]string
-)
-
-func loadOwnerBaseURLs() map[string]string {
-	ownerBaseURLsOnce.Do(func() {
-		raw := os.Getenv("ENTERPRISE_BASE_URLS")
+// loadEnvJSONMap returns a lazy loader that parses a JSON map[string]string
+// from the given environment variable (read once, cached forever).
+func loadEnvJSONMap(envKey string) func() map[string]string {
+	return sync.OnceValue(func() map[string]string {
+		raw := os.Getenv(envKey)
 		if raw == "" {
-			return
+			return nil
 		}
 		var m map[string]string
 		if err := json.Unmarshal([]byte(raw), &m); err != nil {
-			return
+			return nil
 		}
-		ownerBaseURLsMap = m
+		return m
 	})
-	return ownerBaseURLsMap
 }
+
+var (
+	loadOwnerBaseURLs = loadEnvJSONMap("ENTERPRISE_BASE_URLS")
+	loadSetBaseURLs   = loadEnvJSONMap("ENTERPRISE_SET_BASE_URLS")
+)
 
 // allEnabledSetsDefaultFirst returns all set names from the model cache,
 // with "default" guaranteed first so that domestic channels take priority
@@ -368,6 +370,7 @@ func GetMyAccess(c *gin.Context) {
 
 	modelProvider := make(map[string]string, len(availableModels))
 	ownerDisplayName := make(map[string]string) // owner (type string) → channel custom name
+	ownerPrimarySet := make(map[string]string)  // owner → first-seen set
 	for _, set := range groupSets {
 		chMap := modelCaches.EnabledModel2ChannelsBySet[set]
 		for _, modelName := range availableModels {
@@ -379,6 +382,9 @@ func GetMyAccess(c *gin.Context) {
 				// Channels are already sorted by priority (highest first)
 				owner := chs[0].Type.String()
 				modelProvider[modelName] = owner
+				if _, exists := ownerPrimarySet[owner]; !exists {
+					ownerPrimarySet[owner] = set
+				}
 				if _, exists := ownerDisplayName[owner]; !exists && chs[0].Name != "" {
 					ownerDisplayName[owner] = chs[0].Name
 				}
@@ -471,7 +477,22 @@ func GetMyAccess(c *gin.Context) {
 		})
 	}
 
-	ownerURLs := loadOwnerBaseURLs()
+	setURLs := loadSetBaseURLs()
+
+	// Clone ownerURLs to avoid mutating the shared sync.OnceValue cache,
+	// then auto-derive owner URLs from set mapping when not explicitly configured.
+	ownerURLs := make(map[string]string, len(ownerPrimarySet))
+	for k, v := range loadOwnerBaseURLs() {
+		ownerURLs[k] = v
+	}
+	for owner, set := range ownerPrimarySet {
+		if _, exists := ownerURLs[owner]; !exists {
+			if url, ok := setURLs[set]; ok {
+				ownerURLs[owner] = url
+			}
+		}
+	}
+
 	var localOwner string
 	for owner, url := range ownerURLs {
 		if url == baseURL {
@@ -482,6 +503,7 @@ func GetMyAccess(c *gin.Context) {
 
 	middleware.SuccessResponse(c, MyAccessResponse{
 		BaseURL:       baseURL,
+		SetBaseURLs:   setURLs,
 		OwnerBaseURLs: ownerURLs,
 		LocalOwner:    localOwner,
 		GroupID:       groupID,

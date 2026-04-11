@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     Copy, Eye, EyeOff, Plus, Ban, ChevronDown, ChevronRight, Search,
-    Building2, Globe, Info, ArrowUpDown, ArrowUp, ArrowDown, Settings2, FileText,
+    Building2, Globe, Info, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Settings2, FileText,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1338,9 +1338,14 @@ export default function MyAccessPage() {
 
     const baseUrl = data?.base_url || ""
     const ownerBaseUrls = data?.owner_base_urls
+    const setBaseUrls = data?.set_base_urls
+    const hasMultiRegion = setBaseUrls && Object.keys(setBaseUrls).length > 1
+    const setLabels: Record<string, string> = {
+        default: `${t("enterprise.myAccess.regionDomestic" as never)} (PPIO)`,
+        overseas: `${t("enterprise.myAccess.regionOverseas" as never)} (Overseas)`,
+    }
     const tokens = data?.tokens || []
     const modelGroups = data?.model_groups || []
-    const hasMultipleUrls = ownerBaseUrls && Object.keys(ownerBaseUrls).length > 1
 
     return (
         <div className="p-6 space-y-6 max-w-6xl">
@@ -1351,31 +1356,6 @@ export default function MyAccessPage() {
 
             {/* Personal Usage Overview */}
             <PersonalStatsSection onQuotaLoaded={setQuotaStatus} />
-
-            {/* Base URL */}
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex items-center gap-3">
-                        <Label className="text-sm font-medium whitespace-nowrap">
-                            {t("enterprise.myAccess.baseUrl")}
-                        </Label>
-                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">{baseUrl}</code>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyToClipboard(baseUrl, t("enterprise.myAccess.copied"))}
-                        >
-                            <Copy className="w-3.5 h-3.5 mr-1" />
-                            {t("enterprise.myAccess.copyUrl")}
-                        </Button>
-                    </div>
-                    {hasMultipleUrls && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                            {t("enterprise.myAccess.baseUrlHint" as never)}
-                        </p>
-                    )}
-                </CardContent>
-            </Card>
 
             {/* API Keys */}
             <Card>
@@ -1439,6 +1419,55 @@ export default function MyAccessPage() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Endpoint URLs */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">{t("enterprise.myAccess.baseUrlTitle" as never)}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {hasMultiRegion ? (
+                        <>
+                            <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="w-4 h-4 shrink-0" />
+                                <span>{t("enterprise.myAccess.baseUrlRegionWarning" as never)}</span>
+                            </div>
+                            <div className="space-y-2">
+                                {Object.entries(setBaseUrls).map(([set, url]) => (
+                                    <div key={set} className="flex items-center gap-3 px-3 py-2 bg-muted rounded-md">
+                                        <Badge variant="outline" className="shrink-0 text-xs">{setLabels[set] ?? set}</Badge>
+                                        <code className="flex-1 text-sm font-mono truncate">{url}</code>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="shrink-0"
+                                            onClick={() => copyToClipboard(url, t("enterprise.myAccess.copied"))}
+                                        >
+                                            <Copy className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Info className="w-3.5 h-3.5 shrink-0" />
+                                <span>{t("enterprise.myAccess.baseUrlRegionHint" as never)}</span>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">{baseUrl}</code>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyToClipboard(baseUrl, t("enterprise.myAccess.copied"))}
+                            >
+                                <Copy className="w-3.5 h-3.5 mr-1" />
+                                {t("enterprise.myAccess.copyUrl")}
+                            </Button>
                         </div>
                     )}
                 </CardContent>

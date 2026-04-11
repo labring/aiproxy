@@ -356,7 +356,12 @@
     "myAccess": {
       "title": "My Access",
       "baseUrl": "Base URL",
+      "baseUrlTitle": "Endpoint URLs",
       "baseUrlHint": "See channel-specific endpoint URLs in the model list below",
+      "baseUrlRegionWarning": "Choose the endpoint URL matching the region of the model you're using",
+      "baseUrlRegionHint": "Use domestic URL for PPIO models, overseas URL for overseas models",
+      "regionDomestic": "Domestic",
+      "regionOverseas": "Overseas",
       "copied": "Copied to clipboard",
       "apiKeys": "API Key Management",
       "createKey": "Create Key",

@@ -491,6 +491,7 @@ export interface ModelGroupInfo {
 
 export interface MyAccessResponse {
     base_url: string
+    set_base_urls?: Record<string, string>
     owner_base_urls?: Record<string, string>
     local_owner?: string
     group_id: string
