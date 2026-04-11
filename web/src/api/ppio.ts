@@ -42,14 +42,14 @@ export const ppioApi = {
    * 诊断：对比远程和本地模型差异
    */
   diagnostic: async (): Promise<DiagnosticResult> => {
-    return get<DiagnosticResult>('/enterprise/ppio/sync/diagnostic')
+    return get<DiagnosticResult>('/enterprise/ppio/sync/diagnostic', { timeout: 60000 })
   },
 
   /**
    * 预览：显示将要执行的变更
    */
   preview: async (opts: SyncOptions): Promise<SyncDiff> => {
-    return post<SyncDiff>('/enterprise/ppio/sync/preview', opts)
+    return post<SyncDiff>('/enterprise/ppio/sync/preview', opts, { timeout: 60000 })
   },
 
   /**

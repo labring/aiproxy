@@ -103,7 +103,7 @@ export function ConfigPanel({
     const { t, i18n } = useTranslation()
     const lang = i18n.language
 
-    const [templatesOpen, setTemplatesOpen] = useState(false)
+    const [templatesOpen, setTemplatesOpen] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(CATEGORIES))
 

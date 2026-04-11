@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { Pencil, Trash2, Play, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -60,6 +61,7 @@ export function TemplateManager({
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["report-templates"] })
             setSaveDialogOpen(false)
+            toast.success(t("enterprise.customReport.templateSaved", "Template saved"))
             setTemplateName("")
         },
     })

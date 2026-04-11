@@ -13,7 +13,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -161,56 +164,108 @@ var multimodalModelTypes = []string{"embedding", "image", "video", "audio"}
 //
 // PPIO's list API only returns chat-type models when queried with ?visibility=1.
 // Non-chat types (embedding, image, video, audio) require separate requests.
+// All requests are issued concurrently to minimize total latency.
 func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
 	defer cancel()
 
-	// Fetch chat models (the bulk of the catalog, including pa/ closed-source).
-	allModels, err := c.fetchMgmtModels(ctx, mgmtToken, "?visibility=1")
-	if err != nil {
+	// Chat models (the bulk of the catalog, including pa/ closed-source).
+	var chatModels []PPIOModelV2
+
+	// Multimodal results collected under a mutex.
+	var (
+		mu          sync.Mutex
+		extraModels []PPIOModelV2
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	// Fetch chat models (required — failure is fatal).
+	g.Go(func() error {
+		models, err := c.fetchMgmtModels(gctx, mgmtToken, "?visibility=1")
+		if err != nil {
+			return err
+		}
+
+		chatModels = models
+
+		return nil
+	})
+
+	// Fetch each non-chat type concurrently (non-fatal on failure).
+	for _, modelType := range multimodalModelTypes {
+		g.Go(func() error {
+			extra, extraErr := c.fetchMgmtModels(gctx, mgmtToken, "?model_type="+modelType)
+			if extraErr != nil {
+				log.Printf("PPIO sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
+				return nil
+			}
+
+			mu.Lock()
+			extraModels = append(extraModels, extra...)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	// Build a set of already-fetched model IDs to avoid duplicates.
-	seen := make(map[string]struct{}, len(allModels))
-	for _, m := range allModels {
+	// Merge: deduplicate multimodal models against chat models.
+	seen := make(map[string]struct{}, len(chatModels))
+	for _, m := range chatModels {
 		seen[m.ID] = struct{}{}
 	}
 
-	// Fetch each non-chat type separately and merge.
-	for _, modelType := range multimodalModelTypes {
-		extra, extraErr := c.fetchMgmtModels(ctx, mgmtToken, "?model_type="+modelType)
-		if extraErr != nil {
-			log.Printf("PPIO sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
-			continue
-		}
-
-		for _, m := range extra {
-			if _, exists := seen[m.ID]; !exists {
-				seen[m.ID] = struct{}{}
-				allModels = append(allModels, m)
-			}
+	for _, m := range extraModels {
+		if _, exists := seen[m.ID]; !exists {
+			seen[m.ID] = struct{}{}
+			chatModels = append(chatModels, m)
 		}
 	}
 
-	return allModels, nil
+	return chatModels, nil
 }
 
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
-// and merges them into a single V2 list. V2 wins on ID overlap (richer data).
+// concurrently and merges them into a single V2 list. V2 wins on ID overlap.
 // If mgmtToken is empty, only V1 models are returned (converted to V2 format).
 func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
-	// Always fetch V1 (public API)
-	v1Models, v1Err := c.FetchModels(ctx)
-
-	var v2Models []PPIOModelV2
+	var (
+		v1Models []PPIOModel
+		v2Models []PPIOModelV2
+		v1Err    error
+	)
 
 	if mgmtToken != "" {
-		var v2Err error
+		// Fetch V1 and V2 concurrently.
+		g, gctx := errgroup.WithContext(ctx)
 
-		v2Models, v2Err = c.FetchAllModels(ctx, mgmtToken)
-		if v2Err != nil {
-			return nil, fmt.Errorf("failed to fetch models from mgmt API: %w", v2Err)
+		g.Go(func() error {
+			var err error
+			v1Models, err = c.FetchModels(gctx)
+			if err != nil {
+				v1Err = err // non-fatal, recorded for logging below
+			}
+
+			return nil // always succeed — V1 failure is non-fatal when V2 is available
+		})
+
+		g.Go(func() error {
+			var err error
+
+			v2Models, err = c.FetchAllModels(gctx, mgmtToken)
+			if err != nil {
+				return fmt.Errorf("failed to fetch models from mgmt API: %w", err)
+			}
+
+			return nil
+		})
+
+		if err := g.Wait(); err != nil {
+			return nil, err
 		}
 
 		if v1Err != nil {
@@ -219,6 +274,7 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 		}
 	} else {
 		// No mgmt token — V1 is the only source
+		v1Models, v1Err = c.FetchModels(ctx)
 		if v1Err != nil {
 			return nil, fmt.Errorf("failed to fetch models: %w", v1Err)
 		}

@@ -623,8 +623,8 @@ func buildSelectParts(dimensions []string, requiredBase map[string]bool) []strin
 		case "time_day":
 			parts = append(parts, "(hour_timestamp / 86400 * 86400) as time_key")
 		case "time_week":
-			// Align to Monday (Unix epoch was Thursday, offset by 3 days)
-			parts = append(parts, "((hour_timestamp - 259200) / 604800 * 604800 + 259200) as time_key")
+			// Align to Monday: epoch (1970-01-01) = Thursday, first Monday = 1970-01-05 = 4 days = 345600s
+			parts = append(parts, "((hour_timestamp - 345600) / 604800 * 604800 + 345600) as time_key")
 		}
 	}
 

@@ -70,14 +70,14 @@ export function KpiSummaryRow({
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Row count card */}
             <div className="rounded-xl border border-white/20 dark:border-gray-700/30 backdrop-blur-xl bg-white/60 dark:bg-gray-900/60 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                    <div>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
                         <p className="text-xs text-muted-foreground">{t("enterprise.customReport.totalRows")}</p>
-                        <p className="text-xl font-bold mt-0.5 tabular-nums">
+                        <p className="text-xl font-bold mt-0.5 tabular-nums truncate">
                             <AnimatedNumber value={totalRows} format={formatTotalRows} />
                         </p>
                     </div>
-                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#6A6DE6]/20 to-[#8A8DF7]/10 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#6A6DE6]/20 to-[#8A8DF7]/10 flex items-center justify-center shrink-0">
                         <Hash className="w-4 h-4 text-[#6A6DE6]" />
                     </div>
                 </div>
@@ -95,10 +95,10 @@ export function KpiSummaryRow({
                         key={kpi.key}
                         className="rounded-xl border border-white/20 dark:border-gray-700/30 backdrop-blur-xl bg-white/60 dark:bg-gray-900/60 p-4 shadow-sm"
                     >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                                 <p className="text-xs text-muted-foreground truncate">{kpi.label}</p>
-                                <p className="text-xl font-bold mt-0.5 tabular-nums">
+                                <p className="text-xl font-bold mt-0.5 tabular-nums truncate">
                                     <AnimatedNumber value={kpi.rawValue} format={formatter} />
                                 </p>
                             </div>

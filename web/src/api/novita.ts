@@ -30,11 +30,11 @@ export const novitaApi = {
   },
 
   diagnostic: async (): Promise<DiagnosticResult> => {
-    return get<DiagnosticResult>('/enterprise/novita/sync/diagnostic')
+    return get<DiagnosticResult>('/enterprise/novita/sync/diagnostic', { timeout: 60000 })
   },
 
   preview: async (opts: SyncOptions): Promise<SyncDiff> => {
-    return post<SyncDiff>('/enterprise/novita/sync/preview', opts)
+    return post<SyncDiff>('/enterprise/novita/sync/preview', opts, { timeout: 60000 })
   },
 
   execute: (
