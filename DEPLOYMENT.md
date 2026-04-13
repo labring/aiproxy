@@ -7,7 +7,7 @@
 > - `apiproxy.paigod.work` — AI API 服务（公网）
 >
 > 海外域名（`pplabs.tech`）：
-> - `ai.pplabs.tech` — 管理后台（海外）
+> - `ai.pplabs.tech` — 企业前端（公网，Nginx 路径隔离）
 > - `apiproxy.pplabs.tech` — AI API 服务（公网）
 
 ---
@@ -45,7 +45,7 @@
   │   │ ai.pplabs.tech│   apiproxy.pplabs.tech:443 → :81         │             │
   │   └───────────────┘──→ ┌───────────┐    ┌──────────────┐    │             │
   │   ┌───────────────┐   │  Nginx    │──→│  AI Proxy     │──→ 海外直连渠道   │
-  │   │ 海外 AI 客户端  │──→│  :80 管理  │    │  :3000/:3001 │    │             │
+  │   │ 海外 AI 客户端  │──→│  :80 前端  │    │  :3000/:3001 │    │             │
   │   │apiproxy.      │   │  :81 API  │    │  NODE_CHANNEL │    │             │
   │   │ pplabs.tech   │   └───────────┘    │  _SET=overseas│────┘             │
   │   └───────────────┘   ┌────────┐       └──────────────┘  连回国内 DB      │
@@ -68,7 +68,7 @@
 
 | 域名 | 网络 | LB 监听 | Nginx 端口 | 开放路径 | 用途 |
 |------|------|---------|-----------|---------|------|
-| `ai.pplabs.tech` | 受限 | ALB `:443 → EC2:80` | `:80` | 全部（`/`, `/api/*`, `/swagger/*`） | 管理后台（海外员工使用） |
+| `ai.pplabs.tech` | 公网（路径隔离） | ALB `:443 → EC2:80` | `:80` | `/api/enterprise/*`, `/api/status`, `/`（SPA）；阻断 `/api/*`、`/swagger/*`、`/v1/*` 等 | 企业前端 + 飞书 SSO（海外员工使用） |
 | `apiproxy.pplabs.tech` | 公网 | ALB `:443 → EC2:81` | `:81` | 仅 `/v1/*`, `/v1beta/*`, `/mcp/*`, `/sse`, `/mcp`, `/message` | 海外 AI 模型调用 |
 
 ---
@@ -160,10 +160,10 @@ ssh ppuser@1.13.81.31 "sudo <command>"
 | **WireGuard 内网 IP** | `10.0.0.2`（对端 `10.0.0.1` 为国内节点） |
 | **操作系统** | Ubuntu 22.04 LTS |
 | **登录用户** | `ppuser`（sudo 权限，密钥认证） |
-| **域名** | `ai.pplabs.tech`（管理后台）+ `apiproxy.pplabs.tech`（API） |
+| **域名** | `ai.pplabs.tech`（企业前端，公网路径隔离）+ `apiproxy.pplabs.tech`（API） |
 | **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（同国内零停机模式） |
-| **负载均衡** | AWS ALB（SSL 终结，ACM 证书），转发到 EC2:80（管理）/ EC2:81（API） |
-| **Nginx 端口 80** | 反代至 `upstream aiproxy_backend` — 管理后台 |
+| **负载均衡** | AWS ALB（SSL 终结，ACM 证书），转发到 EC2:80（企业前端）/ EC2:81（API） |
+| **Nginx 端口 80** | 反代至 `upstream aiproxy_backend` — 企业前端（路径隔离，公网可达） |
 | **Nginx 端口 81** | 反代至 `upstream aiproxy_backend` — 公网 AI API（白名单路径） |
 | **PostgreSQL** | 通过 WireGuard 隧道连回国内主库（`10.0.0.1:5432`） |
 | **Redis** | Docker 容器，`127.0.0.1:6379`（本地缓存） |
@@ -266,7 +266,7 @@ ssh ppuser@1.13.81.31 "sudo <command>"
 
 | 记录类型 | 主机记录 | 记录值 | 说明 |
 |---------|---------|--------|------|
-| A / CNAME | `ai` | `<AWS ALB 公网 DNS/IP>` | 管理后台（海外员工使用） |
+| A / CNAME | `ai` | `<AWS ALB 公网 DNS/IP>` | 企业前端（公网，路径隔离） |
 | A / CNAME | `apiproxy` | `<AWS ALB 公网 DNS/IP>` | AI API — 海外员工 |
 
 > **注意：** 如使用 AWS ALB 的 DNS 名称（如 `xxx.us-west-2.elb.amazonaws.com`），需用 CNAME 记录而非 A 记录。
@@ -276,17 +276,16 @@ ssh ppuser@1.13.81.31 "sudo <command>"
 > - **方案 A（推荐）：** 使用**企业内部 DNS**将 `ai.paigod.work` 指向 CLB 内网 VIP。公网 DNS 中不添加 `ai` 记录，确保外网完全不可达。
 > - **方案 B：** 在公网 DNS 添加 `ai` 记录指向 CLB 公网 VIP，然后在 CLB 安全组或 Nginx 中限制来源 IP（仅允许公司出口 IP）。
 >
-> **海外 `ai.pplabs.tech` 访问控制（P1 必须配置）：**
+> **海外 `ai.pplabs.tech` 访问控制（已实施：Nginx 路径级隔离）：**
 >
-> 管理后台 `ai.pplabs.tech` 默认对公网开放，**必须**限制访问。推荐以下方案之一：
+> `ai.pplabs.tech` 公网可达，通过 Nginx 路径白名单实现安全隔离：
 >
-> - **方案 A（推荐）：ALB Security Group 限制来源 IP。** 在 AWS Console → EC2 → Load Balancers 找到对应 ALB，编辑其 Security Group，将 Inbound Rule 的 `:80` 端口（对应 `ai.pplabs.tech`）来源 IP 限制为公司海外办公室出口 IP。`:81` 端口（对应 `apiproxy.pplabs.tech`）保持 `0.0.0.0/0` 公网开放。
-> - **方案 B：Nginx IP 白名单。** 编辑 `deploy/nginx/overseas/ai.pplabs.tech.conf`，取消注释 `allow` / `deny` 行并填入实际 IP：
->   ```nginx
->   allow 203.x.x.x/32;   # 海外办公室出口 IP
->   deny all;
->   ```
-> - **方案 C：仅 VPN 可达。** 不在公网 DNS 添加 `ai.pplabs.tech` 记录，海外员工通过 VPN 访问。
+> - **放通**：`/api/enterprise/*`（飞书 SSO 保护）、`/api/status`（健康检查）、`/`（前端 SPA）
+> - **阻断**：`/api/*`（管理 API）、`/swagger/*`（API 文档）、`/v1/*`、`/v1beta/*`、`/mcp/*`、`/sse`、`/message`（Relay API）
+> - **ALB Security Group**：`:80` 和 `:81` 均为 `0.0.0.0/0` 公网开放
+> - **安全保障**：企业 API 需飞书 SSO 登录，管理 API 在 nginx 层直接返回 403
+>
+> 配置文件：`deploy/nginx/overseas/ai.pplabs.tech.conf`
 
 ### 3.6 CLB 超时配置（P0 必须修改）
 
@@ -1243,7 +1242,7 @@ curl -s http://localhost:81/v1/models -H "Authorization: Bearer sk-xxx"
 | **服务器** | `52.35.158.131`（AWS EC2 公网 IP，us-west-2） |
 | **内网 IP** | `10.195.9.13`（AWS VPC） |
 | **登录用户** | `ppuser`（SSH 密钥认证，有 sudo 权限） |
-| **域名** | `ai.pplabs.tech`（管理后台）+ `apiproxy.pplabs.tech`（API） |
+| **域名** | `ai.pplabs.tech`（企业前端）+ `apiproxy.pplabs.tech`（API） |
 | **AI Proxy 运行方式** | Docker 容器 `aiproxy-active`（同国内零停机模式） |
 | **代码路径** | `/data/aiproxy` |
 | **环境变量文件** | `/data/aiproxy/.env`（含 `NODE_CHANNEL_SET=overseas`） |
@@ -1562,7 +1561,7 @@ sudo systemctl status aiproxy --no-pager
 - [ ] WireGuard 健康检查 crontab 已配置：`*/1 * * * * bash /data/aiproxy/scripts/wireguard-health.sh`
 - [ ] `/var/log/wireguard-health.log` 有定期输出（确认 crontab 生效）
 - [ ] 从海外访问 `https://apiproxy.pplabs.tech/v1/models`（带 Token）返回 200
-- [ ] 从海外访问 `https://ai.pplabs.tech`（管理后台）正常加载
+- [ ] 从海外访问 `https://ai.pplabs.tech`（企业前端）正常加载
 
 ### 飞书 & 基础功能验证
 
@@ -1750,7 +1749,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | 域名 | 记录类型 | 值 | 说明 |
 |------|---------|-----|------|
-| `ai.pplabs.tech` | CNAME（或 A） | AWS ALB DNS 名称（或 EIP） | 海外管理后台 |
+| `ai.pplabs.tech` | CNAME（或 A） | AWS ALB DNS 名称（或 EIP） | 海外企业前端（公网，路径隔离） |
 | `apiproxy.pplabs.tech` | CNAME（或 A） | AWS ALB DNS 名称（或 EIP） | 海外 AI API |
 
 #### 8. Clone 代码
