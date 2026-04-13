@@ -70,8 +70,14 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 			})
 			diff.Summary.ToAdd++
 		} else if localModel.Owner != model.ModelOwnerPPIO {
-			// Model exists but owned by another provider — skip
+			// Model exists but owned by another provider.
+			// Track in Shared so it appears in channels and on the UI.
 			diff.Summary.CrossOwner++
+			diff.Changes.Shared = append(diff.Changes.Shared, ModelDiff{
+				ModelID:   remoteModel.ID,
+				Action:    "shared",
+				NewConfig: buildModelConfigMap(&remoteModel),
+			})
 		} else {
 			// Model exists with our owner - check if needs update
 			changes := compareModelConfigs(localModel, &remoteModel)
@@ -167,8 +173,14 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 			})
 			diff.Summary.ToAdd++
 		} else if localModel.Owner != model.ModelOwnerPPIO {
-			// Model exists but owned by another provider — skip
+			// Model exists but owned by another provider.
+			// Track in Shared so it appears in channels and on the UI.
 			diff.Summary.CrossOwner++
+			diff.Changes.Shared = append(diff.Changes.Shared, ModelDiff{
+				ModelID:   remoteModel.ID,
+				Action:    "shared",
+				NewConfig: buildModelV2ConfigMap(&remoteModel),
+			})
 		} else {
 			changes := compareModelConfigsV2(localModel, &remoteModel)
 			if len(changes) > 0 {

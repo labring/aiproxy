@@ -511,7 +511,7 @@ export default function PPIOSyncPage() {
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground mb-1">{t('enterprise.ppio.needSync')}</div>
             <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {diff ? (diff.summary.to_add + diff.summary.to_update) : '-'}
+              {diff ? (diff.summary.to_add + diff.summary.to_update + (diff.summary.cross_owner ?? 0)) : '-'}
             </div>
           </CardContent>
         </Card>
@@ -588,7 +588,7 @@ export default function PPIOSyncPage() {
             </div>
           ) : diff ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                   <div className="text-2xl font-bold text-green-600 dark:text-green-400">{diff.summary.to_add}</div>
                   <div className="text-sm text-muted-foreground">{t('enterprise.ppio.toAdd')}</div>
@@ -597,6 +597,10 @@ export default function PPIOSyncPage() {
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{diff.summary.to_update}</div>
                   <div className="text-sm text-muted-foreground">{t('enterprise.ppio.toUpdate')}</div>
                 </div>
+                <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{diff.summary.cross_owner ?? 0}</div>
+                  <div className="text-sm text-muted-foreground">{t('enterprise.ppio.shared')}</div>
+                </div>
                 <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                   <div className="text-2xl font-bold text-red-600 dark:text-red-400">{diff.summary.to_delete}</div>
                   <div className="text-sm text-muted-foreground">{t('enterprise.ppio.toDelete')}</div>
@@ -604,7 +608,7 @@ export default function PPIOSyncPage() {
               </div>
 
               {/* Change Details - Collapsible */}
-              {((diff.changes.add?.length ?? 0) > 0 || (diff.changes.update?.length ?? 0) > 0 || (diff.changes.delete?.length ?? 0) > 0) && (
+              {((diff.changes.add?.length ?? 0) > 0 || (diff.changes.update?.length ?? 0) > 0 || (diff.changes.delete?.length ?? 0) > 0 || (diff.changes.shared?.length ?? 0) > 0) && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-foreground mb-2">{t('enterprise.ppio.changeDetails')}</h3>
 
@@ -660,6 +664,28 @@ export default function PPIOSyncPage() {
                           {diff.changes.delete!.map(d => (
                             <ModelRow key={d.model_id} d={d} />
                           ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(diff.changes.shared?.length ?? 0) > 0 && (
+                    <div className="border rounded-lg">
+                      <button
+                        onClick={() => toggleSection('shared')}
+                        className="w-full flex items-center gap-2 p-2 text-sm text-left hover:bg-muted/50 rounded-lg transition-colors"
+                      >
+                        {expandedSections.shared ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        <span className="text-purple-600 dark:text-purple-400 font-medium">{t('enterprise.ppio.modelsShared')} ({diff.changes.shared!.length})</span>
+                      </button>
+                      {expandedSections.shared && (
+                        <div className="px-4 pb-2">
+                          <p className="text-xs text-muted-foreground mb-2">{t('enterprise.ppio.sharedHint')}</p>
+                          <div className="space-y-0.5">
+                            {diff.changes.shared!.map(d => (
+                              <ModelRow key={d.model_id} d={d} />
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -778,7 +804,7 @@ export default function PPIOSyncPage() {
           {canManage && (
             <Button
               onClick={handleSync}
-              disabled={syncing || !diff || (diff.summary.to_add + diff.summary.to_update + (syncOpts.delete_unmatched_model ? diff.summary.to_delete : 0) === 0)}
+              disabled={syncing || !diff || (diff.summary.to_add + diff.summary.to_update + (diff.summary.cross_owner ?? 0) + (syncOpts.delete_unmatched_model ? diff.summary.to_delete : 0) === 0)}
               className="w-full"
               size="lg"
             >

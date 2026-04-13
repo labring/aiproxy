@@ -175,7 +175,7 @@ func (m *PPIOModel) ToV2() PPIOModelV2 {
 // ModelDiff represents the difference for a single model
 type ModelDiff struct {
 	ModelID   string         `json:"model_id"`
-	Action    string         `json:"action"` // "add", "update", "delete"
+	Action    string         `json:"action"` // "add", "update", "delete", "shared"
 	OldConfig map[string]any `json:"old_config,omitempty"`
 	NewConfig map[string]any `json:"new_config,omitempty"`
 	Changes   []string       `json:"changes,omitempty"` // List of changed fields
@@ -188,6 +188,7 @@ type SyncDiff struct {
 		Add    []ModelDiff `json:"add"`
 		Update []ModelDiff `json:"update"`
 		Delete []ModelDiff `json:"delete"`
+		Shared []ModelDiff `json:"shared,omitempty"` // Cross-owner models (included in channels, config maintained by primary owner)
 	} `json:"changes"`
 	Channels ChannelsInfo `json:"channels"`
 }

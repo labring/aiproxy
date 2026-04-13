@@ -111,8 +111,14 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 			})
 			diff.Summary.ToAdd++
 		} else if localModel.Owner != model.ModelOwnerNovita {
-			// Model exists but owned by another provider (e.g. PPIO) — skip
+			// Model exists but owned by another provider (e.g. PPIO).
+			// Track in Shared so it appears in channels and on the UI.
 			diff.Summary.CrossOwner++
+			diff.Changes.Shared = append(diff.Changes.Shared, ModelDiff{
+				ModelID:   remoteModel.ID,
+				Action:    "shared",
+				NewConfig: buildModelConfigMapV2(&remoteModel, exchangeRate),
+			})
 		} else {
 			changes := compareModelConfigsV2(localModel, &remoteModel, exchangeRate)
 			if len(changes) > 0 {

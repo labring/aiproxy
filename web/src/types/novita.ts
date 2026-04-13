@@ -17,7 +17,7 @@ export interface NovitaModel {
 
 export interface ModelDiff {
   model_id: string
-  action: 'add' | 'update' | 'delete'
+  action: 'add' | 'update' | 'delete' | 'shared'
   old_config?: Record<string, unknown>
   new_config?: Record<string, unknown>
   changes?: string[]
@@ -28,6 +28,7 @@ export interface SyncSummary {
   to_add: number
   to_update: number
   to_delete: number
+  cross_owner?: number
 }
 
 export interface ChannelInfo {
@@ -46,6 +47,7 @@ export interface SyncDiff {
     add: ModelDiff[] | null
     update: ModelDiff[] | null
     delete: ModelDiff[] | null
+    shared?: ModelDiff[] | null
   }
   channels: ChannelsInfo
 }
