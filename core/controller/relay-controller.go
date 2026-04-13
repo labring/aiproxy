@@ -269,6 +269,7 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	}
 
 	gbc := middleware.GetGroupBalanceConsumerFromContext(c)
+
 	requiredBalance := math.Max(
 		consume.CalculateAmount(http.StatusOK, meta.RequestUsage, price, meta.RequestServiceTier),
 		middleware.GroupMinimumBalance,
