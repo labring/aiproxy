@@ -21,7 +21,7 @@ type FeishuUser struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `json:"-"               gorm:"index"`
-	OpenID         string         `json:"open_id"         gorm:"size:64;uniqueIndex;not null"`
+	OpenID         string         `json:"open_id"         gorm:"size:64;index;not null"`
 	UnionID        string         `json:"union_id"        gorm:"size:64;index"`
 	UserID         string         `json:"user_id"         gorm:"size:64;index"`
 	TenantID       string         `json:"tenant_id"       gorm:"size:64;index"`
@@ -51,7 +51,7 @@ type FeishuDepartment struct {
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `json:"-"                 gorm:"index"`
-	DepartmentID     string         `json:"department_id"     gorm:"size:64;uniqueIndex;not null"`
+	DepartmentID     string         `json:"department_id"     gorm:"size:64;index;not null"`
 	ParentID         string         `json:"parent_id"         gorm:"size:64;index"`
 	Name             string         `json:"name"              gorm:"size:256;not null"`
 	OpenDepartmentID string         `json:"open_department_id" gorm:"size:64;index"`
@@ -67,18 +67,20 @@ func (FeishuDepartment) TableName() string {
 // FeishuSyncHistory records the result of each Feishu organization sync operation.
 // Persists sync status to DB so it survives service restarts.
 type FeishuSyncHistory struct {
-	ID            int64     `json:"id"              gorm:"primaryKey"`
-	SyncedAt      time.Time `json:"synced_at"       gorm:"autoCreateTime;index"`
-	Status        string    `json:"status"          gorm:"size:32;not null;index"` // syncing, success, failed
-	TotalDepts    int       `json:"total_depts"     gorm:"default:0"`
-	DeptsWithName int       `json:"depts_with_name" gorm:"default:0"`
-	TotalUsers    int       `json:"total_users"     gorm:"default:0"`
-	UsersWithName int       `json:"users_with_name" gorm:"default:0"`
-	UsersWithEmail int      `json:"users_with_email" gorm:"default:0"`
-	DepartedUsers int       `json:"departed_users"  gorm:"default:0"`
-	DurationMs    int64     `json:"duration_ms"     gorm:"default:0"`
-	Error         string    `json:"error,omitempty" gorm:"size:1024"`
-	CreatedAt     time.Time `json:"created_at"      gorm:"autoCreateTime"`
+	ID                  int64     `json:"id"                    gorm:"primaryKey"`
+	SyncedAt            time.Time `json:"synced_at"             gorm:"autoCreateTime;index"`
+	Status              string    `json:"status"                gorm:"size:32;not null;index"` // syncing, success, failed
+	TotalDepts          int       `json:"total_depts"           gorm:"default:0"`
+	DeptsWithName       int       `json:"depts_with_name"       gorm:"default:0"`
+	TotalUsers          int       `json:"total_users"           gorm:"default:0"`
+	UsersWithName       int       `json:"users_with_name"       gorm:"default:0"`
+	UsersWithEmail      int       `json:"users_with_email"      gorm:"default:0"`
+	DepartedUsers       int       `json:"departed_users"        gorm:"default:0"`
+	FailedDepts         int       `json:"failed_depts"          gorm:"default:0"`
+	SkippedDeactivation bool      `json:"skipped_deactivation"  gorm:"default:false"`
+	DurationMs          int64     `json:"duration_ms"           gorm:"default:0"`
+	Error               string    `json:"error,omitempty"       gorm:"size:1024"`
+	CreatedAt           time.Time `json:"created_at"            gorm:"autoCreateTime"`
 }
 
 func (FeishuSyncHistory) TableName() string {

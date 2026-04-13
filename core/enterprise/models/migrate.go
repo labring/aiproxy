@@ -3,10 +3,14 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+
+	"github.com/labring/aiproxy/core/common"
 )
 
 // PPIOSyncHistory mirrors ppio.SyncHistory for migration purposes.
@@ -62,6 +66,9 @@ func EnterpriseAutoMigrate(db *gorm.DB) error {
 	); err != nil {
 		return err
 	}
+
+	// Migrate unique indexes to partial indexes (soft-delete compatible)
+	migratePartialUniqueIndexes(db)
 
 	// Seed default role permissions if table is empty
 	seedDefaultRolePermissions(db)
@@ -153,4 +160,61 @@ func migratePermissionsV2(db *gorm.DB) {
 	}
 
 	log.Infof("migrated %d old permission records to %d new records", len(oldPerms), len(newRecords))
+}
+
+// migratePartialUniqueIndexes replaces full unique indexes with partial unique indexes
+// (WHERE deleted_at IS NULL) on soft-delete tables. This prevents soft-deleted rows
+// from blocking inserts of new rows with the same natural key.
+//
+// Idempotent: checks index definition before acting; safe to run on every startup.
+func migratePartialUniqueIndexes(db *gorm.DB) {
+	migrations := []struct {
+		table    string
+		oldIndex string
+		column   string
+	}{
+		{"feishu_users", "idx_feishu_users_open_id", "open_id"},
+		{"feishu_departments", "idx_feishu_departments_department_id", "department_id"},
+	}
+
+	for _, m := range migrations {
+		if isPartialUniqueIndex(db, m.table, m.oldIndex) {
+			continue
+		}
+
+		// Atomic: drop old + create partial unique in one transaction to avoid indexless window
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec("DROP INDEX IF EXISTS " + m.oldIndex).Error; err != nil {
+				return err
+			}
+			return tx.Exec(fmt.Sprintf(
+				"CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (%s) WHERE deleted_at IS NULL",
+				m.oldIndex, m.table, m.column,
+			)).Error
+		}); err != nil {
+			log.Errorf("failed to migrate index %s on %s: %v", m.oldIndex, m.table, err)
+			continue
+		}
+
+		log.Infof("migrated index %s on %s to partial unique (WHERE deleted_at IS NULL)", m.oldIndex, m.table)
+	}
+}
+
+// isPartialUniqueIndex checks if an index already has a WHERE clause (partial index).
+func isPartialUniqueIndex(db *gorm.DB, table, indexName string) bool {
+	var indexDef string
+	var query string
+
+	if common.UsingSQLite {
+		query = "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND name = ?"
+	} else {
+		query = "SELECT indexdef FROM pg_indexes WHERE tablename = ? AND indexname = ?"
+	}
+
+	if err := db.Raw(query, table, indexName).Scan(&indexDef).Error; err == nil && indexDef != "" {
+		return strings.Contains(strings.ToUpper(indexDef), "WHERE")
+	}
+
+	// Index doesn't exist yet — will be created fresh
+	return false
 }

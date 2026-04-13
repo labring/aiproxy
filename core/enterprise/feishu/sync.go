@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
+	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/enterprise/models"
 	"github.com/labring/aiproxy/core/middleware"
@@ -24,13 +25,15 @@ import (
 
 // syncStats tracks sync statistics for logging
 type syncStats struct {
-	totalDepts      int
-	deptsWithName   int
-	totalUsers      int
-	usersWithName   int
-	usersWithEmail  int
-	departedUsers   int // users in DB but no longer in Feishu (deactivated during sync)
-	syncedOpenIDs   map[string]struct{} // all open_ids seen from Feishu API during this sync
+	totalDepts       int
+	deptsWithName    int
+	totalUsers       int
+	usersWithName    int
+	usersWithEmail   int
+	departedUsers    int // users in DB but no longer in Feishu (deactivated during sync)
+	syncedOpenIDs    map[string]struct{} // all open_ids seen from Feishu API during this sync
+	failedDepts      int  // number of departments whose user sync failed
+	skippedDeactivate bool // true if deactivation was skipped due to safety checks
 }
 
 // SyncStatus holds the result of the last Feishu sync operation (API response type).
@@ -50,6 +53,7 @@ type SyncStatus struct {
 var (
 	lastSyncStatus SyncStatus
 	syncStatusMu   gosync.Mutex
+	syncRunMu      gosync.Mutex // guards SyncAll to prevent concurrent executions
 )
 
 // feishuUserFields holds the common fields for upserting a Feishu user record.
@@ -496,7 +500,14 @@ func handleDeptDeletedEvent(data json.RawMessage) {
 }
 
 // SyncAll performs a full synchronization of all departments and users from Feishu.
+// Concurrent calls are rejected (TryLock) to prevent data races on syncedOpenIDs.
 func SyncAll(db *gorm.DB) error {
+	if !syncRunMu.TryLock() {
+		log.Warn("feishu sync: skipped — another sync is already running")
+		return fmt.Errorf("sync already in progress")
+	}
+	defer syncRunMu.Unlock()
+
 	ctx := context.Background()
 	startTime := time.Now()
 
@@ -559,6 +570,7 @@ func SyncAll(db *gorm.DB) error {
 	for _, deptID := range syncedDeptIDs {
 		if err := syncDepartmentUsers(ctx, db, deptID, tenantInfo, stats); err != nil {
 			log.Errorf("feishu sync: failed to sync users for department %s: %v", deptID, err)
+			stats.failedDepts++
 
 			continue
 		}
@@ -567,6 +579,7 @@ func SyncAll(db *gorm.DB) error {
 	// Also sync root department users
 	if err := syncDepartmentUsers(ctx, db, "0", tenantInfo, stats); err != nil {
 		log.Errorf("feishu sync: failed to sync root department users: %v", err)
+		stats.failedDepts++
 	}
 
 	log.Infof("feishu sync: users done — total=%d, with_name=%d, with_email=%d, missing_name=%d",
@@ -593,14 +606,16 @@ func SyncAll(db *gorm.DB) error {
 	log.Infof("feishu sync: full organization sync completed in %dms", durationMs)
 
 	successHistory := &models.FeishuSyncHistory{
-		Status:         "success",
-		TotalDepts:     stats.totalDepts,
-		DeptsWithName:  stats.deptsWithName,
-		TotalUsers:     stats.totalUsers,
-		UsersWithName:  stats.usersWithName,
-		UsersWithEmail: stats.usersWithEmail,
-		DepartedUsers:  stats.departedUsers,
-		DurationMs:     durationMs,
+		Status:              "success",
+		TotalDepts:          stats.totalDepts,
+		DeptsWithName:       stats.deptsWithName,
+		TotalUsers:          stats.totalUsers,
+		UsersWithName:       stats.usersWithName,
+		UsersWithEmail:      stats.usersWithEmail,
+		DepartedUsers:       stats.departedUsers,
+		FailedDepts:         stats.failedDepts,
+		SkippedDeactivation: stats.skippedDeactivate,
+		DurationMs:          durationMs,
 	}
 	successHistory.SyncedAt = startTime
 	setSyncStatus(historyToStatus(successHistory))
@@ -613,10 +628,24 @@ func SyncAll(db *gorm.DB) error {
 // returned by the Feishu API during this sync. Users present in DB but absent from
 // Feishu are considered departed (resigned/removed) and are deactivated.
 //
-// Safety: this only runs when syncedOpenIDs is non-empty. If the Feishu API returned
-// zero users (e.g., due to permission revocation), this function is skipped entirely
-// to avoid mass-deactivation.
+// Three layers of safety prevent false mass-deactivation:
+//  1. Caller skips this entirely when syncedOpenIDs is empty (API returned zero users).
+//  2. If ANY department's user sync failed, we skip deactivation entirely — incomplete
+//     data would cause false positives for users in the failed department(s).
+//  3. Ratio/absolute threshold: if >5% or >20 users would be deactivated, skip and alert.
 func deactivateDepartedUsers(db *gorm.DB, stats *syncStats) {
+	// Safety layer 2: partial sync failure — cannot trust completeness of syncedOpenIDs
+	if stats.failedDepts > 0 {
+		log.Warnf("feishu sync: skipping departed user deactivation — "+
+			"%d department(s) failed to sync, data incomplete", stats.failedDepts)
+		notify.WarnThrottle("feishu-sync-dept-fail", 6*time.Hour,
+			"飞书同步：离职检测已跳过", fmt.Sprintf(
+				"本次同步有 %d 个部门拉取失败，为防止误删用户，已跳过离职清理。\n请检查飞书 API 状态或应用权限。",
+				stats.failedDepts))
+		stats.skippedDeactivate = true
+		return
+	}
+
 	// Load all active (non-soft-deleted) feishu_users from DB
 	var dbUsers []models.FeishuUser
 	if err := db.Select("open_id", "name").Find(&dbUsers).Error; err != nil {
@@ -636,14 +665,25 @@ func deactivateDepartedUsers(db *gorm.DB, stats *syncStats) {
 		return
 	}
 
-	// Safety: if more than 50% of users would be deactivated, something is likely wrong
-	// with the Feishu API response. Log a warning and skip to prevent mass-deactivation.
-	ratio := float64(len(departedOpenIDs)) / float64(len(dbUsers))
-	if ratio > 0.5 && len(departedOpenIDs) > 5 {
-		log.Warnf("feishu sync: skipping departed user deactivation — %d/%d (%.0f%%) users would be deactivated, "+
-			"likely an API issue. Feishu returned %d users, DB has %d.",
-			len(departedOpenIDs), len(dbUsers), ratio*100,
-			len(stats.syncedOpenIDs), len(dbUsers))
+	// Safety layer 3: ratio + absolute threshold guard
+	departed := len(departedOpenIDs)
+	total := len(dbUsers)
+	ratio := float64(departed) / float64(total)
+
+	if (ratio > 0.05 || departed > 20) && departed > 3 {
+		log.Warnf("feishu sync: skipping departed user deactivation — "+
+			"%d/%d (%.1f%%) users would be deactivated, likely an API issue. "+
+			"Feishu returned %d users, DB has %d.",
+			departed, total, ratio*100,
+			len(stats.syncedOpenIDs), total)
+		notify.ErrorThrottle("feishu-sync-mass-depart", 6*time.Hour,
+			"飞书同步：异常离职检测已拦截", fmt.Sprintf(
+				"本次同步检测到 %d/%d (%.1f%%) 用户疑似离职，超过安全阈值。\n"+
+					"飞书 API 返回 %d 人，数据库现有 %d 人。\n"+
+					"如确为大规模人员变动，请联系管理员确认后手动处理。",
+				departed, total, ratio*100,
+				len(stats.syncedOpenIDs), total))
+		stats.skippedDeactivate = true
 		return
 	}
 
