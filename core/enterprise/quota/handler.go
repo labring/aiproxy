@@ -68,13 +68,20 @@ func withGroupTokens(openID string, fn func(tokenID int)) {
 }
 
 // syncPolicyToToken updates ALL tokens in the user's group with PeriodQuota/PeriodType from the given policy.
+// When BlockAtTier3 is false, Token PeriodQuota is set to 0 so the token-level hard check
+// does not block requests — the enterprise tier system (CheckQuotaTier) handles graduated
+// throttling instead. When BlockAtTier3 is true, PeriodQuota is synced normally as a
+// defence-in-depth hard limit.
 // When PeriodType changes, it proactively snapshots UsedAmount to PeriodLastUpdateAmount
 // so the new period starts fresh (instead of waiting for lazy reset on next relay request).
 func syncPolicyToToken(openID string, policy *models.QuotaPolicy) {
 	newPeriodType := PolicyPeriodTypeToTokenPeriodType(policy.PeriodType)
 
 	withGroupTokens(openID, func(tokenID int) {
-		periodQuota := policy.PeriodQuota
+		periodQuota := float64(0)
+		if policy.BlockAtTier3 {
+			periodQuota = policy.PeriodQuota
+		}
 		req := model.UpdateTokenRequest{
 			PeriodQuota: &periodQuota,
 			PeriodType:  &newPeriodType,
@@ -297,23 +304,29 @@ func DeletePolicy(c *gin.Context) {
 		return
 	}
 
-	// Find all groups using this policy before deleting
-	var bindings []models.GroupQuotaPolicy
+	// Collect group bindings before deletion (needed for cache invalidation)
+	var groupBindings []models.GroupQuotaPolicy
+	model.DB.Where("quota_policy_id = ?", id).Find(&groupBindings)
 
-	model.DB.Where("quota_policy_id = ?", id).Find(&bindings)
-
-	// Delete associated bindings first
-	if len(bindings) > 0 {
-		model.DB.Where("quota_policy_id = ?", id).Delete(&models.GroupQuotaPolicy{})
-
-		for _, binding := range bindings {
-			_ = InvalidateGroupQuotaPolicy(context.Background(), binding.GroupID)
+	// Cascade-delete all bindings + the policy itself in one transaction
+	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("quota_policy_id = ?", id).Delete(&models.GroupQuotaPolicy{}).Error; err != nil {
+			return err
 		}
-	}
-
-	if err := model.DB.Delete(&models.QuotaPolicy{}, id).Error; err != nil {
+		if err := tx.Where("quota_policy_id = ?", id).Delete(&models.UserQuotaPolicy{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("quota_policy_id = ?", id).Delete(&models.DepartmentQuotaPolicy{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.QuotaPolicy{}, id).Error
+	}); err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	for _, binding := range groupBindings {
+		_ = InvalidateGroupQuotaPolicy(context.Background(), binding.GroupID)
 	}
 
 	middleware.SuccessResponse(c, nil)

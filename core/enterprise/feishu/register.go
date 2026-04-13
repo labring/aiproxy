@@ -495,19 +495,51 @@ func batchResolveEffectivePolicies(users []models.FeishuUser) (map[string]*model
 		}
 	}
 
-	// Batch load department-level policies
+	// Batch load department-level policies with dual ID form resolution.
+	// DepartmentQuotaPolicy may be keyed by department_id or open_department_id,
+	// but user records may store the other form. Cross-reference via feishu_departments
+	// to match both forms (mirrors GetPolicyForUser in cache.go).
 	if len(deptIDSet) > 0 {
 		deptIDs := make([]string, 0, len(deptIDSet))
 		for id := range deptIDSet {
 			deptIDs = append(deptIDs, id)
 		}
 
+		var depts []models.FeishuDepartment
+		model.DB.Where("department_id IN ? OR open_department_id IN ?", deptIDs, deptIDs).Find(&depts)
+
+		allIDForms := make(map[string]struct{}, len(deptIDs)*2)
+		for _, id := range deptIDs {
+			allIDForms[id] = struct{}{}
+		}
+		idFormPeers := make(map[string][]string, len(depts))
+		for _, d := range depts {
+			peers := []string{d.DepartmentID, d.OpenDepartmentID}
+			for _, p := range peers {
+				if p != "" {
+					allIDForms[p] = struct{}{}
+					idFormPeers[p] = peers
+				}
+			}
+		}
+
+		allIDs := make([]string, 0, len(allIDForms))
+		for id := range allIDForms {
+			allIDs = append(allIDs, id)
+		}
+
 		var deptPolicies []models.DepartmentQuotaPolicy
-		model.DB.Preload("QuotaPolicy").Where("department_id IN ?", deptIDs).Find(&deptPolicies)
+		model.DB.Preload("QuotaPolicy").Where("department_id IN ?", allIDs).Find(&deptPolicies)
 
 		for _, dp := range deptPolicies {
-			if dp.QuotaPolicy != nil {
-				deptPolicyMap[dp.DepartmentID] = dp.QuotaPolicy
+			if dp.QuotaPolicy == nil {
+				continue
+			}
+			deptPolicyMap[dp.DepartmentID] = dp.QuotaPolicy
+			for _, peer := range idFormPeers[dp.DepartmentID] {
+				if peer != "" {
+					deptPolicyMap[peer] = dp.QuotaPolicy
+				}
 			}
 		}
 	}
