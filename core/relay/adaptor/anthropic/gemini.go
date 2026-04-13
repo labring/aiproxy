@@ -225,7 +225,10 @@ func GeminiHandler(
 
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return adaptor.DoResponseResult{Usage: claudeResp.Usage.ToOpenAIUsage().ToModelUsage()}, nil
+	return adaptor.DoResponseResult{
+		Usage:      claudeResp.Usage.ToOpenAIUsage().ToModelUsage(),
+		UpstreamID: claudeResp.ID,
+	}, nil
 }
 
 // GeminiStreamHandler handles streaming responses and converts them to Gemini format
@@ -246,6 +249,7 @@ func GeminiStreamHandler(
 	defer cleanup()
 
 	usage := model.Usage{}
+	upstreamID := ""
 
 	streamState := NewGeminiStreamState()
 
@@ -266,6 +270,10 @@ func GeminiStreamHandler(
 			continue
 		}
 
+		if claudeResp.Message != nil && claudeResp.Message.ID != "" && upstreamID == "" {
+			upstreamID = claudeResp.Message.ID
+		}
+
 		// Convert to Gemini stream format
 		geminiResp := streamState.ConvertClaudeStreamToGemini(
 			meta,
@@ -284,7 +292,10 @@ func GeminiStreamHandler(
 		log.Error("error reading stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: upstreamID,
+	}, nil
 }
 
 // GeminiStreamState maintains state during streaming response conversion

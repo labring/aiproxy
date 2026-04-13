@@ -113,6 +113,24 @@ func OpenaiStreamHandler(
 					continue
 				}
 
+				if usage == nil {
+					usage = &relaymodel.ChatUsage{}
+				}
+
+				if response != nil && response.Usage != nil {
+					usage = response.Usage
+				} else if usage.PromptTokens == 0 || usage.TotalTokens == 0 {
+					complateTokens := openai.CountTokenText(
+						responseText.String(),
+						meta.OriginModel,
+					)
+					usage = &relaymodel.ChatUsage{
+						PromptTokens:     int64(meta.RequestUsage.InputTokens),
+						CompletionTokens: complateTokens,
+						TotalTokens:      int64(meta.RequestUsage.InputTokens) + complateTokens,
+					}
+				}
+
 				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
 			}
 
@@ -127,18 +145,7 @@ func OpenaiStreamHandler(
 
 			switch {
 			case response.Usage != nil:
-				if usage == nil {
-					usage = &relaymodel.ChatUsage{}
-				}
-
-				usage.Add(response.Usage)
-
-				if usage.PromptTokens == 0 {
-					usage.PromptTokens = int64(meta.RequestUsage.InputTokens)
-					usage.TotalTokens += int64(meta.RequestUsage.InputTokens)
-				}
-
-				response.Usage = usage
+				usage = response.Usage
 
 				responseText.Reset()
 			case usage == nil:
