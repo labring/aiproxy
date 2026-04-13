@@ -925,7 +925,18 @@
       "policyFilter": "策略筛选",
       "filterByPolicy": "按生效策略筛选",
       "columns": "显示列",
-      "quotaUsage": "额度使用"
+      "quotaUsage": "额度使用",
+      "disabledUsers": "已禁用",
+      "disabledAt": "禁用时间",
+      "status": "状态",
+      "autoDisabled": "自动禁用",
+      "reactivate": "恢复",
+      "reactivateUser": "恢复用户",
+      "reactivateConfirm": "确认恢复用户 {name} 吗？这将恢复其账户访问权限并重新启用其 API Key。",
+      "reactivateSuccess": "用户已恢复，{count} 个 API Key 已重新启用",
+      "reactivateFailed": "恢复用户失败",
+      "noDisabledUsers": "暂无已禁用的用户",
+      "searchDisabledPlaceholder": "搜索已禁用用户"
     },
     "notifications": {
       "title": "通知与告警",
@@ -1790,10 +1801,10 @@
       "importing": "导入中...",
       "exportSuccess": "模型配置导出成功",
       "importSuccess": "成功导入 {{count}} 个模型配置",
-    "importFailed": "导入模型配置失败",
-    "fetchFailed": "获取模型信息失败",
-    "deleted": "模型已被删除或不存在",
-    "noDataToExport": "没有可导出的模型配置",
+      "importFailed": "导入模型配置失败",
+      "fetchFailed": "获取模型信息失败",
+      "deleted": "模型已被删除或不存在",
+      "noDataToExport": "没有可导出的模型配置",
       "invalidFormat": "文件格式无效"
     }
   },

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
-import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter, KeyRound, History, ChevronDown, ChevronRight } from "lucide-react"
+import { Users, RefreshCcw, Shield, Pencil, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2, Clock, Settings2, Filter, KeyRound, History, ChevronDown, ChevronRight, UserX, RotateCcw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { enterpriseApi, type FeishuUser, type FeishuSyncHistory } from "@/api/enterprise"
+import { enterpriseApi, type FeishuUser, type FeishuSyncHistory, type DisabledFeishuUser } from "@/api/enterprise"
 import { formatMs } from "@/lib/enterprise"
 import { toast } from "sonner"
 import { ColumnDef, useReactTable, getCoreRowModel, VisibilityState } from "@tanstack/react-table"
@@ -45,6 +45,209 @@ const COLUMN_KEYS: Array<{ key: string; labelKey: string; alwaysVisible?: boolea
     { key: "created_at", labelKey: "enterprise.users.createdAt", defaultVisible: false },
     { key: "actions", labelKey: "enterprise.users.actions", alwaysVisible: true },
 ]
+
+// Disabled Users Tab (admin only)
+function DisabledUsersTab() {
+    const { t } = useTranslation()
+    const queryClient = useQueryClient()
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
+    const [searchInput, setSearchInput] = useState("")
+    const [keyword, setKeyword] = useState("")
+    const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false)
+    const [selectedUser, setSelectedUser] = useState<DisabledFeishuUser | null>(null)
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchInput(value)
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => {
+            setKeyword(value || "")
+            setPage(1)
+        }, 300)
+    }, [])
+
+    const { data, isLoading } = useQuery({
+        queryKey: ["feishu-disabled-users", page, pageSize, keyword],
+        queryFn: () => enterpriseApi.getDisabledUsers(page, pageSize, keyword),
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+        placeholderData: keepPreviousData,
+    })
+
+    const reactivateMutation = useMutation({
+        mutationFn: (open_id: string) => enterpriseApi.reactivateUser(open_id),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ["feishu-disabled-users"] })
+            queryClient.invalidateQueries({ queryKey: ["feishu-users"] })
+            toast.success(t("enterprise.users.reactivateSuccess", { count: result.tokens_restored }))
+            setReactivateDialogOpen(false)
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || t("enterprise.users.reactivateFailed"))
+        },
+    })
+
+    const handleReactivate = useCallback((user: DisabledFeishuUser) => {
+        setSelectedUser(user)
+        setReactivateDialogOpen(true)
+    }, [])
+
+    const handleReactivateConfirm = useCallback(() => {
+        if (selectedUser) {
+            reactivateMutation.mutate(selectedUser.open_id)
+        }
+    }, [selectedUser, reactivateMutation])
+
+    const columns: ColumnDef<DisabledFeishuUser>[] = useMemo(() => [
+        {
+            accessorKey: "name",
+            header: () => <div className="font-medium">{t("enterprise.users.name")}</div>,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                    {row.original.avatar && (
+                        <img src={row.original.avatar} alt="" className="w-8 h-8 rounded-full opacity-50" />
+                    )}
+                    <div>
+                        <div className="font-medium">{row.original.name}</div>
+                        <div className="text-xs text-muted-foreground">{row.original.email}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            accessorKey: "role",
+            header: () => <div className="font-medium">{t("enterprise.users.role")}</div>,
+            cell: ({ row }) => (
+                <Badge className={roleColors[row.original.role as keyof typeof roleColors]}>
+                    {t(`enterprise.users.roles.${row.original.role}` as never)}
+                </Badge>
+            ),
+        },
+        {
+            accessorKey: "department_id",
+            header: () => <div className="font-medium">{t("enterprise.users.department")}</div>,
+            cell: ({ row }) => {
+                const deptPath = row.original.department_path
+                if (!deptPath || !deptPath.full_path) {
+                    return <span className="text-muted-foreground">-</span>
+                }
+                return (
+                    <div className="text-sm" title={deptPath.full_path}>
+                        <div className="font-medium">{deptPath.level1_name || "-"}</div>
+                        {deptPath.level2_name && !deptPath.level2_name.startsWith('od-') && (
+                            <div className="text-xs text-muted-foreground">{deptPath.level2_name}</div>
+                        )}
+                    </div>
+                )
+            },
+        },
+        {
+            accessorKey: "disabled_at",
+            header: () => <div className="font-medium">{t("enterprise.users.disabledAt")}</div>,
+            cell: ({ row }) => {
+                const disabledAt = row.original.disabled_at
+                if (!disabledAt) return <span className="text-muted-foreground">-</span>
+                return <span className="text-sm">{format(new Date(disabledAt), "yyyy-MM-dd HH:mm")}</span>
+            },
+        },
+        {
+            id: "status",
+            header: () => <div className="font-medium">{t("enterprise.users.status")}</div>,
+            cell: () => (
+                <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
+                    <UserX className="w-3 h-3 mr-1" />
+                    {t("enterprise.users.autoDisabled")}
+                </Badge>
+            ),
+        },
+        {
+            id: "actions",
+            header: () => <div className="text-right font-medium">{t("enterprise.users.actions")}</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-end">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-green-700 hover:text-green-800 hover:bg-green-50"
+                        onClick={() => handleReactivate(row.original)}
+                    >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {t("enterprise.users.reactivate")}
+                    </Button>
+                </div>
+            ),
+        },
+    ], [t, handleReactivate])
+
+    const disabledUsers = data?.users || []
+    const total = data?.total || 0
+
+    const table = useReactTable({
+        data: disabledUsers,
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
+    })
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                    <CardTitle className="flex items-center gap-2">
+                        <UserX className="w-5 h-5 text-orange-500" />
+                        {t("enterprise.users.disabledUsers")}
+                    </CardTitle>
+                    <Input
+                        placeholder={t("enterprise.users.searchDisabledPlaceholder")}
+                        value={searchInput}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                        className="w-64"
+                    />
+                </div>
+            </CardHeader>
+            <CardContent>
+                {total === 0 && !isLoading ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                        <UserX className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p>{t("enterprise.users.noDisabledUsers")}</p>
+                    </div>
+                ) : (
+                    <>
+                        <DataTable table={table} columns={columns} isLoading={isLoading && !data} />
+                        <ServerPagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
+                    </>
+                )}
+            </CardContent>
+
+            {/* Reactivate Confirmation Dialog */}
+            <Dialog open={reactivateDialogOpen} onOpenChange={setReactivateDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{t("enterprise.users.reactivateUser")}</DialogTitle>
+                        <DialogDescription>
+                            {t("enterprise.users.reactivateConfirm", { name: selectedUser?.name || "" })}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setReactivateDialogOpen(false)}>
+                            {t("common.cancel")}
+                        </Button>
+                        <Button onClick={handleReactivateConfirm} disabled={reactivateMutation.isPending}>
+                            {reactivateMutation.isPending ? t("common.saving") : t("enterprise.users.reactivate")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </Card>
+    )
+}
 
 // Permission Configuration Tab (admin only)
 function PermissionConfigTab() {
@@ -991,13 +1194,17 @@ export default function UsersPage() {
                 <Tabs defaultValue="users">
                     <TabsList>
                         <TabsTrigger value="users">{t("enterprise.users.userList")}</TabsTrigger>
+                        <TabsTrigger value="disabled">{t("enterprise.users.disabledUsers")}</TabsTrigger>
                         <TabsTrigger value="permissions">{t("enterprise.permissions.title")}</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="permissions">
-                        <PermissionConfigTab />
-                    </TabsContent>
                     <TabsContent value="users" className="space-y-6">
                         {userListContent}
+                    </TabsContent>
+                    <TabsContent value="disabled">
+                        <DisabledUsersTab />
+                    </TabsContent>
+                    <TabsContent value="permissions">
+                        <PermissionConfigTab />
                     </TabsContent>
                 </Tabs>
             )}

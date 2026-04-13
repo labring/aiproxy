@@ -118,6 +118,11 @@ export interface FeishuUsersResponse {
     total: number
 }
 
+export interface DisabledFeishuUser extends FeishuUser {
+    disabled_at: string | null
+    department_path?: DepartmentPath
+}
+
 // Feishu Department types
 export interface FeishuDepartment {
     id: number
@@ -852,6 +857,20 @@ export const enterpriseApi = {
 
     updateFeishuUserRole: (open_id: string, role: string): Promise<void> => {
         return put(`/enterprise/feishu/users/${open_id}/role`, { role })
+    },
+
+    getDisabledUsers: (
+        page?: number,
+        per_page?: number,
+        keyword?: string,
+    ): Promise<{ users: DisabledFeishuUser[]; total: number }> => {
+        return get('/enterprise/feishu/disabled-users', {
+            params: { page, per_page, keyword }
+        })
+    },
+
+    reactivateUser: (open_id: string): Promise<{ tokens_restored: number }> => {
+        return post(`/enterprise/feishu/users/${open_id}/reactivate`, {})
     },
 
     // Department Quota APIs

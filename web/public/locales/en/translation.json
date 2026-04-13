@@ -826,7 +826,18 @@
       "policyFilter": "Policy Filter",
       "filterByPolicy": "Filter by Policy",
       "columns": "Columns",
-      "quotaUsage": "Quota Usage"
+      "quotaUsage": "Quota Usage",
+      "disabledUsers": "Disabled",
+      "disabledAt": "Disabled At",
+      "status": "Status",
+      "autoDisabled": "Auto Disabled",
+      "reactivate": "Reactivate",
+      "reactivateUser": "Reactivate User",
+      "reactivateConfirm": "Confirm reactivating user {name}? This will restore their account access and re-enable their API keys.",
+      "reactivateSuccess": "User reactivated, {count} API key(s) re-enabled",
+      "reactivateFailed": "Failed to reactivate user",
+      "noDisabledUsers": "No disabled users",
+      "searchDisabledPlaceholder": "Search disabled users"
     },
     "quota": {
       "title": "Quota Policy Management",
@@ -1802,10 +1813,10 @@
       "importing": "Importing...",
       "exportSuccess": "Model configs exported successfully",
       "importSuccess": "{{count}} model configs imported successfully",
-    "importFailed": "Failed to import model configs",
-    "fetchFailed": "Failed to fetch model",
-    "deleted": "Model has been deleted or does not exist",
-    "noDataToExport": "No model configs to export",
+      "importFailed": "Failed to import model configs",
+      "fetchFailed": "Failed to fetch model",
+      "deleted": "Model has been deleted or does not exist",
+      "noDataToExport": "No model configs to export",
       "invalidFormat": "Invalid file format"
     }
   },

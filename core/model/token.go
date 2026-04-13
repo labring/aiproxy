@@ -534,31 +534,38 @@ func UpdateTokenStatus(id, status int) (err error) {
 // DisableAllGroupTokens disables all tokens in a group and evicts them from cache.
 // Used when a user is offboarded (e.g., Feishu user deleted) to revoke all API access.
 func DisableAllGroupTokens(groupID string) (int64, error) {
+	return setAllGroupTokenStatus(groupID, TokenStatusEnabled, TokenStatusDisabled)
+}
+
+// EnableAllGroupTokens re-enables all disabled tokens in a group and updates the cache.
+// Used when a previously offboarded user is reactivated (e.g., Feishu user restored).
+func EnableAllGroupTokens(groupID string) (int64, error) {
+	return setAllGroupTokenStatus(groupID, TokenStatusDisabled, TokenStatusEnabled)
+}
+
+func setAllGroupTokenStatus(groupID string, fromStatus, toStatus int) (int64, error) {
 	if groupID == "" {
 		return 0, errors.New("group is empty")
 	}
 
-	// Find all enabled tokens in the group first (need keys for cache invalidation)
 	var tokens []Token
-	DB.Select("key").Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).Find(&tokens)
+	DB.Select("key").Where("group_id = ? AND status = ?", groupID, fromStatus).Find(&tokens)
 
 	if len(tokens) == 0 {
 		return 0, nil
 	}
 
-	// Disable all tokens in one UPDATE
 	result := DB.Model(&Token{}).
-		Where("group_id = ? AND status = ?", groupID, TokenStatusEnabled).
-		Update("status", TokenStatusDisabled)
+		Where("group_id = ? AND status = ?", groupID, fromStatus).
+		Update("status", toStatus)
 
 	if result.Error != nil {
 		return 0, result.Error
 	}
 
-	// Evict disabled tokens from cache
 	for _, t := range tokens {
-		if err := CacheUpdateTokenStatus(t.Key, TokenStatusDisabled); err != nil {
-			log.Error("disable all group tokens: cache evict failed for key " + t.Key + ": " + err.Error())
+		if err := CacheUpdateTokenStatus(t.Key, toStatus); err != nil {
+			log.Error("set all group token status: cache update failed for key " + t.Key + ": " + err.Error())
 		}
 	}
 

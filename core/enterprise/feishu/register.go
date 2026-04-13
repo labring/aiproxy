@@ -54,11 +54,13 @@ func RegisterRoutes(public, admin, enterpriseAuth *gin.RouterGroup, mw *FeishuMi
 		// User management — view requires user_manage_view
 		umView := enterpriseAuth.Group("", mw.UserManageView)
 		umView.GET("/feishu/users", GetFeishuUsers)
+		umView.GET("/feishu/disabled-users", GetDisabledUsers)
 
 		// Sync and role update — requires user_manage_manage + admin role
 		umManage := enterpriseAuth.Group("", mw.UserManageManage)
 		umManage.POST("/feishu/sync", mw.AdminOnly, TriggerSync)
 		umManage.PUT("/feishu/users/:open_id/role", mw.AdminOnly, UpdateUserRole)
+		umManage.POST("/feishu/users/:open_id/reactivate", mw.AdminOnly, ReactivateUser)
 	}
 }
 
@@ -781,4 +783,119 @@ func resolveDeptName(nameMap map[string]string, deptID, storedName string) strin
 	}
 
 	return storedName
+}
+
+// DisabledFeishuUser extends FeishuUser with the deactivation timestamp.
+type DisabledFeishuUser struct {
+	models.FeishuUser
+	DisabledAt     *time.Time      `json:"disabled_at"`
+	DepartmentPath *DepartmentPath `json:"department_path"`
+}
+
+// GetDisabledUsers returns a paginated list of soft-deleted (deactivated) Feishu users.
+func GetDisabledUsers(c *gin.Context) {
+	page, perPage := utils.ParsePageParams(c)
+
+	var users []models.FeishuUser
+	var total int64
+
+	tx := model.DB.Unscoped().Model(&models.FeishuUser{}).Where("deleted_at IS NOT NULL")
+
+	keyword := c.Query("keyword")
+	if keyword != "" {
+		op := common.LikeOp()
+		tx = tx.Where("name "+op+" ? OR email "+op+" ?",
+			"%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	if err := tx.Count(&total).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if total <= 0 {
+		middleware.SuccessResponse(c, gin.H{
+			"users": []DisabledFeishuUser{},
+			"total": 0,
+		})
+		return
+	}
+
+	limit := perPage
+	if limit <= 0 {
+		limit = 20
+	}
+
+	offset := (page - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	if err := tx.Order("deleted_at desc").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	result := make([]DisabledFeishuUser, len(users))
+	for i, u := range users {
+		var deptPath *DepartmentPath
+		if u.DepartmentID != "" {
+			deptPath = GetDepartmentPath(u.DepartmentID)
+		} else {
+			deptPath = &DepartmentPath{}
+		}
+
+		var disabledAt *time.Time
+		if u.DeletedAt.Valid {
+			disabledAt = &u.DeletedAt.Time
+		}
+
+		result[i] = DisabledFeishuUser{
+			FeishuUser:     u,
+			DisabledAt:     disabledAt,
+			DepartmentPath: deptPath,
+		}
+	}
+
+	middleware.SuccessResponse(c, gin.H{
+		"users": result,
+		"total": total,
+	})
+}
+
+// ReactivateUser restores a soft-deleted Feishu user and re-enables their tokens.
+func ReactivateUser(c *gin.Context) {
+	openID := c.Param("open_id")
+	if openID == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "open_id is required")
+		return
+	}
+
+	var user models.FeishuUser
+	if err := model.DB.Unscoped().Where("open_id = ? AND deleted_at IS NOT NULL", openID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			middleware.ErrorResponse(c, http.StatusNotFound, "disabled user not found")
+			return
+		}
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Clear deleted_at to restore the user
+	if err := model.DB.Unscoped().Model(&user).Update("deleted_at", nil).Error; err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Re-enable disabled tokens
+	enabled, err := model.EnableAllGroupTokens(user.GroupID)
+	if err != nil {
+		log.Errorf("reactivate user: failed to re-enable tokens for %s: %v", openID, err)
+	}
+
+	log.Infof("reactivated user %s (%s), re-enabled %d token(s)", user.Name, openID, enabled)
+
+	middleware.SuccessResponse(c, gin.H{
+		"tokens_restored": enabled,
+	})
 }

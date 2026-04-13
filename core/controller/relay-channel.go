@@ -284,7 +284,81 @@ func ignoreChannel(
 	return channels[rand.IntN(len(channels))], nil
 }
 
+// getChannelWithFallback selects a channel by trying each set in availableSet
+// in order. Within a set it first filters by error rate; if all channels in the
+// set are exhausted it retries without the error-rate cap. Only when the current
+// set has NO channels at all does it advance to the next set. This ensures
+// overseas nodes prefer their own channels and only fall back to default when
+// the preferred set cannot serve the model.
 func getChannelWithFallback(
+	cache *model.ModelCaches,
+	availableSet []string,
+	modelName string,
+	mode mode.Mode,
+	errorRates map[int64]float64,
+	ignoreChannelIDs map[int64]struct{},
+) (*model.Channel, []*model.Channel, error) {
+	// Fast path: single set (domestic nodes) — no ordering needed.
+	if len(availableSet) <= 1 {
+		return getChannelFromSingleSet(cache, availableSet, modelName, mode, errorRates, ignoreChannelIDs)
+	}
+
+	// Multi-set path: try each set in priority order.
+	for _, set := range availableSet {
+		singleSet := []string{set}
+
+		channel, migratedChannels, err := getRandomChannel(
+			cache,
+			singleSet,
+			modelName,
+			mode,
+			errorRates,
+			maxRetryErrorRate,
+			ignoreChannelIDs,
+		)
+		if err == nil {
+			return channel, migratedChannels, nil
+		}
+
+		// No channels registered for this model in this set — try next set.
+		if errors.Is(err, ErrChannelsNotFound) {
+			continue
+		}
+
+		// Channels exist but all exceeded error threshold — retry without
+		// the error-rate cap but still respecting bans (ignoreChannelIDs).
+		// Unlike the single-set fast path which drops bans as a last resort,
+		// here we keep bans so that a fully-banned set falls through to the
+		// next set rather than resurrecting a banned channel.
+		if errors.Is(err, ErrChannelsExhausted) {
+			channel, migratedChannels, err = getRandomChannel(
+				cache,
+				singleSet,
+				modelName,
+				mode,
+				errorRates,
+				0,
+				ignoreChannelIDs,
+			)
+			if err == nil {
+				return channel, migratedChannels, nil
+			}
+
+			// Still exhausted (all banned) — fall through to next set.
+			continue
+		}
+
+		// Unexpected error — return immediately.
+		return nil, migratedChannels, err
+	}
+
+	return nil, nil, ErrChannelsNotFound
+}
+
+// getChannelFromSingleSet is the original two-phase selection for a single set
+// (or when availableSet is empty). Kept as a fast path to avoid per-set loop
+// overhead for the common domestic-node case.
+func getChannelFromSingleSet(
 	cache *model.ModelCaches,
 	availableSet []string,
 	modelName string,

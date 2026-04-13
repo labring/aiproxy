@@ -5,6 +5,7 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	gosync "sync"
@@ -50,6 +51,82 @@ var (
 	lastSyncStatus SyncStatus
 	syncStatusMu   gosync.Mutex
 )
+
+// feishuUserFields holds the common fields for upserting a Feishu user record.
+type feishuUserFields struct {
+	OpenID        string
+	UnionID       string
+	UserID        string
+	TenantID      string
+	Name          string
+	Email         string
+	Avatar        string
+	DepartmentID  string
+	DepartmentIDs string
+	DeptPath      *DepartmentPath
+	GroupID       string
+}
+
+// upsertFeishuUser creates or updates a Feishu user record using Unscoped
+// to correctly handle soft-deleted rows. Returns whether the user was
+// reactivated (restored from soft-delete).
+func upsertFeishuUser(db *gorm.DB, f feishuUserFields) (reactivated bool, err error) {
+	var existing models.FeishuUser
+	findErr := db.Unscoped().Where("open_id = ?", f.OpenID).First(&existing).Error
+
+	switch {
+	case findErr == nil:
+		wasDeleted := existing.DeletedAt.Valid
+		updates := map[string]interface{}{
+			"deleted_at":       nil,
+			"union_id":         f.UnionID,
+			"user_id":          f.UserID,
+			"tenant_id":        f.TenantID,
+			"name":             f.Name,
+			"email":            f.Email,
+			"avatar":           f.Avatar,
+			"department_id":    f.DepartmentID,
+			"department_ids":   f.DepartmentIDs,
+			"level1_dept_id":   f.DeptPath.Level1ID,
+			"level1_dept_name": f.DeptPath.Level1Name,
+			"level2_dept_id":   f.DeptPath.Level2ID,
+			"level2_dept_name": f.DeptPath.Level2Name,
+			"dept_full_path":   f.DeptPath.FullPath,
+			"group_id":         f.GroupID,
+			"status":           1,
+		}
+		if result := db.Unscoped().Model(&existing).Updates(updates); result.Error != nil {
+			return false, result.Error
+		}
+		return wasDeleted, nil
+
+	case !errors.Is(findErr, gorm.ErrRecordNotFound):
+		return false, findErr
+	}
+
+	newUser := models.FeishuUser{
+		OpenID:         f.OpenID,
+		UnionID:        f.UnionID,
+		UserID:         f.UserID,
+		TenantID:       f.TenantID,
+		Name:           f.Name,
+		Email:          f.Email,
+		Avatar:         f.Avatar,
+		DepartmentID:   f.DepartmentID,
+		DepartmentIDs:  f.DepartmentIDs,
+		Level1DeptID:   f.DeptPath.Level1ID,
+		Level1DeptName: f.DeptPath.Level1Name,
+		Level2DeptID:   f.DeptPath.Level2ID,
+		Level2DeptName: f.DeptPath.Level2Name,
+		DeptFullPath:   f.DeptPath.FullPath,
+		GroupID:        f.GroupID,
+		Status:         1,
+	}
+	if result := db.Create(&newUser); result.Error != nil {
+		return false, result.Error
+	}
+	return false, nil
+}
 
 // GetSyncStatus returns the current sync status from in-memory cache.
 // Falls back to DB on first call (e.g. after service restart).
@@ -282,50 +359,31 @@ func handleUserEvent(data json.RawMessage, tenantKey string) {
 	// Compute department hierarchy
 	deptPath := GetDepartmentPath(deptID)
 
-	assignFields := models.FeishuUser{
-		UnionID:        obj.UnionID,
-		UserID:         obj.UserID,
-		TenantID:       tenantKey,
-		Name:           obj.Name,
-		Email:          obj.Email,
-		Avatar:         avatar,
-		DepartmentID:   deptID,
-		DepartmentIDs:  deptIDsJSON,
-		Level1DeptID:   deptPath.Level1ID,
-		Level1DeptName: deptPath.Level1Name,
-		Level2DeptID:   deptPath.Level2ID,
-		Level2DeptName: deptPath.Level2Name,
-		DeptFullPath:   deptPath.FullPath,
-		GroupID:        groupID,
-		Status:         1,
-	}
-
-	feishuUser := models.FeishuUser{
-		OpenID:         obj.OpenID,
-		UnionID:        obj.UnionID,
-		UserID:         obj.UserID,
-		TenantID:       tenantKey,
-		Name:           obj.Name,
-		Email:          obj.Email,
-		Avatar:         avatar,
-		DepartmentID:   deptID,
-		DepartmentIDs:  deptIDsJSON,
-		Level1DeptID:   deptPath.Level1ID,
-		Level1DeptName: deptPath.Level1Name,
-		Level2DeptID:   deptPath.Level2ID,
-		Level2DeptName: deptPath.Level2Name,
-		DeptFullPath:   deptPath.FullPath,
-		GroupID:        groupID,
-		Status:         1,
-	}
-
-	result := model.DB.
-		Where("open_id = ?", obj.OpenID).
-		Assign(assignFields).
-		FirstOrCreate(&feishuUser)
-	if result.Error != nil {
-		log.Errorf("feishu webhook: failed to upsert user %s: %v", obj.OpenID, result.Error)
+	reactivated, err := upsertFeishuUser(model.DB, feishuUserFields{
+		OpenID:        obj.OpenID,
+		UnionID:       obj.UnionID,
+		UserID:        obj.UserID,
+		TenantID:      tenantKey,
+		Name:          obj.Name,
+		Email:         obj.Email,
+		Avatar:        avatar,
+		DepartmentID:  deptID,
+		DepartmentIDs: deptIDsJSON,
+		DeptPath:      deptPath,
+		GroupID:       groupID,
+	})
+	if err != nil {
+		log.Errorf("feishu webhook: failed to upsert user %s: %v", obj.OpenID, err)
 		return
+	}
+
+	if reactivated {
+		enabled, enableErr := model.EnableAllGroupTokens(groupID)
+		if enableErr != nil {
+			log.Errorf("feishu webhook: failed to re-enable tokens for reactivated user %s: %v", obj.OpenID, enableErr)
+		} else if enabled > 0 {
+			log.Infof("feishu webhook: reactivated user %s (%s), re-enabled %d token(s)", obj.Name, obj.OpenID, enabled)
+		}
 	}
 
 	// Ensure the group exists, update name on conflict
@@ -726,56 +784,31 @@ func syncDepartmentUsers(ctx context.Context, db *gorm.DB, departmentID string, 
 		// Compute department hierarchy
 		deptPath := GetDepartmentPath(userDeptID)
 
-		assignFields := models.FeishuUser{
-			UnionID:        u.UnionID,
-			UserID:         u.UserID,
-			TenantID:       tenantInfo.TenantKey,
-			Name:           u.Name,
-			Email:          u.Email,
-			Avatar:         u.Avatar,
-			DepartmentID:   userDeptID,
-			DepartmentIDs:  deptIDsJSON,
-			Level1DeptID:   deptPath.Level1ID,
-			Level1DeptName: deptPath.Level1Name,
-			Level2DeptID:   deptPath.Level2ID,
-			Level2DeptName: deptPath.Level2Name,
-			DeptFullPath:   deptPath.FullPath,
-			GroupID:        groupID,
-			Status:         1,
-		}
-
-		feishuUser := models.FeishuUser{
-			OpenID:         u.OpenID,
-			UnionID:        u.UnionID,
-			UserID:         u.UserID,
-			TenantID:       tenantInfo.TenantKey,
-			Name:           u.Name,
-			Email:          u.Email,
-			Avatar:         u.Avatar,
-			DepartmentID:   userDeptID,
-			DepartmentIDs:  deptIDsJSON,
-			Level1DeptID:   deptPath.Level1ID,
-			Level1DeptName: deptPath.Level1Name,
-			Level2DeptID:   deptPath.Level2ID,
-			Level2DeptName: deptPath.Level2Name,
-			DeptFullPath:   deptPath.FullPath,
-			GroupID:        groupID,
-			Status:         1,
-		}
-
-		result := db.
-			Where("open_id = ?", u.OpenID).
-			Assign(assignFields).
-			FirstOrCreate(&feishuUser)
-		if result.Error != nil {
-			log.Errorf("feishu sync: failed to upsert user %s: %v", u.OpenID, result.Error)
-
+		reactivated, upsertErr := upsertFeishuUser(db, feishuUserFields{
+			OpenID:        u.OpenID,
+			UnionID:       u.UnionID,
+			UserID:        u.UserID,
+			TenantID:      tenantInfo.TenantKey,
+			Name:          u.Name,
+			Email:         u.Email,
+			Avatar:        u.Avatar,
+			DepartmentID:  userDeptID,
+			DepartmentIDs: deptIDsJSON,
+			DeptPath:      deptPath,
+			GroupID:       groupID,
+		})
+		if upsertErr != nil {
+			log.Errorf("feishu sync: failed to upsert user %s: %v", u.OpenID, upsertErr)
 			continue
 		}
 
-		// Force-update tenant_id using map (struct Assign skips zero-value fields for existing records)
-		if tenantInfo.TenantKey != "" && feishuUser.TenantID != tenantInfo.TenantKey {
-			db.Model(&feishuUser).Update("tenant_id", tenantInfo.TenantKey)
+		if reactivated {
+			enabled, enableErr := model.EnableAllGroupTokens(groupID)
+			if enableErr != nil {
+				log.Errorf("feishu sync: failed to re-enable tokens for reactivated user %s: %v", u.OpenID, enableErr)
+			} else if enabled > 0 {
+				log.Infof("feishu sync: reactivated user %s (%s), re-enabled %d token(s)", u.Name, u.OpenID, enabled)
+			}
 		}
 
 		// Ensure group exists, update name on conflict
