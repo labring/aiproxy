@@ -3300,7 +3300,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Order",
+                        "description": "Sort order for created_at, supports desc or asc",
                         "name": "order",
                         "in": "query"
                     },
@@ -3354,7 +3354,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum exported rows, default 1000, max 10000",
+                        "description": "Maximum exported rows; zero or negative means unlimited",
                         "name": "max_entries",
                         "in": "query"
                     },
@@ -3365,9 +3365,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "description": "Chunk size in hours, default 3, min 1, max 24",
-                        "name": "granularity_hours",
+                        "type": "string",
+                        "description": "Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h",
+                        "name": "chunk_interval",
                         "in": "query"
                     }
                 ],
@@ -3901,7 +3901,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Order",
+                        "description": "Sort order for created_at, supports desc or asc",
                         "name": "order",
                         "in": "query"
                     },
@@ -3955,14 +3955,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum exported rows, default 1000, max 10000",
+                        "description": "Maximum exported rows; zero or negative means unlimited",
                         "name": "max_entries",
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "description": "Chunk size in hours, default 3, min 1, max 24",
-                        "name": "granularity_hours",
+                        "type": "string",
+                        "description": "Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h",
+                        "name": "chunk_interval",
                         "in": "query"
                     }
                 ],

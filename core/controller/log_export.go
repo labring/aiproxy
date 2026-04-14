@@ -20,33 +20,33 @@ import (
 )
 
 const (
-	logExportMaxSpan            = 30 * 24 * time.Hour
-	defaultLogExportGranularity = 3
-	minLogExportGranularity     = 1
-	maxLogExportGranularity     = 24
+	logExportMaxSpan              = 30 * 24 * time.Hour
+	defaultLogExportChunkInterval = 30 * time.Minute
+	minLogExportChunkInterval     = 10 * time.Minute
+	maxLogExportChunkInterval     = 4 * time.Hour
 )
 
 type logExportParams struct {
-	timezone         string
-	location         *time.Location
-	maxEntries       int
-	includeCh        bool
-	granularityHours int
-	startTime        time.Time
-	endTime          time.Time
-	group            string
-	tokenName        string
-	modelName        string
-	channelID        int
-	tokenID          int
-	order            string
-	requestID        string
-	upstreamID       string
-	codeType         string
-	code             int
-	includeDetail    bool
-	ip               string
-	user             string
+	timezone      string
+	location      *time.Location
+	maxEntries    int
+	includeCh     bool
+	chunkInterval time.Duration
+	startTime     time.Time
+	endTime       time.Time
+	group         string
+	tokenName     string
+	modelName     string
+	channelID     int
+	tokenID       int
+	order         string
+	requestID     string
+	upstreamID    string
+	codeType      string
+	code          int
+	includeDetail bool
+	ip            string
+	user          string
 }
 
 func parseLogExportParams(c *gin.Context) (logExportParams, error) {
@@ -69,43 +69,46 @@ func parseLogExportParams(c *gin.Context) (logExportParams, error) {
 	includeChannel, _ := strconv.ParseBool(c.Query("include_channel"))
 	includeDetail, _ := strconv.ParseBool(c.Query("include_detail"))
 
-	granularityHours := defaultLogExportGranularity
-	if raw := c.Query("granularity_hours"); raw != "" {
-		granularityHours, err = strconv.Atoi(raw)
+	chunkInterval := defaultLogExportChunkInterval
+	if raw := c.Query("chunk_interval"); raw != "" {
+		chunkInterval, err = time.ParseDuration(raw)
 		if err != nil {
-			return logExportParams{}, errors.New("granularity_hours must be an integer")
+			return logExportParams{}, errors.New(
+				"chunk_interval must be a valid duration such as 30m or 1h",
+			)
 		}
 	}
 
-	if granularityHours < minLogExportGranularity || granularityHours > maxLogExportGranularity {
-		return logExportParams{}, fmt.Errorf(
-			"granularity_hours must be between %d and %d",
-			minLogExportGranularity,
-			maxLogExportGranularity,
-		)
+	if chunkInterval < minLogExportChunkInterval || chunkInterval > maxLogExportChunkInterval {
+		return logExportParams{}, errors.New("chunk_interval must be between 10m and 4h")
+	}
+
+	order := c.Query("order")
+	if order != "" && order != "desc" && order != "asc" {
+		return logExportParams{}, errors.New("order must be asc or desc")
 	}
 
 	return logExportParams{
-		timezone:         timezone,
-		location:         location,
-		maxEntries:       model.NormalizeLogExportLimit(maxEntries),
-		includeCh:        includeChannel,
-		granularityHours: granularityHours,
-		startTime:        startTime,
-		endTime:          endTime,
-		group:            params.group,
-		tokenName:        params.tokenName,
-		modelName:        params.modelName,
-		channelID:        params.channelID,
-		tokenID:          params.tokenID,
-		order:            params.order,
-		requestID:        params.requestID,
-		upstreamID:       params.upstreamID,
-		codeType:         params.codeType,
-		code:             params.code,
-		includeDetail:    includeDetail,
-		ip:               params.ip,
-		user:             params.user,
+		timezone:      timezone,
+		location:      location,
+		maxEntries:    maxEntries,
+		includeCh:     includeChannel,
+		chunkInterval: chunkInterval,
+		startTime:     startTime,
+		endTime:       endTime,
+		group:         params.group,
+		tokenName:     params.tokenName,
+		modelName:     params.modelName,
+		channelID:     params.channelID,
+		tokenID:       params.tokenID,
+		order:         order,
+		requestID:     params.requestID,
+		upstreamID:    params.upstreamID,
+		codeType:      params.codeType,
+		code:          params.code,
+		includeDetail: includeDetail,
+		ip:            params.ip,
+		user:          params.user,
 	}, nil
 }
 
@@ -116,21 +119,21 @@ func parseLogExportParams(c *gin.Context) (logExportParams, error) {
 //	@Tags			logs
 //	@Produce		text/csv
 //	@Security		ApiKeyAuth
-//	@Param			start_timestamp		query	int		false	"Start timestamp, max span 30 days"
-//	@Param			end_timestamp		query	int		false	"End timestamp, max span 30 days"
-//	@Param			model_name			query	string	false	"Model name"
-//	@Param			channel				query	int		false	"Channel ID"
-//	@Param			order				query	string	false	"Order"
-//	@Param			request_id			query	string	false	"Request ID"
-//	@Param			upstream_id			query	string	false	"Upstream ID"
-//	@Param			code_type			query	string	false	"Status code type"
-//	@Param			code				query	int		false	"Status code"
-//	@Param			include_detail		query	bool	false	"Include request and response detail, default false"
-//	@Param			ip					query	string	false	"IP"
-//	@Param			user				query	string	false	"User"
-//	@Param			timezone			query	string	false	"Timezone, default is Local"
-//	@Param			max_entries			query	int		false	"Maximum exported rows, default 1000, max 10000"
-//	@Param			granularity_hours	query	int		false	"Chunk size in hours, default 3, min 1, max 24"
+//	@Param			start_timestamp	query	int		false	"Start timestamp, max span 30 days"
+//	@Param			end_timestamp	query	int		false	"End timestamp, max span 30 days"
+//	@Param			model_name		query	string	false	"Model name"
+//	@Param			channel			query	int		false	"Channel ID"
+//	@Param			order			query	string	false	"Sort order for created_at, supports desc or asc"
+//	@Param			request_id		query	string	false	"Request ID"
+//	@Param			upstream_id		query	string	false	"Upstream ID"
+//	@Param			code_type		query	string	false	"Status code type"
+//	@Param			code			query	int		false	"Status code"
+//	@Param			include_detail	query	bool	false	"Include request and response detail, default false"
+//	@Param			ip				query	string	false	"IP"
+//	@Param			user			query	string	false	"User"
+//	@Param			timezone		query	string	false	"Timezone, default is Local"
+//	@Param			max_entries		query	int		false	"Maximum exported rows; zero or negative means unlimited"
+//	@Param			chunk_interval	query	string	false	"Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h"
 //	@Router			/api/logs/export [get]
 func ExportLogs(c *gin.Context) {
 	params, err := parseLogExportParams(c)
@@ -153,7 +156,7 @@ func ExportLogs(c *gin.Context) {
 				params.requestID,
 				params.upstreamID,
 				params.channelID,
-				params.order,
+				normalizeLogExportModelOrder(params.order),
 				model.CodeType(params.codeType),
 				params.code,
 				params.includeDetail,
@@ -172,24 +175,24 @@ func ExportLogs(c *gin.Context) {
 //	@Tags			log
 //	@Produce		text/csv
 //	@Security		ApiKeyAuth
-//	@Param			group				path	string	true	"Group name"
-//	@Param			start_timestamp		query	int		false	"Start timestamp, max span 30 days"
-//	@Param			end_timestamp		query	int		false	"End timestamp, max span 30 days"
-//	@Param			model_name			query	string	false	"Model name"
-//	@Param			token_id			query	int		false	"Token ID"
-//	@Param			token_name			query	string	false	"Token name"
-//	@Param			order				query	string	false	"Order"
-//	@Param			request_id			query	string	false	"Request ID"
-//	@Param			upstream_id			query	string	false	"Upstream ID"
-//	@Param			code_type			query	string	false	"Status code type"
-//	@Param			code				query	int		false	"Status code"
-//	@Param			include_detail		query	bool	false	"Include request and response detail, default false"
-//	@Param			ip					query	string	false	"IP"
-//	@Param			user				query	string	false	"User"
-//	@Param			timezone			query	string	false	"Timezone, default is Local"
-//	@Param			max_entries			query	int		false	"Maximum exported rows, default 1000, max 10000"
-//	@Param			include_channel		query	bool	false	"Include channel column, default false"
-//	@Param			granularity_hours	query	int		false	"Chunk size in hours, default 3, min 1, max 24"
+//	@Param			group			path	string	true	"Group name"
+//	@Param			start_timestamp	query	int		false	"Start timestamp, max span 30 days"
+//	@Param			end_timestamp	query	int		false	"End timestamp, max span 30 days"
+//	@Param			model_name		query	string	false	"Model name"
+//	@Param			token_id		query	int		false	"Token ID"
+//	@Param			token_name		query	string	false	"Token name"
+//	@Param			order			query	string	false	"Sort order for created_at, supports desc or asc"
+//	@Param			request_id		query	string	false	"Request ID"
+//	@Param			upstream_id		query	string	false	"Upstream ID"
+//	@Param			code_type		query	string	false	"Status code type"
+//	@Param			code			query	int		false	"Status code"
+//	@Param			include_detail	query	bool	false	"Include request and response detail, default false"
+//	@Param			ip				query	string	false	"IP"
+//	@Param			user			query	string	false	"User"
+//	@Param			timezone		query	string	false	"Timezone, default is Local"
+//	@Param			max_entries		query	int		false	"Maximum exported rows; zero or negative means unlimited"
+//	@Param			include_channel	query	bool	false	"Include channel column, default false"
+//	@Param			chunk_interval	query	string	false	"Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h"
 //	@Router			/api/log/{group}/export [get]
 func ExportGroupLogs(c *gin.Context) {
 	group := c.Param("group")
@@ -220,7 +223,7 @@ func ExportGroupLogs(c *gin.Context) {
 				params.upstreamID,
 				params.tokenID,
 				params.tokenName,
-				params.order,
+				normalizeLogExportModelOrder(params.order),
 				model.CodeType(params.codeType),
 				params.code,
 				params.includeDetail,
@@ -274,11 +277,12 @@ func streamCSV(
 	flusher.Flush()
 
 	totalWritten := 0
-	chunkDuration := time.Duration(params.granularityHours) * time.Hour
+	unlimitedEntries := params.maxEntries <= 0
+	chunkDuration := params.chunkInterval
 	descending := !isAscendingLogExportOrder(params.order)
 	endExclusive := params.endTime.Add(time.Nanosecond)
 
-	for totalWritten < params.maxEntries {
+	for unlimitedEntries || totalWritten < params.maxEntries {
 		chunkStart, chunkEndExclusive, done := nextLogExportChunk(
 			params.startTime,
 			endExclusive,
@@ -289,7 +293,10 @@ func streamCSV(
 			break
 		}
 
-		remaining := params.maxEntries - totalWritten
+		remaining := -1
+		if !unlimitedEntries {
+			remaining = params.maxEntries - totalWritten
+		}
 
 		logs, err := fetch(chunkStart, chunkEndExclusive, remaining)
 		if err != nil {
@@ -307,7 +314,7 @@ func streamCSV(
 			}
 
 			totalWritten++
-			if totalWritten >= params.maxEntries {
+			if !unlimitedEntries && totalWritten >= params.maxEntries {
 				break
 			}
 		}
@@ -326,7 +333,7 @@ func streamCSV(
 
 		flusher.Flush()
 
-		if totalWritten >= params.maxEntries {
+		if !unlimitedEntries && totalWritten >= params.maxEntries {
 			break
 		}
 
@@ -368,13 +375,15 @@ func nextLogExportChunk(
 }
 
 func isAscendingLogExportOrder(order string) bool {
-	prefix, suffix, _ := strings.Cut(order, "-")
-	switch prefix {
-	case "request_at", "id":
-		return suffix == "asc"
-	default:
-		return false
+	return order == "asc"
+}
+
+func normalizeLogExportModelOrder(order string) string {
+	if order == "asc" {
+		return "created_at-asc"
 	}
+
+	return "created_at-desc"
 }
 
 func buildLogExportCSV(

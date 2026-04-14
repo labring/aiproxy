@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 
 import { useLogs } from '@/feature/log/hooks'
+import { LogExportDialog } from '@/feature/log/components/LogExportDialog'
 import { LogFilters } from '@/feature/log/components/LogFilters'
 import { LogTable } from '@/feature/log/components/LogTable'
 import { GroupDialog } from '@/feature/group/components/GroupDialog'
@@ -65,13 +66,22 @@ export default function LogPage() {
     return (
         <div className="h-full flex flex-col">
             <div className="flex-shrink-0 p-6 pb-2">
-                <LogFilters
-                    onFiltersChange={handleFiltersChange}
-                    loading={isLoading}
-                    availableModels={logData?.models}
-                    availableTokenNames={logData?.token_names}
-                    availableChannels={logData?.channels}
-                />
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-end">
+                        <LogExportDialog
+                            scope="global"
+                            currentFilters={filters}
+                        />
+                    </div>
+
+                    <LogFilters
+                        onFiltersChange={handleFiltersChange}
+                        loading={isLoading}
+                        availableModels={logData?.models}
+                        availableTokenNames={logData?.token_names}
+                        availableChannels={logData?.channels}
+                    />
+                </div>
 
                 {error && (
                     <div className="mt-6">

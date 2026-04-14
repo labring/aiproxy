@@ -1428,15 +1428,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
+        type: integer
+      status_500_count:
         type: integer
       status_5xx_count:
         type: integer
       status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -1623,15 +1623,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_4xx_count:
-        type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
         type: integer
+      status_4xx_count:
+        type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -5416,7 +5416,7 @@ paths:
         in: query
         name: token_name
         type: string
-      - description: Order
+      - description: Sort order for created_at, supports desc or asc
         in: query
         name: order
         type: string
@@ -5452,7 +5452,7 @@ paths:
         in: query
         name: timezone
         type: string
-      - description: Maximum exported rows, default 1000, max 10000
+      - description: Maximum exported rows; zero or negative means unlimited
         in: query
         name: max_entries
         type: integer
@@ -5460,10 +5460,11 @@ paths:
         in: query
         name: include_channel
         type: boolean
-      - description: Chunk size in hours, default 3, min 1, max 24
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
         in: query
-        name: granularity_hours
-        type: integer
+        name: chunk_interval
+        type: string
       produces:
       - text/csv
       responses: {}
@@ -5790,7 +5791,7 @@ paths:
         in: query
         name: channel
         type: integer
-      - description: Order
+      - description: Sort order for created_at, supports desc or asc
         in: query
         name: order
         type: string
@@ -5826,14 +5827,15 @@ paths:
         in: query
         name: timezone
         type: string
-      - description: Maximum exported rows, default 1000, max 10000
+      - description: Maximum exported rows; zero or negative means unlimited
         in: query
         name: max_entries
         type: integer
-      - description: Chunk size in hours, default 3, min 1, max 24
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
         in: query
-        name: granularity_hours
-        type: integer
+        name: chunk_interval
+        type: string
       produces:
       - text/csv
       responses: {}

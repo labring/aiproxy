@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logApi } from '@/api/log'
+import { LogExportDialog } from '@/feature/log/components/LogExportDialog'
 import { LogTable } from '@/feature/log/components/LogTable'
 import { LogFilters } from '@/feature/log/components/LogFilters'
 import type { LogFilters as LogFiltersType } from '@/types/log'
@@ -52,15 +53,25 @@ export function GroupLogsTab({ groupId, initialTokenName }: GroupLogsTabProps) {
     return (
         <div className="flex flex-col h-full gap-2">
             <div className="flex-shrink-0">
-                <LogFilters
-                    onFiltersChange={handleFiltersChange}
-                    loading={isLoading}
-                    availableModels={data?.models}
-                    availableTokenNames={data?.token_names}
-                    availableChannels={data?.channels}
-                    tokenNameFirst
-                    defaultTokenName={initialTokenName}
-                />
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-end">
+                        <LogExportDialog
+                            scope="group"
+                            groupId={groupId}
+                            currentFilters={filters}
+                        />
+                    </div>
+
+                    <LogFilters
+                        onFiltersChange={handleFiltersChange}
+                        loading={isLoading}
+                        availableModels={data?.models}
+                        availableTokenNames={data?.token_names}
+                        availableChannels={data?.channels}
+                        tokenNameFirst
+                        defaultTokenName={initialTokenName}
+                    />
+                </div>
             </div>
             <div className="flex-1 min-h-0">
                 <LogTable

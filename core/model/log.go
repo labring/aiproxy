@@ -399,7 +399,7 @@ func RecordConsumeLog(
 func getLogOrder(order string) string {
 	prefix, suffix, _ := strings.Cut(order, "-")
 	switch prefix {
-	case "request_at", "id":
+	case "created_at", "request_at", "id":
 		switch suffix {
 		case "asc":
 			return prefix + " asc"
@@ -429,22 +429,6 @@ type GetLogsResult struct {
 type GetGroupLogsResult struct {
 	GetLogsResult
 	TokenNames []string `json:"token_names"`
-}
-
-const (
-	DefaultLogExportLimit = 1000
-	MaxLogExportLimit     = 10000
-)
-
-func NormalizeLogExportLimit(limit int) int {
-	switch {
-	case limit <= 0:
-		return DefaultLogExportLimit
-	case limit > MaxLogExportLimit:
-		return MaxLogExportLimit
-	default:
-		return limit
-	}
 }
 
 func buildGetLogsQuery(
@@ -802,10 +786,12 @@ func exportLogs(
 		query = query.Preload("RequestDetail")
 	}
 
-	return logs, query.
-		Order(getLogOrder(order)).
-		Limit(NormalizeLogExportLimit(maxEntries)).
-		Find(&logs).Error
+	query = query.Order(getLogOrder(order))
+	if maxEntries > 0 {
+		query = query.Limit(maxEntries)
+	}
+
+	return logs, query.Find(&logs).Error
 }
 
 func exportLogsRange(
@@ -856,10 +842,12 @@ func exportLogsRange(
 		query = query.Preload("RequestDetail")
 	}
 
-	return logs, query.
-		Order(getLogOrder(order)).
-		Limit(NormalizeLogExportLimit(maxEntries)).
-		Find(&logs).Error
+	query = query.Order(getLogOrder(order))
+	if maxEntries > 0 {
+		query = query.Limit(maxEntries)
+	}
+
+	return logs, query.Find(&logs).Error
 }
 
 func ExportLogs(

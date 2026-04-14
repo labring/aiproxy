@@ -151,14 +151,14 @@ func TestParseLogExportParamsLimitsTimeRangeToThirtyDays(t *testing.T) {
 	}
 }
 
-func TestParseLogExportParamsParsesGranularityHours(t *testing.T) {
+func TestParseLogExportParamsParsesChunkInterval(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = &http.Request{
 		URL: &url.URL{
-			RawQuery: "granularity_hours=6",
+			RawQuery: "chunk_interval=1h30m",
 		},
 	}
 
@@ -167,12 +167,12 @@ func TestParseLogExportParamsParsesGranularityHours(t *testing.T) {
 		t.Fatalf("parse params: %v", err)
 	}
 
-	if params.granularityHours != 6 {
-		t.Fatalf("expected granularity_hours to be 6, got %d", params.granularityHours)
+	if params.chunkInterval != 90*time.Minute {
+		t.Fatalf("expected chunk_interval to be 90m, got %s", params.chunkInterval)
 	}
 }
 
-func TestParseLogExportParamsDefaultGranularityIsThreeHours(t *testing.T) {
+func TestParseLogExportParamsDefaultChunkIntervalIsThirtyMinutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
@@ -186,25 +186,59 @@ func TestParseLogExportParamsDefaultGranularityIsThreeHours(t *testing.T) {
 		t.Fatalf("parse params: %v", err)
 	}
 
-	if params.granularityHours != 3 {
-		t.Fatalf("expected default granularity_hours to be 3, got %d", params.granularityHours)
+	if params.chunkInterval != 30*time.Minute {
+		t.Fatalf("expected default chunk_interval to be 30m, got %s", params.chunkInterval)
 	}
 }
 
-func TestParseLogExportParamsRejectsInvalidGranularityHours(t *testing.T) {
+func TestParseLogExportParamsRejectsInvalidChunkInterval(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = &http.Request{
 		URL: &url.URL{
-			RawQuery: "granularity_hours=25",
+			RawQuery: "chunk_interval=abc",
 		},
 	}
 
 	_, err := parseLogExportParams(c)
 	if err == nil {
-		t.Fatal("expected invalid granularity_hours to return error")
+		t.Fatal("expected invalid chunk_interval to return error")
+	}
+}
+
+func TestParseLogExportParamsRejectsTooSmallChunkInterval(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "chunk_interval=5m",
+		},
+	}
+
+	_, err := parseLogExportParams(c)
+	if err == nil {
+		t.Fatal("expected too small chunk_interval to return error")
+	}
+}
+
+func TestParseLogExportParamsRejectsTooLargeChunkInterval(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "chunk_interval=5h",
+		},
+	}
+
+	_, err := parseLogExportParams(c)
+	if err == nil {
+		t.Fatal("expected too large chunk_interval to return error")
 	}
 }
 
@@ -226,5 +260,85 @@ func TestParseLogExportParamsUsesIncludeDetail(t *testing.T) {
 
 	if !params.includeDetail {
 		t.Fatal("expected include_detail=true to enable detail export")
+	}
+}
+
+func TestParseLogExportParamsAllowsNegativeMaxEntriesAsUnlimited(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "max_entries=-1",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if params.maxEntries != -1 {
+		t.Fatalf("expected negative max_entries to remain unlimited, got %d", params.maxEntries)
+	}
+}
+
+func TestParseLogExportParamsAllowsZeroMaxEntriesAsUnlimited(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "max_entries=0",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if params.maxEntries != 0 {
+		t.Fatalf("expected zero max_entries to remain unlimited, got %d", params.maxEntries)
+	}
+}
+
+func TestParseLogExportParamsAllowsAscOrder(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "order=asc",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if params.order != "asc" {
+		t.Fatalf("expected order to be asc, got %q", params.order)
+	}
+}
+
+func TestParseLogExportParamsRejectsUnsupportedOrder(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "order=request_at-desc",
+		},
+	}
+
+	_, err := parseLogExportParams(c)
+	if err == nil {
+		t.Fatal("expected unsupported order to return error")
 	}
 }
