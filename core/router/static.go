@@ -16,6 +16,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	githubProjectURL              = "https://github.com/labring/aiproxy"
+	githubProjectInitialCountdown = 15
+)
+
 func SetStaticFileRouter(router *gin.Engine) {
 	router.SetHTMLTemplate(
 		template.Must(
@@ -24,12 +29,7 @@ func SetStaticFileRouter(router *gin.Engine) {
 	)
 
 	if config.DisableWeb {
-		router.GET("/", func(ctx *gin.Context) {
-			ctx.HTML(http.StatusOK, "index.tmpl", gin.H{
-				"URL":               "https://github.com/labring/aiproxy",
-				"INITIAL_COUNTDOWN": 15,
-			})
-		})
+		router.GET("/", renderWebRootRedirectPage)
 
 		return
 	}
@@ -44,6 +44,8 @@ func SetStaticFileRouter(router *gin.Engine) {
 		if err != nil {
 			panic(err)
 		}
+
+		registerWebRootRedirect(router)
 
 		fs := http.FS(public.Public)
 		router.NoRoute(newIndexNoRouteHandler(fs))
@@ -65,8 +67,25 @@ func SetStaticFileRouter(router *gin.Engine) {
 			panic(err)
 		}
 
+		registerWebRootRedirect(router)
 		router.NoRoute(newDynamicNoRouteHandler(http.Dir(absPath)))
 	}
+}
+
+func registerWebRootRedirect(router *gin.Engine) {
+	if !config.DisableWebRoot {
+		return
+	}
+
+	router.GET("/", renderWebRootRedirectPage)
+	router.HEAD("/", renderWebRootRedirectPage)
+}
+
+func renderWebRootRedirectPage(ctx *gin.Context) {
+	ctx.HTML(http.StatusOK, "index.tmpl", gin.H{
+		"URL":               githubProjectURL,
+		"INITIAL_COUNTDOWN": githubProjectInitialCountdown,
+	})
 }
 
 func checkNoRouteNotFound(req *http.Request) bool {

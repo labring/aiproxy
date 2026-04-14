@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -71,6 +73,43 @@ func TestDoRequest(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			convey.So(string(body), convey.ShouldEqual, "ok")
 		})
+	})
+}
+
+func TestDoRequestResponseHeaderTimeout(t *testing.T) {
+	convey.Convey("DoRequest should timeout while awaiting response headers", t, func() {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(1500 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}))
+		defer ts.Close()
+
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL, nil)
+		start := time.Now()
+
+		resp, err := utils.DoRequest(req, time.Second)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+
+		elapsed := time.Since(start)
+
+		convey.So(resp, convey.ShouldBeNil)
+		convey.So(err, convey.ShouldNotBeNil)
+
+		var urlErr *url.Error
+		convey.So(errors.As(err, &urlErr), convey.ShouldBeTrue)
+		convey.So(errors.Is(err, context.DeadlineExceeded), convey.ShouldBeTrue)
+		convey.So(urlErr.Timeout(), convey.ShouldBeTrue)
+		convey.So(
+			urlErr.Err.Error(),
+			convey.ShouldEqual,
+			"net/http: timeout awaiting response headers",
+		)
+
+		convey.So(elapsed >= time.Second, convey.ShouldBeTrue)
+		convey.So(elapsed < 1400*time.Millisecond, convey.ShouldBeTrue)
 	})
 }
 

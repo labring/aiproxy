@@ -141,6 +141,7 @@ docker-compose up -d
 ```bash
 LISTEN=:3000                    # Server listen address
 ADMIN_KEY=your-admin-key        # Admin API key
+DISABLE_WEB_ROOT=true           # Redirect only `/` to GitHub, keep other web routes available
 ```
 
 #### **Database Configuration**
