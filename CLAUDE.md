@@ -84,20 +84,21 @@ docker compose up -d pgsql redis  # Start PostgreSQL + Redis
 
 ```bash
 # Full deploy: git pull → docker build → canary → nginx switch → drain old
-ADMIN_KEY=xxx bash scripts/deploy.sh
+# ADMIN_KEY is auto-read from .env — no need to pass it manually
+bash scripts/deploy.sh
 
 # Skip git pull (deploy current code)
-ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull
+bash scripts/deploy.sh --no-pull
 
 # Build only (no restart)
 bash scripts/deploy.sh --build-only
 
 # Emergency rollback (uses auto-saved previous image)
-ADMIN_KEY=xxx bash scripts/deploy.sh --rollback
+bash scripts/deploy.sh --rollback
 
 # Legacy mode (direct container restart, 5-10s downtime — fallback only)
-ADMIN_KEY=xxx bash scripts/deploy.sh --legacy
-ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
+bash scripts/deploy.sh --legacy
+bash scripts/deploy.sh --legacy --restart-only
 ```
 
 **Why Docker is the mandated deployment method:**
@@ -114,10 +115,10 @@ ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
 **Multi-node deployment (domestic + overseas):**
 ```bash
 # Deploy all nodes (domestic → overseas, sequential)
-ADMIN_KEY=xxx bash scripts/deploy-all.sh
+bash scripts/deploy-all.sh
 
 # Deploy single overseas node (sudo needs bash -c to pass env vars)
-ssh ppuser@52.35.158.131 "cd /data/aiproxy && sudo bash -c 'export ADMIN_KEY=xxx NODE_TYPE=overseas && bash scripts/deploy.sh'"
+ssh ppuser@52.35.158.131 "cd /data/aiproxy && sudo bash -c 'export NODE_TYPE=overseas && bash scripts/deploy.sh'"
 ```
 
 **Server access & operations:**
@@ -132,8 +133,8 @@ ssh ppuser@52.35.158.131
 cd /data/aiproxy
 sudo GIT_SSH_COMMAND="ssh -i /home/ppuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no" git pull origin main
 
-# Deploy (on server — sudo needs bash -c to pass env vars)
-sudo bash -c 'export ADMIN_KEY=xxx && bash scripts/deploy.sh'
+# Deploy (on server — ADMIN_KEY auto-read from .env)
+sudo bash scripts/deploy.sh
 
 # View logs (Docker, NOT journalctl)
 sudo docker logs -f aiproxy-active
@@ -405,12 +406,12 @@ cd core && go test -tags enterprise -v -run TestXxx ./...
 # 提交前检查
 cd core && golangci-lint run --fix --build-tags=enterprise && go test -tags enterprise ./...
 
-# 生产部署（单节点）
-ADMIN_KEY=xxx bash scripts/deploy.sh
+# 生产部署（单节点，ADMIN_KEY 自动从 .env 读取）
+bash scripts/deploy.sh
 
 # 生产部署（多节点：国内+海外）
-ADMIN_KEY=xxx bash scripts/deploy-all.sh
+bash scripts/deploy-all.sh
 
 # 部署后验证
-ADMIN_KEY=xxx bash scripts/smoke-test.sh https://your-server
+ADMIN_KEY=xxx bash scripts/smoke-test.sh https://your-server  # smoke-test 仍需显式传入
 ```

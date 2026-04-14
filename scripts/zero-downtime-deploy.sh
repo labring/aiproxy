@@ -10,15 +10,16 @@
 #   5. Gracefully drain old container (SIGTERM → 600s wait for in-flight requests)
 #
 # Usage:
-#   ADMIN_KEY=xxx bash scripts/zero-downtime-deploy.sh                # Full deploy
-#   ADMIN_KEY=xxx bash scripts/zero-downtime-deploy.sh --no-pull      # Skip git pull
-#   bash scripts/zero-downtime-deploy.sh --build-only                 # Build image only
-#   ADMIN_KEY=xxx bash scripts/zero-downtime-deploy.sh --rollback     # Emergency rollback
+#   bash scripts/zero-downtime-deploy.sh                # Full deploy (ADMIN_KEY auto-read from .env)
+#   bash scripts/zero-downtime-deploy.sh --no-pull      # Skip git pull
+#   bash scripts/zero-downtime-deploy.sh --build-only   # Build image only
+#   bash scripts/zero-downtime-deploy.sh --rollback     # Emergency rollback
+#   ADMIN_KEY=xxx bash scripts/zero-downtime-deploy.sh  # Override ADMIN_KEY
 #
 # Prerequisites:
 #   - Docker installed
 #   - Nginx with /etc/nginx/conf.d/aiproxy-upstream.conf installed
-#   - ADMIN_KEY env var (for smoke tests)
+#   - ADMIN_KEY in .env or env var (for smoke tests)
 #
 # Network: Uses --network host so containers can reach DB/Redis on 127.0.0.1.
 # The LISTEN env var controls which port the binary listens on.
@@ -504,8 +505,11 @@ if [[ "${ENTERPRISE_CHECK}" != "true" ]]; then
 fi
 pass "Enterprise build confirmed"
 
-# Run smoke tests if ADMIN_KEY is available
+# Run smoke tests if ADMIN_KEY is available (auto-read from .env if not set)
 ADMIN_KEY="${ADMIN_KEY:-}"
+if [[ -z "${ADMIN_KEY}" && -f "${ENV_FILE_PATH}" ]]; then
+  ADMIN_KEY=$(grep -E '^ADMIN_KEY=' "${ENV_FILE_PATH}" | head -1 | cut -d'=' -f2-)
+fi
 if [[ -n "${ADMIN_KEY}" ]]; then
   info "Running smoke tests against canary..."
   if ADMIN_KEY="${ADMIN_KEY}" API_KEY="${API_KEY:-}" \
@@ -515,7 +519,7 @@ if [[ -n "${ADMIN_KEY}" ]]; then
     fail "Canary smoke tests failed — aborting deploy"
   fi
 else
-  warn "ADMIN_KEY not set — skipping smoke tests (strongly recommended)"
+  warn "ADMIN_KEY not set and not found in ${ENV_FILE_PATH} — skipping smoke tests (strongly recommended)"
 fi
 
 # ══════════════════════════════════════════════════════════════

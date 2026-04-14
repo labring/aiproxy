@@ -6,23 +6,24 @@
 # Legacy mode:  direct container restart (5-10s downtime, no Nginx switching).
 #
 # Zero-downtime deploy (default):
-#   ADMIN_KEY=xxx bash scripts/deploy.sh                    # Full deploy
-#   ADMIN_KEY=xxx bash scripts/deploy.sh --no-pull          # Skip git pull
-#   bash scripts/deploy.sh --build-only                     # Build image only
-#   ADMIN_KEY=xxx bash scripts/deploy.sh --rollback         # Emergency rollback
+#   bash scripts/deploy.sh                    # Full deploy (ADMIN_KEY auto-read from .env)
+#   bash scripts/deploy.sh --no-pull          # Skip git pull
+#   bash scripts/deploy.sh --build-only       # Build image only
+#   bash scripts/deploy.sh --rollback         # Emergency rollback
+#   ADMIN_KEY=xxx bash scripts/deploy.sh      # Override ADMIN_KEY
 #
 # Legacy deploy (direct container restart, requires --legacy flag):
-#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy           # Full legacy deploy
-#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --no-pull
-#   ADMIN_KEY=xxx bash scripts/deploy.sh --legacy --restart-only
+#   bash scripts/deploy.sh --legacy           # Full legacy deploy
+#   bash scripts/deploy.sh --legacy --no-pull
+#   bash scripts/deploy.sh --legacy --restart-only
 #
 # Prerequisites:
 #   - Docker + Docker Compose installed
-#   - ADMIN_KEY env var set (for smoke tests)
+#   - ADMIN_KEY in .env or env var (for smoke tests)
 #   - (Zero-downtime only) Nginx with deploy/nginx/aiproxy-upstream.conf installed
 #
 # Environment:
-#   ADMIN_KEY         — Required for smoke tests
+#   ADMIN_KEY         — Auto-read from .env; env var overrides
 #   API_KEY           — Optional: enables /v1/ endpoint smoke tests
 #   COMPOSE_PROFILES  — Docker Compose profiles (if any)
 
@@ -233,6 +234,9 @@ fi
 info "Step 4/4: Running smoke tests..."
 
 ADMIN_KEY="${ADMIN_KEY:-}"
+if [[ -z "${ADMIN_KEY}" && -f ".env" ]]; then
+  ADMIN_KEY=$(grep -E '^ADMIN_KEY=' ".env" | head -1 | cut -d'=' -f2-)
+fi
 if [[ -n "${ADMIN_KEY}" ]]; then
   if ADMIN_KEY="${ADMIN_KEY}" API_KEY="${API_KEY:-}" \
     bash scripts/smoke-test.sh "http://localhost:3000"; then
@@ -242,8 +246,8 @@ if [[ -n "${ADMIN_KEY}" ]]; then
     warn "Service is running but may have issues. Check: docker logs aiproxy"
   fi
 else
-  warn "ADMIN_KEY not set — skipping smoke tests"
-  warn "Strongly recommended: ADMIN_KEY=xxx bash scripts/deploy.sh"
+  warn "ADMIN_KEY not set and not found in .env — skipping smoke tests"
+  warn "Strongly recommended: set ADMIN_KEY in .env or pass via env"
 fi
 
 # ── Post-deploy cleanup check ─────────────────────────────────
