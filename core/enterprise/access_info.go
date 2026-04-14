@@ -368,26 +368,39 @@ func GetMyAccess(c *gin.Context) {
 		gmcMap[gmc.Model] = gmc
 	}
 
-	modelProvider := make(map[string]string, len(availableModels))
-	ownerDisplayName := make(map[string]string) // owner (type string) → channel custom name
-	ownerPrimarySet := make(map[string]string)  // owner → first-seen set
+	// Build per-model owner list across ALL sets. A model that exists in
+	// channels across multiple sets (e.g. both "default" via PPIO and "overseas"
+	// via Novita) appears in each owner's group so users see the full roster
+	// per provider region.
+	type modelOwnerPair struct{ model, owner string }
+	modelOwnerSeen := make(map[modelOwnerPair]struct{})
+	modelOwners := make(map[string][]string, len(availableModels)) // model → distinct owners
+	ownerDisplayName := make(map[string]string)
+	ownerPrimarySet := make(map[string]string)
+
 	for _, set := range groupSets {
 		chMap := modelCaches.EnabledModel2ChannelsBySet[set]
 		for _, modelName := range availableModels {
-			if _, exists := modelProvider[modelName]; exists {
+			chs, ok := chMap[modelName]
+			if !ok || len(chs) == 0 {
 				continue
 			}
 
-			if chs, ok := chMap[modelName]; ok && len(chs) > 0 {
-				// Channels are already sorted by priority (highest first)
-				owner := chs[0].Type.String()
-				modelProvider[modelName] = owner
-				if _, exists := ownerPrimarySet[owner]; !exists {
-					ownerPrimarySet[owner] = set
-				}
-				if _, exists := ownerDisplayName[owner]; !exists && chs[0].Name != "" {
-					ownerDisplayName[owner] = chs[0].Name
-				}
+			owner := chs[0].Type.String()
+			key := modelOwnerPair{model: modelName, owner: owner}
+			if _, exists := modelOwnerSeen[key]; exists {
+				continue
+			}
+
+			modelOwnerSeen[key] = struct{}{}
+			modelOwners[modelName] = append(modelOwners[modelName], owner)
+
+			if _, exists := ownerPrimarySet[owner]; !exists {
+				ownerPrimarySet[owner] = set
+			}
+
+			if _, exists := ownerDisplayName[owner]; !exists && chs[0].Name != "" {
+				ownerDisplayName[owner] = chs[0].Name
 			}
 		}
 	}
@@ -427,20 +440,10 @@ func GetMyAccess(c *gin.Context) {
 			}
 		}
 
-		// Group by the enabled channel's provider, not the static ModelConfig.Owner.
-		owner := modelProvider[modelName]
-		if owner == "" {
-			owner = string(mc.Owner)
-		}
-
-		if owner == "" {
-			owner = "other"
-		}
-
 		maxCtx, _ := model.GetModelConfigInt(mc.Config, model.ModelConfigMaxContextTokensKey)
 		maxOut, _ := model.GetModelConfigInt(mc.Config, model.ModelConfigMaxOutputTokensKey)
 
-		ownerModels[owner] = append(ownerModels[owner], ModelAccessInfo{
+		info := ModelAccessInfo{
 			Model:              modelName,
 			Type:               int(mc.Type),
 			TypeName:           modeToTypeName(mc.Type),
@@ -452,7 +455,22 @@ func GetMyAccess(c *gin.Context) {
 			SupportedEndpoints: getModelSupportedEndpoints(mc),
 			MaxContext:          int64(maxCtx),
 			MaxOutput:          int64(maxOut),
-		})
+		}
+
+		// Add model to ALL owner groups where it has a channel.
+		owners := modelOwners[modelName]
+		if len(owners) == 0 {
+			owner := string(mc.Owner)
+			if owner == "" {
+				owner = "other"
+			}
+
+			owners = []string{owner}
+		}
+
+		for _, owner := range owners {
+			ownerModels[owner] = append(ownerModels[owner], info)
+		}
 	}
 
 	// Sort owners and models
