@@ -890,13 +890,15 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 	price.OutputPrice = model.ZeroNullFloat64(m.GetOutputPricePerToken())
 	price.OutputPriceUnit = model.ZeroNullInt64(1)
 
-	// Cache pricing
-	if m.SupportPromptCache && m.CacheReadInputTokenPricePerM > 0 {
+	// Cache pricing — gate on non-zero price fields only.
+	// PPIO's API returns SupportPromptCache=false for Claude models while
+	// still providing valid cache price data, so we must not gate on that flag.
+	if m.CacheReadInputTokenPricePerM > 0 {
 		price.CachedPrice = model.ZeroNullFloat64(m.GetCacheReadPricePerToken())
 		price.CachedPriceUnit = model.ZeroNullInt64(1)
 	}
 
-	if m.SupportPromptCache && m.CacheCreationInputTokenPricePerM > 0 {
+	if m.CacheCreationInputTokenPricePerM > 0 {
 		price.CacheCreationPrice = model.ZeroNullFloat64(m.GetCacheCreationPricePerToken())
 		price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 	}
