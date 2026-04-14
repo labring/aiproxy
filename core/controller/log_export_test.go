@@ -1,10 +1,15 @@
 package controller
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 )
 
@@ -111,5 +116,115 @@ func TestSanitizeFilename(t *testing.T) {
 	filename := sanitizeFilename("group/a b?.csv")
 	if filename != "group_a_b_.csv" {
 		t.Fatalf("unexpected sanitized filename: %q", filename)
+	}
+}
+
+func TestParseLogExportParamsLimitsTimeRangeToThirtyDays(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	now := time.Now()
+	endTime := now.Add(-2 * time.Hour)
+	startTime := endTime.Add(-45 * 24 * time.Hour)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "start_timestamp=" + strconv.FormatInt(
+				startTime.Unix(),
+				10,
+			) + "&end_timestamp=" + strconv.FormatInt(
+				endTime.Unix(),
+				10,
+			),
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	expectedStart := params.endTime.Add(-logExportMaxSpan)
+	if params.startTime.Unix() != expectedStart.Unix() {
+		t.Fatalf("expected start time to be clamped to %v, got %v", expectedStart, params.startTime)
+	}
+}
+
+func TestParseLogExportParamsParsesGranularityHours(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "granularity_hours=6",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if params.granularityHours != 6 {
+		t.Fatalf("expected granularity_hours to be 6, got %d", params.granularityHours)
+	}
+}
+
+func TestParseLogExportParamsDefaultGranularityIsThreeHours(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if params.granularityHours != 3 {
+		t.Fatalf("expected default granularity_hours to be 3, got %d", params.granularityHours)
+	}
+}
+
+func TestParseLogExportParamsRejectsInvalidGranularityHours(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "granularity_hours=25",
+		},
+	}
+
+	_, err := parseLogExportParams(c)
+	if err == nil {
+		t.Fatal("expected invalid granularity_hours to return error")
+	}
+}
+
+func TestParseLogExportParamsUsesIncludeDetail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "include_detail=true",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if !params.includeDetail {
+		t.Fatal("expected include_detail=true to enable detail export")
 	}
 }

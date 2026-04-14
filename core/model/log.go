@@ -800,10 +800,60 @@ func exportLogs(
 
 	if withBody {
 		query = query.Preload("RequestDetail")
-	} else {
-		query = query.Preload("RequestDetail", func(db *gorm.DB) *gorm.DB {
-			return db.Select("id", "log_id")
-		})
+	}
+
+	return logs, query.
+		Order(getLogOrder(order)).
+		Limit(NormalizeLogExportLimit(maxEntries)).
+		Find(&logs).Error
+}
+
+func exportLogsRange(
+	group string,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*Log, error) {
+	var logs []*Log
+
+	query := buildGetLogsQuery(
+		group,
+		time.Time{},
+		time.Time{},
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+
+	if !startTimestamp.IsZero() {
+		query = query.Where("created_at >= ?", startTimestamp)
+	}
+
+	if !endExclusive.IsZero() {
+		query = query.Where("created_at < ?", endExclusive)
+	}
+
+	if withBody {
+		query = query.Preload("RequestDetail")
 	}
 
 	return logs, query.
@@ -872,6 +922,82 @@ func ExportGroupLogs(
 		group,
 		startTimestamp,
 		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		0,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportLogsRange(
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*Log, error) {
+	return exportLogsRange(
+		"",
+		startTimestamp,
+		endExclusive,
+		modelName,
+		requestID,
+		upstreamID,
+		0,
+		"",
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportGroupLogsRange(
+	group string,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*Log, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	return exportLogsRange(
+		group,
+		startTimestamp,
+		endExclusive,
 		modelName,
 		requestID,
 		upstreamID,

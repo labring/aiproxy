@@ -3153,8 +3153,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "With body",
-                        "name": "with_body",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
                         "in": "query"
                     },
                     {
@@ -3243,6 +3243,135 @@ const docTemplate = `{
                         }
                     }
                 }
+            }
+        },
+        "/api/log/{group}/export": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Streams filtered group logs as a CSV table file",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Export group logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp, max span 30 days",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp, max span 30 days",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail, default false",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum exported rows, default 1000, max 10000",
+                        "name": "max_entries",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include channel column, default false",
+                        "name": "include_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Chunk size in hours, default 3, min 1, max 24",
+                        "name": "granularity_hours",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
             }
         },
         "/api/log/{group}/search": {
@@ -3348,8 +3477,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "With body",
-                        "name": "with_body",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
                         "in": "query"
                     },
                     {
@@ -3471,8 +3600,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "With body",
-                        "name": "with_body",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
                         "in": "query"
                     },
                     {
@@ -3730,6 +3859,116 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/logs/export": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Streams filtered global logs as a CSV table file",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Export global logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp, max span 30 days",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp, max span 30 days",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail, default false",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum exported rows, default 1000, max 10000",
+                        "name": "max_entries",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Chunk size in hours, default 3, min 1, max 24",
+                        "name": "granularity_hours",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
         "/api/logs/search": {
             "get": {
                 "security": [
@@ -3839,8 +4078,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "With body",
-                        "name": "with_body",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
                         "in": "query"
                     },
                     {

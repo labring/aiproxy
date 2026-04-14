@@ -19,32 +19,40 @@ import (
 	"github.com/labring/aiproxy/core/model"
 )
 
+const (
+	logExportMaxSpan            = 30 * 24 * time.Hour
+	defaultLogExportGranularity = 3
+	minLogExportGranularity     = 1
+	maxLogExportGranularity     = 24
+)
+
 type logExportParams struct {
-	timezone   string
-	location   *time.Location
-	maxEntries int
-	includeCh  bool
-	startTime  time.Time
-	endTime    time.Time
-	group      string
-	tokenName  string
-	modelName  string
-	channelID  int
-	tokenID    int
-	order      string
-	requestID  string
-	upstreamID string
-	codeType   string
-	code       int
-	withBody   bool
-	ip         string
-	user       string
+	timezone         string
+	location         *time.Location
+	maxEntries       int
+	includeCh        bool
+	granularityHours int
+	startTime        time.Time
+	endTime          time.Time
+	group            string
+	tokenName        string
+	modelName        string
+	channelID        int
+	tokenID          int
+	order            string
+	requestID        string
+	upstreamID       string
+	codeType         string
+	code             int
+	includeDetail    bool
+	ip               string
+	user             string
 }
 
 func parseLogExportParams(c *gin.Context) (logExportParams, error) {
 	params := parseCommonParams(c)
 
-	startTime, endTime := utils.ParseTimeRange(c, -1)
+	startTime, endTime := utils.ParseTimeRange(c, logExportMaxSpan)
 	if !startTime.IsZero() && !endTime.IsZero() && startTime.After(endTime) {
 		return logExportParams{}, errors.New("start_timestamp cannot be greater than end_timestamp")
 	}
@@ -59,51 +67,70 @@ func parseLogExportParams(c *gin.Context) (logExportParams, error) {
 
 	maxEntries, _ := strconv.Atoi(c.Query("max_entries"))
 	includeChannel, _ := strconv.ParseBool(c.Query("include_channel"))
+	includeDetail, _ := strconv.ParseBool(c.Query("include_detail"))
+
+	granularityHours := defaultLogExportGranularity
+	if raw := c.Query("granularity_hours"); raw != "" {
+		granularityHours, err = strconv.Atoi(raw)
+		if err != nil {
+			return logExportParams{}, errors.New("granularity_hours must be an integer")
+		}
+	}
+
+	if granularityHours < minLogExportGranularity || granularityHours > maxLogExportGranularity {
+		return logExportParams{}, fmt.Errorf(
+			"granularity_hours must be between %d and %d",
+			minLogExportGranularity,
+			maxLogExportGranularity,
+		)
+	}
 
 	return logExportParams{
-		timezone:   timezone,
-		location:   location,
-		maxEntries: model.NormalizeLogExportLimit(maxEntries),
-		includeCh:  includeChannel,
-		startTime:  startTime,
-		endTime:    endTime,
-		group:      params.group,
-		tokenName:  params.tokenName,
-		modelName:  params.modelName,
-		channelID:  params.channelID,
-		tokenID:    params.tokenID,
-		order:      params.order,
-		requestID:  params.requestID,
-		upstreamID: params.upstreamID,
-		codeType:   params.codeType,
-		code:       params.code,
-		withBody:   params.withBody,
-		ip:         params.ip,
-		user:       params.user,
+		timezone:         timezone,
+		location:         location,
+		maxEntries:       model.NormalizeLogExportLimit(maxEntries),
+		includeCh:        includeChannel,
+		granularityHours: granularityHours,
+		startTime:        startTime,
+		endTime:          endTime,
+		group:            params.group,
+		tokenName:        params.tokenName,
+		modelName:        params.modelName,
+		channelID:        params.channelID,
+		tokenID:          params.tokenID,
+		order:            params.order,
+		requestID:        params.requestID,
+		upstreamID:       params.upstreamID,
+		codeType:         params.codeType,
+		code:             params.code,
+		includeDetail:    includeDetail,
+		ip:               params.ip,
+		user:             params.user,
 	}, nil
 }
 
 // ExportLogs godoc
 //
 //	@Summary		Export global logs
-//	@Description	Exports filtered global logs as a CSV table file
+//	@Description	Streams filtered global logs as a CSV table file
 //	@Tags			logs
 //	@Produce		text/csv
 //	@Security		ApiKeyAuth
-//	@Param			start_timestamp	query		int		false	"Start timestamp"
-//	@Param			end_timestamp	query		int		false	"End timestamp"
-//	@Param			model_name		query		string	false	"Model name"
-//	@Param			channel			query		int		false	"Channel ID"
-//	@Param			order			query		string	false	"Order"
-//	@Param			request_id		query		string	false	"Request ID"
-//	@Param			upstream_id		query		string	false	"Upstream ID"
-//	@Param			code_type		query		string	false	"Status code type"
-//	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With request and response body"
-//	@Param			ip				query		string	false	"IP"
-//	@Param			user			query		string	false	"User"
-//	@Param			timezone		query		string	false	"Timezone, default is Local"
-//	@Param			max_entries		query		int		false	"Maximum exported rows, default 1000, max 10000"
+//	@Param			start_timestamp		query	int		false	"Start timestamp, max span 30 days"
+//	@Param			end_timestamp		query	int		false	"End timestamp, max span 30 days"
+//	@Param			model_name			query	string	false	"Model name"
+//	@Param			channel				query	int		false	"Channel ID"
+//	@Param			order				query	string	false	"Order"
+//	@Param			request_id			query	string	false	"Request ID"
+//	@Param			upstream_id			query	string	false	"Upstream ID"
+//	@Param			code_type			query	string	false	"Status code type"
+//	@Param			code				query	int		false	"Status code"
+//	@Param			include_detail		query	bool	false	"Include request and response detail, default false"
+//	@Param			ip					query	string	false	"IP"
+//	@Param			user				query	string	false	"User"
+//	@Param			timezone			query	string	false	"Timezone, default is Local"
+//	@Param			max_entries			query	int		false	"Maximum exported rows, default 1000, max 10000"
+//	@Param			granularity_hours	query	int		false	"Chunk size in hours, default 3, min 1, max 24"
 //	@Router			/api/logs/export [get]
 func ExportLogs(c *gin.Context) {
 	params, err := parseLogExportParams(c)
@@ -112,58 +139,57 @@ func ExportLogs(c *gin.Context) {
 		return
 	}
 
-	logs, err := model.ExportLogs(
-		params.startTime,
-		params.endTime,
-		params.modelName,
-		params.requestID,
-		params.upstreamID,
-		params.channelID,
-		params.order,
-		model.CodeType(params.codeType),
-		params.code,
-		params.withBody,
-		params.ip,
-		params.user,
-		params.maxEntries,
+	filename := buildLogExportFilename("global", "", params.location)
+	streamCSV(
+		c,
+		filename,
+		params,
+		true,
+		func(start, endExclusive time.Time, limit int) ([]*model.Log, error) {
+			return model.ExportLogsRange(
+				start,
+				endExclusive,
+				params.modelName,
+				params.requestID,
+				params.upstreamID,
+				params.channelID,
+				params.order,
+				model.CodeType(params.codeType),
+				params.code,
+				params.includeDetail,
+				params.ip,
+				params.user,
+				limit,
+			)
+		},
 	)
-	if err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	filename := buildLogExportFilename(
-		"global",
-		"",
-		params.location,
-	)
-	downloadCSV(c, filename, logs, params.location, params.timezone, true)
 }
 
 // ExportGroupLogs godoc
 //
 //	@Summary		Export group logs
-//	@Description	Exports filtered group logs as a CSV table file
+//	@Description	Streams filtered group logs as a CSV table file
 //	@Tags			log
 //	@Produce		text/csv
 //	@Security		ApiKeyAuth
-//	@Param			group			path		string	true	"Group name"
-//	@Param			start_timestamp	query		int		false	"Start timestamp"
-//	@Param			end_timestamp	query		int		false	"End timestamp"
-//	@Param			model_name		query		string	false	"Model name"
-//	@Param			token_id		query		int		false	"Token ID"
-//	@Param			token_name		query		string	false	"Token name"
-//	@Param			order			query		string	false	"Order"
-//	@Param			request_id		query		string	false	"Request ID"
-//	@Param			upstream_id		query		string	false	"Upstream ID"
-//	@Param			code_type		query		string	false	"Status code type"
-//	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With request and response body"
-//	@Param			ip				query		string	false	"IP"
-//	@Param			user			query		string	false	"User"
-//	@Param			timezone		query		string	false	"Timezone, default is Local"
-//	@Param			max_entries		query		int		false	"Maximum exported rows, default 1000, max 10000"
-//	@Param			include_channel	query		bool	false	"Include channel column, default false"
+//	@Param			group				path	string	true	"Group name"
+//	@Param			start_timestamp		query	int		false	"Start timestamp, max span 30 days"
+//	@Param			end_timestamp		query	int		false	"End timestamp, max span 30 days"
+//	@Param			model_name			query	string	false	"Model name"
+//	@Param			token_id			query	int		false	"Token ID"
+//	@Param			token_name			query	string	false	"Token name"
+//	@Param			order				query	string	false	"Order"
+//	@Param			request_id			query	string	false	"Request ID"
+//	@Param			upstream_id			query	string	false	"Upstream ID"
+//	@Param			code_type			query	string	false	"Status code type"
+//	@Param			code				query	int		false	"Status code"
+//	@Param			include_detail		query	bool	false	"Include request and response detail, default false"
+//	@Param			ip					query	string	false	"IP"
+//	@Param			user				query	string	false	"User"
+//	@Param			timezone			query	string	false	"Timezone, default is Local"
+//	@Param			max_entries			query	int		false	"Maximum exported rows, default 1000, max 10000"
+//	@Param			include_channel		query	bool	false	"Include channel column, default false"
+//	@Param			granularity_hours	query	int		false	"Chunk size in hours, default 3, min 1, max 24"
 //	@Router			/api/log/{group}/export [get]
 func ExportGroupLogs(c *gin.Context) {
 	group := c.Param("group")
@@ -178,47 +204,44 @@ func ExportGroupLogs(c *gin.Context) {
 		return
 	}
 
-	logs, err := model.ExportGroupLogs(
-		group,
-		params.startTime,
-		params.endTime,
-		params.modelName,
-		params.requestID,
-		params.upstreamID,
-		params.tokenID,
-		params.tokenName,
-		params.order,
-		model.CodeType(params.codeType),
-		params.code,
-		params.withBody,
-		params.ip,
-		params.user,
-		params.maxEntries,
+	filename := buildLogExportFilename("group_"+group, group, params.location)
+	streamCSV(
+		c,
+		filename,
+		params,
+		params.includeCh,
+		func(start, endExclusive time.Time, limit int) ([]*model.Log, error) {
+			return model.ExportGroupLogsRange(
+				group,
+				start,
+				endExclusive,
+				params.modelName,
+				params.requestID,
+				params.upstreamID,
+				params.tokenID,
+				params.tokenName,
+				params.order,
+				model.CodeType(params.codeType),
+				params.code,
+				params.includeDetail,
+				params.ip,
+				params.user,
+				limit,
+			)
+		},
 	)
-	if err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	filename := buildLogExportFilename(
-		"group_"+group,
-		group,
-		params.location,
-	)
-	downloadCSV(c, filename, logs, params.location, params.timezone, params.includeCh)
 }
 
-func downloadCSV(
+func streamCSV(
 	c *gin.Context,
 	filename string,
-	logs []*model.Log,
-	location *time.Location,
-	timezone string,
+	params logExportParams,
 	includeChannel bool,
+	fetch func(start, endExclusive time.Time, limit int) ([]*model.Log, error),
 ) {
-	content, err := buildLogExportCSV(logs, location, timezone, includeChannel)
-	if err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
 
@@ -227,8 +250,131 @@ func downloadCSV(
 	})
 
 	c.Header("Content-Disposition", disposition)
-	c.Header("X-Export-Count", strconv.Itoa(len(logs)))
-	c.Data(http.StatusOK, "text/csv; charset=utf-8", content)
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Accel-Buffering", "no")
+	c.Header("Trailer", "X-Export-Count")
+	c.Status(http.StatusOK)
+
+	if _, err := c.Writer.Write([]byte("\xEF\xBB\xBF")); err != nil {
+		return
+	}
+
+	writer := csv.NewWriter(c.Writer)
+	if err := writer.Write(buildLogExportHeader(includeChannel)); err != nil {
+		return
+	}
+
+	writer.Flush()
+
+	if writer.Error() != nil {
+		return
+	}
+
+	flusher.Flush()
+
+	totalWritten := 0
+	chunkDuration := time.Duration(params.granularityHours) * time.Hour
+	descending := !isAscendingLogExportOrder(params.order)
+	endExclusive := params.endTime.Add(time.Nanosecond)
+
+	for totalWritten < params.maxEntries {
+		chunkStart, chunkEndExclusive, done := nextLogExportChunk(
+			params.startTime,
+			endExclusive,
+			chunkDuration,
+			descending,
+		)
+		if done {
+			break
+		}
+
+		remaining := params.maxEntries - totalWritten
+
+		logs, err := fetch(chunkStart, chunkEndExclusive, remaining)
+		if err != nil {
+			_ = c.Error(err)
+			break
+		}
+
+		var writeErr error
+		for _, logItem := range logs {
+			if err := writer.Write(
+				buildLogExportRow(logItem, params.location, params.timezone, includeChannel),
+			); err != nil {
+				writeErr = err
+				break
+			}
+
+			totalWritten++
+			if totalWritten >= params.maxEntries {
+				break
+			}
+		}
+
+		if writeErr != nil {
+			_ = c.Error(writeErr)
+			break
+		}
+
+		writer.Flush()
+
+		if err := writer.Error(); err != nil {
+			_ = c.Error(err)
+			break
+		}
+
+		flusher.Flush()
+
+		if totalWritten >= params.maxEntries {
+			break
+		}
+
+		if descending {
+			endExclusive = chunkStart
+		} else {
+			params.startTime = chunkEndExclusive
+		}
+	}
+
+	c.Writer.Header().Set("X-Export-Count", strconv.Itoa(totalWritten))
+}
+
+func nextLogExportChunk(
+	start time.Time,
+	endExclusive time.Time,
+	chunkDuration time.Duration,
+	descending bool,
+) (time.Time, time.Time, bool) {
+	if start.IsZero() || endExclusive.IsZero() || !start.Before(endExclusive) {
+		return time.Time{}, time.Time{}, true
+	}
+
+	if descending {
+		chunkStart := endExclusive.Add(-chunkDuration)
+		if chunkStart.Before(start) {
+			chunkStart = start
+		}
+
+		return chunkStart, endExclusive, false
+	}
+
+	chunkEndExclusive := start.Add(chunkDuration)
+	if chunkEndExclusive.After(endExclusive) {
+		chunkEndExclusive = endExclusive
+	}
+
+	return start, chunkEndExclusive, false
+}
+
+func isAscendingLogExportOrder(order string) bool {
+	prefix, suffix, _ := strings.Cut(order, "-")
+	switch prefix {
+	case "request_at", "id":
+		return suffix == "asc"
+	default:
+		return false
+	}
 }
 
 func buildLogExportCSV(
@@ -242,10 +388,31 @@ func buildLogExportCSV(
 	}
 
 	var buffer bytes.Buffer
-
-	// BOM improves CSV compatibility with spreadsheet tools.
 	buffer.WriteString("\xEF\xBB\xBF")
 
+	writer := csv.NewWriter(&buffer)
+	if err := writer.Write(buildLogExportHeader(includeChannel)); err != nil {
+		return nil, err
+	}
+
+	for _, logItem := range logs {
+		if err := writer.Write(
+			buildLogExportRow(logItem, location, timezone, includeChannel),
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	writer.Flush()
+
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func buildLogExportHeader(includeChannel bool) []string {
 	header := []string{
 		"id",
 		"created_at",
@@ -260,7 +427,7 @@ func buildLogExportCSV(
 		header = append(header, "channel")
 	}
 
-	header = append(header,
+	return append(header,
 		"model",
 		"endpoint",
 		"code",
@@ -297,90 +464,78 @@ func buildLogExportCSV(
 		"request_body",
 		"response_body",
 	)
+}
 
-	writer := csv.NewWriter(&buffer)
-	if err := writer.Write(header); err != nil {
-		return nil, err
+func buildLogExportRow(
+	logItem *model.Log,
+	location *time.Location,
+	timezone string,
+	includeChannel bool,
+) []string {
+	requestBody := ""
+
+	responseBody := ""
+	if logItem.RequestDetail != nil {
+		requestBody = logItem.RequestDetail.RequestBody
+		responseBody = logItem.RequestDetail.ResponseBody
 	}
 
-	for _, logItem := range logs {
-		requestBody := ""
-
-		responseBody := ""
-		if logItem.RequestDetail != nil {
-			requestBody = logItem.RequestDetail.RequestBody
-			responseBody = logItem.RequestDetail.ResponseBody
-		}
-
-		metadata := ""
-		if len(logItem.Metadata) > 0 {
-			metadata, _ = sonic.MarshalString(logItem.Metadata)
-		}
-
-		row := []string{
-			strconv.Itoa(logItem.ID),
-			formatTimeForExport(logItem.CreatedAt, location),
-			formatTimeForExport(logItem.RequestAt, location),
-			formatTimeForExport(logItem.RetryAt, location),
-			timezone,
-			sanitizeCSVCell(logItem.GroupID),
-			strconv.Itoa(logItem.TokenID),
-			sanitizeCSVCell(logItem.TokenName),
-		}
-		if includeChannel {
-			row = append(row, strconv.Itoa(logItem.ChannelID))
-		}
-
-		row = append(row,
-			sanitizeCSVCell(logItem.Model),
-			sanitizeCSVCell(logItem.Endpoint.String()),
-			strconv.Itoa(logItem.Code),
-			strconv.Itoa(logItem.Mode),
-			sanitizeCSVCell(logItem.RequestID.String()),
-			sanitizeCSVCell(logItem.UpstreamID.String()),
-			sanitizeCSVCell(logItem.IP.String()),
-			sanitizeCSVCell(logItem.User.String()),
-			sanitizeCSVCell(logItem.ServiceTier),
-			strconv.FormatInt(int64(logItem.TTFBMilliseconds), 10),
-			strconv.FormatInt(int64(logItem.RetryTimes), 10),
-			strconv.FormatInt(int64(logItem.Usage.InputTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.ImageInputTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.AudioInputTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.OutputTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.ImageOutputTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.CachedTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.CacheCreationTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.ReasoningTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.TotalTokens), 10),
-			strconv.FormatInt(int64(logItem.Usage.WebSearchCount), 10),
-			formatFloatForExport(logItem.Amount.InputAmount),
-			formatFloatForExport(logItem.Amount.ImageInputAmount),
-			formatFloatForExport(logItem.Amount.AudioInputAmount),
-			formatFloatForExport(logItem.Amount.OutputAmount),
-			formatFloatForExport(logItem.Amount.ImageOutputAmount),
-			formatFloatForExport(logItem.Amount.CachedAmount),
-			formatFloatForExport(logItem.Amount.CacheCreationAmount),
-			formatFloatForExport(logItem.Amount.WebSearchAmount),
-			formatFloatForExport(logItem.Amount.UsedAmount),
-			sanitizeCSVCell(logItem.Content.String()),
-			sanitizeCSVCell(logItem.PromptCacheKey.String()),
-			sanitizeCSVCell(metadata),
-			sanitizeCSVCell(requestBody),
-			sanitizeCSVCell(responseBody),
-		)
-
-		if err := writer.Write(row); err != nil {
-			return nil, err
-		}
+	metadata := ""
+	if len(logItem.Metadata) > 0 {
+		metadata, _ = sonic.MarshalString(logItem.Metadata)
 	}
 
-	writer.Flush()
-
-	if err := writer.Error(); err != nil {
-		return nil, err
+	row := []string{
+		strconv.Itoa(logItem.ID),
+		formatTimeForExport(logItem.CreatedAt, location),
+		formatTimeForExport(logItem.RequestAt, location),
+		formatTimeForExport(logItem.RetryAt, location),
+		timezone,
+		sanitizeCSVCell(logItem.GroupID),
+		strconv.Itoa(logItem.TokenID),
+		sanitizeCSVCell(logItem.TokenName),
+	}
+	if includeChannel {
+		row = append(row, strconv.Itoa(logItem.ChannelID))
 	}
 
-	return buffer.Bytes(), nil
+	return append(row,
+		sanitizeCSVCell(logItem.Model),
+		sanitizeCSVCell(logItem.Endpoint.String()),
+		strconv.Itoa(logItem.Code),
+		strconv.Itoa(logItem.Mode),
+		sanitizeCSVCell(logItem.RequestID.String()),
+		sanitizeCSVCell(logItem.UpstreamID.String()),
+		sanitizeCSVCell(logItem.IP.String()),
+		sanitizeCSVCell(logItem.User.String()),
+		sanitizeCSVCell(logItem.ServiceTier),
+		strconv.FormatInt(int64(logItem.TTFBMilliseconds), 10),
+		strconv.FormatInt(int64(logItem.RetryTimes), 10),
+		strconv.FormatInt(int64(logItem.Usage.InputTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.ImageInputTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.AudioInputTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.OutputTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.ImageOutputTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.CachedTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.CacheCreationTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.ReasoningTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.TotalTokens), 10),
+		strconv.FormatInt(int64(logItem.Usage.WebSearchCount), 10),
+		formatFloatForExport(logItem.Amount.InputAmount),
+		formatFloatForExport(logItem.Amount.ImageInputAmount),
+		formatFloatForExport(logItem.Amount.AudioInputAmount),
+		formatFloatForExport(logItem.Amount.OutputAmount),
+		formatFloatForExport(logItem.Amount.ImageOutputAmount),
+		formatFloatForExport(logItem.Amount.CachedAmount),
+		formatFloatForExport(logItem.Amount.CacheCreationAmount),
+		formatFloatForExport(logItem.Amount.WebSearchAmount),
+		formatFloatForExport(logItem.Amount.UsedAmount),
+		sanitizeCSVCell(logItem.Content.String()),
+		sanitizeCSVCell(logItem.PromptCacheKey.String()),
+		sanitizeCSVCell(metadata),
+		sanitizeCSVCell(requestBody),
+		sanitizeCSVCell(responseBody),
+	)
 }
 
 func formatTimeForExport(t time.Time, location *time.Location) string {
