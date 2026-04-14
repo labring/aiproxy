@@ -262,6 +262,18 @@ func GetChannelModelErrorRates(ctx context.Context, channelID int64) (map[string
 	return redisMonitorModel.GetChannelModelErrorRates(ctx, channelID)
 }
 
+func GetChannelModelErrorRate(
+	ctx context.Context,
+	model string,
+	channelID int64,
+) (float64, error) {
+	if !common.RedisEnabled {
+		return memModelMonitor.GetChannelModelErrorRate(ctx, model, channelID)
+	}
+
+	return redisMonitorModel.GetChannelModelErrorRate(ctx, model, channelID)
+}
+
 func (m *redisModelMonitor) GetChannelModelErrorRates(
 	ctx context.Context,
 	channelID int64,
@@ -365,6 +377,50 @@ func (m *redisModelMonitor) GetModelChannelErrorRate(
 			setModelChannelErrorRateLocalUnlocked(model, result)
 
 			return result, nil
+		},
+	)
+}
+
+func (m *redisModelMonitor) GetChannelModelErrorRate(
+	ctx context.Context,
+	model string,
+	channelID int64,
+) (float64, error) {
+	if rate, ok := getChannelModelErrorRateLocal(model, channelID); ok {
+		return rate, nil
+	}
+
+	if rates, ok := getModelChannelErrorRateLocal(model); ok {
+		rate := rates[channelID]
+		setChannelModelErrorRateLocalUnlocked(model, channelID, rate)
+		return rate, nil
+	}
+
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		channelModelErrorRateLocalCacheKey(model, channelID),
+		func() (float64, bool) {
+			return getChannelModelErrorRateLocal(model, channelID)
+		},
+		func() (float64, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return 0, err
+			}
+
+			rate, err := getErrorRateScript.Run(
+				ctx,
+				rdb,
+				[]string{buildStatsKey(model, strconv.FormatInt(channelID, 10))},
+				time.Now().UnixMilli(),
+			).Float64()
+			if err != nil {
+				return 0, err
+			}
+
+			setChannelModelErrorRateLocalUnlocked(model, channelID, rate)
+
+			return rate, nil
 		},
 	)
 }
@@ -494,7 +550,9 @@ func (m *redisModelMonitor) ClearChannelModelErrors(
 		strconv.Itoa(channelID),
 	).Err()
 	if err == nil {
-		deleteMonitorModelLocal(model)
+		deleteModelChannelErrorRateLocal(model)
+		deleteChannelModelErrorRateLocal(model, int64(channelID))
+		deleteBannedChannelsLocal(model)
 	}
 
 	return err

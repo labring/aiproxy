@@ -1,3 +1,4 @@
+//nolint:testpackage
 package controller
 
 import (
@@ -86,9 +87,15 @@ func (a testAdaptor) DoResponse(
 
 func newTestRelayContext() (*gin.Context, *meta.Meta) {
 	gin.SetMode(gin.TestMode)
+
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}"))
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader("{}"),
+	)
 
 	return c, meta.NewMeta(nil, mode.ChatCompletions, "gpt-4o-mini", model.ModelConfig{})
 }
@@ -101,7 +108,7 @@ func TestPrepareAndDoRequestConvertRequestReturnsAdaptorError(t *testing.T) {
 		"limited",
 	)
 
-	_, err := prepareAndDoRequest(
+	resp, err := prepareAndDoRequest(
 		context.Background(),
 		testAdaptor{
 			convertRequest: func(
@@ -116,6 +123,9 @@ func TestPrepareAndDoRequestConvertRequestReturnsAdaptorError(t *testing.T) {
 		relayMeta,
 		nil,
 	)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	require.ErrorIs(t, err, expectedErr)
 	require.Equal(t, http.StatusTooManyRequests, err.StatusCode())
@@ -124,7 +134,7 @@ func TestPrepareAndDoRequestConvertRequestReturnsAdaptorError(t *testing.T) {
 func TestPrepareAndDoRequestConvertRequestCanceled(t *testing.T) {
 	c, relayMeta := newTestRelayContext()
 
-	_, err := prepareAndDoRequest(
+	resp, err := prepareAndDoRequest(
 		context.Background(),
 		testAdaptor{
 			convertRequest: func(
@@ -139,6 +149,9 @@ func TestPrepareAndDoRequestConvertRequestCanceled(t *testing.T) {
 		relayMeta,
 		nil,
 	)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	require.Equal(t, http.StatusBadRequest, err.StatusCode())
 	require.Contains(t, err.Error(), "request canceled by client")
@@ -147,7 +160,7 @@ func TestPrepareAndDoRequestConvertRequestCanceled(t *testing.T) {
 func TestPrepareAndDoRequestConvertRequestGenericError(t *testing.T) {
 	c, relayMeta := newTestRelayContext()
 
-	_, err := prepareAndDoRequest(
+	resp, err := prepareAndDoRequest(
 		context.Background(),
 		testAdaptor{
 			convertRequest: func(
@@ -162,6 +175,9 @@ func TestPrepareAndDoRequestConvertRequestGenericError(t *testing.T) {
 		relayMeta,
 		nil,
 	)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	require.Equal(t, http.StatusBadRequest, err.StatusCode())
 	require.Contains(t, err.Error(), "convert request failed: invalid payload")
@@ -170,7 +186,7 @@ func TestPrepareAndDoRequestConvertRequestGenericError(t *testing.T) {
 func TestPrepareAndDoRequestConvertRequestEOF(t *testing.T) {
 	c, relayMeta := newTestRelayContext()
 
-	_, err := prepareAndDoRequest(
+	resp, err := prepareAndDoRequest(
 		context.Background(),
 		testAdaptor{
 			convertRequest: func(
@@ -185,6 +201,9 @@ func TestPrepareAndDoRequestConvertRequestEOF(t *testing.T) {
 		relayMeta,
 		nil,
 	)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	require.Equal(t, http.StatusServiceUnavailable, err.StatusCode())
 	require.Contains(t, err.Error(), "request eof")

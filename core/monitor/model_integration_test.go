@@ -263,6 +263,30 @@ func TestRedisMonitorGetModelChannelErrorRateUsesLocalCache(t *testing.T) {
 	require.Contains(t, rates, int64(505))
 }
 
+func TestRedisMonitorGetChannelModelErrorRateUsesLocalCache(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for i := range minRequestCount {
+		_, _, err := monitor.AddRequest(ctx, "model-single-local-rate", 515, i < 5, false, 0)
+		require.NoError(t, err)
+	}
+
+	rate, err := monitor.GetChannelModelErrorRate(ctx, "model-single-local-rate", 515)
+	require.NoError(t, err)
+	require.InDelta(t, 0.25, rate, 0.01)
+
+	require.NoError(t, redisClient.Del(ctx, buildStatsKey("model-single-local-rate", "515")).Err())
+
+	rate, err = monitor.GetChannelModelErrorRate(ctx, "model-single-local-rate", 515)
+	require.NoError(t, err)
+	require.InDelta(t, 0.25, rate, 0.01)
+}
+
 func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.T) {
 	ctx := context.Background()
 

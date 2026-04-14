@@ -3,6 +3,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -176,6 +177,7 @@ func withTestPostgresStoreDB(t *testing.T, fn func()) {
 
 func openTestPostgreSQLWithRetry(dsn string, timeout time.Duration) (*gorm.DB, error) {
 	deadline := time.Now().Add(timeout)
+
 	var lastErr error
 
 	for time.Now().Before(deadline) {
@@ -198,7 +200,7 @@ func openTestPostgreSQLWithRetry(dsn string, timeout time.Duration) (*gorm.DB, e
 	}
 
 	if lastErr == nil {
-		lastErr = fmt.Errorf("timed out connecting to postgres test database")
+		lastErr = errors.New("timed out connecting to postgres test database")
 	}
 
 	return nil, lastErr

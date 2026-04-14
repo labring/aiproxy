@@ -2,6 +2,7 @@
 package monitor
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -159,4 +160,22 @@ func TestMemModelMonitorAddRequestBansNoPermissionWithoutMaxErrorRate(t *testing
 	errorRate, banExecution := monitor.AddRequest("model-no-permission", 1, true, true, 0)
 	require.Zero(t, errorRate)
 	require.True(t, banExecution)
+}
+
+func TestMemModelMonitorGetChannelModelErrorRate(t *testing.T) {
+	monitor := &MemModelMonitor{
+		models: make(map[string]*ModelData),
+	}
+
+	for i := range minRequestCount {
+		_, _ = monitor.AddRequest("model-single-rate", 42, i < 5, false, 0)
+	}
+
+	rate, err := monitor.GetChannelModelErrorRate(context.Background(), "model-single-rate", 42)
+	require.NoError(t, err)
+	require.InDelta(t, 0.25, rate, 0.01)
+
+	rate, err = monitor.GetChannelModelErrorRate(context.Background(), "model-single-rate", 404)
+	require.NoError(t, err)
+	require.Zero(t, rate)
 }

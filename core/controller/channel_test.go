@@ -77,7 +77,7 @@ func TestRunAutoTestBannedModelsClearsWhenModelRemovedFromChannel(t *testing.T) 
 	var (
 		cleared        atomic.Int32
 		testInvoked    atomic.Bool
-		clearedChannel atomic.Int32
+		clearedChannel atomic.Int64
 	)
 
 	deps := autoTestBannedModelsDeps{
@@ -99,7 +99,7 @@ func TestRunAutoTestBannedModelsClearsWhenModelRemovedFromChannel(t *testing.T) 
 		},
 		clearChannelModelErrors: func(ctx context.Context, modelName string, channelID int) error {
 			cleared.Add(1)
-			clearedChannel.Store(int32(channelID))
+			clearedChannel.Store(int64(channelID))
 			return nil
 		},
 		notifyInfo:  func(title, message string) {},
@@ -116,5 +116,5 @@ func TestRunAutoTestBannedModelsClearsWhenModelRemovedFromChannel(t *testing.T) 
 
 	require.False(t, testInvoked.Load())
 	require.Equal(t, int32(1), cleared.Load())
-	require.Equal(t, int32(123), clearedChannel.Load())
+	require.Equal(t, int64(123), clearedChannel.Load())
 }

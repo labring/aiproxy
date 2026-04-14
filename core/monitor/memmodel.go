@@ -220,6 +220,27 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(
 	return result, nil
 }
 
+func (m *MemModelMonitor) GetChannelModelErrorRate(
+	_ context.Context,
+	model string,
+	channelID int64,
+) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	data, exists := m.models[model]
+	if !exists {
+		return 0, nil
+	}
+
+	channel, exists := data.channels[channelID]
+	if !exists {
+		return 0, nil
+	}
+
+	return getErrorRateFromStats(channel.timeWindows), nil
+}
+
 func (m *MemModelMonitor) GetChannelModelErrorRates(
 	_ context.Context,
 	channelID int64,
