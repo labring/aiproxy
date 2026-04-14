@@ -35,6 +35,11 @@ func ConvertResponseRequest(
 		return adaptor.ConvertResult{}, err
 	}
 
+	// Clamp max_output_tokens to ModelConfig.MaxOutputTokens
+	if maxOut, ok := meta.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 {
+		clampNodeInt(&node, "max_output_tokens", maxOut)
+	}
+
 	jsonData, err := node.MarshalJSON()
 	if err != nil {
 		return adaptor.ConvertResult{}, err

@@ -100,9 +100,13 @@ func buildGenerationConfig(
 		config.TopP = textRequest.TopP
 	}
 
-	// Convert MaxTokens (int) to MaxOutputTokens (*int)
+	// Convert MaxTokens (int) to MaxOutputTokens (*int), clamped to ModelConfig limit
 	if config.MaxOutputTokens == nil && textRequest.MaxTokens != 0 {
-		config.MaxOutputTokens = &textRequest.MaxTokens
+		v := textRequest.MaxTokens
+		if maxOut, ok := meta.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 && v > maxOut {
+			v = maxOut
+		}
+		config.MaxOutputTokens = &v
 	}
 
 	if len(config.ResponseModalities) == 0 &&

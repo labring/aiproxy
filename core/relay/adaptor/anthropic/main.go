@@ -230,6 +230,10 @@ func ConvertRequestBodyToBytes(
 			"max_tokens",
 			ast.NewNumber(strconv.Itoa(GetMaxTokens(meta))),
 		)
+	} else if maxOut, ok := meta.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 {
+		if v, err := maxTokensNode.Int64(); err == nil && v > int64(maxOut) {
+			_, _ = node.Set("max_tokens", ast.NewNumber(strconv.Itoa(maxOut)))
+		}
 	}
 
 	// Handle thinking budget tokens adjustment

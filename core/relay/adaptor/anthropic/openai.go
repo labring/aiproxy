@@ -124,6 +124,8 @@ func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.Claud
 
 	if claudeRequest.MaxTokens == 0 {
 		claudeRequest.MaxTokens = GetMaxTokens(meta)
+	} else if maxOut, ok := meta.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 && claudeRequest.MaxTokens > maxOut {
+		claudeRequest.MaxTokens = maxOut
 	}
 
 	if onlyThinking.Thinking != nil {

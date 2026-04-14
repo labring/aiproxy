@@ -335,6 +335,12 @@ func ConvertChatCompletionsRequest(
 		return adaptor.ConvertResult{}, err
 	}
 
+	// Clamp max_tokens / max_completion_tokens to ModelConfig.MaxOutputTokens
+	if maxOut, ok := meta.ModelConfig.MaxOutputTokens(); ok && maxOut > 0 {
+		clampNodeInt(&node, "max_tokens", maxOut)
+		clampNodeInt(&node, "max_completion_tokens", maxOut)
+	}
+
 	jsonData, err := node.MarshalJSON()
 	if err != nil {
 		return adaptor.ConvertResult{}, err
@@ -379,6 +385,20 @@ func patchStreamOptions(node *ast.Node) error {
 	_, err = streamOptionsNode.Set("include_usage", ast.NewBool(true))
 
 	return err
+}
+
+// clampNodeInt caps the integer value of a JSON field to the given max.
+// If the field doesn't exist or is not a positive integer exceeding max, it's a no-op.
+func clampNodeInt(node *ast.Node, key string, max int) {
+	n := node.Get(key)
+	if n == nil || !n.Exists() {
+		return
+	}
+	v, err := n.Int64()
+	if err != nil || v <= int64(max) {
+		return
+	}
+	_, _ = node.Set(key, ast.NewNumber(strconv.Itoa(max)))
 }
 
 func GetUsageOrChatChoicesResponseFromNode(
