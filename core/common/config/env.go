@@ -14,6 +14,7 @@ var (
 	AdminKey             string
 	WebPath              string
 	DisableWeb           bool
+	DisableWebRoot       bool
 	FfmpegEnabled        bool
 	InternalToken        string
 	DisableModelConfig   bool
@@ -34,6 +35,7 @@ func ReloadEnv() {
 	AdminKey = os.Getenv("ADMIN_KEY")
 	WebPath = os.Getenv("WEB_PATH")
 	DisableWeb = env.Bool("DISABLE_WEB", false)
+	DisableWebRoot = env.Bool("DISABLE_WEB_ROOT", false)
 	FfmpegEnabled = env.Bool("FFMPEG_ENABLED", false)
 	InternalToken = os.Getenv("INTERNAL_TOKEN")
 	DisableModelConfig = env.Bool("DISABLE_MODEL_CONFIG", false)

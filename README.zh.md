@@ -142,6 +142,7 @@ docker-compose up -d
 ```bash
 LISTEN=:3000                    # 服务器监听地址
 ADMIN_KEY=your-admin-key        # 管理员 API 密钥
+DISABLE_WEB_ROOT=true           # 仅将 `/` 重定向到 GitHub，其他 Web 路径保持可访问
 ```
 
 #### **数据库配置**
