@@ -586,6 +586,21 @@ func AutoTestBannedModels() {
 				continue
 			}
 
+			if channel.Status == model.ChannelStatusDisabled {
+				log.Infof("channel %s (type: %d, id: %d) is disabled, skip testing",
+					channel.Name,
+					channel.Type,
+					channel.ID,
+				)
+
+				err := monitor.ClearChannelModelErrors(context.Background(), modelName, channel.ID)
+				if err != nil {
+					log.Errorf("clear channel errors failed: %+v", err)
+				}
+
+				continue
+			}
+
 			result, err := testSingleModel(mc, channel, modelName, true)
 			if err != nil {
 				notify.Error(
