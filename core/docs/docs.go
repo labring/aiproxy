@@ -9499,6 +9499,9 @@ const docTemplate = `{
                 "enabled_auto_balance_check": {
                     "type": "boolean"
                 },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
                 "key": {
                     "type": "string"
                 },
@@ -11265,6 +11268,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "enabled_auto_balance_check": {
+                    "type": "boolean"
+                },
+                "enabled_no_permission_ban": {
                     "type": "boolean"
                 },
                 "id": {
