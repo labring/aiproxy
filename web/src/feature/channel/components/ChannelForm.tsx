@@ -14,7 +14,7 @@ import {
     FormMessage,
 } from '@/components/ui/form'
 import { channelCreateSchema } from '@/validation/channel'
-import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useUpdateChannelStatus, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
+import { useChannelTypeMetas, useCreateChannel, useUpdateChannel, useUpdateChannelStatus, useTestChannel, useTestChannelPreviewAll, useChannelDefaultModels } from '../hooks'
 import { useModels } from '@/feature/model/hooks'
 import { useTranslation } from 'react-i18next'
 import { ChannelCreateForm } from '@/validation/channel'
@@ -33,6 +33,62 @@ import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { getChannelModelMetric } from '@/utils/runtime-metrics'
+import { DEFAULT_PRIORITY } from '@/types/channel'
+
+type ComparableChannelPayload = {
+    type: number
+    name: string
+    key: string
+    base_url: string
+    proxy_url: string
+    models: string[]
+    model_mapping: Record<string, string>
+    sets: string[]
+    priority: number
+    enabled_no_permission_ban: boolean
+    warn_error_rate?: number
+    max_error_rate?: number
+    configs?: Record<string, unknown>
+}
+
+const stableSerialize = (value: unknown): string => {
+    if (Array.isArray(value)) {
+        return `[${value.map(stableSerialize).join(',')}]`
+    }
+
+    if (value && typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, nestedValue]) => `${JSON.stringify(key)}:${stableSerialize(nestedValue)}`)
+        return `{${entries.join(',')}}`
+    }
+
+    return JSON.stringify(value) ?? 'undefined'
+}
+
+const normalizeChannelPayload = (
+    payload: Partial<ComparableChannelPayload> & {
+        type: number
+        name: string
+        key: string
+    }
+): ComparableChannelPayload => ({
+    type: payload.type,
+    name: payload.name,
+    key: payload.key,
+    base_url: payload.base_url ?? '',
+    proxy_url: payload.proxy_url ?? '',
+    models: payload.models ?? [],
+    model_mapping: payload.model_mapping ?? {},
+    sets: payload.sets ?? [],
+    priority: payload.priority ?? DEFAULT_PRIORITY,
+    enabled_no_permission_ban: payload.enabled_no_permission_ban ?? false,
+    warn_error_rate: payload.warn_error_rate ?? undefined,
+    max_error_rate: payload.max_error_rate && payload.max_error_rate > 0
+        ? payload.max_error_rate
+        : undefined,
+    configs: payload.configs ?? undefined,
+})
 
 interface ChannelFormProps {
     mode?: 'create' | 'update' | 'copy'
@@ -115,14 +171,23 @@ export function ChannelForm({
 
     // Test channel hook
     const {
+        testChannel: testSavedChannel,
+        cancelTest: cancelSavedChannelTest,
+        isTesting: isSavedChannelTesting,
+        results: savedChannelTestResults,
+        clearResults: clearSavedChannelTestResults
+    } = useTestChannel()
+
+    const {
         testChannelPreviewAll,
-        cancelTest,
-        isTesting,
-        results: testResults,
-        clearResults: clearTestResults
+        cancelTest: cancelPreviewChannelTest,
+        isTesting: isPreviewChannelTesting,
+        results: previewChannelTestResults,
+        clearResults: clearPreviewChannelTestResults
     } = useTestChannelPreviewAll()
 
     const [testDialogOpen, setTestDialogOpen] = useState(false)
+    const [activeTestMode, setActiveTestMode] = useState<'saved' | 'preview' | null>(null)
 
     useEffect(() => {
         setCurrentStatus(channel?.status ?? 1)
@@ -132,6 +197,8 @@ export function ChannelForm({
     const isLoading = isCreateLikeMode ? isCreating : isUpdating
     const error = isCreateLikeMode ? createError : updateError
     const clearError = isCreateLikeMode ? clearCreateError : clearUpdateError
+    const isTesting = isSavedChannelTesting || isPreviewChannelTesting
+    const testResults = activeTestMode === 'saved' ? savedChannelTestResults : previewChannelTestResults
 
     // 表单设置
     const form = useForm<ChannelCreateForm>({
@@ -281,6 +348,49 @@ export function ChannelForm({
         }
     }
 
+    const isChannelFormUnchanged = (
+        formData: ChannelCreateForm,
+        parsedConfigs?: Record<string, unknown>
+    ) => {
+        if (mode !== 'update' || !channel) {
+            return false
+        }
+
+        const currentPayload = normalizeChannelPayload({
+            type: formData.type,
+            name: formData.name,
+            key: formData.key,
+            base_url: formData.base_url || '',
+            proxy_url: formData.proxy_url || '',
+            models: effectiveUseDefault ? [] : (formData.models || []),
+            model_mapping: effectiveUseDefault ? {} : (formData.model_mapping || {}),
+            sets: formData.sets || [],
+            priority: formData.priority,
+            enabled_no_permission_ban: formData.enabled_no_permission_ban ?? false,
+            warn_error_rate: formData.warn_error_rate,
+            max_error_rate: formData.max_error_rate,
+            configs: parsedConfigs,
+        })
+
+        const originalPayload = normalizeChannelPayload({
+            type: channel.type,
+            name: channel.name,
+            key: channel.key,
+            base_url: channel.base_url || '',
+            proxy_url: channel.proxy_url || '',
+            models: channel.models || [],
+            model_mapping: channel.model_mapping || {},
+            sets: channel.sets || [],
+            priority: channel.priority,
+            enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
+            warn_error_rate: channel.warn_error_rate,
+            max_error_rate: channel.max_error_rate,
+            configs: channel.configs || undefined,
+        })
+
+        return stableSerialize(currentPayload) === stableSerialize(originalPayload)
+    }
+
     // 处理测试按钮点击
     const handleTestClick = () => {
         const formData = form.getValues()
@@ -329,9 +439,18 @@ export function ChannelForm({
             }
         }
 
-        clearTestResults()
         setTestDialogOpen(true)
+        const useSavedChannelTest = mode === 'update' && !!channelId && isChannelFormUnchanged(formData, parsedConfigs)
 
+        if (useSavedChannelTest && channelId) {
+            setActiveTestMode('saved')
+            clearSavedChannelTestResults()
+            testSavedChannel(channelId)
+            return
+        }
+
+        setActiveTestMode('preview')
+        clearPreviewChannelTestResults()
         testChannelPreviewAll({
             type: formData.type,
             key: formData.key,
@@ -346,7 +465,11 @@ export function ChannelForm({
 
     // 处理取消测试
     const handleCancelTest = () => {
-        cancelTest()
+        if (activeTestMode === 'saved') {
+            cancelSavedChannelTest()
+        } else {
+            cancelPreviewChannelTest()
+        }
         setTestDialogOpen(false)
     }
 

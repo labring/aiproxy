@@ -368,8 +368,9 @@ export function ChannelTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.name")}</div>,
             cell: ({ row }) => (
                 <div
-                    className={cn("font-medium", clickableCell)}
+                    className={cn("max-w-[240px] truncate font-medium", clickableCell)}
                     onClick={() => openUpdateDialog(row.original)}
+                    title={row.original.name}
                 >
                     {row.original.name}
                 </div>
@@ -560,19 +561,56 @@ export function ChannelTable() {
                     return <div className="text-xs text-muted-foreground">-</div>
                 }
 
-                return (
-                    <div className="flex flex-wrap gap-1">
-                        {excludedModels.map((model) => (
+                if (excludedModels.length === 1) {
+                    return (
+                        <div className="flex flex-wrap gap-1">
                             <Badge
-                                key={model}
+                                key={excludedModels[0]}
                                 variant="destructive"
                                 className="max-w-[220px] truncate text-xs"
                                 title={t('channel.highErrorRateExcluded')}
                             >
-                                {model}
+                                {excludedModels[0]}
                             </Badge>
-                        ))}
-                    </div>
+                        </div>
+                    )
+                }
+
+                return (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-red-300/70 bg-red-50 px-2.5 py-1 text-sm text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 hover:text-red-800 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                                title={t('channel.highErrorRateExcluded')}
+                            >
+                                <span className="whitespace-nowrap">
+                                    {excludedModels.length} {t("channel.modelsCount")}
+                                </span>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto max-w-sm p-3" align="start">
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">
+                                    {t("channel.temporarilyExcludedModels")} ({excludedModels.length})
+                                </h4>
+                                <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+                                    {excludedModels.map((model) => (
+                                        <button
+                                            key={model}
+                                            type="button"
+                                            className="w-full cursor-pointer rounded-md border border-red-300/70 bg-red-50 px-2 py-1 text-left text-xs text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 hover:text-red-800 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                                            title={t('channel.highErrorRateExcluded')}
+                                            onClick={() => openUpdateDialog(row.original)}
+                                        >
+                                            <span className="block truncate">{model}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                 )
             },
         },
