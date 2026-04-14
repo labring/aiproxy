@@ -12,19 +12,19 @@ import (
 )
 
 func parseCommonParams(c *gin.Context) (params struct {
-	group      string
-	tokenName  string
-	modelName  string
-	channelID  int
-	tokenID    int
-	order      string
-	requestID  string
-	upstreamID string
-	codeType   string
-	code       int
-	withBody   bool
-	ip         string
-	user       string
+	group         string
+	tokenName     string
+	modelName     string
+	channelID     int
+	tokenID       int
+	order         string
+	requestID     string
+	upstreamID    string
+	codeType      string
+	code          int
+	includeDetail bool
+	ip            string
+	user          string
 },
 ) {
 	params.group = c.Query("group")
@@ -37,7 +37,7 @@ func parseCommonParams(c *gin.Context) (params struct {
 	params.upstreamID = c.Query("upstream_id")
 	params.codeType = c.Query("code_type")
 	params.code, _ = strconv.Atoi(c.Query("code"))
-	params.withBody, _ = strconv.ParseBool(c.Query("with_body"))
+	params.includeDetail, _ = strconv.ParseBool(c.Query("include_detail"))
 	params.ip = c.Query("ip")
 	params.user = c.Query("user")
 
@@ -62,7 +62,7 @@ func parseCommonParams(c *gin.Context) (params struct {
 //	@Param			upstream_id		query		string	false	"Upstream ID"
 //	@Param			code_type		query		string	false	"Status code type"
 //	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With body"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
 //	@Param			ip				query		string	false	"IP"
 //	@Param			user			query		string	false	"User"
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetLogsResult}
@@ -82,7 +82,7 @@ func GetLogs(c *gin.Context) {
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
-		params.withBody,
+		params.includeDetail,
 		params.ip,
 		params.user,
 		page,
@@ -117,7 +117,7 @@ func GetLogs(c *gin.Context) {
 //	@Param			upstream_id		query		string	false	"Upstream ID"
 //	@Param			code_type		query		string	false	"Status code type"
 //	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With body"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
 //	@Param			ip				query		string	false	"IP"
 //	@Param			user			query		string	false	"User"
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupLogsResult}
@@ -145,7 +145,7 @@ func GetGroupLogs(c *gin.Context) {
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
-		params.withBody,
+		params.includeDetail,
 		params.ip,
 		params.user,
 		page,
@@ -181,7 +181,7 @@ func GetGroupLogs(c *gin.Context) {
 //	@Param			upstream_id		query		string	false	"Upstream ID"
 //	@Param			code_type		query		string	false	"Status code type"
 //	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With body"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
 //	@Param			ip				query		string	false	"IP"
 //	@Param			user			query		string	false	"User"
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetLogsResult}
@@ -207,7 +207,7 @@ func SearchLogs(c *gin.Context) {
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
-		params.withBody,
+		params.includeDetail,
 		params.ip,
 		params.user,
 		page,
@@ -242,7 +242,7 @@ func SearchLogs(c *gin.Context) {
 //	@Param			upstream_id		query		string	false	"Upstream ID"
 //	@Param			code_type		query		string	false	"Status code type"
 //	@Param			code			query		int		false	"Status code"
-//	@Param			with_body		query		bool	false	"With body"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
 //	@Param			ip				query		string	false	"IP"
 //	@Param			user			query		string	false	"User"
 //	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupLogsResult}
@@ -272,7 +272,7 @@ func SearchGroupLogs(c *gin.Context) {
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
-		params.withBody,
+		params.includeDetail,
 		params.ip,
 		params.user,
 		page,

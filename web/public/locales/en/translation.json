@@ -731,6 +731,74 @@
       "dateRangePlaceholder": "Select date range",
       "search": "Search",
       "reset": "Reset"
+    },
+    "export": {
+      "trigger": "Export CSV",
+      "globalTitle": "Export Global Logs",
+      "groupTitle": "Export Group Logs: {{group}}",
+      "globalDescription": "Generate a CSV file for global logs using the time range, filters, and export options you choose.",
+      "groupDescription": "Generate a CSV file for the current group and control options such as whether the channel column is included.",
+      "keywordNotice": "The current keyword search is not supported by the export API. Use the explicit filters below instead.",
+      "confirm": "Start Export",
+      "exporting": "Exporting...",
+      "success": "Log export started",
+      "failed": "Failed to export logs",
+      "sections": {
+        "time": "Time and Chunking",
+        "timeDescription": "Set the export time range, timezone, and server-side chunk size.",
+        "filters": "Filters",
+        "filtersDescription": "These values are sent directly to the log export API to narrow the export scope.",
+        "options": "Export Options",
+        "optionsDescription": "Control detail payloads, entry limits, and the group-only channel column."
+      },
+      "fields": {
+        "dateRange": "Date Range",
+        "timezone": "Timezone",
+        "order": "Sort Order",
+        "chunkInterval": "Read Interval",
+        "model": "Model",
+        "tokenName": "Token Name",
+        "channel": "Channel ID",
+        "statusType": "Status Type",
+        "statusCode": "Status Code",
+        "requestId": "Request ID",
+        "upstreamId": "Upstream ID",
+        "ip": "IP",
+        "user": "User",
+        "includeDetail": "Include request/response detail",
+        "includeChannel": "Include channel column",
+        "includeRetryAt": "Include retry time",
+        "limitEntries": "Limit exported entries",
+        "maxEntries": "Max Entries"
+      },
+      "placeholders": {
+        "model": "For example gpt-4.1",
+        "tokenName": "For example team-prod",
+        "channel": "For example 12",
+        "statusCode": "For example 500",
+        "requestId": "Exact request ID",
+        "upstreamId": "Exact upstream ID",
+        "ip": "For example 10.0.0.1",
+        "user": "Enter username",
+        "chunkInterval": "For example 10m, 30m, 1h, 2h30m",
+        "maxEntries": "Enter a positive integer"
+      },
+      "order": {
+        "createdDesc": "Created time descending",
+        "createdAsc": "Created time ascending"
+      },
+      "hints": {
+        "includeDetail": "Include request and response payload details. This can make the CSV much larger.",
+        "includeChannel": "Only available for group exports. Writes the channel ID as a separate CSV column.",
+        "includeRetryAt": "Only available for group exports. retry_at is excluded by default.",
+        "limitEntries": "When disabled, the request is sent as unlimited and the export follows only the selected time range."
+      },
+      "validation": {
+        "chunkInterval": "Read interval must be a duration between 10m and 4h, for example 30m or 1h",
+        "statusCode": "Status code must be an integer",
+        "channel": "Channel ID must be an integer",
+        "maxEntries": "Max entries must be a positive integer"
+      }
     }
   },
   "apiDoc": {

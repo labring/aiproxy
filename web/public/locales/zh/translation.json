@@ -719,6 +719,74 @@
       "dateRangePlaceholder": "选择日期范围",
       "search": "搜索",
       "reset": "重置"
+    },
+    "export": {
+      "trigger": "导出 CSV",
+      "globalTitle": "导出全局日志",
+      "groupTitle": "导出组别日志: {{group}}",
+      "globalDescription": "根据你选择的时间范围、筛选条件和导出选项生成全局日志 CSV 文件。",
+      "groupDescription": "为当前组别生成日志 CSV 文件，并可控制是否附带渠道列等参数。",
+      "keywordNotice": "当前关键词搜索不会应用到导出接口，请使用下方精确筛选条件。",
+      "confirm": "开始导出",
+      "exporting": "导出中...",
+      "success": "日志导出已开始",
+      "failed": "日志导出失败",
+      "sections": {
+        "time": "时间与分段",
+        "timeDescription": "设置导出的时间范围、时区以及服务端分段粒度。",
+        "filters": "筛选条件",
+        "filtersDescription": "这些参数会直接传给日志导出接口，用于缩小导出范围。",
+        "options": "导出选项",
+        "optionsDescription": "控制是否携带详情、是否限制条目数以及 group 导出的渠道列。"
+      },
+      "fields": {
+        "dateRange": "日期范围",
+        "timezone": "时区",
+        "order": "排序方式",
+        "chunkInterval": "读取间隔",
+        "model": "模型",
+        "tokenName": "Token 名称",
+        "channel": "渠道 ID",
+        "statusType": "状态类型",
+        "statusCode": "状态码",
+        "requestId": "请求 ID",
+        "upstreamId": "上游 ID",
+        "ip": "IP",
+        "user": "用户",
+        "includeDetail": "包含请求/响应详情",
+        "includeChannel": "包含渠道列",
+        "includeRetryAt": "包含重试时间",
+        "limitEntries": "限制导出条目数",
+        "maxEntries": "最大条目数"
+      },
+      "placeholders": {
+        "model": "例如 gpt-4.1",
+        "tokenName": "例如 team-prod",
+        "channel": "例如 12",
+        "statusCode": "例如 500",
+        "requestId": "精确匹配请求 ID",
+        "upstreamId": "精确匹配上游 ID",
+        "ip": "例如 10.0.0.1",
+        "user": "输入用户名",
+        "chunkInterval": "例如 10m、30m、1h、2h30m",
+        "maxEntries": "输入正整数"
+      },
+      "order": {
+        "createdDesc": "创建时间倒序",
+        "createdAsc": "创建时间正序"
+      },
+      "hints": {
+        "includeDetail": "导出请求体和响应体详情，文件会明显变大。",
+        "includeChannel": "仅 group 日志支持，把渠道 ID 作为单独列写入 CSV。",
+        "includeRetryAt": "仅 group 日志支持，默认不导出 retry_at 列。",
+        "limitEntries": "关闭后会传入“不限制”，更适合按时间范围做完整导出。"
+      },
+      "validation": {
+        "chunkInterval": "读取间隔必须是 10m 到 4h 之间的时长，例如 30m 或 1h",
+        "statusCode": "状态码必须是整数",
+        "channel": "渠道 ID 必须是整数",
+        "maxEntries": "最大条目数必须是正整数"
+      }
     }
   },
   "apiDoc": {

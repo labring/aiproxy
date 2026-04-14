@@ -1428,15 +1428,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1623,15 +1623,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1964,6 +1964,8 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
@@ -1971,8 +1973,6 @@ definitions:
       status_429_count:
         type: integer
       status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -3118,15 +3118,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
-        type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -5327,9 +5327,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -5385,6 +5385,96 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get group log detail
+      tags:
+      - log
+  /api/log/{group}/export:
+    get:
+      description: Streams filtered group logs as a CSV table file
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Include channel column, default false
+        in: query
+        name: include_channel
+        type: boolean
+      - description: Include retry_at column, default false
+        in: query
+        name: include_retry_at
+        type: boolean
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export group logs
       tags:
       - log
   /api/log/{group}/search:
@@ -5448,9 +5538,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -5550,9 +5640,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -5685,6 +5775,79 @@ paths:
       summary: Get log detail
       tags:
       - logs
+  /api/logs/export:
+    get:
+      description: Streams filtered global logs as a CSV table file
+      parameters:
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export global logs
+      tags:
+      - logs
   /api/logs/search:
     get:
       description: Search logs with various filters
@@ -5750,9 +5913,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query

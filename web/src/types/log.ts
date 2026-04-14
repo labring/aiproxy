@@ -110,6 +110,31 @@ export interface LogFilters {
   per_page?: number
 }
 
+export type LogExportOrder =
+  | 'desc'
+  | 'asc'
+
+export interface LogExportParams {
+  model?: string
+  token_name?: string
+  channel?: number
+  start_timestamp?: number
+  end_timestamp?: number
+  timezone?: string
+  code_type?: 'all' | 'success' | 'error'
+  code?: number
+  request_id?: string
+  upstream_id?: string
+  ip?: string
+  user?: string
+  include_detail?: boolean
+  include_channel?: boolean
+  include_retry_at?: boolean
+  max_entries?: number
+  chunk_interval?: string
+  order?: LogExportOrder
+}
+
 // 日志列表请求参数
 export interface LogListParams extends LogFilters {
   group?: string

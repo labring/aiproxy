@@ -56,6 +56,32 @@ export const zonedBoundaryToUnixMs = (date: Date, timeZone: string, endOfDay = f
     return zonedBoundaryToUnix(date, timeZone, endOfDay) * 1000 + (endOfDay ? 999 : 0)
 }
 
+export const unixMsToZonedDate = (timestampMs: number, timeZone: string): Date => {
+    try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        })
+
+        const values = Object.fromEntries(
+            formatter
+                .formatToParts(new Date(timestampMs))
+                .filter(part => part.type !== 'literal')
+                .map(part => [part.type, part.value])
+        )
+
+        return new Date(
+            Number(values.year),
+            Number(values.month) - 1,
+            Number(values.day)
+        )
+    } catch {
+        return new Date(timestampMs)
+    }
+}
+
 export const formatRangeTimestamp = (timestampSeconds: number, timeZone: string): string => {
     return new Intl.DateTimeFormat(undefined, {
         timeZone,
