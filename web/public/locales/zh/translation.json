@@ -755,6 +755,7 @@
         "user": "用户",
         "includeDetail": "包含请求/响应详情",
         "includeChannel": "包含渠道列",
+        "includeRetryAt": "包含重试时间",
         "limitEntries": "限制导出条目数",
         "maxEntries": "最大条目数"
       },
@@ -777,6 +778,7 @@
       "hints": {
         "includeDetail": "导出请求体和响应体详情，文件会明显变大。",
         "includeChannel": "仅 group 日志支持，把渠道 ID 作为单独列写入 CSV。",
+        "includeRetryAt": "仅 group 日志支持，默认不导出 retry_at 列。",
         "limitEntries": "关闭后会传入“不限制”，更适合按时间范围做完整导出。"
       },
       "validation": {

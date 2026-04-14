@@ -36,13 +36,13 @@ func TestBuildLogExportCSVFormatsTimezoneAndSanitizesCells(t *testing.T) {
 				ResponseBody: "-payload",
 			},
 		},
-	}, location, "Asia/Shanghai", true)
+	}, location, true, true)
 	if err != nil {
 		t.Fatalf("build csv: %v", err)
 	}
 
 	csvText := string(content)
-	if !strings.HasPrefix(csvText, "\xEF\xBB\xBFid,created_at") {
+	if !strings.HasPrefix(csvText, "\xEF\xBB\xBFid,end_time") {
 		sample := csvText
 		if len(sample) > 32 {
 			sample = sample[:32]
@@ -73,7 +73,7 @@ func TestBuildLogExportCSVExcludesChannelByDefaultForGroupExport(t *testing.T) {
 			ChannelID: 9,
 			Model:     "gpt-test",
 		},
-	}, time.UTC, "UTC", false)
+	}, time.UTC, false, false)
 	if err != nil {
 		t.Fatalf("build csv: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestBuildLogExportCSVIncludesChannelWhenRequested(t *testing.T) {
 			ChannelID: 9,
 			Model:     "gpt-test",
 		},
-	}, time.UTC, "UTC", true)
+	}, time.UTC, true, false)
 	if err != nil {
 		t.Fatalf("build csv: %v", err)
 	}
@@ -109,6 +109,34 @@ func TestBuildLogExportCSVIncludesChannelWhenRequested(t *testing.T) {
 
 	if !strings.Contains(csvText, ",9,gpt-test,") {
 		t.Fatalf("expected channel value to be included, got %q", csvText)
+	}
+}
+
+func TestBuildLogExportCSVExcludesTimezoneModeAndRetryAtByDefault(t *testing.T) {
+	content, err := buildLogExportCSV([]*model.Log{
+		{
+			ID:        1,
+			CreatedAt: time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+			RequestAt: time.Date(2026, time.April, 14, 12, 0, 1, 0, time.UTC),
+			RetryAt:   time.Date(2026, time.April, 14, 12, 5, 0, 0, time.UTC),
+			Model:     "gpt-test",
+			Mode:      2,
+		},
+	}, time.UTC, false, false)
+	if err != nil {
+		t.Fatalf("build csv: %v", err)
+	}
+
+	csvText := string(content)
+
+	headerLine := strings.SplitN(strings.TrimPrefix(csvText, "\xEF\xBB\xBF"), "\n", 2)[0]
+	if strings.Contains(","+headerLine+",", ",timezone,") ||
+		strings.Contains(","+headerLine+",", ",mode,") ||
+		strings.Contains(","+headerLine+",", ",retry_at,") {
+		t.Fatalf(
+			"expected timezone, mode and retry_at headers to be excluded, got header %q",
+			headerLine,
+		)
 	}
 }
 
@@ -302,6 +330,27 @@ func TestParseLogExportParamsAllowsZeroMaxEntriesAsUnlimited(t *testing.T) {
 
 	if params.maxEntries != 0 {
 		t.Fatalf("expected zero max_entries to remain unlimited, got %d", params.maxEntries)
+	}
+}
+
+func TestParseLogExportParamsUsesIncludeRetryAt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{
+		URL: &url.URL{
+			RawQuery: "include_retry_at=true",
+		},
+	}
+
+	params, err := parseLogExportParams(c)
+	if err != nil {
+		t.Fatalf("parse params: %v", err)
+	}
+
+	if !params.includeRetryAt {
+		t.Fatal("expected include_retry_at=true to enable retry_at export")
 	}
 }
 

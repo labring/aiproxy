@@ -1428,8 +1428,6 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
@@ -1437,6 +1435,8 @@ definitions:
       status_5xx_count:
         type: integer
       status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1623,15 +1623,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1964,8 +1964,6 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_4xx_count:
-        type: integer
       status_500_count:
         type: integer
       status_5xx_count:
@@ -1973,6 +1971,8 @@ definitions:
       status_400_count:
         type: integer
       status_429_count:
+        type: integer
+      status_4xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -3033,8 +3033,6 @@ definitions:
         type: integer
       status_2xx_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -3042,6 +3040,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -3118,15 +3118,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
-        type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -5459,6 +5459,10 @@ paths:
       - description: Include channel column, default false
         in: query
         name: include_channel
+        type: boolean
+      - description: Include retry_at column, default false
+        in: query
+        name: include_retry_at
         type: boolean
       - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
           1h

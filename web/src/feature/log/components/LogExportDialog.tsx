@@ -59,6 +59,7 @@ interface ExportFormState {
     dateRange?: DateRange
     includeDetail: boolean
     includeChannel: boolean
+    includeRetryAt: boolean
     limitEntries: boolean
     maxEntries: string
     chunkInterval: string
@@ -119,6 +120,7 @@ const buildInitialState = (currentFilters?: LogFilters): ExportFormState => {
         dateRange,
         includeDetail: false,
         includeChannel: false,
+        includeRetryAt: false,
         limitEntries: false,
         maxEntries: '10000',
         chunkInterval: '30m',
@@ -228,6 +230,7 @@ export function LogExportDialog({
             timezone,
             include_detail: form.includeDetail,
             include_channel: scope === 'group' ? form.includeChannel : undefined,
+            include_retry_at: scope === 'group' ? form.includeRetryAt : undefined,
             max_entries: maxEntries,
             chunk_interval: chunkInterval,
             order: form.order,
@@ -465,12 +468,21 @@ export function LogExportDialog({
                             />
 
                             {scope === 'group' && (
-                                <ToggleRow
-                                    label={t('log.export.fields.includeChannel')}
-                                    description={t('log.export.hints.includeChannel')}
-                                    checked={form.includeChannel}
-                                    onCheckedChange={(includeChannel) => setForm(prev => ({ ...prev, includeChannel }))}
-                                />
+                                <>
+                                    <ToggleRow
+                                        label={t('log.export.fields.includeChannel')}
+                                        description={t('log.export.hints.includeChannel')}
+                                        checked={form.includeChannel}
+                                        onCheckedChange={(includeChannel) => setForm(prev => ({ ...prev, includeChannel }))}
+                                    />
+
+                                    <ToggleRow
+                                        label={t('log.export.fields.includeRetryAt')}
+                                        description={t('log.export.hints.includeRetryAt')}
+                                        checked={form.includeRetryAt}
+                                        onCheckedChange={(includeRetryAt) => setForm(prev => ({ ...prev, includeRetryAt }))}
+                                    />
+                                </>
                             )}
 
                             <ToggleRow

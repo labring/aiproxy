@@ -39,6 +39,7 @@ const buildLogExportParams = (filters?: LogExportParams): URLSearchParams => {
     if (filters?.user) params.append('user', filters.user)
     if (filters?.include_detail) params.append('include_detail', 'true')
     if (filters?.include_channel) params.append('include_channel', 'true')
+    if (filters?.include_retry_at) params.append('include_retry_at', 'true')
     if (typeof filters?.max_entries === 'number') params.append('max_entries', filters.max_entries.toString())
     if (filters?.chunk_interval) params.append('chunk_interval', filters.chunk_interval)
     if (filters?.order) params.append('order', filters.order)

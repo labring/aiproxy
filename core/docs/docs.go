@@ -3365,6 +3365,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Include retry_at column, default false",
+                        "name": "include_retry_at",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h",
                         "name": "chunk_interval",

@@ -767,6 +767,7 @@
         "user": "User",
         "includeDetail": "Include request/response detail",
         "includeChannel": "Include channel column",
+        "includeRetryAt": "Include retry time",
         "limitEntries": "Limit exported entries",
         "maxEntries": "Max Entries"
       },
@@ -789,6 +790,7 @@
       "hints": {
         "includeDetail": "Include request and response payload details. This can make the CSV much larger.",
         "includeChannel": "Only available for group exports. Writes the channel ID as a separate CSV column.",
+        "includeRetryAt": "Only available for group exports. retry_at is excluded by default.",
         "limitEntries": "When disabled, the request is sent as unlimited and the export follows only the selected time range."
       },
       "validation": {

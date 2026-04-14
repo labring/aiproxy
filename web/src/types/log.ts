@@ -129,6 +129,7 @@ export interface LogExportParams {
   user?: string
   include_detail?: boolean
   include_channel?: boolean
+  include_retry_at?: boolean
   max_entries?: number
   chunk_interval?: string
   order?: LogExportOrder
