@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/common/config"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -106,33 +106,25 @@ func (m *redisModelMonitor) GetModelsErrorRate(ctx context.Context) (map[string]
 	return result, nil
 }
 
-// AddRequest adds a request record and checks if channel should be banned
-// warnErrorRate: threshold for warning (default 30%)
-// maxErrorRate: threshold for banning (0 means no banning)
+// AddRequest adds a request record, returns the current error rate and checks
+// whether channel-model should be temporarily banned.
 func AddRequest(
 	ctx context.Context,
 	model string,
 	channelID int64,
 	isError, tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool, err error) {
-	// Set default warning threshold if not specified
-	if warnErrorRate <= 0 {
-		warnErrorRate = config.GetDefaultWarnNotifyErrorRate()
-	}
-
+) (errorRate float64, banExecution bool, err error) {
 	if !common.RedisEnabled {
-		beyondThreshold, banExecution = memModelMonitor.AddRequest(
+		errorRate, banExecution = memModelMonitor.AddRequest(
 			model,
 			channelID,
 			isError,
 			tryBan,
-			warnErrorRate,
 			maxErrorRate,
 		)
 
-		return beyondThreshold, banExecution, nil
+		return errorRate, banExecution, nil
 	}
 
 	return redisMonitorModel.AddRequest(
@@ -141,7 +133,6 @@ func AddRequest(
 		channelID,
 		isError,
 		tryBan,
-		warnErrorRate,
 		maxErrorRate,
 	)
 }
@@ -151,12 +142,11 @@ func (m *redisModelMonitor) AddRequest(
 	model string,
 	channelID int64,
 	isError, tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool, err error) {
+) (errorRate float64, banExecution bool, err error) {
 	rdb, err := m.rdb()
 	if err != nil {
-		return false, false, err
+		return 0, false, err
 	}
 
 	errorFlag := 0
@@ -175,16 +165,64 @@ func (m *redisModelMonitor) AddRequest(
 		channelID,
 		errorFlag,
 		now,
-		warnErrorRate,
 		maxErrorRate,
-		maxErrorRate > 0,
 		tryBan,
-	).Int64()
+		getBanDuration().Milliseconds(),
+	).Slice()
 	if err != nil {
-		return false, false, err
+		return 0, false, err
 	}
 
-	return val == 3, val == 1, nil
+	banExecution, errorRate, err = parseAddRequestResult(val)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return errorRate, banExecution, nil
+}
+
+func parseAddRequestResult(result []any) (banExecution bool, errorRate float64, err error) {
+	if len(result) != 2 {
+		return false, 0, fmt.Errorf("unexpected add request result length: %d", len(result))
+	}
+
+	banExecution, err = parseLuaBoolNumber(result[0])
+	if err != nil {
+		return false, 0, fmt.Errorf("parse ban execution: %w", err)
+	}
+
+	errorRate, err = parseLuaFloat(result[1])
+	if err != nil {
+		return false, 0, fmt.Errorf("parse error rate: %w", err)
+	}
+
+	return banExecution, errorRate, nil
+}
+
+func parseLuaBoolNumber(value any) (bool, error) {
+	number, err := parseLuaFloat(value)
+	if err != nil {
+		return false, err
+	}
+
+	return math.Abs(number) > 0, nil
+}
+
+func parseLuaFloat(value any) (float64, error) {
+	switch v := value.(type) {
+	case int64:
+		return float64(v), nil
+	case float64:
+		return v, nil
+	case string:
+		return strconv.ParseFloat(v, 64)
+	case []byte:
+		return strconv.ParseFloat(string(v), 64)
+	case nil:
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unsupported lua result type %T", value)
+	}
 }
 
 func buildStatsKey(model, channelID string) string {
@@ -704,17 +742,15 @@ local model = KEYS[2]
 local channel_id = ARGV[1]
 local is_error = tonumber(ARGV[2])
 local now_ts = tonumber(ARGV[3])
-local warn_error_rate = tonumber(ARGV[4])
-local max_error_rate = tonumber(ARGV[5])
-local can_ban = tonumber(ARGV[6])
-local try_ban = tonumber(ARGV[7])
+local max_error_rate = tonumber(ARGV[4])
+local try_ban = tonumber(ARGV[5])
+local banExpiry = tonumber(ARGV[6])
 
 local banned_key = prefix .. ":model:" .. model .. ":channel:" .. channel_id .. ":banned"
 local stats_key = prefix .. ":model:" .. model .. ":channel:" .. channel_id .. ":stats"
 local model_stats_key = prefix .. ":model:" .. model .. ":total_stats"
 local maxSliceCount = 12
 local statsExpiry = maxSliceCount * 10 * 1000
-local banExpiry = 5 * 60 * 1000
 local current_slice = math.floor(now_ts / 10 / 1000)
 local total_req_field = "__meta_total_req"
 local total_err_field = "__meta_total_err"
@@ -803,36 +839,37 @@ update_stats(model_stats_key)
 
 local function check_channel_error()
     local already_banned = redis.call("EXISTS", banned_key) == 1
+    local total_req, total_err = get_clean_req_err(stats_key)
+    local error_rate = 0
+    if total_req >= 20 then
+        error_rate = total_err / total_req
+    end
+    local error_rate_str = tostring(error_rate)
 
-	if try_ban == 1 and can_ban == 1 then
+	if try_ban == 1 then
 		if already_banned then
-			return 2
+			return {0, error_rate_str}
 		end
 		redis.call("SET", banned_key, 1)
 		redis.call("PEXPIRE", banned_key, banExpiry)
-		return 1
+		return {1, error_rate_str}
 	end
 
-	local total_req, total_err = get_clean_req_err(stats_key)
 	if total_req < 20 then
-		return 0
+		return {0, 0}
 	end
-
-	local error_rate = total_err / total_req
 
 	-- Check if we should ban (only if max_error_rate is set and exceeded)
-	if can_ban == 1 and error_rate >= max_error_rate then
+	if max_error_rate > 0 and error_rate >= max_error_rate then
 		if already_banned then
-			return 3  -- Beyond threshold but already banned
+			return {0, error_rate_str}
 		end
 		redis.call("SET", banned_key, 1)
 		redis.call("PEXPIRE", banned_key, banExpiry)
-		return 1  -- Ban executed
-	elseif error_rate >= warn_error_rate then
-		return 3  -- Beyond warning threshold but not banning
-	else
-		return 0  -- All good
+		return {1, error_rate_str}
 	end
+
+	return {0, error_rate_str}
 end
 
 return check_channel_error()

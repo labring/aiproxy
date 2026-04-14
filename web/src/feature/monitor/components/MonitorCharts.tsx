@@ -15,6 +15,7 @@ import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
 import type { Channel } from '@/types/channel'
 import { useGroupModelMetrics, useGroupTokennameModelMetrics, useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
+import { getChannelModelMetric } from '@/utils/runtime-metrics'
 
 interface MonitorChartsProps {
     chartData: ChartDataPoint[]
@@ -889,13 +890,18 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                                                 )
                                                             }
 
-                                                            const metric = channelRuntimeMetrics?.channel_models?.[String(detail.channelId)]?.[detail.model]
+                                                            const metric = getChannelModelMetric(channelRuntimeMetrics, detail.channelId, detail.model)
                                                             if (!metric) return <span className="text-muted-foreground">-</span>
                                                             return (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     <span>RPM {metric.rpm.toLocaleString()}</span>
                                                                     <span>TPM {metric.tpm.toLocaleString()}</span>
                                                                     <span>ERR {formatPercent(metric.error_rate)}</span>
+                                                                    {metric.banned && (
+                                                                        <span className="font-medium text-destructive">
+                                                                            {t('channel.temporarilyExcluded')}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             )
                                                         })()}

@@ -43,8 +43,6 @@ type ModelConfig struct {
 	Price                      Price              `gorm:"embedded"                      json:"price,omitempty"                          yaml:"price,omitempty"`
 	RetryTimes                 int64              `                                     json:"retry_times,omitempty"                    yaml:"retry_times,omitempty"`
 	TimeoutConfig              TimeoutConfig      `gorm:"embedded"                      json:"timeout_config,omitempty"                 yaml:"timeout_config,omitempty"`
-	WarnErrorRate              float64            `                                     json:"warn_error_rate,omitempty"                yaml:"warn_error_rate,omitempty"`
-	MaxErrorRate               float64            `                                     json:"max_error_rate,omitempty"                 yaml:"max_error_rate,omitempty"`
 	ForceSaveDetail            bool               `                                     json:"force_save_detail,omitempty"              yaml:"force_save_detail,omitempty"`
 	RequestBodyStorageMaxSize  int64              `                                     json:"request_body_storage_max_size,omitempty"  yaml:"request_body_storage_max_size,omitempty"`
 	ResponseBodyStorageMaxSize int64              `                                     json:"response_body_storage_max_size,omitempty" yaml:"response_body_storage_max_size,omitempty"`

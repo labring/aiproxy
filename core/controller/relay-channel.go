@@ -22,7 +22,7 @@ const (
 	AIProxyChannelHeader = "Aiproxy-Channel"
 	// maxRetryErrorRate is the maximum error rate threshold for channel retry selection
 	// Channels with error rate higher than this will be filtered out during retry
-	maxRetryErrorRate = 0.75
+	maxRetryErrorRate = 0.85
 	// errorRatePenaltyBase smooths low-error channels so tiny differences near zero
 	// do not create outsized weight gaps.
 	errorRatePenaltyBase = 0.10

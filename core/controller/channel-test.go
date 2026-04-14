@@ -557,14 +557,177 @@ func tryTestChannel(channelID int, modelName string) bool {
 	)
 }
 
+const defaultAutoTestBannedModelsConcurrency = 50
+
+type autoTestBannedModelsDeps struct {
+	tryTestChannel          func(channelID int, modelName string) bool
+	loadChannelByID         func(id int) (*model.Channel, error)
+	testSingleModel         func(mc *model.ModelCaches, channel *model.Channel, modelName string, saveToDB bool) (*model.ChannelTest, error)
+	clearChannelModelErrors func(ctx context.Context, modelName string, channelID int) error
+	notifyInfo              func(title, message string)
+	notifyError             func(title, message string)
+}
+
+func defaultAutoTestBannedModelsDeps() autoTestBannedModelsDeps {
+	return autoTestBannedModelsDeps{
+		tryTestChannel:          tryTestChannel,
+		loadChannelByID:         model.LoadChannelByID,
+		testSingleModel:         testSingleModel,
+		clearChannelModelErrors: monitor.ClearChannelModelErrors,
+		notifyInfo:              notify.Info,
+		notifyError:             notify.Error,
+	}
+}
+
+type autoTestBannedModelJob struct {
+	modelName string
+	channelID int64
+}
+
+func processAutoTestBannedModelJob(
+	logEntry *log.Entry,
+	mc *model.ModelCaches,
+	job autoTestBannedModelJob,
+	deps autoTestBannedModelsDeps,
+) {
+	if !deps.tryTestChannel(int(job.channelID), job.modelName) {
+		return
+	}
+
+	channel, err := deps.loadChannelByID(int(job.channelID))
+	if err != nil {
+		logEntry.Errorf("failed to get channel by model %s: %s", job.modelName, err.Error())
+		return
+	}
+
+	if channel.Status == model.ChannelStatusDisabled {
+		logEntry.Infof("channel %s (type: %d, id: %d) is disabled, skip testing",
+			channel.Name,
+			channel.Type,
+			channel.ID,
+		)
+
+		err := deps.clearChannelModelErrors(context.Background(), job.modelName, channel.ID)
+		if err != nil {
+			logEntry.Errorf("clear channel errors failed: %+v", err)
+		}
+
+		return
+	}
+
+	if !slices.Contains(channel.Models, job.modelName) {
+		logEntry.Infof(
+			"model %s is no longer configured on channel %s (type: %d, id: %d), clear banned state",
+			job.modelName,
+			channel.Name,
+			channel.Type,
+			channel.ID,
+		)
+
+		err := deps.clearChannelModelErrors(context.Background(), job.modelName, channel.ID)
+		if err != nil {
+			logEntry.Errorf("clear channel errors failed: %+v", err)
+		}
+
+		return
+	}
+
+	result, err := deps.testSingleModel(mc, channel, job.modelName, true)
+	if err != nil {
+		deps.notifyError(
+			fmt.Sprintf(
+				"channel %s (type: %d, id: %d) model %s test failed",
+				channel.Name,
+				channel.Type,
+				channel.ID,
+				job.modelName,
+			),
+			err.Error(),
+		)
+
+		return
+	}
+
+	if result.Success {
+		deps.notifyInfo(
+			fmt.Sprintf(
+				"channel %s (type: %d, id: %d) model %s test success",
+				channel.Name,
+				channel.Type,
+				channel.ID,
+				job.modelName,
+			),
+			"unban it",
+		)
+
+		err = deps.clearChannelModelErrors(context.Background(), job.modelName, channel.ID)
+		if err != nil {
+			logEntry.Errorf("clear channel errors failed: %+v", err)
+		}
+
+		return
+	}
+
+	deps.notifyError(
+		fmt.Sprintf(
+			"channel %s (type: %d, id: %d) model %s test failed",
+			channel.Name,
+			channel.Type,
+			channel.ID,
+			job.modelName,
+		),
+		fmt.Sprintf("code: %d, response: %s", result.Code, result.Response),
+	)
+}
+
+func runAutoTestBannedModels(
+	logEntry *log.Entry,
+	channels map[string][]int64,
+	mc *model.ModelCaches,
+	concurrency int,
+	deps autoTestBannedModelsDeps,
+) {
+	if len(channels) == 0 {
+		return
+	}
+
+	if concurrency <= 0 {
+		concurrency = defaultAutoTestBannedModelsConcurrency
+	}
+
+	jobs := make(chan autoTestBannedModelJob)
+
+	var wg sync.WaitGroup
+
+	for range concurrency {
+		wg.Go(func() {
+			for job := range jobs {
+				processAutoTestBannedModelJob(logEntry, mc, job, deps)
+			}
+		})
+	}
+
+	for modelName, ids := range channels {
+		for _, id := range ids {
+			jobs <- autoTestBannedModelJob{
+				modelName: modelName,
+				channelID: id,
+			}
+		}
+	}
+
+	close(jobs)
+	wg.Wait()
+}
+
 func AutoTestBannedModels() {
-	log := log.WithFields(log.Fields{
+	logEntry := log.WithFields(log.Fields{
 		"auto_test_banned_models": "true",
 	})
 
 	channels, err := monitor.GetAllBannedModelChannels(context.Background())
 	if err != nil {
-		log.Errorf("failed to get banned channels: %s", err.Error())
+		logEntry.Errorf("failed to get banned channels: %s", err.Error())
 		return
 	}
 
@@ -573,80 +736,13 @@ func AutoTestBannedModels() {
 	}
 
 	mc := model.LoadModelCaches()
-
-	for modelName, ids := range channels {
-		for _, id := range ids {
-			if !tryTestChannel(int(id), modelName) {
-				continue
-			}
-
-			channel, err := model.LoadChannelByID(int(id))
-			if err != nil {
-				log.Errorf("failed to get channel by model %s: %s", modelName, err.Error())
-				continue
-			}
-
-			if channel.Status == model.ChannelStatusDisabled {
-				log.Infof("channel %s (type: %d, id: %d) is disabled, skip testing",
-					channel.Name,
-					channel.Type,
-					channel.ID,
-				)
-
-				err := monitor.ClearChannelModelErrors(context.Background(), modelName, channel.ID)
-				if err != nil {
-					log.Errorf("clear channel errors failed: %+v", err)
-				}
-
-				continue
-			}
-
-			result, err := testSingleModel(mc, channel, modelName, true)
-			if err != nil {
-				notify.Error(
-					fmt.Sprintf(
-						"channel %s (type: %d, id: %d) model %s test failed",
-						channel.Name,
-						channel.Type,
-						channel.ID,
-						modelName,
-					),
-					err.Error(),
-				)
-
-				continue
-			}
-
-			if result.Success {
-				notify.Info(
-					fmt.Sprintf(
-						"channel %s (type: %d, id: %d) model %s test success",
-						channel.Name,
-						channel.Type,
-						channel.ID,
-						modelName,
-					),
-					"unban it",
-				)
-
-				err = monitor.ClearChannelModelErrors(context.Background(), modelName, channel.ID)
-				if err != nil {
-					log.Errorf("clear channel errors failed: %+v", err)
-				}
-			} else {
-				notify.Error(
-					fmt.Sprintf(
-						"channel %s (type: %d, id: %d) model %s test failed",
-						channel.Name,
-						channel.Type,
-						channel.ID,
-						modelName,
-					),
-					fmt.Sprintf("code: %d, response: %s", result.Code, result.Response),
-				)
-			}
-		}
-	}
+	runAutoTestBannedModels(
+		logEntry,
+		channels,
+		mc,
+		defaultAutoTestBannedModelsConcurrency,
+		defaultAutoTestBannedModelsDeps(),
+	)
 }
 
 // TestChannelRequest 用于测试未保存的渠道配置

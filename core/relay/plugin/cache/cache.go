@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"sync"
@@ -69,6 +70,19 @@ var (
 		},
 	}
 )
+
+func jitterCacheTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+
+	jitter := ttl / 10
+	if jitter <= 0 {
+		return ttl
+	}
+
+	return ttl + time.Duration(rand.Int64N(int64(jitter)*2+1)) - jitter
+}
 
 // NewCachePlugin creates a new cache plugin
 func NewCachePlugin(rdb *redis.Client) plugin.Plugin {
@@ -207,6 +221,8 @@ func (c *Cache) getFromCache(ctx context.Context, key string) (*Item, bool) {
 
 // setToCache stores item in cache (Redis and/or memory)
 func (c *Cache) setToCache(ctx context.Context, key string, item Item, ttl time.Duration) {
+	ttl = jitterCacheTTL(ttl)
+
 	// Set to Redis if available
 	if c.rdb != nil {
 		if err := c.setToRedis(ctx, key, &item, ttl); err == nil {

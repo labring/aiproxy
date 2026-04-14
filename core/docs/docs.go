@@ -9496,8 +9496,14 @@ const docTemplate = `{
                 "configs": {
                     "$ref": "#/definitions/model.ChannelConfigs"
                 },
+                "enabled_auto_balance_check": {
+                    "type": "boolean"
+                },
                 "key": {
                     "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
                 },
                 "model_mapping": {
                     "type": "object",
@@ -9531,6 +9537,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"
+                },
+                "warn_error_rate": {
+                    "type": "number"
                 }
             }
         },
@@ -9635,9 +9644,6 @@ const docTemplate = `{
                         }
                     }
                 },
-                "max_error_rate": {
-                    "type": "number"
-                },
                 "model": {
                     "type": "string"
                 },
@@ -9683,9 +9689,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "warn_error_rate": {
-                    "type": "number"
                 }
             }
         },
@@ -10643,9 +10646,6 @@ const docTemplate = `{
                         }
                     }
                 },
-                "max_error_rate": {
-                    "type": "number"
-                },
                 "model": {
                     "type": "string"
                 },
@@ -10691,9 +10691,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "warn_error_rate": {
-                    "type": "number"
                 }
             }
         },
@@ -11279,6 +11276,9 @@ const docTemplate = `{
                 "last_test_error_at": {
                     "type": "string"
                 },
+                "max_error_rate": {
+                    "type": "number"
+                },
                 "model_mapping": {
                     "type": "object",
                     "additionalProperties": {
@@ -11319,6 +11319,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/model.ChannelType"
                 },
                 "used_amount": {
+                    "type": "number"
+                },
+                "warn_error_rate": {
                     "type": "number"
                 }
             }
@@ -13005,9 +13008,6 @@ const docTemplate = `{
                         }
                     }
                 },
-                "max_error_rate": {
-                    "type": "number"
-                },
                 "model": {
                     "type": "string"
                 },
@@ -13053,9 +13053,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "warn_error_rate": {
-                    "type": "number"
                 }
             }
         },

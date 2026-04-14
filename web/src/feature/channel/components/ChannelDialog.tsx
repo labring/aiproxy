@@ -54,6 +54,11 @@ export function ChannelDialog({
             model_mapping: channel.model_mapping || {},
             sets: channel.sets || [],
             priority: channel.priority,
+            enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
+            warn_error_rate: channel.warn_error_rate,
+            max_error_rate: channel.max_error_rate !== undefined && channel.max_error_rate > 0
+                ? channel.max_error_rate
+                : undefined,
             configs_text: channel.configs ? JSON.stringify(channel.configs, null, 2) : ''
         }
         : {
@@ -66,6 +71,9 @@ export function ChannelDialog({
             model_mapping: {},
             sets: [],
             priority: 10,
+            enabled_no_permission_ban: false,
+            warn_error_rate: undefined,
+            max_error_rate: undefined,
             configs_text: ''
         }, [mode, channel])
 

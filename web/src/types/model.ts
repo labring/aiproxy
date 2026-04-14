@@ -71,8 +71,6 @@ export interface ModelConfig {
     tpm?: number
     retry_times?: number
     timeout_config?: TimeoutConfig
-    warn_error_rate?: number
-    max_error_rate?: number
     force_save_detail?: boolean
     request_body_storage_max_size?: number
     response_body_storage_max_size?: number
@@ -173,8 +171,6 @@ export interface ModelCreateRequest {
     image_prices?: Record<string, number> | null
     retry_times?: number
     timeout_config?: TimeoutConfig
-    warn_error_rate?: number
-    max_error_rate?: number
     force_save_detail?: boolean
     request_body_storage_max_size?: number
     response_body_storage_max_size?: number

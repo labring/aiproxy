@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -39,7 +38,11 @@ func (a *Adaptor) ConvertRequest(
 ) (adaptor.ConvertResult, error) {
 	aa := GetAdaptor(meta.ActualModel)
 	if aa == nil {
-		return adaptor.ConvertResult{}, errors.New("adaptor not found")
+		return adaptor.ConvertResult{}, relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusInternalServerError,
+			"adaptor not found",
+		)
 	}
 
 	meta.Set("awsAdapter", aa)

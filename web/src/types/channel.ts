@@ -14,6 +14,9 @@ export interface Channel {
     created_at: number
     accessed_at: number
     priority: number
+    enabled_no_permission_ban?: boolean
+    warn_error_rate?: number
+    max_error_rate?: number
     balance?: number
     used_amount?: number
     sets?: string[]
@@ -58,6 +61,9 @@ export interface ChannelCreateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    enabled_no_permission_ban?: boolean
+    warn_error_rate?: number
+    max_error_rate?: number
     configs?: Record<string, unknown>
 }
 
@@ -71,6 +77,9 @@ export interface ChannelUpdateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    enabled_no_permission_ban?: boolean
+    warn_error_rate?: number
+    max_error_rate?: number
     configs?: Record<string, unknown>
 }
 

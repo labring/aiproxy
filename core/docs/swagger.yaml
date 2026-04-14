@@ -26,8 +26,12 @@ definitions:
         type: string
       configs:
         $ref: '#/definitions/model.ChannelConfigs'
+      enabled_auto_balance_check:
+        type: boolean
       key:
         type: string
+      max_error_rate:
+        type: number
       model_mapping:
         additionalProperties:
           type: string
@@ -50,6 +54,8 @@ definitions:
         type: integer
       type:
         $ref: '#/definitions/model.ChannelType'
+      warn_error_rate:
+        type: number
     type: object
   controller.AddTokenRequest:
     properties:
@@ -119,8 +125,6 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
@@ -152,8 +156,6 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   controller.CreateGroupRequest:
     properties:
@@ -782,8 +784,6 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
@@ -815,8 +815,6 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   controller.StatusData:
     properties:
@@ -1226,6 +1224,8 @@ definitions:
         type: string
       last_test_error_at:
         type: string
+      max_error_rate:
+        type: number
       model_mapping:
         additionalProperties:
           type: string
@@ -1253,6 +1253,8 @@ definitions:
       type:
         $ref: '#/definitions/model.ChannelType'
       used_amount:
+        type: number
+      warn_error_rate:
         type: number
     type: object
   model.ChannelBasicInfo:
@@ -1428,15 +1430,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1623,15 +1625,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
-        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
+        type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -1964,15 +1966,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_500_count:
-        type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
         type: integer
       status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -2406,8 +2408,6 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
@@ -2439,8 +2439,6 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   model.ModelOwner:
     enum:
@@ -3033,8 +3031,6 @@ definitions:
         type: integer
       status_2xx_count:
         type: integer
-      status_400_count:
-        type: integer
       status_429_count:
         type: integer
       status_4xx_count:
@@ -3042,6 +3038,8 @@ definitions:
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
         type: integer
       status_other_count:
         type: integer
@@ -3118,15 +3116,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       status_other_count:
         type: integer

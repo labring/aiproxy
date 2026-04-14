@@ -178,11 +178,7 @@ func prepareAndDoRequest(
 
 	convertResult, err := a.ConvertRequest(meta, store, c.Request)
 	if err != nil {
-		return nil, relaymodel.WrapperErrorWithMessage(
-			meta.Mode,
-			http.StatusBadRequest,
-			"convert request failed: "+err.Error(),
-		)
+		return nil, mapRequestError(meta, err, http.StatusBadRequest, "convert request failed")
 	}
 
 	if closer, ok := convertResult.Body.(io.Closer); ok {
@@ -225,6 +221,63 @@ func prepareAndDoRequest(
 	return doRequest(a, c, meta, store, req)
 }
 
+func mapRequestError(
+	meta *meta.Meta,
+	err error,
+	fallbackStatusCode int,
+	fallbackMessage string,
+) adaptor.Error {
+	if adaptorErr, ok := errors.AsType[adaptor.Error](err); ok {
+		return adaptorErr
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusBadRequest,
+			"request canceled by client: "+err.Error(),
+		)
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusRequestTimeout,
+			"timeout with deadline exceeded: "+err.Error(),
+		)
+	}
+
+	if errors.Is(err, io.EOF) {
+		return relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusServiceUnavailable,
+			"request eof: "+err.Error(),
+		)
+	}
+
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusInternalServerError,
+			"request unexpected eof: "+err.Error(),
+		)
+	}
+
+	if strings.Contains(err.Error(), "timeout awaiting response headers") {
+		return relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusRequestTimeout,
+			"request timeout: "+err.Error(),
+		)
+	}
+
+	return relaymodel.WrapperErrorWithMessage(
+		meta.Mode,
+		fallbackStatusCode,
+		fallbackMessage+": "+err.Error(),
+	)
+}
+
 func setupRequestHeader(
 	a adaptor.Adaptor,
 	c *gin.Context,
@@ -255,58 +308,7 @@ func doRequest(
 ) (*http.Response, adaptor.Error) {
 	resp, err := a.DoRequest(meta, store, c, req)
 	if err != nil {
-		var adaptorErr adaptor.Error
-
-		ok := errors.As(err, &adaptorErr)
-		if ok {
-			return nil, adaptorErr
-		}
-
-		if errors.Is(err, context.Canceled) {
-			return nil, relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusBadRequest,
-				"request canceled by client: "+err.Error(),
-			)
-		}
-
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusRequestTimeout,
-				"request timeout: "+err.Error(),
-			)
-		}
-
-		if errors.Is(err, io.EOF) {
-			return nil, relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusServiceUnavailable,
-				"request eof: "+err.Error(),
-			)
-		}
-
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return nil, relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusInternalServerError,
-				"request unexpected eof: "+err.Error(),
-			)
-		}
-
-		if strings.Contains(err.Error(), "timeout awaiting response headers") {
-			return nil, relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusRequestTimeout,
-				"request timeout: "+err.Error(),
-			)
-		}
-
-		return nil, relaymodel.WrapperErrorWithMessage(
-			meta.Mode,
-			http.StatusInternalServerError,
-			"request error: "+err.Error(),
-		)
+		return nil, mapRequestError(meta, err, http.StatusInternalServerError, "request error")
 	}
 
 	return resp, nil

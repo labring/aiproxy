@@ -60,6 +60,7 @@ import { modelApi } from "@/api/model";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { openResourceDialog, showDeletedResourceToast } from "@/utils/resource-dialog";
+import { getChannelModelMetric } from "@/utils/runtime-metrics";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -345,7 +346,7 @@ export function ModelTable() {
                             ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>
                           {(() => {
-                            const pair = runtimeMetrics?.channel_models?.[String(channel.id)]?.[modelName];
+                            const pair = getChannelModelMetric(runtimeMetrics, channel.id, modelName);
                             if (!pair) return null;
                             return (
                               <div className="flex items-center gap-1 ml-auto">
@@ -353,7 +354,7 @@ export function ModelTable() {
                                 <Badge variant="outline" className="text-[11px]">TPM {pair.tpm}</Badge>
                                 <Badge variant="outline" className="text-[11px]">ERR {formatPercent(pair.error_rate)}</Badge>
                                 {pair.banned && (
-                                  <Badge variant="destructive" className="text-[11px]">BANNED</Badge>
+                                  <Badge variant="destructive" className="text-[11px]">{t("channel.temporarilyExcluded")}</Badge>
                                 )}
                               </div>
                             );

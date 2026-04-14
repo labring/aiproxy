@@ -102,13 +102,61 @@ func TestMemModelMonitorAddRequestAndThreshold(t *testing.T) {
 	}
 
 	for i := range minRequestCount {
-		beyondThreshold, banExecution := monitor.AddRequest("model-a", 1, true, false, 0.3, 0)
+		errorRate, banExecution := monitor.AddRequest("model-a", 1, true, false, 0)
 		if i < minRequestCount-1 {
-			require.False(t, beyondThreshold)
+			require.Zero(t, errorRate)
 			require.False(t, banExecution)
 		} else {
-			require.True(t, beyondThreshold)
+			require.InDelta(t, 1.0, errorRate, 0.0001)
 			require.False(t, banExecution)
 		}
 	}
+}
+
+func TestMemModelMonitorAddRequestReturnsZeroErrorRateWithoutMinimumSamples(t *testing.T) {
+	monitor := &MemModelMonitor{
+		models: make(map[string]*ModelData),
+	}
+
+	for i := range minRequestCount - 1 {
+		errorRate, banExecution := monitor.AddRequest("model-a", 1, true, false, 0)
+		require.Zero(
+			t,
+			errorRate,
+			"request %d should not return an error rate before the minimum sample size",
+			i,
+		)
+		require.False(t, banExecution, "request %d should not trigger ban", i)
+	}
+}
+
+func TestMemModelMonitorAddRequestReturnsCurrentErrorRateAndBans(t *testing.T) {
+	monitor := &MemModelMonitor{
+		models: make(map[string]*ModelData),
+	}
+
+	for i := range minRequestCount {
+		errorRate, banExecution := monitor.AddRequest("model-ban", 1, true, false, 0.8)
+		if i < minRequestCount-1 {
+			require.InDelta(t, 0, errorRate, 0.0001)
+			require.False(t, banExecution)
+		} else {
+			require.InDelta(t, 1.0, errorRate, 0.0001)
+			require.True(t, banExecution)
+		}
+	}
+
+	errorRate, banExecution := monitor.AddRequest("model-ban", 1, true, false, 0.8)
+	require.InDelta(t, 1.0, errorRate, 0.0001)
+	require.False(t, banExecution)
+}
+
+func TestMemModelMonitorAddRequestBansNoPermissionWithoutMaxErrorRate(t *testing.T) {
+	monitor := &MemModelMonitor{
+		models: make(map[string]*ModelData),
+	}
+
+	errorRate, banExecution := monitor.AddRequest("model-no-permission", 1, true, true, 0)
+	require.Zero(t, errorRate)
+	require.True(t, banExecution)
 }

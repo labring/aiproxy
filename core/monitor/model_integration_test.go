@@ -26,22 +26,21 @@ func TestRedisMonitorAddRequestAndGetRates(t *testing.T) {
 
 	for i := range minRequestCount {
 		isError := i < 10
-		beyondThreshold, banExecution, err := monitor.AddRequest(
+		errorRate, banExecution, err := monitor.AddRequest(
 			ctx,
 			"model-a",
 			101,
 			isError,
 			false,
-			0.3,
 			0,
 		)
 		require.NoError(t, err)
 
 		if i < minRequestCount-1 {
-			require.False(t, beyondThreshold)
+			require.Zero(t, errorRate)
 			require.False(t, banExecution)
 		} else {
-			require.True(t, beyondThreshold)
+			require.InDelta(t, 0.5, errorRate, 0.01)
 			require.False(t, banExecution)
 		}
 	}
@@ -68,6 +67,34 @@ func TestRedisMonitorAddRequestAndGetRates(t *testing.T) {
 	require.InDelta(t, 0.5, allRates[101]["model-a"], 0.01)
 }
 
+func TestRedisMonitorAddRequestReturnsZeroErrorRateWithoutMinimumSamples(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	for i := range minRequestCount - 1 {
+		errorRate, banExecution, err := monitor.AddRequest(
+			ctx,
+			"model-no-auto-balance",
+			404,
+			true,
+			false,
+			0,
+		)
+		require.NoError(t, err)
+		require.Zero(
+			t,
+			errorRate,
+			"request %d should not return an error rate before the minimum sample size",
+			i,
+		)
+		require.False(t, banExecution, "request %d should not trigger ban", i)
+	}
+}
+
 func TestRedisMonitorBanAndBannedQuery(t *testing.T) {
 	ctx := context.Background()
 
@@ -77,21 +104,25 @@ func TestRedisMonitorBanAndBannedQuery(t *testing.T) {
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for range minRequestCount {
-		_, _, err := monitor.AddRequest(ctx, "model-ban", 202, true, false, 0.3, 0.8)
+		errorRate, banExecution, err := monitor.AddRequest(ctx, "model-ban", 202, true, false, 0.8)
 		require.NoError(t, err)
+
+		if errorRate > 0 {
+			require.InDelta(t, 1.0, errorRate, 0.01)
+			require.True(t, banExecution)
+		}
 	}
 
-	beyondThreshold, banExecution, err := monitor.AddRequest(
+	errorRate, banExecution, err := monitor.AddRequest(
 		ctx,
 		"model-ban",
 		202,
 		true,
 		false,
-		0.3,
 		0.8,
 	)
 	require.NoError(t, err)
-	require.True(t, beyondThreshold)
+	require.InDelta(t, 1.0, errorRate, 0.01)
 	require.False(t, banExecution)
 
 	bannedChannels, err := monitor.GetBannedChannelsWithModel(ctx, "model-ban")
@@ -103,6 +134,31 @@ func TestRedisMonitorBanAndBannedQuery(t *testing.T) {
 
 	_, ok := bannedMap[202]
 	require.True(t, ok)
+}
+
+func TestRedisMonitorBansNoPermissionWithoutMaxErrorRate(t *testing.T) {
+	ctx := context.Background()
+
+	redisClient, cleanup := setupRedisForMonitorTest(t, ctx)
+	defer cleanup()
+
+	monitor := newTestRedisModelMonitor(redisClient)
+
+	errorRate, banExecution, err := monitor.AddRequest(
+		ctx,
+		"model-no-permission",
+		212,
+		true,
+		true,
+		0,
+	)
+	require.NoError(t, err)
+	require.Zero(t, errorRate)
+	require.True(t, banExecution)
+
+	bannedChannels, err := monitor.GetBannedChannelsWithModel(ctx, "model-no-permission")
+	require.NoError(t, err)
+	require.Contains(t, bannedChannels, int64(212))
 }
 
 func TestRedisMonitorConcurrentAddRequest(t *testing.T) {
@@ -132,7 +188,6 @@ func TestRedisMonitorConcurrentAddRequest(t *testing.T) {
 					303,
 					(id+j)%4 == 0,
 					false,
-					0.3,
 					0,
 				)
 				require.NoError(t, err)
@@ -193,7 +248,7 @@ func TestRedisMonitorGetModelChannelErrorRateUsesLocalCache(t *testing.T) {
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for i := range minRequestCount {
-		_, _, err := monitor.AddRequest(ctx, "model-local-rate", 505, i < 5, false, 0.3, 0)
+		_, _, err := monitor.AddRequest(ctx, "model-local-rate", 505, i < 5, false, 0)
 		require.NoError(t, err)
 	}
 
@@ -223,7 +278,6 @@ func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.
 			606,
 			i < 5,
 			false,
-			0.3,
 			0,
 		)
 		require.NoError(t, err)
@@ -241,7 +295,6 @@ func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.
 			606,
 			i < 10,
 			false,
-			0.3,
 			0,
 		)
 		require.NoError(t, err)
@@ -273,7 +326,7 @@ func TestRedisMonitorGetBannedChannelsMapWithModelUsesLocalCache(t *testing.T) {
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for range minRequestCount + 1 {
-		_, _, err := monitor.AddRequest(ctx, "model-local-banned", 707, true, false, 0.3, 0.8)
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned", 707, true, false, 0.8)
 		require.NoError(t, err)
 	}
 
@@ -300,7 +353,7 @@ func TestRedisMonitorGetBannedChannelsMapWithModelInvalidatesLocalCacheOnClear(t
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for range minRequestCount + 1 {
-		_, _, err := monitor.AddRequest(ctx, "model-local-banned-clear", 808, true, false, 0.3, 0.8)
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned-clear", 808, true, false, 0.8)
 		require.NoError(t, err)
 	}
 
@@ -324,7 +377,7 @@ func TestRedisMonitorGetBannedChannelsMapWithModelKeepsLocalCacheUntilTTL(t *tes
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for range minRequestCount + 1 {
-		_, _, err := monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.3, 0.8)
+		_, _, err := monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.8)
 		require.NoError(t, err)
 	}
 
@@ -332,7 +385,7 @@ func TestRedisMonitorGetBannedChannelsMapWithModelKeepsLocalCacheUntilTTL(t *tes
 	require.NoError(t, err)
 	require.Contains(t, banned, int64(909))
 
-	_, _, err = monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.3, 0.8)
+	_, _, err = monitor.AddRequest(ctx, "model-local-banned-stale", 909, true, false, 0.8)
 	require.NoError(t, err)
 
 	require.NoError(

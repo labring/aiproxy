@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
     Form,
     FormControl,
@@ -31,6 +32,7 @@ import { ChannelTestDialog } from './ChannelTestDialog'
 import { DefaultModelsDialog } from './DefaultModelsDialog'
 import { ChannelConfigEditor } from './ChannelConfigEditor'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
+import { getChannelModelMetric } from '@/utils/runtime-metrics'
 
 interface ChannelFormProps {
     mode?: 'create' | 'update' | 'copy'
@@ -47,6 +49,9 @@ interface ChannelFormProps {
         model_mapping?: Record<string, string>
         sets?: string[]
         priority?: number
+        enabled_no_permission_ban?: boolean
+        warn_error_rate?: number
+        max_error_rate?: number
         configs_text?: string
     }
 }
@@ -65,7 +70,10 @@ export function ChannelForm({
         models: [],
         model_mapping: {},
         sets: [],
-        priority: 10
+        priority: 10,
+        enabled_no_permission_ban: false,
+        warn_error_rate: undefined,
+        max_error_rate: undefined,
     },
 }: ChannelFormProps) {
     const { t } = useTranslation()
@@ -201,6 +209,9 @@ export function ChannelForm({
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
             priority: data.priority,
+            enabled_no_permission_ban: data.enabled_no_permission_ban ?? false,
+            warn_error_rate: data.warn_error_rate,
+            max_error_rate: data.max_error_rate ?? 0,
             configs: parsedConfigs
         }
 
@@ -452,7 +463,7 @@ export function ChannelForm({
                             >
                                 <span>{model}</span>
                                 {(() => {
-                                    const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[model] : undefined
+                                    const pair = getChannelModelMetric(runtimeMetrics, channelId, model)
                                     const modelMetric = runtimeMetrics?.models?.[model]
                                     if (!pair && !modelMetric) return null
                                     const metric = pair || modelMetric
@@ -461,6 +472,11 @@ export function ChannelForm({
                                             <span>RPM {metric?.rpm || 0}</span>
                                             <span>TPM {metric?.tpm || 0}</span>
                                             <span>ERR {formatPercent(metric?.error_rate)}</span>
+                                            {pair?.banned && (
+                                                <span className="rounded bg-destructive/10 px-1 py-0.5 text-destructive">
+                                                    {t('channel.temporarilyExcluded')}
+                                                </span>
+                                            )}
                                         </span>
                                     )
                                 })()}
@@ -707,7 +723,7 @@ export function ChannelForm({
                                                                         </div>
                                                                     )
                                                                 }
-                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const pair = getChannelModelMetric(runtimeMetrics, channelId, item)
                                                                 const modelMetric = runtimeMetrics?.models?.[item]
                                                                 const metric = pair || modelMetric
                                                                 return (
@@ -718,11 +734,16 @@ export function ChannelForm({
                                                                                 RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
                                                                             </span>
                                                                         )}
+                                                                        {pair?.banned && (
+                                                                            <span className="text-[10px] font-medium text-destructive">
+                                                                                {t('channel.highErrorRateExcluded')}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 )
                                                             }}
                                                             handleSelectedItemDisplay={(item) => {
-                                                                const pair = channelId ? runtimeMetrics?.channel_models?.[String(channelId)]?.[item] : undefined
+                                                                const pair = getChannelModelMetric(runtimeMetrics, channelId, item)
                                                                 const modelMetric = runtimeMetrics?.models?.[item]
                                                                 const metric = pair || modelMetric
                                                                 return (
@@ -731,6 +752,11 @@ export function ChannelForm({
                                                                         {metric && (
                                                                             <span className="text-[10px] text-muted-foreground">
                                                                                 RPM {metric.rpm} · TPM {metric.tpm} · ERR {formatPercent(metric.error_rate)}
+                                                                            </span>
+                                                                        )}
+                                                                        {pair?.banned && (
+                                                                            <span className="text-[10px] font-medium text-destructive">
+                                                                                {t('channel.highErrorRateExcluded')}
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -943,6 +969,91 @@ export function ChannelForm({
                                     </FormItem>
                                 )}
                             />
+
+                            <div className="grid gap-4 md:grid-cols-2 rounded-lg border bg-muted/20 p-4">
+                                <FormField
+                                    control={form.control}
+                                    name="enabled_no_permission_ban"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between gap-4 md:col-span-2">
+                                            <div className="space-y-1">
+                                                <FormLabel>{t('channel.dialog.enabledNoPermissionBan')}</FormLabel>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('channel.dialog.enabledNoPermissionBanHelp')}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('channel.temporarilyExcludedHelp')}
+                                                </p>
+                                            </div>
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value ?? false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="warn_error_rate"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t('channel.dialog.warnErrorRate')}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    placeholder={t('channel.dialog.warnErrorRatePlaceholder')}
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={(e) => field.onChange(
+                                                        e.target.value === '' ? undefined : Number(e.target.value)
+                                                    )}
+                                                />
+                                            </FormControl>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t('channel.dialog.warnErrorRateHelp')}
+                                            </p>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="max_error_rate"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t('channel.dialog.maxErrorRate')}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    placeholder={t('channel.dialog.maxErrorRatePlaceholder')}
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={(e) => field.onChange(
+                                                        e.target.value === '' ? undefined : Number(e.target.value)
+                                                    )}
+                                                />
+                                                </FormControl>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('channel.dialog.maxErrorRateHelp')}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('channel.temporarilyExcludedHelp')}
+                                                </p>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                />
+                            </div>
 
                             {/* 提交和测试按钮 */}
                             <div className="flex justify-between items-center gap-3">
