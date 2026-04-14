@@ -52,6 +52,9 @@ type Channel struct {
 	Priority                int32             `                                          json:"priority"                   yaml:"priority,omitempty"`
 	EnabledAutoBalanceCheck bool              `                                          json:"enabled_auto_balance_check" yaml:"enabled_auto_balance_check,omitempty"`
 	BalanceThreshold        float64           `                                          json:"balance_threshold"          yaml:"balance_threshold,omitempty"`
+	EnabledNoPermissionBan  bool              `                                          json:"enabled_no_permission_ban"  yaml:"enabled_no_permission_ban,omitempty"`
+	WarnErrorRate           float64           `                                          json:"warn_error_rate"            yaml:"warn_error_rate,omitempty"`
+	MaxErrorRate            float64           `                                          json:"max_error_rate"             yaml:"max_error_rate,omitempty"`
 	Configs                 ChannelConfigs    `gorm:"serializer:fastjson;type:text"      json:"configs,omitempty"          yaml:"configs,omitempty"`
 	Sets                    []string          `gorm:"serializer:fastjson;type:text"      json:"sets,omitempty"             yaml:"sets,omitempty"`
 }
@@ -414,6 +417,9 @@ func UpdateChannel(channel *Channel) (err error) {
 		"priority",
 		"configs",
 		"enabled_auto_balance_check",
+		"enabled_no_permission_ban",
+		"warn_error_rate",
+		"max_error_rate",
 		"balance_threshold",
 		"sets",
 	}

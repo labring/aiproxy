@@ -3,6 +3,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"gorm.io/gorm"
 )
 
 func TestSaveStoreWithOptionPostgresSkipsUpdateWithinMinInterval(t *testing.T) {
@@ -109,7 +111,9 @@ func withTestPostgresStoreDB(t *testing.T, fn func()) {
 			"POSTGRES_PASSWORD": "postgres",
 			"POSTGRES_DB":       "aiproxy_test",
 		},
-		WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second),
+		WaitingFor: wait.ForLog("database system is ready to accept connections").
+			WithOccurrence(2).
+			WithStartupTimeout(60 * time.Second),
 	}
 
 	var (
@@ -144,9 +148,8 @@ func withTestPostgresStoreDB(t *testing.T, fn func()) {
 		net.JoinHostPort(host, port.Port()),
 	)
 
-	db, err := OpenPostgreSQL(dsn)
+	db, err := openTestPostgreSQLWithRetry(dsn, 15*time.Second)
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&StoreV2{}))
 
 	DB = db
 	LogDB = db
@@ -170,4 +173,35 @@ func withTestPostgresStoreDB(t *testing.T, fn func()) {
 	})
 
 	fn()
+}
+
+func openTestPostgreSQLWithRetry(dsn string, timeout time.Duration) (*gorm.DB, error) {
+	deadline := time.Now().Add(timeout)
+
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		db, err := OpenPostgreSQL(dsn)
+		if err == nil {
+			if migrateErr := db.AutoMigrate(&StoreV2{}); migrateErr == nil {
+				return db, nil
+			} else {
+				lastErr = migrateErr
+			}
+
+			if sqlDB, sqlErr := db.DB(); sqlErr == nil {
+				_ = sqlDB.Close()
+			}
+		} else {
+			lastErr = err
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("timed out connecting to postgres test database")
+	}
+
+	return nil, lastErr
 }

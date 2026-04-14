@@ -2,10 +2,9 @@ package monitor
 
 import (
 	"context"
+	"math/rand/v2"
 	"sync"
 	"time"
-
-	"github.com/labring/aiproxy/core/common/config"
 )
 
 var memModelMonitor *MemModelMonitor
@@ -21,6 +20,15 @@ const (
 	minRequestCount = 20
 	cleanupInterval = time.Minute
 )
+
+func getBanDuration() time.Duration {
+	jitter := banDuration / 10
+	if jitter <= 0 {
+		return banDuration
+	}
+
+	return banDuration + time.Duration(rand.Int64N(int64(jitter)*2+1)) - jitter
+}
 
 type MemModelMonitor struct {
 	mu     sync.RWMutex
@@ -108,14 +116,8 @@ func (m *MemModelMonitor) AddRequest(
 	model string,
 	channelID int64,
 	isError, tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool) {
-	// Set default warning threshold if not specified
-	if warnErrorRate <= 0 {
-		warnErrorRate = config.GetDefaultWarnNotifyErrorRate()
-	}
-
+) (errorRate float64, banExecution bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -145,52 +147,39 @@ func (m *MemModelMonitor) AddRequest(
 	modelData.totalStats.AddRequest(now, isError)
 	channel.timeWindows.AddRequest(now, isError)
 
-	return m.checkAndBan(now, channel, tryBan, warnErrorRate, maxErrorRate)
+	return m.checkAndBan(now, channel, tryBan, maxErrorRate)
 }
 
 func (m *MemModelMonitor) checkAndBan(
 	now time.Time,
 	channel *ChannelStats,
 	tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool) {
-	canBan := maxErrorRate > 0
+) (errorRate float64, banExecution bool) {
+	errorRate = getErrorRateFromStats(channel.timeWindows)
 
-	if tryBan && canBan {
+	if tryBan {
 		if channel.bannedUntil.After(now) {
-			return false, false
+			return errorRate, false
 		}
 
-		channel.bannedUntil = now.Add(banDuration)
+		channel.bannedUntil = now.Add(getBanDuration())
 
-		return false, true
+		return errorRate, true
 	}
 
-	req, err := channel.timeWindows.GetStats()
-	if req < minRequestCount {
-		return false, false
-	}
-
-	errorRate := float64(err) / float64(req)
-
-	// Check if error rate exceeds warning threshold
-	exceedsWarning := errorRate >= warnErrorRate
-
-	// Check if we should ban (only if maxErrorRate is set and exceeded)
-	if canBan && errorRate >= maxErrorRate {
+	// Check if we should ban (maxErrorRate <= 0 disables banning)
+	if maxErrorRate > 0 && errorRate >= maxErrorRate {
 		if channel.bannedUntil.After(now) {
-			return true, false // Already banned
+			return errorRate, false
 		}
 
-		channel.bannedUntil = now.Add(banDuration)
+		channel.bannedUntil = now.Add(getBanDuration())
 
-		return false, true // Ban executed
-	} else if exceedsWarning {
-		return true, false // Beyond warning threshold but not banning
+		return errorRate, true
 	}
 
-	return false, false
+	return errorRate, false
 }
 
 func getErrorRateFromStats(stats *TimeWindowStats) float64 {
@@ -229,6 +218,27 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(
 	}
 
 	return result, nil
+}
+
+func (m *MemModelMonitor) GetChannelModelErrorRate(
+	_ context.Context,
+	model string,
+	channelID int64,
+) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	data, exists := m.models[model]
+	if !exists {
+		return 0, nil
+	}
+
+	channel, exists := data.channels[channelID]
+	if !exists {
+		return 0, nil
+	}
+
+	return getErrorRateFromStats(channel.timeWindows), nil
 }
 
 func (m *MemModelMonitor) GetChannelModelErrorRates(

@@ -13,7 +13,7 @@ import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Plus, Trash2, RefreshCcw, Pencil,
-    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload, Copy, ChevronDown
+    PowerOff, Power, FlaskConical, Search, Settings, Download, Upload, Copy, ChevronDown, CircleHelp
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -45,11 +45,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ROUTES } from '@/routes/constants'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 import { format } from 'date-fns'
+import { getChannelModelMetric, getTemporarilyExcludedModels } from '@/utils/runtime-metrics'
 
 const formatTimestamp = (timestamp: number): string => {
     if (!timestamp) return '-'
@@ -188,6 +190,9 @@ export function ChannelTable() {
                 model_mapping: channel.model_mapping || undefined,
                 sets: channel.sets,
                 priority: channel.priority,
+                enabled_no_permission_ban: channel.enabled_no_permission_ban,
+                warn_error_rate: channel.warn_error_rate,
+                max_error_rate: channel.max_error_rate,
                 configs: channel.configs || undefined,
             }))
 
@@ -220,6 +225,9 @@ export function ChannelTable() {
             model_mapping: channel.model_mapping || undefined,
             sets: channel.sets,
             priority: channel.priority,
+            enabled_no_permission_ban: channel.enabled_no_permission_ban,
+            warn_error_rate: channel.warn_error_rate,
+            max_error_rate: channel.max_error_rate,
             configs: channel.configs || undefined,
         }]
 
@@ -330,6 +338,10 @@ export function ChannelTable() {
     }, [allDefaultModels])
 
     const formatPercent = useCallback((value?: number) => `${((value || 0) * 100).toFixed(1)}%`, [])
+    const getExcludedModels = useCallback((channel: Channel) => {
+        const { models } = getDisplayModels(channel)
+        return getTemporarilyExcludedModels(runtimeMetrics, channel.id, models)
+    }, [getDisplayModels, runtimeMetrics])
 
     // 可点击单元格样式
     const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
@@ -356,8 +368,9 @@ export function ChannelTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.name")}</div>,
             cell: ({ row }) => (
                 <div
-                    className={cn("font-medium", clickableCell)}
+                    className={cn("max-w-[240px] truncate font-medium", clickableCell)}
                     onClick={() => openUpdateDialog(row.original)}
+                    title={row.original.name}
                 >
                     {row.original.name}
                 </div>
@@ -501,14 +514,14 @@ export function ChannelTable() {
                                         >
                                             <div>{model}</div>
                                             {(() => {
-                                                const pair = runtimeMetrics?.channel_models?.[String(row.original.id)]?.[model]
+                                                const pair = getChannelModelMetric(runtimeMetrics, row.original.id, model)
                                                 if (!pair) return null
                                                 return (
                                                     <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                                                         <span>RPM {pair.rpm}</span>
                                                         <span>TPM {pair.tpm}</span>
                                                         <span>ERR {formatPercent(pair.error_rate)}</span>
-                                                        {pair.banned && <span>BANNED</span>}
+                                                        {pair.banned && <span className="text-destructive">{t('channel.temporarilyExcluded')}</span>}
                                                     </div>
                                                 )
                                             })()}
@@ -520,6 +533,86 @@ export function ChannelTable() {
                     </Popover>
                 )
             }
+        },
+        {
+            id: 'temporarily_excluded_models',
+            header: () => (
+                <div className="flex items-center gap-1 font-medium py-3.5 whitespace-nowrap">
+                    <span>{t("channel.temporarilyExcludedModels")}</span>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label={t('channel.temporarilyExcludedHelp')}
+                            >
+                                <CircleHelp className="h-3.5 w-3.5" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-64">
+                            {t('channel.temporarilyExcludedHelp')}
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            ),
+            cell: ({ row }) => {
+                const excludedModels = getExcludedModels(row.original)
+                if (excludedModels.length === 0) {
+                    return <div className="text-xs text-muted-foreground">-</div>
+                }
+
+                if (excludedModels.length === 1) {
+                    return (
+                        <div className="flex flex-wrap gap-1">
+                            <Badge
+                                key={excludedModels[0]}
+                                variant="destructive"
+                                className="max-w-[220px] truncate text-xs"
+                                title={t('channel.highErrorRateExcluded')}
+                            >
+                                {excludedModels[0]}
+                            </Badge>
+                        </div>
+                    )
+                }
+
+                return (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-red-300/70 bg-red-50 px-2.5 py-1 text-sm text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 hover:text-red-800 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                                title={t('channel.highErrorRateExcluded')}
+                            >
+                                <span className="whitespace-nowrap">
+                                    {excludedModels.length} {t("channel.modelsCount")}
+                                </span>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto max-w-sm p-3" align="start">
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">
+                                    {t("channel.temporarilyExcludedModels")} ({excludedModels.length})
+                                </h4>
+                                <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+                                    {excludedModels.map((model) => (
+                                        <button
+                                            key={model}
+                                            type="button"
+                                            className="w-full cursor-pointer rounded-md border border-red-300/70 bg-red-50 px-2 py-1 text-left text-xs text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 hover:text-red-800 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                                            title={t('channel.highErrorRateExcluded')}
+                                            onClick={() => openUpdateDialog(row.original)}
+                                        >
+                                            <span className="block truncate">{model}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                )
+            },
         },
         {
             accessorKey: 'request_count',
@@ -667,7 +760,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent, getExcludedModels])
 
     // 初始化表格
     const table = useReactTable({

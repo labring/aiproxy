@@ -74,11 +74,10 @@ const MANAGED_MODEL_KEYS = new Set([
     'owner',
     'type',
     'rpm',
-    'tpm',
-    'retry_times',
-    'timeout_config',
-    'max_error_rate',
-    'force_save_detail',
+	'tpm',
+	'retry_times',
+	'timeout_config',
+	'force_save_detail',
     'request_body_storage_max_size',
     'response_body_storage_max_size',
     'summary_service_tier',
@@ -150,10 +149,8 @@ interface ModelFormProps {
         image_prices?: ModelConfig['image_prices']
         retry_times?: number
         timeout_config?: ModelConfig['timeout_config']
-        warn_error_rate?: number
         timeout?: number
         stream_timeout?: number
-        max_error_rate?: number
         force_save_detail?: boolean
         request_body_storage_max_size?: number
         response_body_storage_max_size?: number
@@ -233,7 +230,6 @@ export function ModelForm({
             retry_times: defaultValues.retry_times,
             timeout: defaultValues.timeout,
             stream_timeout: defaultValues.stream_timeout ?? defaultValues.timeout_config?.stream_request_timeout,
-            max_error_rate: defaultValues.max_error_rate,
             force_save_detail: defaultValues.force_save_detail ?? false,
             request_body_storage_max_size: defaultValues.request_body_storage_max_size,
             response_body_storage_max_size: defaultValues.response_body_storage_max_size,
@@ -721,7 +717,6 @@ export function ModelForm({
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
             ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
             ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
-            ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
             ...(data.request_body_storage_max_size !== undefined && {
                 request_body_storage_max_size: Number(data.request_body_storage_max_size),
@@ -746,7 +741,6 @@ export function ModelForm({
                 ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
                 ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
                 ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
-                ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
                 ...(data.request_body_storage_max_size !== undefined && {
                     request_body_storage_max_size: Number(data.request_body_storage_max_size),
@@ -981,29 +975,6 @@ export function ModelForm({
                             )}
                         />
                     )}
-
-                    {/* Max Error Rate Field */}
-                    <FormField
-                        control={form.control}
-                        name="max_error_rate"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>{t("model.dialog.maxErrorRate")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="number"
-                                        placeholder={t("model.dialog.maxErrorRatePlaceholder")}
-                                        {...field}
-                                        min="0"
-                                        max="1"
-                                        step="0.01"
-                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
 
                     {/* Force Save Detail Switch */}
                     <FormField

@@ -93,7 +93,7 @@ func getStoreCacheNotFoundKey(group string, tokenID int, id string) string {
 func getStoreLocalTTL(store *StoreCache) time.Duration {
 	ttl := storeLocalTTL
 	if store == nil || store.ExpiresAt.IsZero() {
-		return ttl
+		return jitterStoreLocalTTL(ttl)
 	}
 
 	storeTTL := time.Until(store.ExpiresAt)
@@ -102,10 +102,23 @@ func getStoreLocalTTL(store *StoreCache) time.Duration {
 	}
 
 	if storeTTL < ttl {
-		return storeTTL
+		return jitterStoreLocalTTL(storeTTL)
 	}
 
-	return ttl
+	return jitterStoreLocalTTL(ttl)
+}
+
+func jitterStoreLocalTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+
+	jitter := ttl / 10
+	if jitter <= 0 {
+		return ttl
+	}
+
+	return ttl + time.Duration(rand.Int64N(int64(jitter)*2+1)) - jitter
 }
 
 func cacheSetStoreLocal(key string, store *StoreCache) {

@@ -22,7 +22,7 @@ const (
 	AIProxyChannelHeader = "Aiproxy-Channel"
 	// maxRetryErrorRate is the maximum error rate threshold for channel retry selection
 	// Channels with error rate higher than this will be filtered out during retry
-	maxRetryErrorRate = 0.75
+	maxRetryErrorRate = 0.85
 	// errorRatePenaltyBase smooths low-error channels so tiny differences near zero
 	// do not create outsized weight gaps.
 	errorRatePenaltyBase = 0.10
@@ -226,18 +226,31 @@ func getChannelErrorRate(errorRates map[int64]float64, channelID int64) float64 
 	return errorRates[channelID]
 }
 
-func pickChannel(
-	channels []*model.Channel,
-	mode mode.Mode,
-	errorRates map[int64]float64,
-	maxErrorRate float64,
-	ignoreChannelIDs ...map[int64]struct{},
-) (*model.Channel, error) {
-	if len(channels) == 0 {
-		return nil, ErrChannelsNotFound
+func pickMinErrorRateHasPermissionChannel(
+	current *model.Channel,
+	currentErrorRate float64,
+	candidate *model.Channel,
+	candidateErrorRate float64,
+) *model.Channel {
+	if candidate == nil {
+		return current
 	}
 
-	channels = filterChannels(channels, mode, errorRates, maxErrorRate, ignoreChannelIDs...)
+	if current == nil {
+		return candidate
+	}
+
+	if candidateErrorRate < currentErrorRate {
+		return candidate
+	}
+
+	return current
+}
+
+func pickChannel(
+	channels []*model.Channel,
+	errorRates map[int64]float64,
+) (*model.Channel, error) {
 	if len(channels) == 0 {
 		return nil, ErrChannelsExhausted
 	}
@@ -286,58 +299,62 @@ func getChannelWithFallback(
 		mode,
 	)
 	if err != nil {
-		return nil, migratedChannels, err
+		return nil, nil, err
 	}
+
+	filteredChannels := filterChannels(
+		migratedChannels,
+		errorRates,
+		maxRetryErrorRate,
+		ignoreChannelIDs,
+	)
 
 	if len(preferChannelIDs) > 0 {
 		channel := pickPreferredChannel(
-			migratedChannels,
-			mode,
+			filteredChannels,
 			preferChannelIDs,
-			errorRates,
-			maxRetryErrorRate,
-			ignoreChannelIDs,
 		)
 		if channel != nil {
 			return channel, migratedChannels, nil
 		}
 	}
 
-	channel, err := pickChannel(
-		migratedChannels,
-		mode,
-		errorRates,
-		maxRetryErrorRate,
-		ignoreChannelIDs,
-	)
-	if err == nil {
-		return channel, migratedChannels, nil
+	pipeline := []func() []*model.Channel{
+		func() []*model.Channel {
+			return filteredChannels
+		},
+		func() []*model.Channel {
+			return filterChannels(
+				migratedChannels,
+				errorRates,
+				0,
+				ignoreChannelIDs,
+			)
+		},
+		func() []*model.Channel {
+			return filterChannels(
+				migratedChannels,
+				errorRates,
+				0,
+			)
+		},
 	}
 
-	if !errors.Is(err, ErrChannelsExhausted) {
-		return nil, migratedChannels, err
+	for _, step := range pipeline {
+		channel, err := pickChannel(step(), errorRates)
+		if err == nil {
+			return channel, migratedChannels, nil
+		}
 	}
 
-	channel, err = pickChannel(
-		migratedChannels,
-		mode,
-		errorRates,
-		0,
-		ignoreChannelIDs,
-	)
-
-	return channel, migratedChannels, err
+	return nil, nil, ErrChannelsExhausted
 }
 
 func pickPreferredChannel(
 	channels []*model.Channel,
-	mode mode.Mode,
 	preferChannelIDs []int,
-	errorRates map[int64]float64,
-	maxErrorRate float64,
-	ignoreChannelIDs ...map[int64]struct{},
 ) *model.Channel {
-	if len(preferChannelIDs) == 0 {
+	if len(channels) == 0 || len(preferChannelIDs) == 0 {
 		return nil
 	}
 
@@ -354,16 +371,7 @@ func pickPreferredChannel(
 
 		seen[channelID] = struct{}{}
 		if channel, ok := channelMap[channelID]; ok {
-			filtered := filterChannels(
-				[]*model.Channel{channel},
-				mode,
-				errorRates,
-				maxErrorRate,
-				ignoreChannelIDs...,
-			)
-			if len(filtered) > 0 {
-				return filtered[0]
-			}
+			return channel
 		}
 	}
 
@@ -604,7 +612,6 @@ func getWebSearchChannel(
 func getRetryChannel(
 	ctx context.Context,
 	state *retryState,
-	currentRetry, totalRetries int,
 ) (*model.Channel, error) {
 	errorRates, err := monitor.GetModelChannelErrorRate(ctx, state.meta.OriginModel)
 	if err != nil {
@@ -615,78 +622,59 @@ func getRetryChannel(
 	}
 
 	if state.exhausted {
-		if state.lastHasPermissionChannel == nil {
+		if state.lastMinErrorRateHasPermissionChannel == nil {
 			return nil, ErrChannelsExhausted
 		}
 
-		// Check if lastHasPermissionChannel has high error rate
+		// Check if the lowest-error has-permission channel has high error rate.
 		// If so, return exhausted to prevent retrying with a bad channel
-		channelID := int64(state.lastHasPermissionChannel.ID)
+		channelID := int64(state.lastMinErrorRateHasPermissionChannel.ID)
 		if errorRate := getChannelErrorRate(errorRates, channelID); errorRate > maxRetryErrorRate {
 			return nil, ErrChannelsExhausted
 		}
 
-		return state.lastHasPermissionChannel, nil
+		return state.lastMinErrorRateHasPermissionChannel, nil
 	}
+
+	filteredChannels := filterChannels(
+		state.migratedChannels,
+		errorRates,
+		maxRetryErrorRate,
+		state.ignoreChannelIDs,
+		state.failedChannelIDs,
+	)
 
 	if len(state.preferChannelIDs) > 0 {
 		newChannel := pickPreferredChannel(
-			state.migratedChannels,
-			state.meta.Mode,
+			filteredChannels,
 			state.preferChannelIDs,
-			errorRates,
-			maxRetryErrorRate,
-			state.ignoreChannelIDs,
-			state.failedChannelIDs,
 		)
 		if newChannel != nil {
 			return newChannel, nil
 		}
 	}
 
-	// For the last retry, filter out all previously failed channels if there are other options
-	if currentRetry == totalRetries-1 && len(state.failedChannelIDs) > 0 {
-		// Check if there are channels available after filtering out failed channels
-		newChannel, err := pickChannel(
-			state.migratedChannels,
-			state.meta.Mode,
-			errorRates,
-			maxRetryErrorRate,
-			state.ignoreChannelIDs,
-			state.failedChannelIDs,
-		)
-		if err == nil {
-			return newChannel, nil
-		}
-		// If no channels available after filtering, fall back to not using failed channels filter
-	}
-
-	ignoreChannelIDs := []map[int64]struct{}{state.ignoreChannelIDs}
-	if currentRetry != totalRetries-1 {
-		ignoreChannelIDs = append(ignoreChannelIDs, state.failedChannelIDs)
-	}
-
 	newChannel, err := pickChannel(
-		state.migratedChannels,
-		state.meta.Mode,
+		filteredChannels,
 		errorRates,
-		maxRetryErrorRate,
-		ignoreChannelIDs...,
 	)
 	if err != nil {
-		if !errors.Is(err, ErrChannelsExhausted) || state.lastHasPermissionChannel == nil {
+		if !errors.Is(err, ErrChannelsExhausted) ||
+			state.lastMinErrorRateHasPermissionChannel == nil {
 			return nil, err
 		}
 
-		// Check if lastHasPermissionChannel has high error rate before using it
-		channelID := int64(state.lastHasPermissionChannel.ID)
+		// Check if the lowest-error has-permission channel has high error rate.
+		// If so, return exhausted to prevent retrying with a bad channel
+		channelID := int64(state.lastMinErrorRateHasPermissionChannel.ID)
 		if errorRate := getChannelErrorRate(errorRates, channelID); errorRate > maxRetryErrorRate {
 			return nil, ErrChannelsExhausted
 		}
 
+		// Check if the lowest-error has-permission channel is still healthy before using it.
 		state.exhausted = true
 
-		return state.lastHasPermissionChannel, nil
+		return state.lastMinErrorRateHasPermissionChannel, nil
 	}
 
 	return newChannel, nil
@@ -694,50 +682,13 @@ func getRetryChannel(
 
 func filterChannels(
 	channels []*model.Channel,
-	mode mode.Mode,
 	errorRates map[int64]float64,
 	maxErrorRate float64,
 	ignoreChannel ...map[int64]struct{},
 ) []*model.Channel {
 	filtered := make([]*model.Channel, 0)
 	for _, channel := range channels {
-		if channel.Status != model.ChannelStatusEnabled {
-			continue
-		}
-
-		a, ok := adaptors.GetAdaptor(channel.Type)
-		if !ok {
-			continue
-		}
-
-		if !a.SupportMode(mode) {
-			continue
-		}
-
-		chid := int64(channel.ID)
-
-		if maxErrorRate != 0 {
-			// Filter out channels with error rate higher than threshold
-			// This avoids amplifying attacks and retrying with bad channels
-			if errorRate, ok := errorRates[chid]; ok && errorRate > maxErrorRate {
-				continue
-			}
-		}
-
-		needIgnore := false
-
-		for _, ignores := range ignoreChannel {
-			if ignores == nil {
-				continue
-			}
-
-			_, needIgnore = ignores[chid]
-			if needIgnore {
-				break
-			}
-		}
-
-		if needIgnore {
+		if !isChannelSelectable(channel, errorRates, maxErrorRate, ignoreChannel...) {
 			continue
 		}
 
@@ -745,4 +696,37 @@ func filterChannels(
 	}
 
 	return filtered
+}
+
+func isChannelSelectable(
+	channel *model.Channel,
+	errorRates map[int64]float64,
+	maxErrorRate float64,
+	ignoreChannel ...map[int64]struct{},
+) bool {
+	if channel == nil || channel.Status != model.ChannelStatusEnabled {
+		return false
+	}
+
+	chid := int64(channel.ID)
+
+	if maxErrorRate != 0 {
+		// Filter out channels with error rate higher than threshold
+		// This avoids amplifying attacks and retrying with bad channels.
+		if errorRate, ok := errorRates[chid]; ok && errorRate > maxErrorRate {
+			return false
+		}
+	}
+
+	for _, ignores := range ignoreChannel {
+		if ignores == nil {
+			continue
+		}
+
+		if _, needIgnore := ignores[chid]; needIgnore {
+			return false
+		}
+	}
+
+	return true
 }

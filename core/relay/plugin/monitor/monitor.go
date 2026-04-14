@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/reqlimit"
@@ -112,14 +113,16 @@ func (m *ChannelMonitor) DoRequest(
 }
 
 func handleDoRequestError(meta *meta.Meta, c *gin.Context, err error, requestCost time.Duration) {
-	beyondThreshold, banExecution, _err := monitor.AddRequest(
+	warnErrorRate := getChannelWarnErrorRate(meta)
+	maxErrorRate := getChannelMaxErrorRate(meta)
+
+	errorRate, banExecution, _err := monitor.AddRequest(
 		context.Background(),
 		meta.OriginModel,
 		int64(meta.Channel.ID),
 		true,
 		false,
-		meta.ModelConfig.WarnErrorRate,
-		meta.ModelConfig.MaxErrorRate,
+		maxErrorRate,
 	)
 	if _err != nil {
 		common.GetLogger(c).Errorf("add request failed: %+v", _err)
@@ -135,7 +138,7 @@ func handleDoRequestError(meta *meta.Meta, c *gin.Context, err error, requestCos
 			requestCost,
 			time.Minute*15,
 		)
-	case beyondThreshold:
+	case shouldNotifyErrorRate(warnErrorRate, errorRate):
 		notifyChannelRequestIssue(
 			meta,
 			"beyondThreshold",
@@ -213,14 +216,14 @@ func (m *ChannelMonitor) DoResponse(
 	}
 
 	if relayErr == nil {
+		maxErrorRate := getChannelMaxErrorRate(meta)
 		if _, _, err := monitor.AddRequest(
 			context.Background(),
 			meta.OriginModel,
 			int64(meta.Channel.ID),
 			false,
 			false,
-			meta.ModelConfig.WarnErrorRate,
-			meta.ModelConfig.MaxErrorRate,
+			maxErrorRate,
 		); err != nil {
 			common.GetLogger(c).Errorf("add request failed: %+v", err)
 		}
@@ -239,15 +242,17 @@ func (m *ChannelMonitor) DoResponse(
 
 func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error) {
 	hasPermission := ChannelHasPermission(relayErr)
+	warnErrorRate := getChannelWarnErrorRate(meta)
+	maxErrorRate := getChannelMaxErrorRate(meta)
+	tryBanNoPermission := shouldTryBanNoPermission(meta, hasPermission)
 
-	beyondThreshold, banExecution, err := monitor.AddRequest(
+	errorRate, banExecution, err := monitor.AddRequest(
 		context.Background(),
 		meta.OriginModel,
 		int64(meta.Channel.ID),
 		true,
-		!hasPermission,
-		meta.ModelConfig.WarnErrorRate,
-		meta.ModelConfig.MaxErrorRate,
+		tryBanNoPermission,
+		maxErrorRate,
 	)
 	if err != nil {
 		common.GetLogger(c).Errorf("add request failed: %+v", err)
@@ -256,7 +261,7 @@ func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error)
 	switch {
 	case banExecution:
 		notifyChannelResponseIssue(c, meta, "autoBanned", "Auto Banned", relayErr, time.Minute*15)
-	case beyondThreshold:
+	case shouldNotifyErrorRate(warnErrorRate, errorRate):
 		notifyChannelResponseIssue(
 			c,
 			meta,
@@ -275,6 +280,30 @@ func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error)
 			time.Minute*15,
 		)
 	}
+}
+
+func getChannelWarnErrorRate(meta *meta.Meta) float64 {
+	if meta != nil && meta.Channel.WarnErrorRate > 0 {
+		return meta.Channel.WarnErrorRate
+	}
+
+	return config.GetDefaultWarnNotifyErrorRate()
+}
+
+func getChannelMaxErrorRate(meta *meta.Meta) float64 {
+	if meta == nil {
+		return 0
+	}
+
+	return meta.Channel.MaxErrorRate
+}
+
+func shouldTryBanNoPermission(meta *meta.Meta, hasPermission bool) bool {
+	return meta != nil && meta.Channel.EnabledNoPermissionBan && !hasPermission
+}
+
+func shouldNotifyErrorRate(warnErrorRate, errorRate float64) bool {
+	return warnErrorRate > 0 && errorRate >= warnErrorRate
 }
 
 func notifyChannelResponseIssue(

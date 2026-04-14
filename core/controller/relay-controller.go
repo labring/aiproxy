@@ -21,6 +21,7 @@ import (
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	"github.com/labring/aiproxy/core/relay/controller"
@@ -400,12 +401,12 @@ func effectiveDetailBodyMaxSize(modelLimit, globalLimit int64) int64 {
 }
 
 type retryState struct {
-	retryTimes               int
-	lastHasPermissionChannel *model.Channel
-	preferChannelIDs         []int
-	ignoreChannelIDs         map[int64]struct{}
-	exhausted                bool
-	failedChannelIDs         map[int64]struct{} // Track all failed channels in this request
+	retryTimes                           int
+	lastMinErrorRateHasPermissionChannel *model.Channel
+	preferChannelIDs                     []int
+	ignoreChannelIDs                     map[int64]struct{}
+	exhausted                            bool
+	failedChannelIDs                     map[int64]struct{} // Track all failed channels in this request
 
 	meta             *meta.Meta
 	price            model.Price
@@ -484,7 +485,7 @@ func initRetryState(
 
 		state.ignoreChannelIDs[int64(channel.channel.ID)] = struct{}{}
 	} else {
-		state.lastHasPermissionChannel = channel.channel
+		state.lastMinErrorRateHasPermissionChannel = channel.channel
 	}
 
 	return state
@@ -549,7 +550,7 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 	i := 0
 
 	for {
-		newChannel, err := getRetryChannel(c.Request.Context(), state, i, state.retryTimes)
+		newChannel, err := getRetryChannel(c.Request.Context(), state)
 		if err == nil {
 			err = prepareRetry(c)
 		}
@@ -683,7 +684,35 @@ func handleRetryResult(
 			state.ignoreChannelIDs[int64(newChannel.ID)] = struct{}{}
 			state.retryTimes++
 		} else {
-			state.lastHasPermissionChannel = newChannel
+			if state.lastMinErrorRateHasPermissionChannel == nil {
+				state.lastMinErrorRateHasPermissionChannel = newChannel
+				return false
+			}
+
+			currentErrorRate, err := monitor.GetChannelModelErrorRate(
+				ctx.Request.Context(),
+				state.meta.OriginModel,
+				int64(state.lastMinErrorRateHasPermissionChannel.ID),
+			)
+			if err != nil {
+				return false
+			}
+
+			newErrorRate, err := monitor.GetChannelModelErrorRate(
+				ctx.Request.Context(),
+				state.meta.OriginModel,
+				int64(newChannel.ID),
+			)
+			if err != nil {
+				return false
+			}
+
+			state.lastMinErrorRateHasPermissionChannel = pickMinErrorRateHasPermissionChannel(
+				state.lastMinErrorRateHasPermissionChannel,
+				currentErrorRate,
+				newChannel,
+				newErrorRate,
+			)
 		}
 	}
 
