@@ -564,6 +564,11 @@ func ensureNovitaChannelsFromModels(
 			channels[i].Configs.SetOrInit(model.ChannelConfigAllowPassthroughUnknown, allowPassthroughUnknown, false)
 		}
 
+		// Backfill Sets for channels created before overseas routing was added.
+		if len(channels[i].Sets) == 0 {
+			channels[i].Sets = []string{"overseas"}
+		}
+
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
 			return info, fmt.Errorf("failed to update channel %d models: %w", channels[i].ID, err)
 		}
@@ -598,6 +603,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 			BaseURL: openaiBase,
 			Key:     cfg.APIKey,
 			Models:  openaiModels,
+			Sets:    []string{"overseas"},
 			Status:  model.ChannelStatusEnabled,
 			Configs: model.ChannelConfigs{
 				model.ChannelConfigPathBaseMapKey: map[string]string{
@@ -621,6 +627,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 				BaseURL: DefaultNovitaAnthropicBase,
 				Key:     cfg.APIKey,
 				Models:  anthropicModels,
+				Sets:    []string{"overseas"},
 				Status:  model.ChannelStatusEnabled,
 				Configs: model.ChannelConfigs{
 					"skip_image_conversion":      true,
@@ -666,6 +673,7 @@ func newNovitaMultimodalChannel(apiKey string, models []string) model.Channel {
 		BaseURL: DefaultNovitaMultimodalBase,
 		Key:     apiKey,
 		Models:  models,
+		Sets:    []string{"overseas"},
 		Status:  model.ChannelStatusEnabled,
 		Configs: model.ChannelConfigs{
 			model.ChannelConfigAllowPassthroughUnknown: true,
