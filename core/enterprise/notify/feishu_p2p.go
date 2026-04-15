@@ -67,7 +67,44 @@ func (c *FeishuP2PClient) SendTextMessage(ctx context.Context, openID, text stri
 // SendCardMessage sends an interactive card message to a Feishu user.
 // color should be one of: "green", "orange", "red", etc.
 func (c *FeishuP2PClient) SendCardMessage(ctx context.Context, openID, title, content, color string) error {
-	card := fmt.Sprintf(`{"config":{"wide_screen_mode":true},"header":{"title":{"tag":"plain_text","content":%q},"template":%q},"elements":[{"tag":"div","text":{"tag":"lark_md","content":%q}}]}`, title, color, content)
-
+	card := buildCardJSON(title, content, color)
 	return c.SendMessage(ctx, openID, larkim.MsgTypeInteractive, card)
+}
+
+// SendChatCardMessage sends an interactive card message to a Feishu group chat.
+func (c *FeishuP2PClient) SendChatCardMessage(ctx context.Context, chatID, title, content, color string) error {
+	card := buildCardJSON(title, content, color)
+
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(larkim.ReceiveIdTypeChatId).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(chatID).
+			MsgType(larkim.MsgTypeInteractive).
+			Content(card).
+			Build()).
+		Build()
+
+	resp, err := c.client.Im.Message.Create(ctx, req)
+	if err != nil {
+		log.WithError(err).WithField("chat_id", chatID).Error("failed to send feishu chat message")
+		return fmt.Errorf("failed to send feishu chat message: %w", err)
+	}
+
+	if !resp.Success() {
+		log.WithFields(log.Fields{
+			"chat_id": chatID,
+			"code":    resp.Code,
+			"msg":     resp.Msg,
+		}).Error("feishu chat message API returned error")
+		return fmt.Errorf("feishu chat message failed: code=%d, msg=%s", resp.Code, resp.Msg)
+	}
+
+	return nil
+}
+
+func buildCardJSON(title, content, color string) string {
+	return fmt.Sprintf(
+		`{"config":{"wide_screen_mode":true},"header":{"title":{"tag":"plain_text","content":%q},"template":%q},"elements":[{"tag":"div","text":{"tag":"lark_md","content":%q}}]}`,
+		title, color, content,
+	)
 }

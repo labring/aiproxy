@@ -16,6 +16,7 @@ import (
 // point-to-point user notifications. It implements the notify.Notifier interface.
 type EnterpriseNotifier struct {
 	webhookURL string
+	chatID     string
 	p2pClient  *FeishuP2PClient
 	std        *notify.StdNotifier
 }
@@ -31,15 +32,11 @@ func GetEnterpriseNotifier() *EnterpriseNotifier { return defaultEnterpriseNotif
 // IsP2PAvailable reports whether the Feishu P2P client is configured and ready to send messages.
 func (n *EnterpriseNotifier) IsP2PAvailable() bool { return n.p2pClient != nil }
 
-// Notify sends a notification via stdout logging and, if configured, via Feishu webhook.
+// Notify sends a notification via stdout logging and, if configured, via Feishu webhook
+// or app API (chat_id fallback when webhook is not set).
 func (n *EnterpriseNotifier) Notify(level notify.Level, title, message string) {
 	n.std.Notify(level, title, message)
-
-	if n.webhookURL != "" {
-		go func() {
-			_ = notify.PostToFeiShuv2(context.Background(), level2Color(level), title, message, n.webhookURL)
-		}()
-	}
+	n.sendGroupNotification(level, title, message)
 }
 
 // NotifyThrottle sends a throttled notification. The notification is suppressed
@@ -55,10 +52,21 @@ func (n *EnterpriseNotifier) NotifyThrottle(
 	}
 
 	n.std.Notify(level, title, message)
+	n.sendGroupNotification(level, title, message)
+}
 
-	if n.webhookURL != "" {
+// sendGroupNotification sends a notification to a Feishu group via webhook or app API.
+func (n *EnterpriseNotifier) sendGroupNotification(level notify.Level, title, message string) {
+	color := level2Color(level)
+
+	switch {
+	case n.webhookURL != "":
 		go func() {
-			_ = notify.PostToFeiShuv2(context.Background(), level2Color(level), title, message, n.webhookURL)
+			_ = notify.PostToFeiShuv2(context.Background(), color, title, message, n.webhookURL)
+		}()
+	case n.chatID != "" && n.p2pClient != nil:
+		go func() {
+			_ = n.p2pClient.SendChatCardMessage(context.Background(), n.chatID, title, message, color)
 		}()
 	}
 }
@@ -81,6 +89,7 @@ func Init() {
 	appID := os.Getenv("FEISHU_APP_ID")
 	appSecret := os.Getenv("FEISHU_APP_SECRET")
 	webhookURL := os.Getenv("NOTIFY_FEISHU_WEBHOOK")
+	chatID := os.Getenv("NOTIFY_FEISHU_CHAT_ID")
 
 	if appID == "" && appSecret == "" && webhookURL == "" {
 		log.Info("enterprise notifier: no feishu credentials or webhook configured, skipping")
@@ -89,6 +98,7 @@ func Init() {
 
 	n := &EnterpriseNotifier{
 		webhookURL: webhookURL,
+		chatID:     chatID,
 		std:        &notify.StdNotifier{},
 	}
 
@@ -101,6 +111,8 @@ func Init() {
 
 	if webhookURL != "" {
 		log.Info("enterprise notifier: feishu webhook configured")
+	} else if chatID != "" && n.p2pClient != nil {
+		log.Info("enterprise notifier: feishu app chat notification configured (chat_id: " + chatID + ")")
 	}
 
 	defaultEnterpriseNotifier = n
