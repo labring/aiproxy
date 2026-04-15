@@ -6,6 +6,7 @@ import (
 	_ "github.com/labring/aiproxy/core/relay/adaptor/ai360"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/ali"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/anthropic"
+	_ "github.com/labring/aiproxy/core/relay/adaptor/antling"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/aws"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/azure"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/azure2"

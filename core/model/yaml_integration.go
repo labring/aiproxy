@@ -102,6 +102,9 @@ func ChannelTypeNameToType(typeName string) int {
 		"zhipu coding":                          52,
 		"zhipucoding":                           52,
 		"fake":                                  53,
+		"antling":                               54,
+		"ant ling":                              54,
+		"蚂蚁百灵":                                  54,
 	}
 
 	if typ, ok := typeMap[typeName]; ok {
