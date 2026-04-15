@@ -53,6 +53,7 @@ const (
 	ChannelTypeStreamlake              ChannelType = 51
 	ChannelTypeZhipuCoding             ChannelType = 52
 	ChannelTypeFake                    ChannelType = 53
+	ChannelTypeAntLing                 ChannelType = 54
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -97,4 +98,5 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeStreamlake:              "Streamlake",
 	ChannelTypeZhipuCoding:             "zhipu coding",
 	ChannelTypeFake:                    "fake",
+	ChannelTypeAntLing:                 "antling",
 }
