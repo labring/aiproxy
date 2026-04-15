@@ -26,8 +26,8 @@ func SetRelayRouter(router *gin.Engine) {
 
 	modelsRouter := v1Router.Group("/models")
 	{
-		modelsRouter.GET("", controller.ListModels)
-		modelsRouter.GET("/:model", controller.RetrieveModel)
+		modelsRouter.GET("", controller.ModelsRateLimit, controller.ListModels)
+		modelsRouter.GET("/:model", controller.ModelsRateLimit, controller.RetrieveModel)
 	}
 
 	// gemini

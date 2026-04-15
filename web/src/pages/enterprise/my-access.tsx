@@ -1470,6 +1470,28 @@ export default function MyAccessPage() {
                             </Button>
                         </div>
                     )}
+
+                    {/* Models & Pricing API */}
+                    <div className="mt-3 pt-3 border-t">
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <Badge variant="secondary" className="text-xs">GET</Badge>
+                            <span className="text-sm font-medium">{t("enterprise.myAccess.modelsApiTitle" as never)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">{baseUrl}/v1/models</code>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyToClipboard(`${baseUrl}/v1/models`, t("enterprise.myAccess.copied"))}
+                            >
+                                <Copy className="w-3.5 h-3.5 mr-1" />
+                                {t("enterprise.myAccess.copyUrl")}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                            {t("enterprise.myAccess.modelsApiHint" as never)}
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
 

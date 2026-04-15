@@ -6,13 +6,55 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/middleware"
+	"github.com/labring/aiproxy/core/model"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
+
+func buildOpenAIModel(name string, mc model.ModelConfig) *OpenAIModels {
+	t := mc.Type
+	rpm := mc.RPM
+	tpm := mc.TPM
+
+	m := &OpenAIModels{
+		ID:         name,
+		Object:     "model",
+		Created:    1626777600,
+		OwnedBy:    string(mc.Owner),
+		Root:       name,
+		Permission: permission,
+		Parent:     nil,
+		Type:       &t,
+	}
+
+	price := mc.Price
+	if price.InputPrice != 0 || price.OutputPrice != 0 || price.PerRequestPrice != 0 ||
+		len(price.ConditionalPrices) > 0 {
+		m.Price = &price
+	}
+
+	if len(mc.ImagePrices) > 0 {
+		m.ImagePrices = mc.ImagePrices
+	}
+
+	if len(mc.Config) > 0 {
+		m.Config = mc.Config
+	}
+
+	if rpm > 0 {
+		m.RPM = &rpm
+	}
+
+	if tpm > 0 {
+		m.TPM = &tpm
+	}
+
+	return m
+}
 
 // ListModels godoc
 //
 //	@Summary		List models
-//	@Description	List all models
+//	@Description	List all models with pricing and capabilities
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
@@ -21,20 +63,14 @@ import (
 func ListModels(c *gin.Context) {
 	enabledModelConfigsMap := middleware.GetModelCaches(c).EnabledModelConfigsMap
 	token := middleware.GetToken(c)
+	group := middleware.GetGroup(c)
 
 	availableOpenAIModels := make([]*OpenAIModels, 0)
 
-	token.Range(func(model string) bool {
-		if mc, ok := enabledModelConfigsMap[model]; ok {
-			availableOpenAIModels = append(availableOpenAIModels, &OpenAIModels{
-				ID:         model,
-				Object:     "model",
-				Created:    1626777600,
-				OwnedBy:    string(mc.Owner),
-				Root:       model,
-				Permission: permission,
-				Parent:     nil,
-			})
+	token.Range(func(modelName string) bool {
+		if mc, ok := enabledModelConfigsMap[modelName]; ok {
+			adjusted := middleware.GetGroupAdjustedModelConfig(group, mc)
+			availableOpenAIModels = append(availableOpenAIModels, buildOpenAIModel(modelName, adjusted))
 		}
 
 		return true
@@ -49,7 +85,7 @@ func ListModels(c *gin.Context) {
 // RetrieveModel godoc
 //
 //	@Summary		Retrieve model
-//	@Description	Retrieve a model
+//	@Description	Retrieve a model with pricing and capabilities
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
@@ -75,13 +111,8 @@ func RetrieveModel(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, &OpenAIModels{
-		ID:         modelName,
-		Object:     "model",
-		Created:    1626777600,
-		OwnedBy:    string(mc.Owner),
-		Root:       modelName,
-		Permission: permission,
-		Parent:     nil,
-	})
+	group := middleware.GetGroup(c)
+	adjusted := middleware.GetGroupAdjustedModelConfig(group, mc)
+
+	c.JSON(http.StatusOK, buildOpenAIModel(modelName, adjusted))
 }

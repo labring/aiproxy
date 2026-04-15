@@ -389,6 +389,8 @@
       "hideKey": "Hide Key",
       "copyKey": "Copy Key",
       "copyUrl": "Copy URL",
+      "modelsApiTitle": "Models & Pricing API",
+      "modelsApiHint": "Returns all available models with pricing, capabilities, and rate limits. Agents can call this periodically to optimize model selection. Requires API Key authentication.",
       "newKeyTitle": "New Key Created",
       "tokenName": "Name",
       "actions": "Actions",

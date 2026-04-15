@@ -12,6 +12,7 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptors"
+	"github.com/labring/aiproxy/core/relay/mode"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,6 +41,12 @@ type OpenAIModels struct {
 	Root       string                  `json:"root"`
 	Permission []OpenAIModelPermission `json:"permission"`
 	Created    int                     `json:"created"`
+	Price       *model.Price                `json:"price,omitempty"`
+	ImagePrices map[string]float64          `json:"image_prices,omitempty"`
+	Config      map[model.ModelConfigKey]any `json:"config,omitempty"`
+	Type        *mode.Mode                  `json:"type,omitempty"`
+	RPM         *int64                      `json:"rpm,omitempty"`
+	TPM         *int64                      `json:"tpm,omitempty"`
 }
 
 type BuiltinModelConfig model.ModelConfig

@@ -378,6 +378,8 @@
       "hideKey": "隐藏 Key",
       "copyKey": "复制 Key",
       "copyUrl": "复制 URL",
+      "modelsApiTitle": "模型与报价查询",
+      "modelsApiHint": "返回所有可用模型及其定价、能力、限速信息。可供 Agent 定期调用以优化模型选择。需携带 API Key 鉴权。",
       "newKeyTitle": "新 Key 已创建",
       "tokenName": "名称",
       "actions": "操作",
