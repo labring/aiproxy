@@ -82,10 +82,11 @@ COPY --from=builder /aiproxy/core/aiproxy /usr/local/bin/aiproxy
 ENV PUID=0 PGID=0 UMASK=022
 
 ENV FFMPEG_ENABLED=true
+ENV LISTEN=0.0.0.0:3000
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
-  CMD curl -f http://localhost:3000/api/status || exit 1
+  CMD curl -f "http://localhost:${LISTEN##*:}/api/status" || exit 1
 
 ENTRYPOINT ["aiproxy"]

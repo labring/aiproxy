@@ -294,6 +294,16 @@ func migrateLogDB(batchSize int) error {
 				err.Error(),
 			)
 		}
+
+		err = CreateStoreV2Indexes(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createStoreV2Indexes",
+				time.Minute*10,
+				"failed to create store_v2 indexes",
+				err.Error(),
+			)
+		}
 	}()
 
 	return nil

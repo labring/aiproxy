@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -293,6 +294,81 @@ func UpdateGroupUsedAmountAndRequestCount(id string, amount float64, count int) 
 		})
 
 	return HandleUpdateResult(result, ErrGroupNotFound)
+}
+
+// maxBulkUpdateRows caps rows per UPDATE ... FROM (VALUES ...) statement.
+// 10k rows × 4 params = 40k, well under PostgreSQL's 65535 parameter limit.
+const maxBulkUpdateRows = 10000
+
+// BulkUpdateGroupUsedAmountAndRequestCount updates multiple groups in a single SQL
+// and returns the updated used_amount for cache sync.
+func BulkUpdateGroupUsedAmountAndRequestCount(updates map[string]*GroupUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	type entry struct {
+		id   string
+		data *GroupUpdate
+	}
+
+	all := make([]entry, 0, len(updates))
+	for id, data := range updates {
+		all = append(all, entry{id, data})
+	}
+
+	for start := 0; start < len(all); start += maxBulkUpdateRows {
+		end := min(start+maxBulkUpdateRows, len(all))
+		chunk := all[start:end]
+
+		args := make([]any, 0, len(chunk)*3)
+		valueClauses := make([]string, 0, len(chunk))
+		for i, e := range chunk {
+			base := i * 3
+			valueClauses = append(valueClauses,
+				fmt.Sprintf("($%d::text, $%d::numeric, $%d::int)",
+					base+1, base+2, base+3))
+			args = append(args, e.id, e.data.Amount.InexactFloat64(), e.data.Count)
+		}
+
+		sql := fmt.Sprintf(`UPDATE groups AS g SET
+			used_amount = g.used_amount + v.amount,
+			request_count = g.request_count + v.count
+		FROM (VALUES %s) AS v(id, amount, count)
+		WHERE g.id = v.id
+		RETURNING g.id, g.used_amount`,
+			strings.Join(valueClauses, ", "))
+
+		if err := bulkUpdateGroupScanRows(sql, args, updates); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func bulkUpdateGroupScanRows(sql string, args []any, updates map[string]*GroupUpdate) error {
+	rows, err := DB.Raw(sql, args...).Rows()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var groupID string
+		var usedAmount float64
+		if err := rows.Scan(&groupID, &usedAmount); err != nil {
+			log.Error("bulk update group scan failed: " + err.Error())
+			continue
+		}
+		if data, ok := updates[groupID]; ok && data.Amount.IsPositive() {
+			if cacheErr := CacheUpdateGroupUsedAmountOnlyIncrease(groupID, usedAmount); cacheErr != nil {
+				log.Error("bulk update group cache failed: " + cacheErr.Error())
+			}
+		}
+	}
+
+	return rows.Err()
 }
 
 func UpdateGroupRPMRatio(id string, rpmRatio float64) (err error) {

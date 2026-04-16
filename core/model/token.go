@@ -978,6 +978,80 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
+// BulkUpdateTokenUsedAmount updates multiple tokens in a single SQL statement
+// and syncs cache for tokens with quota enforcement.
+func BulkUpdateTokenUsedAmount(updates map[int]*TokenUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	type entry struct {
+		id   int
+		data *TokenUpdate
+	}
+
+	all := make([]entry, 0, len(updates))
+	for id, data := range updates {
+		all = append(all, entry{id, data})
+	}
+
+	for start := 0; start < len(all); start += maxBulkUpdateRows {
+		end := min(start+maxBulkUpdateRows, len(all))
+		chunk := all[start:end]
+
+		args := make([]any, 0, len(chunk)*3)
+		valueClauses := make([]string, 0, len(chunk))
+		for i, e := range chunk {
+			base := i * 3
+			valueClauses = append(valueClauses,
+				fmt.Sprintf("($%d::int, $%d::numeric, $%d::int)",
+					base+1, base+2, base+3))
+			args = append(args, e.id, e.data.Amount.InexactFloat64(), e.data.Count)
+		}
+
+		sql := fmt.Sprintf(`UPDATE tokens AS t SET
+			used_amount = t.used_amount + v.amount,
+			request_count = t.request_count + v.count
+		FROM (VALUES %s) AS v(id, amount, count)
+		WHERE t.id = v.id
+		RETURNING t.id, t.key, t.quota, t.used_amount, t.period_quota`,
+			strings.Join(valueClauses, ", "))
+
+		if err := bulkUpdateTokenScanRows(sql, args, updates); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func bulkUpdateTokenScanRows(sql string, args []any, updates map[int]*TokenUpdate) error {
+	rows, err := DB.Raw(sql, args...).Rows()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tokenID int
+		var key string
+		var quota, usedAmount, periodQuota float64
+		if err := rows.Scan(&tokenID, &key, &quota, &usedAmount, &periodQuota); err != nil {
+			log.Error("bulk update token scan failed: " + err.Error())
+			continue
+		}
+		if data, ok := updates[tokenID]; ok &&
+			data.Amount.IsPositive() &&
+			(quota > 0 || periodQuota > 0) {
+			if cacheErr := CacheUpdateTokenUsedAmountOnlyIncrease(key, usedAmount); cacheErr != nil {
+				log.Error("bulk update token cache failed: " + cacheErr.Error())
+			}
+		}
+	}
+
+	return rows.Err()
+}
+
 // calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
 // This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
 // This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.

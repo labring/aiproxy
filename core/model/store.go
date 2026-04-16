@@ -59,6 +59,12 @@ func SaveStore(s *StoreV2) (*StoreV2, error) {
 	return s, nil
 }
 
+func CreateStoreV2Indexes(db *gorm.DB) error {
+	return db.Exec(
+		"CREATE INDEX IF NOT EXISTS idx_store_v2_expires_at ON store_v2 (expires_at)",
+	).Error
+}
+
 func GetStore(group string, tokenID int, id string) (*StoreV2, error) {
 	var s StoreV2
 

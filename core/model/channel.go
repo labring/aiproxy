@@ -585,6 +585,53 @@ func UpdateChannelUsedAmount(id int, amount float64, requestCount, retryCount in
 	return HandleUpdateResult(result, ErrChannelNotFound)
 }
 
+// BulkUpdateChannelUsedAmount updates multiple channels in a single SQL statement
+// using PostgreSQL UPDATE ... FROM (VALUES ...) pattern.
+func BulkUpdateChannelUsedAmount(updates map[int]*ChannelUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	type entry struct {
+		id   int
+		data *ChannelUpdate
+	}
+
+	all := make([]entry, 0, len(updates))
+	for id, data := range updates {
+		all = append(all, entry{id, data})
+	}
+
+	for start := 0; start < len(all); start += maxBulkUpdateRows {
+		end := min(start+maxBulkUpdateRows, len(all))
+		chunk := all[start:end]
+
+		args := make([]any, 0, len(chunk)*4)
+		valueClauses := make([]string, 0, len(chunk))
+		for i, e := range chunk {
+			base := i * 4
+			valueClauses = append(valueClauses,
+				fmt.Sprintf("($%d::int, $%d::numeric, $%d::int, $%d::int)",
+					base+1, base+2, base+3, base+4))
+			args = append(args, e.id, e.data.Amount.InexactFloat64(), e.data.Count, e.data.RetryCount)
+		}
+
+		sql := fmt.Sprintf(`UPDATE channels AS c SET
+			used_amount = c.used_amount + v.amount,
+			request_count = c.request_count + v.count,
+			retry_count = c.retry_count + v.retry
+		FROM (VALUES %s) AS v(id, amount, count, retry)
+		WHERE c.id = v.id AND c.deleted_at IS NULL`,
+			strings.Join(valueClauses, ", "))
+
+		if err := DB.Exec(sql, args...).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 type ChannelBasicInfo struct {
 	ID   int         `json:"id"`
 	Name string      `json:"name"`
