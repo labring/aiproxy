@@ -274,6 +274,7 @@ type AddChannelRequest struct {
 	Status                  int                  `json:"status"`
 	Sets                    []string             `json:"sets"`
 	EnabledAutoBalanceCheck bool                 `json:"enabled_auto_balance_check"`
+	SkipTLSVerify           bool                 `json:"skip_tls_verify"`
 	EnabledNoPermissionBan  bool                 `json:"enabled_no_permission_ban"`
 	WarnErrorRate           float64              `json:"warn_error_rate"`
 	MaxErrorRate            float64              `json:"max_error_rate"`
@@ -324,6 +325,7 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 		Configs:                 r.Configs,
 		Sets:                    slices.Clone(r.Sets),
 		EnabledAutoBalanceCheck: r.EnabledAutoBalanceCheck,
+		SkipTLSVerify:           r.SkipTLSVerify,
 		EnabledNoPermissionBan:  r.EnabledNoPermissionBan,
 		WarnErrorRate:           r.WarnErrorRate,
 		MaxErrorRate:            r.MaxErrorRate,

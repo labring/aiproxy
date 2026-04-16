@@ -916,6 +916,8 @@
       "priority": "Priority",
       "priorityPlaceholder": "1-100, default 10",
       "priorityHelp": "Lower value means higher priority, default is 10",
+      "skipTlsVerify": "Skip TLS Verification",
+      "skipTlsVerifyHelp": "Enable this only when you trust the upstream service and need to bypass certificate verification.",
       "enabledNoPermissionBan": "Temporarily Exclude No-Permission Models",
       "enabledNoPermissionBanHelp": "When the upstream returns a no-permission status, the channel-model route will be temporarily excluded immediately.",
       "warnErrorRate": "Warn Error Rate (0-1)",

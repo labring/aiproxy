@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -70,13 +71,28 @@ func normalizeProxyURL(proxyURL string) string {
 	return strings.TrimSpace(proxyURL)
 }
 
-func httpClientCacheKey(timeout time.Duration, proxyURL string) string {
-	return fmt.Sprintf("%d|%s", normalizeTimeout(timeout), normalizeProxyURL(proxyURL))
+func httpClientCacheKey(timeout time.Duration, proxyURL string, skipTLSVerify bool) string {
+	return fmt.Sprintf(
+		"%d|%s|%t",
+		normalizeTimeout(timeout),
+		normalizeProxyURL(proxyURL),
+		skipTLSVerify,
+	)
 }
 
-func createTransport(timeout time.Duration, proxyURL string) (*http.Transport, error) {
+func createTransport(
+	timeout time.Duration,
+	proxyURL string,
+	skipTLSVerify bool,
+) (*http.Transport, error) {
 	transport := defaultTransportTemplate()
+
 	transport.ResponseHeaderTimeout = normalizeTimeout(timeout)
+	if skipTLSVerify {
+		transport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec
+		}
+	}
 
 	proxyURL = normalizeProxyURL(proxyURL)
 	if proxyURL == "" {
@@ -161,7 +177,15 @@ func LoadHTTPClient(timeout time.Duration, proxyURL string) *http.Client {
 }
 
 func LoadHTTPClientE(timeout time.Duration, proxyURL string) (*http.Client, error) {
-	key := httpClientCacheKey(timeout, proxyURL)
+	return LoadHTTPClientWithTLSConfigE(timeout, proxyURL, false)
+}
+
+func LoadHTTPClientWithTLSConfigE(
+	timeout time.Duration,
+	proxyURL string,
+	skipTLSVerify bool,
+) (*http.Client, error) {
+	key := httpClientCacheKey(timeout, proxyURL, skipTLSVerify)
 	if value, ok := httpClientCache.Get(key); ok {
 		cached, ok := value.(*cachedHTTPClient)
 		if !ok {
@@ -171,7 +195,7 @@ func LoadHTTPClientE(timeout time.Duration, proxyURL string) (*http.Client, erro
 		return cached.client, nil
 	}
 
-	transport, err := createTransport(timeout, proxyURL)
+	transport, err := createTransport(timeout, proxyURL, skipTLSVerify)
 	if err != nil {
 		return nil, err
 	}

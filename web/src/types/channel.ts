@@ -14,6 +14,7 @@ export interface Channel {
     created_at: number
     accessed_at: number
     priority: number
+    skip_tls_verify?: boolean
     enabled_no_permission_ban?: boolean
     warn_error_rate?: number
     max_error_rate?: number
@@ -61,6 +62,7 @@ export interface ChannelCreateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    skip_tls_verify?: boolean
     enabled_no_permission_ban?: boolean
     warn_error_rate?: number
     max_error_rate?: number
@@ -77,6 +79,7 @@ export interface ChannelUpdateRequest {
     model_mapping?: Record<string, string>
     sets?: string[]
     priority?: number
+    skip_tls_verify?: boolean
     enabled_no_permission_ban?: boolean
     warn_error_rate?: number
     max_error_rate?: number

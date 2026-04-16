@@ -904,6 +904,8 @@
       "priority": "优先级",
       "priorityPlaceholder": "1-100，默认10",
       "priorityHelp": "数值越小优先级越高，默认为10",
+      "skipTlsVerify": "跳过 TLS 证书校验",
+      "skipTlsVerifyHelp": "仅在你明确可信任上游服务且需要绕过证书校验时开启。",
       "enabledNoPermissionBan": "启用无权模型临时排除",
       "enabledNoPermissionBanHelp": "当上游返回无权相关状态码时，会立即临时排除对应的渠道模型路由。",
       "warnErrorRate": "告警错误率 (0-1)",
