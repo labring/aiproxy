@@ -212,11 +212,14 @@ func (a *Adaptor) ConvertRequest(
 				header.Set("Content-Type", ct)
 			}
 
-			if cl := req.Header.Get("Content-Length"); cl != "" {
-				header.Set("Content-Length", cl)
+			// Replace model name when mapping is active; don't forward
+			// Content-Length since model replacement changes body size.
+			body, _, err := passthrough.ReplaceModelInBody(meta, req.Body)
+			if err != nil {
+				return adaptor.ConvertResult{}, err
 			}
 
-			return adaptor.ConvertResult{Header: header, Body: req.Body}, nil
+			return adaptor.ConvertResult{Header: header, Body: body}, nil
 		}
 
 		return ConvertRequest(meta, req)

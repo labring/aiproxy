@@ -121,11 +121,11 @@ func (a *Adaptor) NativeMode(m mode.Mode) bool {
 	return a.SupportMode(m)
 }
 
-// ConvertRequest returns the original request body unchanged.
-// Only protocol-relevant headers from the client request are forwarded;
+// ConvertRequest returns the original request body with only the "model" field
+// replaced when model mapping is active. All other fields are forwarded unchanged.
 // Authorization is replaced later by SetupRequestHeader.
 func (a *Adaptor) ConvertRequest(
-	_ *meta.Meta,
+	m *meta.Meta,
 	_ adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
@@ -137,9 +137,18 @@ func (a *Adaptor) ConvertRequest(
 		}
 	}
 
+	body, replaced, err := ReplaceModelInBody(m, req.Body)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	if replaced {
+		header.Del("Content-Length")
+	}
+
 	return adaptor.ConvertResult{
 		Header: header,
-		Body:   req.Body,
+		Body:   body,
 	}, nil
 }
 

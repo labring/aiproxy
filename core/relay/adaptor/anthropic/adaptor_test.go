@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"strconv"
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
@@ -13,7 +12,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
-func TestAdaptorConvertRequest_PurePassthroughPreservesAnthropicBody(t *testing.T) {
+func TestAdaptorConvertRequest_PurePassthroughReplacesModel(t *testing.T) {
 	a := &anthropic.Adaptor{}
 	channel := &model.Channel{
 		Type: model.ChannelTypeAnthropic,
@@ -35,7 +34,62 @@ func TestAdaptorConvertRequest_PurePassthroughPreservesAnthropicBody(t *testing.
 		t.Fatalf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Length", strconv.Itoa(len(body)))
+
+	result, err := a.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	gotBody, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	if !bytes.Contains(gotBody, []byte(`"model":"upstream-model"`)) {
+		t.Fatalf("pure passthrough did not replace model:\ngot: %s", gotBody)
+	}
+
+	if bytes.Contains(gotBody, []byte(`"model":"client-model"`)) {
+		t.Fatalf("pure passthrough still contains original model:\ngot: %s", gotBody)
+	}
+
+	// Messages should be preserved unchanged
+	if !bytes.Contains(gotBody, []byte(`"messages"`)) {
+		t.Fatalf("pure passthrough lost messages field:\ngot: %s", gotBody)
+	}
+
+	if got := result.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+
+	// Content-Length should NOT be forwarded (model replacement changes body size)
+	if got := result.Header.Get("Content-Length"); got != "" {
+		t.Fatalf("Content-Length should not be set, got %q", got)
+	}
+}
+
+func TestAdaptorConvertRequest_PurePassthroughNoMappingPreservesBody(t *testing.T) {
+	a := &anthropic.Adaptor{}
+	channel := &model.Channel{
+		Type: model.ChannelTypeAnthropic,
+		Configs: model.ChannelConfigs{
+			"pure_passthrough": true,
+		},
+	}
+	m := meta.NewMeta(channel, mode.Anthropic, "same-model", model.ModelConfig{})
+	m.ActualModel = "same-model" // no mapping
+
+	body := []byte(`{"model":"same-model","messages":[{"role":"user","content":"hello"}]}`)
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/messages",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 
 	result, err := a.ConvertRequest(m, nil, req)
 	if err != nil {
@@ -48,15 +102,7 @@ func TestAdaptorConvertRequest_PurePassthroughPreservesAnthropicBody(t *testing.
 	}
 
 	if string(gotBody) != string(body) {
-		t.Fatalf("pure passthrough body changed:\nwant: %s\ngot:  %s", body, gotBody)
-	}
-
-	if got := result.Header.Get("Content-Type"); got != "application/json" {
-		t.Fatalf("Content-Type = %q, want application/json", got)
-	}
-
-	if got := result.Header.Get("Content-Length"); got != strconv.Itoa(len(body)) {
-		t.Fatalf("Content-Length = %q, want %d", got, len(body))
+		t.Fatalf("body should be unchanged when no mapping:\nwant: %s\ngot:  %s", body, gotBody)
 	}
 }
 

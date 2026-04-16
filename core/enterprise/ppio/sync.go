@@ -210,17 +210,10 @@ func ExecuteSync( //nolint:cyclop
 	}
 
 	// Step 4: Ensure channels exist
-	// Pass remote model IDs so cross-owner shared models are included in channels.
+	// Classify models directly from upstream API data and replace channel model lists.
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	remoteIDs := make([]string, 0, len(allModels))
-	for i := range allModels {
-		if allModels[i].IsAvailable() {
-			remoteIDs = append(remoteIDs, allModels[i].ID)
-		}
-	}
-
-	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, remoteIDs)
+	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, allModels)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -464,16 +457,15 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 	return added, updated, nil
 }
 
-// EnsurePPIOChannels queries local ModelConfig entries and partitions them by
-// endpoint compatibility, then writes the lists into the corresponding PPIO
-// channels. When autoCreate is true and no PPIO channels exist, it creates
-// them automatically using the API key from cfg.
+// EnsurePPIOChannels classifies models from the upstream API data and writes
+// the lists into the corresponding PPIO channels. When autoCreate is true and
+// no PPIO channels exist, it creates them automatically using the API key
+// from cfg.
 //
-// remoteModelIDs is optional: when provided (during sync), the query includes
-// both PPIO-owned models AND cross-owner models whose name appears in the
-// remote list. This ensures shared models (e.g. owned by Novita) are still
-// included in PPIO channels. When omitted (startup refresh), only PPIO-owned
-// models are used.
+// remoteModels is the list of models from the PPIO upstream API. When non-nil,
+// classification is performed directly from the upstream data (ground truth) and
+// channel model lists are replaced entirely. When nil (startup refresh), only
+// channel configs are updated — model lists are left unchanged.
 //
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
@@ -483,55 +475,46 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 // allowPassthroughUnknown controls the allow_passthrough_unknown config on the
 // OpenAI channel. When true, requests for models not in the model list are
 // forwarded to this channel as a fallback (billed at zero cost).
-func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult, remoteModelIDs ...[]string) (ChannelsInfo, error) {
-	var localModels []model.ModelConfig
-
-	query := model.DB.Select("model", "type", "config")
-	if len(remoteModelIDs) > 0 && len(remoteModelIDs[0]) > 0 {
-		// Include both PPIO-owned models and cross-owner models in the remote list
-		query = query.Where("owner = ? OR model IN ?", string(model.ModelOwnerPPIO), remoteModelIDs[0])
-	} else {
-		query = query.Where("owner = ?", string(model.ModelOwnerPPIO))
-	}
-
-	if err := query.Find(&localModels).Error; err != nil {
-		return ChannelsInfo{}, fmt.Errorf("failed to query local PPIO models: %w", err)
-	}
+func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult, remoteModels []PPIOModelV2) (ChannelsInfo, error) {
+	// When remoteModels is nil (startup refresh), skip model list updates
+	// but still ensure channel existence and configs.
+	skipModelUpdate := len(remoteModels) == 0
 
 	var anthropicModels, openaiModels, multimodalModels []string
 
-	for _, mc := range localModels {
-		// Skip models whose stored status indicates they are not available.
-		// This acts as a safety net for models synced before the status filter
-		// was added in ComparePPIOModels/V2.
-		if status, ok := model.GetModelConfigInt(mc.Config, "status"); ok && status != PPIOModelStatusAvailable {
-			continue
-		}
+	if !skipModelUpdate {
+		openaiModels = make([]string, 0, len(remoteModels))
 
-		// PPIONative models (image/video/audio) go to the multimodal channel.
-		if mc.Type == mode.PPIONative {
-			multimodalModels = append(multimodalModels, mc.Model)
-			continue
-		}
+		for i := range remoteModels {
+			m := &remoteModels[i]
+			if !m.IsAvailable() {
+				continue
+			}
 
-		openaiModels = append(openaiModels, mc.Model)
+			t := inferModeFromPPIO(m.ModelType, m.Endpoints)
+			if t == mode.PPIONative {
+				multimodalModels = append(multimodalModels, m.ID)
+				continue
+			}
 
-		if slugs, ok := model.GetModelConfigStringSlice(mc.Config, "endpoints"); ok {
-			if slices.Contains(slugs, "anthropic") {
-				anthropicModels = append(anthropicModels, mc.Model)
+			openaiModels = append(openaiModels, m.ID)
+
+			if slices.Contains(m.Endpoints, "anthropic") || synccommon.IsAnthropicModelName(m.ID) {
+				anthropicModels = append(anthropicModels, m.ID)
 			}
 		}
+
+		slices.Sort(anthropicModels)
+		slices.Sort(openaiModels)
+		slices.Sort(multimodalModels)
 	}
 
-	slices.Sort(anthropicModels)
-	slices.Sort(openaiModels)
-	slices.Sort(multimodalModels)
-
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, multimodalModels, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
+	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, multimodalModels, skipModelUpdate, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
 }
 
 func ensurePPIOChannelsFromModels(
 	anthropicModels, openaiModels, multimodalModels []string,
+	skipModelUpdate bool,
 	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
@@ -571,7 +554,9 @@ func ensurePPIOChannelsFromModels(
 	for i := range channels {
 		switch channels[i].Type {
 		case model.ChannelTypeAnthropic:
-			channels[i].Models = synccommon.MergeModels(channels[i].Models, anthropicModels)
+			if !skipModelUpdate {
+				channels[i].Models = anthropicModels
+			}
 			// Ensure recommended defaults for PPIO's Anthropic endpoint:
 			// skip_image_conversion — PPIO natively supports URL image sources
 			// disable_context_management — PPIO rejects the beta field with 400
@@ -589,7 +574,9 @@ func ensurePPIOChannelsFromModels(
 
 		case model.ChannelTypePPIOMultimodal:
 			hasMultimodal = true
-			channels[i].Models = synccommon.MergeModels(channels[i].Models, multimodalModels)
+			if !skipModelUpdate {
+				channels[i].Models = multimodalModels
+			}
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -599,7 +586,9 @@ func ensurePPIOChannelsFromModels(
 
 		default:
 			// ChannelTypePPIO (OpenAI-compatible)
-			channels[i].Models = synccommon.MergeModels(channels[i].Models, openaiModels)
+			if !skipModelUpdate {
+				channels[i].Models = openaiModels
+			}
 			// Write path_base_map so the passthrough adaptor can route
 			// Responses API and web-search to their respective base URLs
 			// without depending on BaseURL string matching at request time.

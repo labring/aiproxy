@@ -69,7 +69,8 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
 		[]string{"seedream-5.0-lite"},
-		false,
+		false, // skipModelUpdate
+		false, // autoCreate
 		&purePassthrough,
 		&allowUnknown,
 		PPIOConfigResult{},
