@@ -8,12 +8,11 @@ import (
 	"log"
 	"slices"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
+	"golang.org/x/sync/singleflight"
 )
 
 // discoverGroup collapses concurrent auto-discovery calls for the same model
@@ -29,7 +28,12 @@ func init() {
 // channels it fetches pricing from the management API and registers a
 // ModelConfig so subsequent requests are billed correctly and the model
 // appears in users' "My Access" model list.
-func onPassthroughFirstSuccess(ctx context.Context, _ int, channelType model.ChannelType, modelName string) {
+func onPassthroughFirstSuccess(
+	ctx context.Context,
+	_ int,
+	channelType model.ChannelType,
+	modelName string,
+) {
 	if channelType != model.ChannelTypePPIOMultimodal {
 		return
 	}
@@ -67,7 +71,12 @@ func doDiscover(ctx context.Context, modelName string) {
 
 			// Fallback: try V2 management API for token-based pricing
 			if perRequestPrice == 0 {
-				if remoteModel := discoverV2Model(ctx, client, cfg.MgmtToken, modelName); remoteModel != nil {
+				if remoteModel := discoverV2Model(
+					ctx,
+					client,
+					cfg.MgmtToken,
+					modelName,
+				); remoteModel != nil {
 					if err := registerPPIONativeModel(modelName, remoteModel); err != nil {
 						log.Printf("ppio autodiscover: failed to register %s: %v", modelName, err)
 						return
@@ -110,7 +119,11 @@ func finalizeDiscovery(modelName, source string) {
 	addModelToMultimodalChannel(modelName)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
-		log.Printf("ppio autodiscover: cache refresh failed after registering %s: %v", modelName, err)
+		log.Printf(
+			"ppio autodiscover: cache refresh failed after registering %s: %v",
+			modelName,
+			err,
+		)
 	}
 
 	log.Printf("ppio autodiscover: registered model %s (%s)", modelName, source)
@@ -119,7 +132,11 @@ func finalizeDiscovery(modelName, source string) {
 // discoverMultimodalPrice fetches the multimodal model catalog and returns the
 // minimum SKU price for the given model. Returns 0 if the model is not found or
 // pricing is unavailable.
-func discoverMultimodalPrice(ctx context.Context, client *PPIOClient, mgmtToken, modelName string) float64 {
+func discoverMultimodalPrice(
+	ctx context.Context,
+	client *PPIOClient,
+	mgmtToken, modelName string,
+) float64 {
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
 		log.Printf("ppio autodiscover: FetchMultimodalModels failed (non-fatal): %v", err)
@@ -150,7 +167,11 @@ func discoverMultimodalPrice(ctx context.Context, client *PPIOClient, mgmtToken,
 
 // discoverV2Model searches the V2 management API for a model by name.
 // Returns nil if not found.
-func discoverV2Model(ctx context.Context, client *PPIOClient, mgmtToken, modelName string) *PPIOModelV2 {
+func discoverV2Model(
+	ctx context.Context,
+	client *PPIOClient,
+	mgmtToken, modelName string,
+) *PPIOModelV2 {
 	all, err := client.FetchAllModels(ctx, mgmtToken)
 	if err != nil {
 		log.Printf("ppio autodiscover: FetchAllModels failed (non-fatal): %v", err)
@@ -167,8 +188,9 @@ func discoverV2Model(ctx context.Context, client *PPIOClient, mgmtToken, modelNa
 }
 
 // registerPPIONativeModel creates a ModelConfig entry for a PPIO native
-// multimodal model. When remoteModel is non-nil, pricing and config are
-// sourced from the management API; otherwise sensible zero-cost defaults apply.
+// multimodal model. When remoteModel is non-nil, pricing, config, and the
+// mode type are sourced from the management API; otherwise sensible
+// zero-cost defaults apply with PPIONative as the type.
 func registerPPIONativeModel(modelName string, remoteModel *PPIOModelV2) error {
 	mc := model.ModelConfig{
 		Model: modelName,
@@ -179,13 +201,20 @@ func registerPPIONativeModel(modelName string, remoteModel *PPIOModelV2) error {
 	}
 
 	if remoteModel != nil {
+		// Use the V2 model's model_type and endpoints to infer the correct
+		// mode — this prevents non-multimodal models (e.g. embedding, chat)
+		// from being misclassified as PPIONative.
+		mc.Type = inferModeFromPPIO(remoteModel.ModelType, remoteModel.Endpoints)
+
 		mc.Config = synccommon.ToModelConfigKeys(buildConfigFromPPIOModelV2(remoteModel))
 		if remoteModel.RPM > 0 {
 			mc.RPM = int64(remoteModel.RPM)
 		}
+
 		if remoteModel.TPM > 0 {
 			mc.TPM = int64(remoteModel.TPM)
 		}
+
 		setPriceFromV2Model(&mc.Price, remoteModel)
 	}
 
@@ -198,7 +227,9 @@ func registerPPIONativeModel(modelName string, remoteModel *PPIOModelV2) error {
 // invisible to the routing system until the next daily sync.
 func addModelToMultimodalChannel(modelName string) {
 	var ch model.Channel
-	if err := model.DB.Where("type = ?", model.ChannelTypePPIOMultimodal).First(&ch).Error; err != nil {
+	if err := model.DB.Where("type = ?", model.ChannelTypePPIOMultimodal).
+		First(&ch).
+		Error; err != nil {
 		return
 	}
 

@@ -65,6 +65,9 @@ const ENDPOINT_LABELS: Record<string, { label: string; color: string }> = {
     "POST /v1/video/generations/jobs": { label: "Video Gen", color: EP_COLORS.video },
     "GET /v1/video/generations/jobs/{id}": { label: "Video Status", color: EP_COLORS.video },
     "POST /v1/web-search": { label: "Web Search", color: EP_COLORS.misc },
+    "POST /v3/{model}": { label: "Multimodal", color: EP_COLORS.misc },
+    "POST /v3/async/{model}": { label: "Async", color: EP_COLORS.misc },
+    "GET /v3/async/task-result": { label: "Task Result", color: EP_COLORS.misc },
 }
 
 // Translate a server-side type_name (e.g. "chat") via i18n keys "enterprise.myAccess.typeName_chat".
@@ -92,14 +95,22 @@ function ownerDisplayName(owner: string): string {
 // Build the full endpoint URL from base URL and endpoint descriptor.
 // e.g. baseUrl="https://api.example.com/v1", ep="POST /v1/chat/completions"
 //   → "https://api.example.com/v1/chat/completions"
+// For non-/v1 paths (e.g. "/v3/{model}"), strip the /v1 suffix from the base
+// and append the path as-is:
+//   baseUrl="https://api.example.com/v1", ep="POST /v3/{model}"
+//   → "https://api.example.com/v3/{model}"
 function getEndpointUrl(baseUrl: string, ep: string): string {
-    // Extract path from "METHOD /v1/..." → "/v1/..."
+    // Extract path from "METHOD /path..." → "/path..."
     const path = ep.replace(/^\S+\s+/, "")
-    // Strip the /v1 prefix since baseUrl already ends with /v1
-    const suffix = path.replace(/^\/v1\/?/, "/")
-    // Ensure no double slashes when joining
-    const base = baseUrl.replace(/\/+$/, "")
-    return base + suffix
+    if (path.startsWith("/v1/") || path === "/v1") {
+        // Standard /v1 endpoint — strip /v1 prefix and append to base (which ends with /v1)
+        const suffix = path.replace(/^\/v1\/?/, "/")
+        const base = baseUrl.replace(/\/+$/, "")
+        return base + suffix
+    }
+    // Non-/v1 endpoint (e.g. /v3/{model}) — strip /v1 from base URL, then append path
+    const origin = baseUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "")
+    return origin + path
 }
 
 function maskKey(key: string): string {

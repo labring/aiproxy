@@ -40,6 +40,7 @@ func TestPPIOURLHelpers(t *testing.T) {
 			if got := ppioResponsesBase(tc.baseURL); got != tc.wantResp {
 				t.Errorf("ppioResponsesBase(%q) = %q, want %q", tc.baseURL, got, tc.wantResp)
 			}
+
 			if got := ppioWebSearchBase(tc.baseURL); got != tc.wantWebSearch {
 				t.Errorf("ppioWebSearchBase(%q) = %q, want %q", tc.baseURL, got, tc.wantWebSearch)
 			}

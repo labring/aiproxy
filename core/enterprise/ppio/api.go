@@ -111,12 +111,12 @@ func GetConfigHandler(c *gin.Context) {
 	}
 
 	successResponse(c, gin.H{
-		"channel_id":              cfg.ChannelID,
-		"api_key":                 maskedKey,
-		"api_base":                cfg.APIBase,
-		"configured":              configured,
-		"mgmt_token_configured":   cfg.MgmtToken != "",
-		"auto_sync_enabled":       cfg.AutoSyncEnabled,
+		"channel_id":               cfg.ChannelID,
+		"api_key":                  maskedKey,
+		"api_base":                 cfg.APIBase,
+		"configured":               configured,
+		"mgmt_token_configured":    cfg.MgmtToken != "",
+		"auto_sync_enabled":        cfg.AutoSyncEnabled,
 		"auto_sync_force_disabled": env.Bool("DISABLE_PPIO_AUTO_SYNC", false),
 	})
 }
@@ -134,7 +134,11 @@ func UpdateMgmtTokenHandler(c *gin.Context) {
 	}
 
 	if err := SetPPIOMgmtToken(req.Token); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save mgmt token: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save mgmt token: %v", err),
+		)
 		return
 	}
 
@@ -155,7 +159,11 @@ func UpdateAPIKeyHandler(c *gin.Context) {
 	}
 
 	if err := SetPPIOAPIKeyDirect(req.APIKey, req.APIBase); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save API key: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save API key: %v", err),
+		)
 		return
 	}
 
@@ -175,7 +183,11 @@ func UpdateConfigHandler(c *gin.Context) {
 	}
 
 	if err := SetPPIOConfigFromChannel(req.ChannelID); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save config: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save config: %v", err),
+		)
 		return
 	}
 
@@ -411,7 +423,11 @@ func UpdateAutoSyncHandler(c *gin.Context) {
 	}
 
 	if err := SetAutoSyncEnabled(req.Enabled); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save auto-sync setting: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save auto-sync setting: %v", err),
+		)
 		return
 	}
 

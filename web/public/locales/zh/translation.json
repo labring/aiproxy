@@ -429,6 +429,8 @@
       "typeName_rerank": "重排序",
       "typeName_moderation": "内容审核",
       "typeName_parse_pdf": "PDF 解析",
+      "typeName_multimodal": "多模态",
+      "typeName_web_search": "联网搜索",
       "typeName_other": "其他",
       "requestLogs": "请求记录",
       "filterModel": "筛选模型",

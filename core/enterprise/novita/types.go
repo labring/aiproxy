@@ -94,46 +94,46 @@ func (p NovitaPricing) PricePerToken() float64 {
 
 // TieredBillingConfig represents a tiered billing tier from the management API.
 type TieredBillingConfig struct {
-	MinTokens                      int64          `json:"min_tokens"`
-	MaxTokens                      int64          `json:"max_tokens"`
-	InputPricing                   NovitaPricing  `json:"input_pricing"`
-	OutputPricing                  NovitaPricing  `json:"output_pricing"`
-	CacheReadInputPricing          NovitaPricing  `json:"cache_read_input_pricing"`
-	CacheCreationInputPricing      NovitaPricing  `json:"cache_creation_input_pricing"`
-	CacheCreation1HourInputPricing NovitaPricing  `json:"cache_creation_1_hour_input_pricing"`
+	MinTokens                      int64         `json:"min_tokens"`
+	MaxTokens                      int64         `json:"max_tokens"`
+	InputPricing                   NovitaPricing `json:"input_pricing"`
+	OutputPricing                  NovitaPricing `json:"output_pricing"`
+	CacheReadInputPricing          NovitaPricing `json:"cache_read_input_pricing"`
+	CacheCreationInputPricing      NovitaPricing `json:"cache_creation_input_pricing"`
+	CacheCreation1HourInputPricing NovitaPricing `json:"cache_creation_1_hour_input_pricing"`
 }
 
 // NovitaModelV2 represents a model from the Novita management API
 // (api-server.novita.ai/v1/product/model/list).
 type NovitaModelV2 struct {
-	ID                                    string              `json:"id"`
-	Title                                 string              `json:"title"`
-	Description                           string              `json:"description"`
-	DisplayName                           string              `json:"display_name"`
-	ModelType                             string              `json:"model_type"`
-	ContextSize                           int64               `json:"context_size"`
-	MaxOutputTokens                       int64               `json:"max_output_tokens"`
-	InputTokenPricePerM                   int64               `json:"input_token_price_per_m"`
-	OutputTokenPricePerM                  int64               `json:"output_token_price_per_m"`
-	Endpoints                             []string            `json:"endpoints"`
-	Features                              []string            `json:"features"`
-	InputModalities                       []string            `json:"input_modalities"`
-	OutputModalities                      []string            `json:"output_modalities"`
-	Status                                int                 `json:"status"`
-	Tags                                  []any               `json:"tags"`
-	IsTieredBilling                       bool                `json:"is_tiered_billing"`
+	ID                                    string                `json:"id"`
+	Title                                 string                `json:"title"`
+	Description                           string                `json:"description"`
+	DisplayName                           string                `json:"display_name"`
+	ModelType                             string                `json:"model_type"`
+	ContextSize                           int64                 `json:"context_size"`
+	MaxOutputTokens                       int64                 `json:"max_output_tokens"`
+	InputTokenPricePerM                   int64                 `json:"input_token_price_per_m"`
+	OutputTokenPricePerM                  int64                 `json:"output_token_price_per_m"`
+	Endpoints                             []string              `json:"endpoints"`
+	Features                              []string              `json:"features"`
+	InputModalities                       []string              `json:"input_modalities"`
+	OutputModalities                      []string              `json:"output_modalities"`
+	Status                                int                   `json:"status"`
+	Tags                                  []any                 `json:"tags"`
+	IsTieredBilling                       bool                  `json:"is_tiered_billing"`
 	TieredBillingConfigs                  []TieredBillingConfig `json:"tiered_billing_configs"`
-	SupportPromptCache                    bool                `json:"support_prompt_cache"`
-	CacheReadInputTokenPricePerM          int64               `json:"cache_read_input_token_price_per_m"`
-	CacheCreationInputTokenPricePerM      int64               `json:"cache_creation_input_token_price_per_m"`
-	CacheCreation1HourInputTokenPricePerM int64               `json:"cache_creation_1_hour_input_token_price_per_m"`
-	InputPricing                          NovitaPricing       `json:"input_pricing"`
-	OutputPricing                         NovitaPricing       `json:"output_pricing"`
-	Series                                string              `json:"series"`
-	Quantization                          string              `json:"quantization"`
-	RPM                                   int                 `json:"rpm"`
-	TPM                                   int                 `json:"tpm"`
-	Labels                                []map[string]string `json:"labels"`
+	SupportPromptCache                    bool                  `json:"support_prompt_cache"`
+	CacheReadInputTokenPricePerM          int64                 `json:"cache_read_input_token_price_per_m"`
+	CacheCreationInputTokenPricePerM      int64                 `json:"cache_creation_input_token_price_per_m"`
+	CacheCreation1HourInputTokenPricePerM int64                 `json:"cache_creation_1_hour_input_token_price_per_m"`
+	InputPricing                          NovitaPricing         `json:"input_pricing"`
+	OutputPricing                         NovitaPricing         `json:"output_pricing"`
+	Series                                string                `json:"series"`
+	Quantization                          string                `json:"quantization"`
+	RPM                                   int                   `json:"rpm"`
+	TPM                                   int                   `json:"tpm"`
+	Labels                                []map[string]string   `json:"labels"`
 }
 
 // NovitaMgmtModelsResponse is the response from the Novita management model list API.
@@ -177,7 +177,7 @@ type ModelDiff struct {
 
 // SyncDiff represents the comparison between remote and local models.
 type SyncDiff struct {
-	Summary  SyncSummary `json:"summary"`
+	Summary SyncSummary `json:"summary"`
 	Changes struct {
 		Add    []ModelDiff `json:"add"`
 		Update []ModelDiff `json:"update"`
@@ -211,12 +211,12 @@ type ChannelInfo struct {
 
 // SyncOptions represents options for a sync operation.
 type SyncOptions struct {
-	AutoCreateChannels       bool `json:"auto_create_channels"`
-	ChangesConfirmed         bool `json:"changes_confirmed"`
-	DryRun                   bool `json:"dry_run,omitempty"`
-	DeleteUnmatchedModel     bool `json:"delete_unmatched_model"`
+	AutoCreateChannels       bool  `json:"auto_create_channels"`
+	ChangesConfirmed         bool  `json:"changes_confirmed"`
+	DryRun                   bool  `json:"dry_run,omitempty"`
+	DeleteUnmatchedModel     bool  `json:"delete_unmatched_model"`
 	AnthropicPurePassthrough bool  `json:"anthropic_pure_passthrough"`          // Enable pure passthrough for Anthropic channel
-	AllowPassthroughUnknown *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
+	AllowPassthroughUnknown  *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
 }
 
 // SyncResult represents the result of a sync operation.
@@ -352,7 +352,10 @@ func (m *NovitaMultimodalModel) collectSKUCodes() []string {
 // skuPrices maps skuCode → raw basePrice0 value from the batch-price API.
 // Returns price in USD/request (raw / multimodalPriceDivisor), converted to CNY
 // using the given exchange rate.
-func (m *NovitaMultimodalModel) minSKUPrice(skuPrices map[string]int64, exchangeRate float64) float64 {
+func (m *NovitaMultimodalModel) minSKUPrice(
+	skuPrices map[string]int64,
+	exchangeRate float64,
+) float64 {
 	var minRaw int64
 
 	for _, sku := range m.ModelConfig.SKUMappings {
@@ -371,19 +374,4 @@ func (m *NovitaMultimodalModel) minSKUPrice(skuPrices map[string]int64, exchange
 	}
 
 	return float64(minRaw) / multimodalPriceDivisor * exchangeRate
-}
-
-// multimodalCategoryToModelType maps the multimodal API's category field to
-// model_type strings used by modeFromEndpoints.
-func multimodalCategoryToModelType(category string) string {
-	switch category {
-	case "image_gen":
-		return "image"
-	case "video_gen":
-		return "video"
-	case "audio_gen":
-		return "audio"
-	default:
-		return "video"
-	}
 }

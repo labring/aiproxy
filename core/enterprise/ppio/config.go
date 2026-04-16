@@ -6,20 +6,25 @@ import (
 	"fmt"
 	"strconv"
 
-	"gorm.io/gorm"
-
 	"github.com/labring/aiproxy/core/model"
+	"gorm.io/gorm"
 )
 
 const (
-	optionKeyPPIOChannelID      = "PPIOChannelID"
-	optionKeyPPIOAPIKey         = "PPIOAPIKey"
-	optionKeyPPIOAPIBase        = "PPIOAPIBase"
-	optionKeyPPIOMgmtToken      = "PPIOMgmtToken"
+	optionKeyPPIOChannelID       = "PPIOChannelID"
+	optionKeyPPIOAPIKey          = "PPIOAPIKey"
+	optionKeyPPIOAPIBase         = "PPIOAPIBase"
+	optionKeyPPIOMgmtToken       = "PPIOMgmtToken"
 	optionKeyPPIOAutoSyncEnabled = "PPIOAutoSyncEnabled"
 )
 
-var ppioOptionKeys = []string{optionKeyPPIOChannelID, optionKeyPPIOAPIKey, optionKeyPPIOAPIBase, optionKeyPPIOMgmtToken, optionKeyPPIOAutoSyncEnabled}
+var ppioOptionKeys = []string{
+	optionKeyPPIOChannelID,
+	optionKeyPPIOAPIKey,
+	optionKeyPPIOAPIBase,
+	optionKeyPPIOMgmtToken,
+	optionKeyPPIOAutoSyncEnabled,
+}
 
 // PPIOConfigResult holds the current PPIO configuration.
 type PPIOConfigResult struct {
@@ -57,7 +62,9 @@ func GetPPIOConfig() (cfg PPIOConfigResult) {
 // IsAutoSyncEnabled returns whether the daily auto-sync is enabled in the DB.
 func IsAutoSyncEnabled() bool {
 	var opt model.Option
-	if err := model.DB.Where("key = ?", optionKeyPPIOAutoSyncEnabled).First(&opt).Error; err != nil {
+	if err := model.DB.Where("key = ?", optionKeyPPIOAutoSyncEnabled).
+		First(&opt).
+		Error; err != nil {
 		return false // not found → default off
 	}
 

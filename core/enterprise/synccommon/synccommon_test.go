@@ -13,15 +13,35 @@ func TestInferToolChoice(t *testing.T) {
 	}{
 		{name: "chat no features", modelType: "chat", want: true},
 		{name: "chat empty features", modelType: "chat", features: []string{}, want: true},
-		{name: "chat tool_use", modelType: "chat", features: []string{"tool_use", "streaming"}, want: true},
-		{name: "chat function_calling", modelType: "chat", features: []string{"function_calling"}, want: true},
+		{
+			name:      "chat tool_use",
+			modelType: "chat",
+			features:  []string{"tool_use", "streaming"},
+			want:      true,
+		},
+		{
+			name:      "chat function_calling",
+			modelType: "chat",
+			features:  []string{"function_calling"},
+			want:      true,
+		},
 		{name: "chat tools", modelType: "chat", features: []string{"tools"}, want: true},
 		{name: "embedding no features", modelType: "embedding", want: false},
 		{name: "image no features", modelType: "image", want: false},
-		{name: "embedding tool_use", modelType: "embedding", features: []string{"tool_use"}, want: true},
+		{
+			name:      "embedding tool_use",
+			modelType: "embedding",
+			features:  []string{"tool_use"},
+			want:      true,
+		},
 		{name: "rerank no features", modelType: "rerank", features: []string{}, want: false},
 		{name: "empty type no features", modelType: "", want: false},
-		{name: "rerank function_calling", modelType: "rerank", features: []string{"function_calling"}, want: true},
+		{
+			name:      "rerank function_calling",
+			modelType: "rerank",
+			features:  []string{"function_calling"},
+			want:      true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -37,30 +57,30 @@ func TestInferToolChoice(t *testing.T) {
 
 func TestAdjustTierBounds(t *testing.T) {
 	tests := []struct {
-		name      string
-		min, max  int64
-		prevMax   int64
-		wantMin   int64
-		wantMax   int64
+		name     string
+		min, max int64
+		prevMax  int64
+		wantMin  int64
+		wantMax  int64
 	}{
 		{
 			name: "first tier no adjustment",
-			min: 0, max: 128000, prevMax: 0,
+			min:  0, max: 128000, prevMax: 0,
 			wantMin: 0, wantMax: 128000,
 		},
 		{
 			name: "second tier overlapping boundary bumped",
-			min: 128000, max: 0, prevMax: 128000,
+			min:  128000, max: 0, prevMax: 128000,
 			wantMin: 128001, wantMax: 0,
 		},
 		{
 			name: "second tier non-overlapping unchanged",
-			min: 128001, max: 0, prevMax: 128000,
+			min:  128001, max: 0, prevMax: 128000,
 			wantMin: 128001, wantMax: 0,
 		},
 		{
 			name: "min zero not bumped",
-			min: 0, max: 128000, prevMax: 128000,
+			min:  0, max: 128000, prevMax: 128000,
 			wantMin: 0, wantMax: 128000,
 		},
 	}

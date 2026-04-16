@@ -88,34 +88,34 @@ type TieredBillingConfig struct {
 
 // PPIOModelV2 represents a model from the PPIO management API (full catalog including pa/ models)
 type PPIOModelV2 struct {
-	ID                                    string              `json:"id"`
-	Title                                 string              `json:"title"`
-	Description                           string              `json:"description"`
-	DisplayName                           string              `json:"display_name"`
-	ModelType                             string              `json:"model_type"`
-	ContextSize                           int64               `json:"context_size"`
-	MaxOutputTokens                       int64               `json:"max_output_tokens"`
-	InputTokenPricePerM                   int64               `json:"input_token_price_per_m"`
-	OutputTokenPricePerM                  int64               `json:"output_token_price_per_m"`
-	Endpoints                             []string            `json:"endpoints"`
-	Features                              []string            `json:"features"`
-	InputModalities                       []string            `json:"input_modalities"`
-	OutputModalities                      []string            `json:"output_modalities"`
-	Status                                int                 `json:"status"`
-	Tags                                  []any               `json:"tags"`
-	IsTieredBilling                       bool                `json:"is_tiered_billing"`
+	ID                                    string                `json:"id"`
+	Title                                 string                `json:"title"`
+	Description                           string                `json:"description"`
+	DisplayName                           string                `json:"display_name"`
+	ModelType                             string                `json:"model_type"`
+	ContextSize                           int64                 `json:"context_size"`
+	MaxOutputTokens                       int64                 `json:"max_output_tokens"`
+	InputTokenPricePerM                   int64                 `json:"input_token_price_per_m"`
+	OutputTokenPricePerM                  int64                 `json:"output_token_price_per_m"`
+	Endpoints                             []string              `json:"endpoints"`
+	Features                              []string              `json:"features"`
+	InputModalities                       []string              `json:"input_modalities"`
+	OutputModalities                      []string              `json:"output_modalities"`
+	Status                                int                   `json:"status"`
+	Tags                                  []any                 `json:"tags"`
+	IsTieredBilling                       bool                  `json:"is_tiered_billing"`
 	TieredBillingConfigs                  []TieredBillingConfig `json:"tiered_billing_configs"`
-	SupportPromptCache                    bool                `json:"support_prompt_cache"`
-	CacheReadInputTokenPricePerM          int64               `json:"cache_read_input_token_price_per_m"`
-	CacheCreationInputTokenPricePerM      int64               `json:"cache_creation_input_token_price_per_m"`
-	CacheCreation1HourInputTokenPricePerM int64               `json:"cache_creation_1_hour_input_token_price_per_m"`
-	InputPricing                          PPIOPricing         `json:"input_pricing"`
-	OutputPricing                         PPIOPricing         `json:"output_pricing"`
-	Series                                string              `json:"series"`
-	Quantization                          string              `json:"quantization"`
-	RPM                                   int                 `json:"rpm"`
-	TPM                                   int                 `json:"tpm"`
-	Labels                                []map[string]string `json:"labels"`
+	SupportPromptCache                    bool                  `json:"support_prompt_cache"`
+	CacheReadInputTokenPricePerM          int64                 `json:"cache_read_input_token_price_per_m"`
+	CacheCreationInputTokenPricePerM      int64                 `json:"cache_creation_input_token_price_per_m"`
+	CacheCreation1HourInputTokenPricePerM int64                 `json:"cache_creation_1_hour_input_token_price_per_m"`
+	InputPricing                          PPIOPricing           `json:"input_pricing"`
+	OutputPricing                         PPIOPricing           `json:"output_pricing"`
+	Series                                string                `json:"series"`
+	Quantization                          string                `json:"quantization"`
+	RPM                                   int                   `json:"rpm"`
+	TPM                                   int                   `json:"tpm"`
+	Labels                                []map[string]string   `json:"labels"`
 }
 
 // IsAvailable reports whether the model is operational.
@@ -216,12 +216,12 @@ type ChannelInfo struct {
 
 // SyncOptions represents options for sync operation
 type SyncOptions struct {
-	AutoCreateChannels       bool `json:"auto_create_channels"`
-	ChangesConfirmed         bool `json:"changes_confirmed"`          // User confirmed the changes
-	DryRun                   bool `json:"dry_run,omitempty"`          // Preview only, don't execute
-	DeleteUnmatchedModel     bool `json:"delete_unmatched_model"`     // Delete local models not in PPIO
-	AnthropicPurePassthrough bool `json:"anthropic_pure_passthrough"` // Enable pure passthrough for Anthropic channel
-	AllowPassthroughUnknown *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
+	AutoCreateChannels       bool  `json:"auto_create_channels"`
+	ChangesConfirmed         bool  `json:"changes_confirmed"`                   // User confirmed the changes
+	DryRun                   bool  `json:"dry_run,omitempty"`                   // Preview only, don't execute
+	DeleteUnmatchedModel     bool  `json:"delete_unmatched_model"`              // Delete local models not in PPIO
+	AnthropicPurePassthrough bool  `json:"anthropic_pure_passthrough"`          // Enable pure passthrough for Anthropic channel
+	AllowPassthroughUnknown  *bool `json:"allow_passthrough_unknown,omitempty"` // Route requests for models not in the model list to this channel; nil = preserve existing
 }
 
 // SyncResult represents the result of a sync operation
@@ -377,19 +377,4 @@ func (m *PPIOMultimodalModel) minSKUPrice(skuPrices map[string]int64) float64 {
 	}
 
 	return float64(minRaw) / multimodalPriceDivisor
-}
-
-// multimodalCategoryToModelType maps the multimodal API's category field to
-// the PPIO model_type strings used by ModelTypeToMode (sync.go).
-func multimodalCategoryToModelType(category string) string {
-	switch category {
-	case "image_gen":
-		return "image"
-	case "video_gen":
-		return "video"
-	case "audio_gen":
-		return "audio"
-	default:
-		return "video" // safe default for unknown multimodal categories
-	}
 }

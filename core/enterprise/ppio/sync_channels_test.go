@@ -65,6 +65,7 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 
 	purePassthrough := true
 	allowUnknown := true
+
 	info, err := ensurePPIOChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
@@ -101,18 +102,35 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 
 			pathBaseMap, ok := ch.Configs[model.ChannelConfigPathBaseMapKey].(map[string]any)
 			if !ok {
-				t.Fatalf("openai channel path_base_map missing or wrong type: %#v", ch.Configs[model.ChannelConfigPathBaseMapKey])
+				t.Fatalf(
+					"openai channel path_base_map missing or wrong type: %#v",
+					ch.Configs[model.ChannelConfigPathBaseMapKey],
+				)
 			}
 
-			if gotBase := pathBaseMap[ppiorelay.PathPrefixResponses]; gotBase != ppioResponsesBase(DefaultPPIOAPIBase) {
-				t.Fatalf("responses base = %#v, want %q", gotBase, ppioResponsesBase(DefaultPPIOAPIBase))
+			if gotBase := pathBaseMap[ppiorelay.PathPrefixResponses]; gotBase != ppioResponsesBase(
+				DefaultPPIOAPIBase,
+			) {
+				t.Fatalf(
+					"responses base = %#v, want %q",
+					gotBase,
+					ppioResponsesBase(DefaultPPIOAPIBase),
+				)
 			}
 
-			if gotBase := pathBaseMap[ppiorelay.PathPrefixWebSearch]; gotBase != ppioWebSearchBase(DefaultPPIOAPIBase) {
-				t.Fatalf("web search base = %#v, want %q", gotBase, ppioWebSearchBase(DefaultPPIOAPIBase))
+			if gotBase := pathBaseMap[ppiorelay.PathPrefixWebSearch]; gotBase != ppioWebSearchBase(
+				DefaultPPIOAPIBase,
+			) {
+				t.Fatalf(
+					"web search base = %#v, want %q",
+					gotBase,
+					ppioWebSearchBase(DefaultPPIOAPIBase),
+				)
 			}
 
-			if gotAllow := ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown); !gotAllow {
+			if gotAllow := ch.Configs.GetBool(
+				model.ChannelConfigAllowPassthroughUnknown,
+			); !gotAllow {
 				t.Fatalf("allow_passthrough_unknown = false, want true")
 			}
 		case model.ChannelTypeAnthropic:
@@ -163,23 +181,35 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 		switch ch.Type {
 		case model.ChannelTypeAnthropic:
 			anthropicFound = true
+
 			if gotPure := ch.Configs.GetBool("pure_passthrough"); !gotPure {
 				t.Fatalf("anthropic pure_passthrough = false, want true")
 			}
 		case model.ChannelTypePPIO:
 			pathBaseMap, ok := ch.Configs[model.ChannelConfigPathBaseMapKey].(map[string]string)
 			if !ok {
-				t.Fatalf("openai channel path_base_map missing or wrong type: %#v", ch.Configs[model.ChannelConfigPathBaseMapKey])
+				t.Fatalf(
+					"openai channel path_base_map missing or wrong type: %#v",
+					ch.Configs[model.ChannelConfigPathBaseMapKey],
+				)
 			}
 
-			if gotBase := pathBaseMap[ppiorelay.PathPrefixResponses]; gotBase != ppioResponsesBase(DefaultPPIOAPIBase) {
-				t.Fatalf("responses base = %q, want %q", gotBase, ppioResponsesBase(DefaultPPIOAPIBase))
+			if gotBase := pathBaseMap[ppiorelay.PathPrefixResponses]; gotBase != ppioResponsesBase(
+				DefaultPPIOAPIBase,
+			) {
+				t.Fatalf(
+					"responses base = %q, want %q",
+					gotBase,
+					ppioResponsesBase(DefaultPPIOAPIBase),
+				)
 			}
 		case model.ChannelTypePPIOMultimodal:
 			multimodalFound = true
+
 			if !ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown) {
 				t.Fatalf("multimodal allow_passthrough_unknown = false, want true")
 			}
+
 			if ch.BaseURL != DefaultPPIOMultimodalBase {
 				t.Fatalf("multimodal base_url = %q, want %q", ch.BaseURL, DefaultPPIOMultimodalBase)
 			}
@@ -189,6 +219,7 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 	if !anthropicFound {
 		t.Fatalf("expected anthropic channel to be created")
 	}
+
 	if !multimodalFound {
 		t.Fatalf("expected multimodal channel to be created")
 	}

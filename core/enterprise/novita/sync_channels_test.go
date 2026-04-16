@@ -61,6 +61,7 @@ func TestEnsureNovitaChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 
 	purePassthrough := true
 	allowUnknown := true
+
 	info, err := ensureNovitaChannelsFromModels(
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
@@ -93,14 +94,25 @@ func TestEnsureNovitaChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 		case model.ChannelTypeNovita:
 			pathBaseMap, ok := ch.Configs[model.ChannelConfigPathBaseMapKey].(map[string]any)
 			if !ok {
-				t.Fatalf("openai channel path_base_map missing or wrong type: %#v", ch.Configs[model.ChannelConfigPathBaseMapKey])
+				t.Fatalf(
+					"openai channel path_base_map missing or wrong type: %#v",
+					ch.Configs[model.ChannelConfigPathBaseMapKey],
+				)
 			}
 
-			if gotBase := pathBaseMap["/v1/responses"]; gotBase != novitaResponsesBase(DefaultNovitaAPIBase) {
-				t.Fatalf("responses base = %#v, want %q", gotBase, novitaResponsesBase(DefaultNovitaAPIBase))
+			if gotBase := pathBaseMap["/v1/responses"]; gotBase != novitaResponsesBase(
+				DefaultNovitaAPIBase,
+			) {
+				t.Fatalf(
+					"responses base = %#v, want %q",
+					gotBase,
+					novitaResponsesBase(DefaultNovitaAPIBase),
+				)
 			}
 
-			if gotAllow := ch.Configs.GetBool(model.ChannelConfigAllowPassthroughUnknown); !gotAllow {
+			if gotAllow := ch.Configs.GetBool(
+				model.ChannelConfigAllowPassthroughUnknown,
+			); !gotAllow {
 				t.Fatalf("allow_passthrough_unknown = false, want true")
 			}
 		case model.ChannelTypeAnthropic:

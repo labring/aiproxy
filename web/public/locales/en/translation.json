@@ -440,6 +440,8 @@
       "typeName_rerank": "Rerank",
       "typeName_moderation": "Moderation",
       "typeName_parse_pdf": "Parse PDF",
+      "typeName_multimodal": "Multimodal",
+      "typeName_web_search": "Web Search",
       "typeName_other": "Other",
       "requestLogs": "Request History",
       "filterModel": "Filter model",

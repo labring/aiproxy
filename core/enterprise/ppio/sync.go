@@ -69,7 +69,9 @@ func inferModeFromPPIO(modelType string, endpoints []string) mode.Mode {
 	// Responses-only detection takes highest priority: model_type may be "chat"
 	// but if the only endpoint is "responses", the model cannot serve chat/completions.
 	hasResponses := slices.Contains(endpoints, "responses")
-	hasChatFamily := slices.Contains(endpoints, "chat/completions") || slices.Contains(endpoints, "completions")
+
+	hasChatFamily := slices.Contains(endpoints, "chat/completions") ||
+		slices.Contains(endpoints, "completions")
 	if hasResponses && !hasChatFamily {
 		return mode.Responses
 	}
@@ -131,6 +133,7 @@ func ExecuteSync( //nolint:cyclop
 	for _, m := range allModels {
 		if !m.IsAvailable() {
 			unavailCount++
+
 			log.Printf("PPIO sync: skipping unavailable model %s (status=%d)", m.ID, m.Status)
 		}
 	}
@@ -159,6 +162,7 @@ func ExecuteSync( //nolint:cyclop
 			if m == nil {
 				return fmt.Errorf("model %s not found in remote models", modelID)
 			}
+
 			return createModelConfigV2(tx, m)
 		},
 		update: func(tx *gorm.DB, modelID string) error {
@@ -166,6 +170,7 @@ func ExecuteSync( //nolint:cyclop
 			if m == nil {
 				return fmt.Errorf("model %s not found in remote models", modelID)
 			}
+
 			return updateModelConfigV2(tx, m)
 		},
 	}
@@ -213,7 +218,13 @@ func ExecuteSync( //nolint:cyclop
 	// Classify models directly from upstream API data and replace channel model lists.
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsurePPIOChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, allModels)
+	channelsInfo, err := EnsurePPIOChannels(
+		opts.AutoCreateChannels,
+		&opts.AnthropicPurePassthrough,
+		opts.AllowPassthroughUnknown,
+		cfg,
+		allModels,
+	)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
 	}
@@ -357,7 +368,11 @@ func executeSyncTransaction(
 //   - Multimodal models use SKU-based pricing, not per-token pricing
 //   - The data comes from different API endpoints (api-server.ppio.com)
 //   - The V2 management API (api-server.ppinfra.com) does not return multimodal models
-func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken string) (added, updated int, err error) {
+func syncMultimodalModels(
+	ctx context.Context,
+	client *PPIOClient,
+	mgmtToken string,
+) (added, updated int, err error) {
 	// Fetch multimodal model catalog
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
@@ -377,7 +392,10 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 	// Fetch batch pricing
 	skuPrices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, allSKUs)
 	if priceErr != nil {
-		log.Printf("PPIO sync: multimodal price fetch failed (non-fatal, using zero prices): %v", priceErr)
+		log.Printf(
+			"PPIO sync: multimodal price fetch failed (non-fatal, using zero prices): %v",
+			priceErr,
+		)
 
 		skuPrices = make(map[string]int64)
 	}
@@ -392,7 +410,14 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 		}
 
 		minPrice := mm.minSKUPrice(skuPrices)
-		modelType := multimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+		modelType := synccommon.MultimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+
+		// Skip entries with unrecognized category — the multimodal API
+		// sometimes returns non-multimodal models (e.g. openai/embeddings,
+		// openai/chat/completions) that should not be classified as PPIONative.
+		if modelType == "" {
+			continue
+		}
 
 		rawConfig := map[string]any{
 			"model_type":   modelType,
@@ -475,7 +500,12 @@ func syncMultimodalModels(ctx context.Context, client *PPIOClient, mgmtToken str
 // allowPassthroughUnknown controls the allow_passthrough_unknown config on the
 // OpenAI channel. When true, requests for models not in the model list are
 // forwarded to this channel as a fallback (billed at zero cost).
-func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult, remoteModels []PPIOModelV2) (ChannelsInfo, error) {
+func EnsurePPIOChannels(
+	autoCreate bool,
+	anthropicPurePassthrough, allowPassthroughUnknown *bool,
+	cfg PPIOConfigResult,
+	remoteModels []PPIOModelV2,
+) (ChannelsInfo, error) {
 	// When remoteModels is nil (startup refresh), skip model list updates
 	// but still ensure channel existence and configs.
 	skipModelUpdate := len(remoteModels) == 0
@@ -509,13 +539,22 @@ func EnsurePPIOChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPa
 		slices.Sort(multimodalModels)
 	}
 
-	return ensurePPIOChannelsFromModels(anthropicModels, openaiModels, multimodalModels, skipModelUpdate, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
+	return ensurePPIOChannelsFromModels(
+		anthropicModels,
+		openaiModels,
+		multimodalModels,
+		skipModelUpdate,
+		autoCreate,
+		anthropicPurePassthrough,
+		allowPassthroughUnknown,
+		cfg,
+	)
 }
 
 func ensurePPIOChannelsFromModels(
 	anthropicModels, openaiModels, multimodalModels []string,
 	skipModelUpdate bool,
-	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
+	autoCreate bool, anthropicPurePassthrough, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -534,7 +573,15 @@ func ensurePPIOChannelsFromModels(
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
 		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
-		created, createErr := createPPIOChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels, multimodalModels)
+
+		created, createErr := createPPIOChannels(
+			cfg,
+			purePassthrough,
+			allowUnknown,
+			anthropicModels,
+			openaiModels,
+			multimodalModels,
+		)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -564,19 +611,24 @@ func ensurePPIOChannelsFromModels(
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
+
 			if _, ok := channels[i].Configs["skip_image_conversion"]; !ok {
 				channels[i].Configs["skip_image_conversion"] = true
 			}
+
 			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
 				channels[i].Configs["disable_context_management"] = true
 			}
+
 			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
 
 		case model.ChannelTypePPIOMultimodal:
 			hasMultimodal = true
+
 			if !skipModelUpdate {
 				channels[i].Models = multimodalModels
 			}
+
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -595,11 +647,16 @@ func ensurePPIOChannelsFromModels(
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
+
 			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
 				ppiorelay.PathPrefixResponses: ppioResponsesBase(channels[i].BaseURL),
 				ppiorelay.PathPrefixWebSearch: ppioWebSearchBase(channels[i].BaseURL),
 			}
-			channels[i].Configs.SetOrInit(model.ChannelConfigAllowPassthroughUnknown, allowPassthroughUnknown, false)
+			channels[i].Configs.SetOrInit(
+				model.ChannelConfigAllowPassthroughUnknown,
+				allowPassthroughUnknown,
+				false,
+			)
 		}
 
 		if err := model.DB.Save(&channels[i]).Error; err != nil {
@@ -638,7 +695,11 @@ func newPPIOMultimodalChannel(apiKey string, models []string) model.Channel {
 // createPPIOChannels creates the OpenAI-compatible channel and, if there are
 // anthropic-endpoint models, an Anthropic-compatible channel as well.
 // It always creates a multimodal channel (type=55) for image/video/audio models.
-func createPPIOChannels(cfg PPIOConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels, multimodalModels []string) ([]model.Channel, error) {
+func createPPIOChannels(
+	cfg PPIOConfigResult,
+	anthropicPurePassthrough, allowPassthroughUnknown bool,
+	anthropicModels, openaiModels, multimodalModels []string,
+) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultPPIOAPIBase
@@ -930,7 +991,9 @@ func setPriceFromV2Model(price *model.Price, m *PPIOModelV2) {
 		}
 
 		if tier.CacheCreationInputPricing.PricePerM > 0 {
-			cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken())
+			cp.Price.CacheCreationPrice = model.ZeroNullFloat64(
+				tier.CacheCreationInputPricing.PricePerToken(),
+			)
 			cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 		}
 
@@ -977,6 +1040,7 @@ func buildConfigFromPPIOModelV2(m *PPIOModelV2) map[string]any {
 	if synccommon.InferToolChoice(m.ModelType, m.Features) {
 		cfg[string(model.ModelConfigToolChoiceKey)] = true
 	}
+
 	if slices.Contains(m.InputModalities, "image") {
 		cfg[string(model.ModelConfigVisionKey)] = true
 	}
@@ -1028,7 +1092,11 @@ func StartSyncScheduler(ctx context.Context) {
 		}
 
 		delay := next.Sub(now)
-		log.Printf("PPIO sync scheduler: next check at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
+		log.Printf(
+			"PPIO sync scheduler: next check at %s (in %v)",
+			next.Format(time.DateTime),
+			delay,
+		)
 
 		select {
 		case <-ctx.Done():

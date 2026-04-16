@@ -7,12 +7,11 @@ import (
 	"log"
 	"slices"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
+	"golang.org/x/sync/singleflight"
 )
 
 // discoverGroup collapses concurrent auto-discovery calls for the same model
@@ -28,7 +27,12 @@ func init() {
 // it fetches pricing from the management API and registers a ModelConfig so
 // subsequent requests are billed correctly and the model appears in users'
 // "My Access" model list.
-func onPassthroughFirstSuccess(ctx context.Context, _ int, channelType model.ChannelType, modelName string) {
+func onPassthroughFirstSuccess(
+	ctx context.Context,
+	_ int,
+	channelType model.ChannelType,
+	modelName string,
+) {
 	switch channelType {
 	case model.ChannelTypeNovita:
 		_, _, _ = discoverGroup.Do(modelName, func() (any, error) {
@@ -76,7 +80,11 @@ func doDiscoverChat(ctx context.Context, modelName string) {
 	addModelToNovitaChannels(modelName, remoteModel)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
-		log.Printf("novita autodiscover: cache refresh failed after registering %s: %v", modelName, err)
+		log.Printf(
+			"novita autodiscover: cache refresh failed after registering %s: %v",
+			modelName,
+			err,
+		)
 	}
 
 	log.Printf("novita autodiscover: registered model %s (V2 API)", modelName)
@@ -102,12 +110,27 @@ func doDiscoverMultimodal(ctx context.Context, modelName string) {
 	var perRequestPrice float64
 
 	if cfg.MgmtToken != "" {
-		perRequestPrice = discoverMultimodalPrice(ctx, client, cfg.MgmtToken, modelName, cfg.ExchangeRate)
+		perRequestPrice = discoverMultimodalPrice(
+			ctx,
+			client,
+			cfg.MgmtToken,
+			modelName,
+			cfg.ExchangeRate,
+		)
 
 		// Fallback: try V2 management API for token-based pricing
 		if perRequestPrice == 0 {
-			if remoteModel := discoverV2Model(ctx, client, cfg.MgmtToken, modelName); remoteModel != nil {
-				if err := registerNovitaChatModel(modelName, remoteModel, cfg.ExchangeRate); err != nil {
+			if remoteModel := discoverV2Model(
+				ctx,
+				client,
+				cfg.MgmtToken,
+				modelName,
+			); remoteModel != nil {
+				if err := registerNovitaChatModel(
+					modelName,
+					remoteModel,
+					cfg.ExchangeRate,
+				); err != nil {
 					log.Printf("novita autodiscover: failed to register %s: %v", modelName, err)
 					return
 				}
@@ -119,7 +142,9 @@ func doDiscoverMultimodal(ctx context.Context, modelName string) {
 		}
 	}
 
-	// Register with per-request pricing (or zero if no pricing found)
+	// Register with per-request pricing (or zero if no pricing found).
+	// Default to PPIONative for genuinely unknown multimodal models;
+	// the next daily sync will correct the type if V2 data becomes available.
 	mc := model.ModelConfig{
 		Model: modelName,
 		Owner: model.ModelOwnerNovita,
@@ -156,7 +181,11 @@ func modelExists(modelName string) bool {
 }
 
 // discoverV2Model searches the V2 management API for a model by name.
-func discoverV2Model(ctx context.Context, client *NovitaClient, mgmtToken, modelName string) *NovitaModelV2 {
+func discoverV2Model(
+	ctx context.Context,
+	client *NovitaClient,
+	mgmtToken, modelName string,
+) *NovitaModelV2 {
 	all, err := client.FetchAllModels(ctx, mgmtToken)
 	if err != nil {
 		log.Printf("novita autodiscover: FetchAllModels failed (non-fatal): %v", err)
@@ -174,7 +203,12 @@ func discoverV2Model(ctx context.Context, client *NovitaClient, mgmtToken, model
 
 // discoverMultimodalPrice fetches the multimodal model catalog and returns the
 // minimum SKU price for the given model. Returns 0 if not found.
-func discoverMultimodalPrice(ctx context.Context, client *NovitaClient, mgmtToken, modelName string, exchangeRate float64) float64 {
+func discoverMultimodalPrice(
+	ctx context.Context,
+	client *NovitaClient,
+	mgmtToken, modelName string,
+	exchangeRate float64,
+) float64 {
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
 		log.Printf("novita autodiscover: FetchMultimodalModels failed (non-fatal): %v", err)
@@ -193,7 +227,10 @@ func discoverMultimodalPrice(ctx context.Context, client *NovitaClient, mgmtToke
 
 		prices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, skuCodes)
 		if priceErr != nil {
-			log.Printf("novita autodiscover: FetchMultimodalPrices failed (non-fatal): %v", priceErr)
+			log.Printf(
+				"novita autodiscover: FetchMultimodalPrices failed (non-fatal): %v",
+				priceErr,
+			)
 			return 0
 		}
 
@@ -205,7 +242,11 @@ func discoverMultimodalPrice(ctx context.Context, client *NovitaClient, mgmtToke
 
 // registerNovitaChatModel creates a ModelConfig entry for a Novita chat model
 // using V2 management API data.
-func registerNovitaChatModel(modelName string, remoteModel *NovitaModelV2, exchangeRate float64) error {
+func registerNovitaChatModel(
+	modelName string,
+	remoteModel *NovitaModelV2,
+	exchangeRate float64,
+) error {
 	mc := model.ModelConfig{
 		Model:  modelName,
 		Owner:  model.ModelOwnerNovita,
@@ -247,7 +288,11 @@ func registerFallbackModel(modelName string) {
 	addModelToFirstChannelByType(modelName, model.ChannelTypeNovita)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
-		log.Printf("novita autodiscover: cache refresh failed after registering %s: %v", modelName, err)
+		log.Printf(
+			"novita autodiscover: cache refresh failed after registering %s: %v",
+			modelName,
+			err,
+		)
 	}
 
 	log.Printf("novita autodiscover: registered model %s (fallback, zero-cost)", modelName)
@@ -264,7 +309,11 @@ func registerMultimodalFallback(modelName string) {
 	}
 
 	if err := model.DB.Save(&mc).Error; err != nil {
-		log.Printf("novita autodiscover: failed to register multimodal fallback %s: %v", modelName, err)
+		log.Printf(
+			"novita autodiscover: failed to register multimodal fallback %s: %v",
+			modelName,
+			err,
+		)
 		return
 	}
 
@@ -296,7 +345,12 @@ func addModelToFirstChannelByType(modelName string, channelType model.ChannelTyp
 	ch.Models = append(ch.Models, modelName)
 
 	if err := model.DB.Save(&ch).Error; err != nil {
-		log.Printf("novita autodiscover: failed to add %s to channel type %d: %v", modelName, channelType, err)
+		log.Printf(
+			"novita autodiscover: failed to add %s to channel type %d: %v",
+			modelName,
+			channelType,
+			err,
+		)
 	}
 }
 
@@ -329,7 +383,11 @@ func finalizeMultimodalDiscovery(modelName, source string) {
 	addModelToFirstChannelByType(modelName, model.ChannelTypeNovitaMultimodal)
 
 	if err := model.InitModelConfigAndChannelCache(); err != nil {
-		log.Printf("novita autodiscover: cache refresh failed after registering %s: %v", modelName, err)
+		log.Printf(
+			"novita autodiscover: cache refresh failed after registering %s: %v",
+			modelName,
+			err,
+		)
 	}
 
 	log.Printf("novita autodiscover: registered model %s (%s)", modelName, source)

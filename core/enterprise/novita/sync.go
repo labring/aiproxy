@@ -98,7 +98,15 @@ func ExecuteSync(
 	synccommon.SendProgress(progressCallback, "syncing", "开始同步模型配置...", 50, nil)
 
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
-		return executeSyncTransaction(tx, diff, opts, modelMap, result, progressCallback, exchangeRate)
+		return executeSyncTransaction(
+			tx,
+			diff,
+			opts,
+			modelMap,
+			result,
+			progressCallback,
+			exchangeRate,
+		)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("transaction failed: %w", err)
@@ -122,7 +130,13 @@ func ExecuteSync(
 	// Classify models directly from upstream API data and replace channel model lists.
 	synccommon.SendProgress(progressCallback, "channels", "检查并更新 Channel 模型列表...", 85, nil)
 
-	channelsInfo, err := EnsureNovitaChannels(opts.AutoCreateChannels, &opts.AnthropicPurePassthrough, opts.AllowPassthroughUnknown, cfg, allModels)
+	channelsInfo, err := EnsureNovitaChannels(
+		opts.AutoCreateChannels,
+		&opts.AnthropicPurePassthrough,
+		opts.AllowPassthroughUnknown,
+		cfg,
+		allModels,
+	)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
 	}
@@ -176,12 +190,18 @@ func executeSyncTransaction(
 
 		m := modelMap[modelDiff.ModelID]
 		if m == nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID),
+			)
 			continue
 		}
 
 		if err := createModelConfigV2(tx, m, exchangeRate); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to add %s: %v", modelDiff.ModelID, err))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf("failed to add %s: %v", modelDiff.ModelID, err),
+			)
 			continue
 		}
 
@@ -200,12 +220,18 @@ func executeSyncTransaction(
 
 		m := modelMap[modelDiff.ModelID]
 		if m == nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf("model %s not found in remote models", modelDiff.ModelID),
+			)
 			continue
 		}
 
 		if err := updateModelConfigV2(tx, m, exchangeRate); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to update %s: %v", modelDiff.ModelID, err))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf("failed to update %s: %v", modelDiff.ModelID, err),
+			)
 			continue
 		}
 
@@ -224,8 +250,12 @@ func executeSyncTransaction(
 			)
 
 			if err := tx.Where("model = ? AND owner = ?", modelDiff.ModelID, string(model.ModelOwnerNovita)).
-				Delete(&model.ModelConfig{}).Error; err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to delete %s: %v", modelDiff.ModelID, err))
+				Delete(&model.ModelConfig{}).
+				Error; err != nil {
+				result.Errors = append(
+					result.Errors,
+					fmt.Sprintf("failed to delete %s: %v", modelDiff.ModelID, err),
+				)
 				continue
 			}
 
@@ -324,7 +354,9 @@ func setPriceFromV2Model(price *model.Price, m *NovitaModelV2, exchangeRate floa
 	}
 
 	if m.SupportPromptCache && m.CacheCreationInputTokenPricePerM > 0 {
-		price.CacheCreationPrice = model.ZeroNullFloat64(m.GetCacheCreationPricePerToken() * exchangeRate)
+		price.CacheCreationPrice = model.ZeroNullFloat64(
+			m.GetCacheCreationPricePerToken() * exchangeRate,
+		)
 		price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 	}
 
@@ -351,20 +383,28 @@ func setPriceFromV2Model(price *model.Price, m *NovitaModelV2, exchangeRate floa
 				InputTokenMax: maxTokens,
 			},
 			Price: model.Price{
-				InputPrice:      model.ZeroNullFloat64(tier.InputPricing.PricePerToken() * exchangeRate),
-				InputPriceUnit:  model.ZeroNullInt64(1),
-				OutputPrice:     model.ZeroNullFloat64(tier.OutputPricing.PricePerToken() * exchangeRate),
+				InputPrice: model.ZeroNullFloat64(
+					tier.InputPricing.PricePerToken() * exchangeRate,
+				),
+				InputPriceUnit: model.ZeroNullInt64(1),
+				OutputPrice: model.ZeroNullFloat64(
+					tier.OutputPricing.PricePerToken() * exchangeRate,
+				),
 				OutputPriceUnit: model.ZeroNullInt64(1),
 			},
 		}
 
 		if tier.CacheReadInputPricing.PricePerM > 0 {
-			cp.Price.CachedPrice = model.ZeroNullFloat64(tier.CacheReadInputPricing.PricePerToken() * exchangeRate)
+			cp.Price.CachedPrice = model.ZeroNullFloat64(
+				tier.CacheReadInputPricing.PricePerToken() * exchangeRate,
+			)
 			cp.Price.CachedPriceUnit = model.ZeroNullInt64(1)
 		}
 
 		if tier.CacheCreationInputPricing.PricePerM > 0 {
-			cp.Price.CacheCreationPrice = model.ZeroNullFloat64(tier.CacheCreationInputPricing.PricePerToken() * exchangeRate)
+			cp.Price.CacheCreationPrice = model.ZeroNullFloat64(
+				tier.CacheCreationInputPricing.PricePerToken() * exchangeRate,
+			)
 			cp.Price.CacheCreationPriceUnit = model.ZeroNullInt64(1)
 		}
 
@@ -411,6 +451,7 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 	if synccommon.InferToolChoice(m.ModelType, m.Features) {
 		cfg[string(model.ModelConfigToolChoiceKey)] = true
 	}
+
 	if slices.Contains(m.InputModalities, "image") {
 		cfg[string(model.ModelConfigVisionKey)] = true
 	}
@@ -435,7 +476,12 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 // allowPassthroughUnknown controls the allow_passthrough_unknown config on the
 // OpenAI channel. When true, requests for models not in the model list are
 // forwarded to this channel as a fallback (billed at zero cost).
-func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult, remoteModels []NovitaModelV2) (ChannelsInfo, error) {
+func EnsureNovitaChannels(
+	autoCreate bool,
+	anthropicPurePassthrough, allowPassthroughUnknown *bool,
+	cfg NovitaConfigResult,
+	remoteModels []NovitaModelV2,
+) (ChannelsInfo, error) {
 	// When remoteModels is nil (startup refresh), skip model list updates
 	// but still ensure channel existence and configs.
 	skipModelUpdate := len(remoteModels) == 0
@@ -469,13 +515,24 @@ func EnsureNovitaChannels(autoCreate bool, anthropicPurePassthrough *bool, allow
 		slices.Sort(multimodalModels)
 	}
 
-	return ensureNovitaChannelsFromModels(anthropicModels, openaiModels, multimodalModels, skipModelUpdate, autoCreate, anthropicPurePassthrough, allowPassthroughUnknown, cfg)
+	return ensureNovitaChannelsFromModels(
+		anthropicModels,
+		openaiModels,
+		multimodalModels,
+		skipModelUpdate,
+		autoCreate,
+		anthropicPurePassthrough,
+		allowPassthroughUnknown,
+		cfg,
+	)
 }
 
 func ensureNovitaChannelsFromModels(
 	anthropicModels, openaiModels, multimodalModels []string,
 	skipModelUpdate bool,
-	autoCreate bool, anthropicPurePassthrough *bool, allowPassthroughUnknown *bool, cfg NovitaConfigResult,
+	autoCreate bool,
+	anthropicPurePassthrough, allowPassthroughUnknown *bool,
+	cfg NovitaConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
 
@@ -494,7 +551,15 @@ func ensureNovitaChannelsFromModels(
 
 		purePassthrough := anthropicPurePassthrough != nil && *anthropicPurePassthrough
 		allowUnknown := allowPassthroughUnknown != nil && *allowPassthroughUnknown
-		created, createErr := createNovitaChannels(cfg, purePassthrough, allowUnknown, anthropicModels, openaiModels, multimodalModels)
+
+		created, createErr := createNovitaChannels(
+			cfg,
+			purePassthrough,
+			allowUnknown,
+			anthropicModels,
+			openaiModels,
+			multimodalModels,
+		)
 		if createErr != nil {
 			return info, createErr
 		}
@@ -517,22 +582,28 @@ func ensureNovitaChannelsFromModels(
 			if !skipModelUpdate {
 				channels[i].Models = anthropicModels
 			}
+
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
+
 			if _, ok := channels[i].Configs["skip_image_conversion"]; !ok {
 				channels[i].Configs["skip_image_conversion"] = true
 			}
+
 			if _, ok := channels[i].Configs["disable_context_management"]; !ok {
 				channels[i].Configs["disable_context_management"] = true
 			}
+
 			channels[i].Configs.SetOrInit("pure_passthrough", anthropicPurePassthrough, false)
 
 		case model.ChannelTypeNovitaMultimodal:
 			hasMultimodal = true
+
 			if !skipModelUpdate {
 				channels[i].Models = multimodalModels
 			}
+
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
@@ -544,14 +615,20 @@ func ensureNovitaChannelsFromModels(
 			if !skipModelUpdate {
 				channels[i].Models = openaiModels
 			}
+
 			if channels[i].Configs == nil {
 				channels[i].Configs = make(model.ChannelConfigs)
 			}
+
 			channels[i].Configs[model.ChannelConfigPathBaseMapKey] = map[string]string{
 				"/v1/responses":  novitaResponsesBase(channels[i].BaseURL),
 				"/v1/web-search": novitaWebSearchBase(channels[i].BaseURL),
 			}
-			channels[i].Configs.SetOrInit(model.ChannelConfigAllowPassthroughUnknown, allowPassthroughUnknown, false)
+			channels[i].Configs.SetOrInit(
+				model.ChannelConfigAllowPassthroughUnknown,
+				allowPassthroughUnknown,
+				false,
+			)
 		}
 
 		// Backfill Sets for channels created before overseas routing was added.
@@ -578,7 +655,11 @@ func ensureNovitaChannelsFromModels(
 // createNovitaChannels creates the OpenAI-compatible channel, Anthropic channel
 // (if there are anthropic-endpoint models), and a multimodal channel.
 // All channels share the same API key from the Novita config.
-func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool, allowPassthroughUnknown bool, anthropicModels, openaiModels, multimodalModels []string) ([]model.Channel, error) {
+func createNovitaChannels(
+	cfg NovitaConfigResult,
+	anthropicPurePassthrough, allowPassthroughUnknown bool,
+	anthropicModels, openaiModels, multimodalModels []string,
+) ([]model.Channel, error) {
 	openaiBase := cfg.APIBase
 	if openaiBase == "" {
 		openaiBase = DefaultNovitaAPIBase
@@ -622,7 +703,7 @@ func createNovitaChannels(cfg NovitaConfigResult, anthropicPurePassthrough bool,
 				Configs: model.ChannelConfigs{
 					"skip_image_conversion":      true,
 					"disable_context_management": true,
-					"pure_passthrough":            anthropicPurePassthrough,
+					"pure_passthrough":           anthropicPurePassthrough,
 				},
 			}
 
@@ -674,7 +755,12 @@ func newNovitaMultimodalChannel(apiKey string, models []string) model.Channel {
 // syncMultimodalModels fetches multimodal models (image/video/audio) from
 // the Novita console API and their SKU-based pricing from the batch-price API,
 // then creates or updates ModelConfig entries with PerRequestPrice.
-func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken string, exchangeRate float64) (added, updated int, err error) {
+func syncMultimodalModels(
+	ctx context.Context,
+	client *NovitaClient,
+	mgmtToken string,
+	exchangeRate float64,
+) (added, updated int, err error) {
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
 		return 0, 0, fmt.Errorf("fetch multimodal models: %w", err)
@@ -693,7 +779,10 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 	// Fetch batch pricing
 	skuPrices, priceErr := client.FetchMultimodalPrices(ctx, mgmtToken, allSKUs)
 	if priceErr != nil {
-		log.Printf("Novita sync: multimodal price fetch failed (non-fatal, using zero prices): %v", priceErr)
+		log.Printf(
+			"Novita sync: multimodal price fetch failed (non-fatal, using zero prices): %v",
+			priceErr,
+		)
 
 		skuPrices = make(map[string]int64)
 	}
@@ -708,7 +797,14 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 		}
 
 		minPrice := mm.minSKUPrice(skuPrices, exchangeRate)
-		modelType := multimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+		modelType := synccommon.MultimodalCategoryToModelType(mm.ModelConfig.Config.Category)
+
+		// Skip entries with unrecognized category — the multimodal API
+		// sometimes returns non-multimodal models that should not be
+		// classified as PPIONative.
+		if modelType == "" {
+			continue
+		}
 
 		rawConfig := map[string]any{
 			"model_type":   modelType,
@@ -739,7 +835,11 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 			}
 
 			if txErr := model.DB.Save(&existing).Error; txErr != nil {
-				log.Printf("Novita sync: failed to update multimodal model %s: %v", modelName, txErr)
+				log.Printf(
+					"Novita sync: failed to update multimodal model %s: %v",
+					modelName,
+					txErr,
+				)
 
 				continue
 			}
@@ -760,7 +860,11 @@ func syncMultimodalModels(ctx context.Context, client *NovitaClient, mgmtToken s
 			}
 
 			if txErr := model.DB.Create(&mc).Error; txErr != nil {
-				log.Printf("Novita sync: failed to create multimodal model %s: %v", modelName, txErr)
+				log.Printf(
+					"Novita sync: failed to create multimodal model %s: %v",
+					modelName,
+					txErr,
+				)
 
 				continue
 			}
@@ -808,7 +912,11 @@ func StartSyncScheduler(ctx context.Context) {
 		}
 
 		delay := next.Sub(now)
-		log.Printf("Novita sync scheduler: next check at %s (in %v)", next.Format("2006-01-02 15:04:05"), delay)
+		log.Printf(
+			"Novita sync scheduler: next check at %s (in %v)",
+			next.Format(time.DateTime),
+			delay,
+		)
 
 		select {
 		case <-ctx.Done():
@@ -903,5 +1011,3 @@ func RecordSyncHistory(opts SyncOptions, result *SyncResult) error {
 
 	return model.DB.Create(&history).Error
 }
-
-

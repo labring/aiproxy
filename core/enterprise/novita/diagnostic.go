@@ -49,7 +49,9 @@ func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 	// Responses-only detection takes highest priority: model_type may be "chat"
 	// but if the only endpoint is "responses", the model cannot serve chat/completions.
 	hasResponses := slices.Contains(endpoints, "responses")
-	hasChatFamily := slices.Contains(endpoints, "chat/completions") || slices.Contains(endpoints, "completions")
+
+	hasChatFamily := slices.Contains(endpoints, "chat/completions") ||
+		slices.Contains(endpoints, "completions")
 	if hasResponses && !hasChatFamily {
 		return mode.Responses
 	}
@@ -68,7 +70,11 @@ func modeFromEndpoints(modelType string, endpoints []string) mode.Mode {
 }
 
 // CompareNovitaModelsV2 compares remote V2 models with local database models.
-func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, exchangeRate float64) (*SyncDiff, error) {
+func CompareNovitaModelsV2(
+	remoteModels []NovitaModelV2,
+	opts SyncOptions,
+	exchangeRate float64,
+) (*SyncDiff, error) {
 	// Fetch ALL local models (not filtered by owner) so we can detect
 	// cross-owner models shared with other providers (e.g. PPIO).
 	var localModels []model.ModelConfig
@@ -166,7 +172,11 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 
 // compareModelConfigsV2 compares a local model config with a remote V2 model.
 // Prices are compared after applying the exchange rate (USD→CNY).
-func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exchangeRate float64) []string {
+func compareModelConfigsV2(
+	local *model.ModelConfig,
+	remote *NovitaModelV2,
+	exchangeRate float64,
+) []string {
 	var changes []string
 
 	newInputPrice := remote.GetInputPricePerToken() * exchangeRate
@@ -196,12 +206,16 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *NovitaModelV2, exch
 
 	localTieredCount := len(local.Price.ConditionalPrices)
 	if localTieredCount != remoteTieredCount {
-		changes = append(changes, fmt.Sprintf("tiered_billing_count: %d → %d", localTieredCount, remoteTieredCount))
+		changes = append(
+			changes,
+			fmt.Sprintf("tiered_billing_count: %d → %d", localTieredCount, remoteTieredCount),
+		)
 	}
 
 	// Compare cache pricing
 	remoteCacheRead := remote.GetCacheReadPricePerToken() * exchangeRate
-	if remote.SupportPromptCache && !floatEquals(float64(local.Price.CachedPrice), remoteCacheRead) {
+	if remote.SupportPromptCache &&
+		!floatEquals(float64(local.Price.CachedPrice), remoteCacheRead) {
 		changes = append(changes, fmt.Sprintf("cache_read_price: %.8f → %.8f",
 			float64(local.Price.CachedPrice), remoteCacheRead))
 	}

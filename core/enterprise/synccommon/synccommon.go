@@ -18,12 +18,29 @@ func IsAnthropicModelName(id string) bool {
 	return strings.HasPrefix(id, "claude-") || strings.HasPrefix(id, "pa/claude-")
 }
 
+// MultimodalCategoryToModelType maps the multimodal API's category field
+// (e.g. "image_gen", "video_gen", "audio_gen") to model_type strings used by
+// provider-specific mode inference. Returns "" for unrecognized categories so
+// callers can skip non-multimodal entries that the multimodal API sometimes includes.
+func MultimodalCategoryToModelType(category string) string {
+	switch category {
+	case "image_gen":
+		return "image"
+	case "video_gen":
+		return "video"
+	case "audio_gen":
+		return "audio"
+	default:
+		return ""
+	}
+}
+
 // SyncProgressEvent represents a progress event sent via SSE during a model sync.
 // Shared by all provider sync implementations to ensure a consistent wire format.
 type SyncProgressEvent struct {
-	Type     string `json:"type"`              // "progress", "success", "error"
-	Step     string `json:"step"`              // "fetching", "comparing", "syncing", "complete"
-	Message  string `json:"message"`           // Human-readable message
+	Type     string `json:"type"`    // "progress", "success", "error"
+	Step     string `json:"step"`    // "fetching", "comparing", "syncing", "complete"
+	Message  string `json:"message"` // Human-readable message
 	Progress int    `json:"progress,omitempty"`
 	Data     any    `json:"data,omitempty"` // Additional data (e.g., SyncResult on success)
 }

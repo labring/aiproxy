@@ -61,7 +61,9 @@ func NewNovitaClient() (*NovitaClient, error) {
 	}
 
 	if apiKey == "" {
-		return nil, errors.New("Novita API Key is not configured. Please select a Novita channel in the Sync page or set NOVITA_API_KEY environment variable")
+		return nil, errors.New(
+			"Novita API Key is not configured. Please select a Novita channel in the Sync page or set NOVITA_API_KEY environment variable",
+		)
 	}
 
 	if apiBase == "" {
@@ -125,7 +127,10 @@ var novitaMultimodalModelTypes = []string{"embedding", "image", "video", "audio"
 
 // fetchMgmtModels calls the Novita management model-list API with the given
 // query string and returns the parsed model slice.
-func (c *NovitaClient) fetchMgmtModels(ctx context.Context, mgmtToken, query string) ([]NovitaModelV2, error) {
+func (c *NovitaClient) fetchMgmtModels(
+	ctx context.Context,
+	mgmtToken, query string,
+) ([]NovitaModelV2, error) {
 	url := novitaMgmtEndpoint + query
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -147,7 +152,11 @@ func (c *NovitaClient) fetchMgmtModels(ctx context.Context, mgmtToken, query str
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("Novita mgmt API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"Novita mgmt API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
@@ -170,7 +179,10 @@ func (c *NovitaClient) fetchMgmtModels(ctx context.Context, mgmtToken, query str
 // closed-source pa/ models (e.g. pa/gpt-5.4, pa/claude-opus-4-6).
 // Non-chat types (embedding, image, video, audio) require separate requests.
 // All requests are issued concurrently to minimize total latency.
-func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
+func (c *NovitaClient) FetchAllModels(
+	ctx context.Context,
+	mgmtToken string,
+) ([]NovitaModelV2, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
 	defer cancel()
 
@@ -202,11 +214,16 @@ func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]
 		g.Go(func() error {
 			extra, extraErr := c.fetchMgmtModels(gctx, mgmtToken, "?model_type="+modelType)
 			if extraErr != nil {
-				log.Printf("Novita sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
+				log.Printf(
+					"Novita sync: failed to fetch %s models (non-fatal): %v",
+					modelType,
+					extraErr,
+				)
 				return nil
 			}
 
 			mu.Lock()
+
 			extraModels = append(extraModels, extra...)
 			mu.Unlock()
 
@@ -237,7 +254,10 @@ func (c *NovitaClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
 // concurrently and merges them into a single V2 list. V2 wins on ID overlap.
 // If mgmtToken is empty, only V1 models are returned (converted to V2 format).
-func (c *NovitaClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string) ([]NovitaModelV2, error) {
+func (c *NovitaClient) FetchAllModelsMerged(
+	ctx context.Context,
+	mgmtToken string,
+) ([]NovitaModelV2, error) {
 	var (
 		v1Models []NovitaModel
 		v2Models []NovitaModelV2
@@ -250,6 +270,7 @@ func (c *NovitaClient) FetchAllModelsMerged(ctx context.Context, mgmtToken strin
 
 		g.Go(func() error {
 			var err error
+
 			v1Models, err = c.FetchModels(gctx)
 			if err != nil {
 				v1Err = err // non-fatal, recorded for logging below
@@ -304,7 +325,10 @@ func (c *NovitaClient) FetchAllModelsMerged(ctx context.Context, mgmtToken strin
 
 // FetchMultimodalModels fetches all multimodal models (image/video/audio) from
 // the Novita console API. Requires the mgmt console token for authentication.
-func (c *NovitaClient) FetchMultimodalModels(ctx context.Context, mgmtToken string) ([]NovitaMultimodalModel, error) {
+func (c *NovitaClient) FetchMultimodalModels(
+	ctx context.Context,
+	mgmtToken string,
+) ([]NovitaMultimodalModel, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultNovitaTimeout)
 	defer cancel()
 
@@ -323,7 +347,11 @@ func (c *NovitaClient) FetchMultimodalModels(ctx context.Context, mgmtToken stri
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("multimodal API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"multimodal API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
@@ -341,7 +369,11 @@ func (c *NovitaClient) FetchMultimodalModels(ctx context.Context, mgmtToken stri
 
 // FetchMultimodalPrices fetches batch SKU pricing for the given SKU codes.
 // Returns a map of skuCode → raw basePrice0 value (divide by multimodalPriceDivisor for USD/request).
-func (c *NovitaClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string, skuCodes []string) (map[string]int64, error) {
+func (c *NovitaClient) FetchMultimodalPrices(
+	ctx context.Context,
+	mgmtToken string,
+	skuCodes []string,
+) (map[string]int64, error) {
 	if len(skuCodes) == 0 {
 		return nil, nil
 	}
@@ -359,7 +391,12 @@ func (c *NovitaClient) FetchMultimodalPrices(ctx context.Context, mgmtToken stri
 		return nil, fmt.Errorf("failed to marshal batch-price request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, novitaBatchPriceEndpoint, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		novitaBatchPriceEndpoint,
+		bytes.NewReader(bodyBytes),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -375,7 +412,11 @@ func (c *NovitaClient) FetchMultimodalPrices(ctx context.Context, mgmtToken stri
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("batch-price API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"batch-price API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))

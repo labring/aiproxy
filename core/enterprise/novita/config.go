@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"strconv"
 
-	"gorm.io/gorm"
-
 	"github.com/labring/aiproxy/core/model"
+	"gorm.io/gorm"
 )
 
 const (
-	optionKeyNovitaChannelID        = "NovitaChannelID"
-	optionKeyNovitaAPIKey           = "NovitaAPIKey"
-	optionKeyNovitaAPIBase          = "NovitaAPIBase"
-	optionKeyNovitaMgmtToken        = "NovitaMgmtToken"
-	optionKeyNovitaExchangeRate     = "NovitaExchangeRate"
-	optionKeyNovitaAutoSyncEnabled  = "NovitaAutoSyncEnabled"
-	defaultNovitaExchangeRate       = 7.0
+	optionKeyNovitaChannelID       = "NovitaChannelID"
+	optionKeyNovitaAPIKey          = "NovitaAPIKey"
+	optionKeyNovitaAPIBase         = "NovitaAPIBase"
+	optionKeyNovitaMgmtToken       = "NovitaMgmtToken"
+	optionKeyNovitaExchangeRate    = "NovitaExchangeRate"
+	optionKeyNovitaAutoSyncEnabled = "NovitaAutoSyncEnabled"
+	defaultNovitaExchangeRate      = 7.0
 )
 
 var novitaOptionKeys = []string{
@@ -73,7 +72,9 @@ func GetNovitaConfig() (cfg NovitaConfigResult) {
 // IsAutoSyncEnabled returns whether the daily auto-sync is enabled in the DB.
 func IsAutoSyncEnabled() bool {
 	var opt model.Option
-	if err := model.DB.Where("key = ?", optionKeyNovitaAutoSyncEnabled).First(&opt).Error; err != nil {
+	if err := model.DB.Where("key = ?", optionKeyNovitaAutoSyncEnabled).
+		First(&opt).
+		Error; err != nil {
 		return false // not found → default off
 	}
 

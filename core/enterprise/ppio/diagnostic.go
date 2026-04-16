@@ -303,12 +303,16 @@ func compareModelConfigsV2(local *model.ModelConfig, remote *PPIOModelV2) []stri
 
 	localTieredCount := len(local.Price.ConditionalPrices)
 	if localTieredCount != remoteTieredCount {
-		changes = append(changes, fmt.Sprintf("tiered_billing_count: %d → %d", localTieredCount, remoteTieredCount))
+		changes = append(
+			changes,
+			fmt.Sprintf("tiered_billing_count: %d → %d", localTieredCount, remoteTieredCount),
+		)
 	}
 
 	// Compare cache pricing
 	remoteCacheRead := remote.GetCacheReadPricePerToken()
-	if remote.SupportPromptCache && !floatEquals(float64(local.Price.CachedPrice), remoteCacheRead) {
+	if remote.SupportPromptCache &&
+		!floatEquals(float64(local.Price.CachedPrice), remoteCacheRead) {
 		changes = append(changes, fmt.Sprintf("cache_read_price: %.12f → %.12f",
 			float64(local.Price.CachedPrice), remoteCacheRead))
 	}
@@ -383,22 +387,22 @@ func buildModelConfigMap(m *PPIOModel) map[string]any {
 // buildModelV2ConfigMap builds a map representation of remote V2 model config
 func buildModelV2ConfigMap(m *PPIOModelV2) map[string]any {
 	return map[string]any{
-		"model":           m.ID,
-		"title":           m.Title,
-		"description":     m.Description,
-		"input_price":     m.GetInputPricePerToken(),
-		"output_price":    m.GetOutputPricePerToken(),
-		"context_size":    m.ContextSize,
-		"max_outputs":     m.MaxOutputTokens,
-		"endpoints":       m.Endpoints,
-		"features":        m.Features,
-		"model_type":      m.ModelType,
-		"tags":            m.Tags,
-		"status":          m.Status,
-		"is_tiered":       m.IsTieredBilling,
-		"support_cache":   m.SupportPromptCache,
-		"cache_read":      m.GetCacheReadPricePerToken(),
-		"cache_creation":  m.GetCacheCreationPricePerToken(),
+		"model":          m.ID,
+		"title":          m.Title,
+		"description":    m.Description,
+		"input_price":    m.GetInputPricePerToken(),
+		"output_price":   m.GetOutputPricePerToken(),
+		"context_size":   m.ContextSize,
+		"max_outputs":    m.MaxOutputTokens,
+		"endpoints":      m.Endpoints,
+		"features":       m.Features,
+		"model_type":     m.ModelType,
+		"tags":           m.Tags,
+		"status":         m.Status,
+		"is_tiered":      m.IsTieredBilling,
+		"support_cache":  m.SupportPromptCache,
+		"cache_read":     m.GetCacheReadPricePerToken(),
+		"cache_creation": m.GetCacheCreationPricePerToken(),
 	}
 }
 

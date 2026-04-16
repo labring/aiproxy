@@ -107,13 +107,13 @@ func GetConfigHandler(c *gin.Context) {
 	}
 
 	successResponse(c, gin.H{
-		"channel_id":              cfg.ChannelID,
-		"api_key":                 maskedKey,
-		"api_base":                cfg.APIBase,
-		"configured":              configured,
-		"mgmt_token_configured":   cfg.MgmtToken != "",
+		"channel_id":               cfg.ChannelID,
+		"api_key":                  maskedKey,
+		"api_base":                 cfg.APIBase,
+		"configured":               configured,
+		"mgmt_token_configured":    cfg.MgmtToken != "",
 		"exchange_rate":            cfg.ExchangeRate,
-		"auto_sync_enabled":       cfg.AutoSyncEnabled,
+		"auto_sync_enabled":        cfg.AutoSyncEnabled,
 		"auto_sync_force_disabled": env.Bool("DISABLE_NOVITA_AUTO_SYNC", false),
 	})
 }
@@ -132,7 +132,11 @@ func UpdateAPIKeyHandler(c *gin.Context) {
 	}
 
 	if err := SetNovitaAPIKeyDirect(req.APIKey, req.APIBase); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save API key: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save API key: %v", err),
+		)
 		return
 	}
 
@@ -151,7 +155,11 @@ func UpdateConfigHandler(c *gin.Context) {
 	}
 
 	if err := SetNovitaConfigFromChannel(req.ChannelID); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save config: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save config: %v", err),
+		)
 		return
 	}
 
@@ -170,7 +178,11 @@ func UpdateMgmtTokenHandler(c *gin.Context) {
 	}
 
 	if err := SetNovitaMgmtToken(req.Token); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save mgmt token: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save mgmt token: %v", err),
+		)
 		return
 	}
 
@@ -189,7 +201,11 @@ func UpdateExchangeRateHandler(c *gin.Context) {
 	}
 
 	if err := SetNovitaExchangeRate(req.Rate); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save exchange rate: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save exchange rate: %v", err),
+		)
 		return
 	}
 
@@ -416,7 +432,11 @@ func UpdateAutoSyncHandler(c *gin.Context) {
 	}
 
 	if err := SetAutoSyncEnabled(req.Enabled); err != nil {
-		errorResponse(c, http.StatusInternalServerError, fmt.Sprintf("failed to save auto-sync setting: %v", err))
+		errorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to save auto-sync setting: %v", err),
+		)
 		return
 	}
 

@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	DefaultPPIOAPIBase        = "https://api.ppinfra.com/v3/openai"
-	DefaultPPIOAnthropicBase  = "https://api.ppinfra.com/anthropic"
+	DefaultPPIOAPIBase       = "https://api.ppinfra.com/v3/openai"
+	DefaultPPIOAnthropicBase = "https://api.ppinfra.com/anthropic"
 	// DefaultPPIOMultimodalBase is the base URL for PPIO native multimodal channels
 	// (image, video, audio). The path suffix is provided by the request itself.
 	DefaultPPIOMultimodalBase = "https://api.ppinfra.com"
@@ -51,7 +51,9 @@ func NewPPIOClient() (*PPIOClient, error) {
 	}
 
 	if apiKey == "" {
-		return nil, errors.New("PPIO API Key is not configured. Please select a PPIO channel in the Sync page or set PPIO_API_KEY environment variable")
+		return nil, errors.New(
+			"PPIO API Key is not configured. Please select a PPIO channel in the Sync page or set PPIO_API_KEY environment variable",
+		)
 	}
 
 	if apiBase == "" {
@@ -114,7 +116,10 @@ func (c *PPIOClient) FetchModels(ctx context.Context) ([]PPIOModel, error) {
 
 // fetchMgmtModels calls the PPIO management model-list API with the given query
 // string and returns the parsed model slice.
-func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query string) ([]PPIOModelV2, error) {
+func (c *PPIOClient) fetchMgmtModels(
+	ctx context.Context,
+	mgmtToken, query string,
+) ([]PPIOModelV2, error) {
 	url := ppioMgmtModelsEndpoint + query
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -133,7 +138,11 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("PPIO mgmt API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"PPIO mgmt API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
@@ -147,7 +156,11 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 	}
 
 	if mgmtResp.Code != 0 {
-		return nil, fmt.Errorf("PPIO mgmt API error: code=%d, message=%s", mgmtResp.Code, mgmtResp.Message)
+		return nil, fmt.Errorf(
+			"PPIO mgmt API error: code=%d, message=%s",
+			mgmtResp.Code,
+			mgmtResp.Message,
+		)
 	}
 
 	return mgmtResp.Data, nil
@@ -157,7 +170,6 @@ func (c *PPIOClient) fetchMgmtModels(ctx context.Context, mgmtToken, query strin
 // cover non-chat multimodal models. Each requires its own API request since
 // the default ?visibility=1 query only returns chat-family models.
 var multimodalModelTypes = []string{"embedding", "image", "video", "audio"}
-
 
 // FetchAllModels fetches the full model catalog (including pa/ closed-source models)
 // via the PPIO management API using the mgmt console token.
@@ -197,11 +209,16 @@ func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PP
 		g.Go(func() error {
 			extra, extraErr := c.fetchMgmtModels(gctx, mgmtToken, "?model_type="+modelType)
 			if extraErr != nil {
-				log.Printf("PPIO sync: failed to fetch %s models (non-fatal): %v", modelType, extraErr)
+				log.Printf(
+					"PPIO sync: failed to fetch %s models (non-fatal): %v",
+					modelType,
+					extraErr,
+				)
 				return nil
 			}
 
 			mu.Lock()
+
 			extraModels = append(extraModels, extra...)
 			mu.Unlock()
 
@@ -232,7 +249,10 @@ func (c *PPIOClient) FetchAllModels(ctx context.Context, mgmtToken string) ([]PP
 // FetchAllModelsMerged fetches models from both V1 (public) and V2 (mgmt) APIs
 // concurrently and merges them into a single V2 list. V2 wins on ID overlap.
 // If mgmtToken is empty, only V1 models are returned (converted to V2 format).
-func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string) ([]PPIOModelV2, error) {
+func (c *PPIOClient) FetchAllModelsMerged(
+	ctx context.Context,
+	mgmtToken string,
+) ([]PPIOModelV2, error) {
 	var (
 		v1Models []PPIOModel
 		v2Models []PPIOModelV2
@@ -245,6 +265,7 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 
 		g.Go(func() error {
 			var err error
+
 			v1Models, err = c.FetchModels(gctx)
 			if err != nil {
 				v1Err = err // non-fatal, recorded for logging below
@@ -270,6 +291,7 @@ func (c *PPIOClient) FetchAllModelsMerged(ctx context.Context, mgmtToken string)
 
 		if v1Err != nil {
 			log.Printf("PPIO sync: V1 API fetch failed (non-fatal, using V2 only): %v", v1Err)
+
 			v1Models = nil // treat as empty; fall through to known-model merge
 		}
 	} else {
@@ -305,7 +327,10 @@ const (
 
 // FetchMultimodalModels fetches all multimodal models (image/video/audio) from
 // the PPIO console API. Requires the mgmt console token for authentication.
-func (c *PPIOClient) FetchMultimodalModels(ctx context.Context, mgmtToken string) ([]PPIOMultimodalModel, error) {
+func (c *PPIOClient) FetchMultimodalModels(
+	ctx context.Context,
+	mgmtToken string,
+) ([]PPIOMultimodalModel, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultPPIOTimeout)
 	defer cancel()
 
@@ -324,7 +349,11 @@ func (c *PPIOClient) FetchMultimodalModels(ctx context.Context, mgmtToken string
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("multimodal API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"multimodal API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
@@ -342,7 +371,11 @@ func (c *PPIOClient) FetchMultimodalModels(ctx context.Context, mgmtToken string
 
 // FetchMultimodalPrices fetches batch SKU pricing for the given SKU codes.
 // Returns a map of skuCode → raw basePrice0 value (divide by multimodalPriceDivisor for 元/次).
-func (c *PPIOClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string, skuCodes []string) (map[string]int64, error) {
+func (c *PPIOClient) FetchMultimodalPrices(
+	ctx context.Context,
+	mgmtToken string,
+	skuCodes []string,
+) (map[string]int64, error) {
 	if len(skuCodes) == 0 {
 		return nil, nil
 	}
@@ -360,7 +393,12 @@ func (c *PPIOClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string
 		return nil, fmt.Errorf("failed to marshal batch-price request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ppioBatchPriceEndpoint, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		ppioBatchPriceEndpoint,
+		bytes.NewReader(bodyBytes),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -376,7 +414,11 @@ func (c *PPIOClient) FetchMultimodalPrices(ctx context.Context, mgmtToken string
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("batch-price API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"batch-price API returned status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, ppioMaxResponseSize))
