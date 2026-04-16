@@ -129,6 +129,14 @@ func TestLoadHTTPClientReuse(t *testing.T) {
 		client4, err := utils.LoadHTTPClientE(time.Second, "http://127.0.0.1:7890")
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(client4, convey.ShouldEqual, client3)
+
+		client5, err := utils.LoadHTTPClientWithTLSConfigE(time.Second, "", true)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(client5, convey.ShouldNotEqual, client1)
+
+		client6, err := utils.LoadHTTPClientWithTLSConfigE(time.Second, "", true)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(client6, convey.ShouldEqual, client5)
 	})
 }
 

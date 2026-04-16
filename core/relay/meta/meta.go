@@ -17,6 +17,7 @@ type ChannelMeta struct {
 	Type                    model.ChannelType
 	ModelMapping            map[string]string
 	EnabledAutoBalanceCheck bool
+	SkipTLSVerify           bool
 	EnabledNoPermissionBan  bool
 	WarnErrorRate           float64
 	MaxErrorRate            float64
@@ -168,6 +169,7 @@ func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.ID = channel.ID
 	m.Channel.Type = channel.Type
 	m.Channel.EnabledAutoBalanceCheck = channel.EnabledAutoBalanceCheck
+	m.Channel.SkipTLSVerify = channel.SkipTLSVerify
 	m.Channel.EnabledNoPermissionBan = channel.EnabledNoPermissionBan
 	m.Channel.WarnErrorRate = channel.WarnErrorRate
 	m.Channel.MaxErrorRate = channel.MaxErrorRate

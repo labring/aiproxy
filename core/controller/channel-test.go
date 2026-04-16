@@ -748,39 +748,42 @@ func AutoTestBannedModels() {
 // TestChannelRequest 用于测试未保存的渠道配置
 // 尽可能接近 Channel 结构
 type TestChannelRequest struct {
-	Type         int               `json:"type"          binding:"required"`
-	Key          string            `json:"key"           binding:"required"`
-	BaseURL      string            `json:"base_url"`
-	ProxyURL     string            `json:"proxy_url"`
-	Name         string            `json:"name"`
-	Models       []string          `json:"models"`
-	ModelMapping map[string]string `json:"model_mapping"`
-	Configs      map[string]any    `json:"configs"`
+	Type          int               `json:"type"            binding:"required"`
+	Key           string            `json:"key"             binding:"required"`
+	BaseURL       string            `json:"base_url"`
+	ProxyURL      string            `json:"proxy_url"`
+	Name          string            `json:"name"`
+	Models        []string          `json:"models"`
+	ModelMapping  map[string]string `json:"model_mapping"`
+	SkipTLSVerify bool              `json:"skip_tls_verify"`
+	Configs       map[string]any    `json:"configs"`
 }
 
 // TestSingleModelRequest 测试单个模型的请求
 type TestSingleModelRequest struct {
-	Type         int               `json:"type"          binding:"required"`
-	Key          string            `json:"key"           binding:"required"`
-	BaseURL      string            `json:"base_url"`
-	ProxyURL     string            `json:"proxy_url"`
-	Name         string            `json:"name"`
-	Model        string            `json:"model"         binding:"required"`
-	ModelMapping map[string]string `json:"model_mapping"`
-	Configs      map[string]any    `json:"configs"`
+	Type          int               `json:"type"            binding:"required"`
+	Key           string            `json:"key"             binding:"required"`
+	BaseURL       string            `json:"base_url"`
+	ProxyURL      string            `json:"proxy_url"`
+	Name          string            `json:"name"`
+	Model         string            `json:"model"           binding:"required"`
+	ModelMapping  map[string]string `json:"model_mapping"`
+	SkipTLSVerify bool              `json:"skip_tls_verify"`
+	Configs       map[string]any    `json:"configs"`
 }
 
 // createTempChannel 创建临时 Channel 对象
 func createTempChannel(req *TestChannelRequest) *model.Channel {
 	return &model.Channel{
-		Type:         model.ChannelType(req.Type),
-		Key:          req.Key,
-		BaseURL:      req.BaseURL,
-		ProxyURL:     req.ProxyURL,
-		Name:         req.Name,
-		Models:       req.Models,
-		ModelMapping: req.ModelMapping,
-		Configs:      model.ChannelConfigs(req.Configs),
+		Type:          model.ChannelType(req.Type),
+		Key:           req.Key,
+		BaseURL:       req.BaseURL,
+		ProxyURL:      req.ProxyURL,
+		Name:          req.Name,
+		Models:        req.Models,
+		ModelMapping:  req.ModelMapping,
+		SkipTLSVerify: req.SkipTLSVerify,
+		Configs:       model.ChannelConfigs(req.Configs),
 	}
 }
 
@@ -808,14 +811,15 @@ func TestChannelPreview(c *gin.Context) {
 
 	// 创建临时 Channel 对象（不保存到数据库）
 	channel := &model.Channel{
-		Type:         model.ChannelType(req.Type),
-		Key:          req.Key,
-		BaseURL:      req.BaseURL,
-		ProxyURL:     req.ProxyURL,
-		Name:         req.Name,
-		Models:       []string{req.Model},
-		ModelMapping: req.ModelMapping,
-		Configs:      model.ChannelConfigs(req.Configs),
+		Type:          model.ChannelType(req.Type),
+		Key:           req.Key,
+		BaseURL:       req.BaseURL,
+		ProxyURL:      req.ProxyURL,
+		Name:          req.Name,
+		Models:        []string{req.Model},
+		ModelMapping:  req.ModelMapping,
+		SkipTLSVerify: req.SkipTLSVerify,
+		Configs:       model.ChannelConfigs(req.Configs),
 	}
 
 	// 获取模型缓存

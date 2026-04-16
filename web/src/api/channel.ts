@@ -157,6 +157,7 @@ export const channelApi = {
         name?: string
         model: string
         model_mapping?: Record<string, string>
+        skip_tls_verify?: boolean
         configs?: Record<string, unknown>
     }): Promise<ChannelTestResult> => {
         const response = await post<ChannelTestResult>('channel/test-preview?return_success=true&success_body=true', data)
@@ -173,6 +174,7 @@ export const channelApi = {
             name?: string
             models: string[]
             model_mapping?: Record<string, string>
+            skip_tls_verify?: boolean
             configs?: Record<string, unknown>
         },
         onResult: (result: ChannelTestResult) => void,

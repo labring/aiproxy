@@ -11,6 +11,7 @@ export const channelCreateSchema = z.object({
     model_mapping: z.record(z.string(), z.string()).optional(),
     sets: z.array(z.string()).optional(),
     priority: z.number().int().min(0).max(1000000).optional(),
+    skip_tls_verify: z.boolean().optional(),
     enabled_no_permission_ban: z.boolean().optional(),
     warn_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
     max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),

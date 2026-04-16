@@ -13,11 +13,11 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/meta"
-	model "github.com/labring/aiproxy/core/relay/model"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-func UnmarshalGeneralThinking(req *http.Request) (model.GeneralOpenAIThinkingRequest, error) {
-	var request model.GeneralOpenAIThinkingRequest
+func UnmarshalGeneralThinking(req *http.Request) (relaymodel.GeneralOpenAIThinkingRequest, error) {
+	var request relaymodel.GeneralOpenAIThinkingRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -27,8 +27,10 @@ func UnmarshalGeneralThinking(req *http.Request) (model.GeneralOpenAIThinkingReq
 	return request, nil
 }
 
-func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinkingRequest, error) {
-	var request model.GeneralOpenAIThinkingRequest
+func UnmarshalGeneralThinkingFromNode(
+	node *ast.Node,
+) (relaymodel.GeneralOpenAIThinkingRequest, error) {
+	var request relaymodel.GeneralOpenAIThinkingRequest
 
 	thinkingNode := node.Get("thinking")
 	if thinkingNode == nil || !thinkingNode.Exists() || thinkingNode.TypeSafe() == ast.V_NULL {
@@ -40,7 +42,7 @@ func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinki
 		return request, err
 	}
 
-	request.Thinking = &model.ClaudeThinking{}
+	request.Thinking = &relaymodel.ClaudeThinking{}
 
 	err = sonic.UnmarshalString(raw, request.Thinking)
 	if err != nil {
@@ -50,8 +52,10 @@ func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinki
 	return request, nil
 }
 
-func UnmarshalAnthropicMessageRequest(req *http.Request) (*model.AnthropicMessageRequest, error) {
-	var request model.AnthropicMessageRequest
+func UnmarshalAnthropicMessageRequest(
+	req *http.Request,
+) (*relaymodel.AnthropicMessageRequest, error) {
+	var request relaymodel.AnthropicMessageRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -61,8 +65,8 @@ func UnmarshalAnthropicMessageRequest(req *http.Request) (*model.AnthropicMessag
 	return &request, nil
 }
 
-func UnmarshalGeneralOpenAIRequest(req *http.Request) (*model.GeneralOpenAIRequest, error) {
-	var request model.GeneralOpenAIRequest
+func UnmarshalGeneralOpenAIRequest(req *http.Request) (*relaymodel.GeneralOpenAIRequest, error) {
+	var request relaymodel.GeneralOpenAIRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -74,8 +78,8 @@ func UnmarshalGeneralOpenAIRequest(req *http.Request) (*model.GeneralOpenAIReque
 
 func UnmarshalVideoGenerationJobRequest(
 	req *http.Request,
-) (*model.VideoGenerationJobRequest, error) {
-	var request model.VideoGenerationJobRequest
+) (*relaymodel.VideoGenerationJobRequest, error) {
+	var request relaymodel.VideoGenerationJobRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -85,8 +89,8 @@ func UnmarshalVideoGenerationJobRequest(
 	return &request, nil
 }
 
-func UnmarshalImageRequest(req *http.Request) (*model.ImageRequest, error) {
-	var request model.ImageRequest
+func UnmarshalImageRequest(req *http.Request) (*relaymodel.ImageRequest, error) {
+	var request relaymodel.ImageRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -96,8 +100,8 @@ func UnmarshalImageRequest(req *http.Request) (*model.ImageRequest, error) {
 	return &request, nil
 }
 
-func UnmarshalRerankRequest(req *http.Request) (*model.RerankRequest, error) {
-	var request model.RerankRequest
+func UnmarshalRerankRequest(req *http.Request) (*relaymodel.RerankRequest, error) {
+	var request relaymodel.RerankRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -107,8 +111,8 @@ func UnmarshalRerankRequest(req *http.Request) (*model.RerankRequest, error) {
 	return &request, nil
 }
 
-func UnmarshalTTSRequest(req *http.Request) (*model.TextToSpeechRequest, error) {
-	var request model.TextToSpeechRequest
+func UnmarshalTTSRequest(req *http.Request) (*relaymodel.TextToSpeechRequest, error) {
+	var request relaymodel.TextToSpeechRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -118,8 +122,8 @@ func UnmarshalTTSRequest(req *http.Request) (*model.TextToSpeechRequest, error) 
 	return &request, nil
 }
 
-func UnmarshalGeminiChatRequest(req *http.Request) (*model.GeminiChatRequest, error) {
-	var request model.GeminiChatRequest
+func UnmarshalGeminiChatRequest(req *http.Request) (*relaymodel.GeminiChatRequest, error) {
+	var request relaymodel.GeminiChatRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -159,7 +163,11 @@ func DoRequestWithMeta(req *http.Request, m *meta.Meta) (*http.Response, error) 
 		return DoRequest(req, 0)
 	}
 
-	client, err := LoadHTTPClientE(m.RequestTimeout, m.Channel.ProxyURL)
+	client, err := LoadHTTPClientWithTLSConfigE(
+		m.RequestTimeout,
+		m.Channel.ProxyURL,
+		m.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return nil, err
 	}

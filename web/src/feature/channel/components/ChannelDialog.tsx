@@ -54,6 +54,7 @@ export function ChannelDialog({
             model_mapping: channel.model_mapping || {},
             sets: channel.sets || [],
             priority: channel.priority,
+            skip_tls_verify: channel.skip_tls_verify ?? false,
             enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
             warn_error_rate: channel.warn_error_rate,
             max_error_rate: channel.max_error_rate !== undefined && channel.max_error_rate > 0
@@ -71,6 +72,7 @@ export function ChannelDialog({
             model_mapping: {},
             sets: [],
             priority: 10,
+            skip_tls_verify: false,
             enabled_no_permission_ban: false,
             warn_error_rate: undefined,
             max_error_rate: undefined,

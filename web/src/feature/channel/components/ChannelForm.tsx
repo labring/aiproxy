@@ -45,6 +45,7 @@ type ComparableChannelPayload = {
     model_mapping: Record<string, string>
     sets: string[]
     priority: number
+    skip_tls_verify: boolean
     enabled_no_permission_ban: boolean
     warn_error_rate?: number
     max_error_rate?: number
@@ -82,6 +83,7 @@ const normalizeChannelPayload = (
     model_mapping: payload.model_mapping ?? {},
     sets: payload.sets ?? [],
     priority: payload.priority ?? DEFAULT_PRIORITY,
+    skip_tls_verify: payload.skip_tls_verify ?? false,
     enabled_no_permission_ban: payload.enabled_no_permission_ban ?? false,
     warn_error_rate: payload.warn_error_rate ?? undefined,
     max_error_rate: payload.max_error_rate && payload.max_error_rate > 0
@@ -105,6 +107,7 @@ interface ChannelFormProps {
         model_mapping?: Record<string, string>
         sets?: string[]
         priority?: number
+        skip_tls_verify?: boolean
         enabled_no_permission_ban?: boolean
         warn_error_rate?: number
         max_error_rate?: number
@@ -127,6 +130,7 @@ export function ChannelForm({
         model_mapping: {},
         sets: [],
         priority: 10,
+        skip_tls_verify: false,
         enabled_no_permission_ban: false,
         warn_error_rate: undefined,
         max_error_rate: undefined,
@@ -276,6 +280,7 @@ export function ChannelForm({
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
             priority: data.priority,
+            skip_tls_verify: data.skip_tls_verify ?? false,
             enabled_no_permission_ban: data.enabled_no_permission_ban ?? false,
             warn_error_rate: data.warn_error_rate,
             max_error_rate: data.max_error_rate ?? 0,
@@ -366,6 +371,7 @@ export function ChannelForm({
             model_mapping: effectiveUseDefault ? {} : (formData.model_mapping || {}),
             sets: formData.sets || [],
             priority: formData.priority,
+            skip_tls_verify: formData.skip_tls_verify ?? false,
             enabled_no_permission_ban: formData.enabled_no_permission_ban ?? false,
             warn_error_rate: formData.warn_error_rate,
             max_error_rate: formData.max_error_rate,
@@ -382,6 +388,7 @@ export function ChannelForm({
             model_mapping: channel.model_mapping || {},
             sets: channel.sets || [],
             priority: channel.priority,
+            skip_tls_verify: channel.skip_tls_verify ?? false,
             enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
             warn_error_rate: channel.warn_error_rate,
             max_error_rate: channel.max_error_rate,
@@ -459,6 +466,7 @@ export function ChannelForm({
             name: formData.name || '',
             models: testModels,
             model_mapping: testMapping,
+            skip_tls_verify: formData.skip_tls_verify ?? false,
             configs: parsedConfigs
         })
     }
@@ -1053,6 +1061,27 @@ export function ChannelForm({
                                             {t("channel.dialog.proxyUrlHelp")}
                                         </p>
                                         <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="skip_tls_verify"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-lg border bg-muted/10 p-4">
+                                        <div className="space-y-1">
+                                            <FormLabel>{t('channel.dialog.skipTlsVerify')}</FormLabel>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t('channel.dialog.skipTlsVerifyHelp')}
+                                            </p>
+                                        </div>
+                                        <FormControl>
+                                            <Switch
+                                                checked={field.value ?? false}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
                                     </FormItem>
                                 )}
                             />

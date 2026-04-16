@@ -248,6 +248,7 @@ export const useTestChannelPreview = () => {
         name?: string
         model: string
         model_mapping?: Record<string, string>
+        skip_tls_verify?: boolean
         configs?: Record<string, unknown>
     }) => {
         setIsTesting(true)
@@ -295,6 +296,7 @@ export const useTestChannelPreviewAll = () => {
         name?: string
         models: string[]
         model_mapping?: Record<string, string>
+        skip_tls_verify?: boolean
         configs?: Record<string, unknown>
     }) => {
         setIsTesting(true)
