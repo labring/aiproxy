@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 // SyncProgressEvent represents a progress event sent via SSE during a model sync.
@@ -113,6 +114,13 @@ func CanClaimOwnership(existingOwner, newOwner model.ModelOwner) bool {
 // existing model because it belongs to a higher-priority provider.
 func ShouldSkipOwnership(existingOwner, newOwner model.ModelOwner) bool {
 	return existingOwner != newOwner && !CanClaimOwnership(existingOwner, newOwner)
+}
+
+// IsLocalOnlyMode returns true for model types that are generated locally and
+// not sourced from the standard V1/V2 remote model list API. These must be
+// excluded from delete detection during sync diagnostics to avoid false positives.
+func IsLocalOnlyMode(t mode.Mode) bool {
+	return t == mode.WebSearch || t == mode.PPIONative
 }
 
 // AdjustTierBounds returns the effective [minTokens, maxTokens] for a tiered-billing

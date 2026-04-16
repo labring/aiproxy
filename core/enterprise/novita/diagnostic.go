@@ -78,8 +78,14 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
 
+	// Build local model map, excluding locally-generated model types (WebSearch,
+	// PPIONative) that are not sourced from the remote API.
 	localModelMap := make(map[string]*model.ModelConfig)
 	for i := range localModels {
+		if synccommon.IsLocalOnlyMode(localModels[i].Type) {
+			continue
+		}
+
 		localModelMap[localModels[i].Model] = &localModels[i]
 	}
 
@@ -134,27 +140,22 @@ func CompareNovitaModelsV2(remoteModels []NovitaModelV2, opts SyncOptions, excha
 		}
 	}
 
-	// Only consider models owned by Novita for deletion.
-	if opts.DeleteUnmatchedModel {
-		for modelID, mc := range localModelMap {
-			if mc.Owner != model.ModelOwnerNovita {
-				continue
-			}
+	// Always detect models that exist locally but not remotely (owned by Novita).
+	// This populates diff for informational display regardless of whether the user
+	// has opted in to deletion. Actual deletion is gated separately in
+	// executeSyncTransaction by opts.DeleteUnmatchedModel.
+	for modelID, mc := range localModelMap {
+		if mc.Owner != model.ModelOwnerNovita {
+			continue
+		}
 
-			// Skip virtual models (e.g. novita-web-search) that are not sourced from
-			// the remote model catalog and should never be deleted.
-			if mc.Type == mode.WebSearch {
-				continue
-			}
-
-			if _, exists := remoteModelMap[modelID]; !exists {
-				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
-					ModelID:   modelID,
-					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(mc),
-				})
-				diff.Summary.ToDelete++
-			}
+		if _, exists := remoteModelMap[modelID]; !exists {
+			diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
+				ModelID:   modelID,
+				Action:    "delete",
+				OldConfig: buildLocalModelConfigMap(mc),
+			})
+			diff.Summary.ToDelete++
 		}
 	}
 

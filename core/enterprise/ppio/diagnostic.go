@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/enterprise/synccommon"
 	"github.com/labring/aiproxy/core/model"
-	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 // ComparePPIOModels compares remote PPIO models (V1) with local database models
@@ -24,12 +24,11 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
 
-	// Build local model map for quick lookup.
-	// Skip virtual models (e.g. ppio-web-search) that are not sourced from
-	// the remote API — they would otherwise be flagged for deletion.
+	// Build local model map, excluding locally-generated model types (WebSearch,
+	// PPIONative) that are not sourced from the V1/V2 remote API.
 	localModelMap := make(map[string]*model.ModelConfig)
 	for i := range localModels {
-		if localModels[i].Type == mode.WebSearch {
+		if synccommon.IsLocalOnlyMode(localModels[i].Type) {
 			continue
 		}
 
@@ -94,22 +93,22 @@ func ComparePPIOModels(remoteModels []PPIOModel, opts SyncOptions) (*SyncDiff, e
 		}
 	}
 
-	// Find models to delete (only if DeleteUnmatchedModel is enabled)
-	// Only consider models owned by PPIO for deletion.
-	if opts.DeleteUnmatchedModel {
-		for modelID, mc := range localModelMap {
-			if mc.Owner != model.ModelOwnerPPIO {
-				continue
-			}
+	// Always detect models that exist locally but not remotely (owned by PPIO).
+	// This populates diff for informational display regardless of whether the user
+	// has opted in to deletion. Actual deletion is gated separately in
+	// executeSyncTransaction by opts.DeleteUnmatchedModel.
+	for modelID, mc := range localModelMap {
+		if mc.Owner != model.ModelOwnerPPIO {
+			continue
+		}
 
-			if _, exists := remoteModelMap[modelID]; !exists {
-				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
-					ModelID:   modelID,
-					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(mc),
-				})
-				diff.Summary.ToDelete++
-			}
+		if _, exists := remoteModelMap[modelID]; !exists {
+			diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
+				ModelID:   modelID,
+				Action:    "delete",
+				OldConfig: buildLocalModelConfigMap(mc),
+			})
+			diff.Summary.ToDelete++
 		}
 	}
 
@@ -130,12 +129,11 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 		return nil, fmt.Errorf("failed to query local models: %w", err)
 	}
 
-	// Build local model map for quick lookup.
-	// Skip virtual models (e.g. ppio-web-search) that are not sourced from
-	// the remote API — they would otherwise be flagged for deletion.
+	// Build local model map, excluding locally-generated model types (WebSearch,
+	// PPIONative) that are not sourced from the V1/V2 remote API.
 	localModelMap := make(map[string]*model.ModelConfig)
 	for i := range localModels {
-		if localModels[i].Type == mode.WebSearch {
+		if synccommon.IsLocalOnlyMode(localModels[i].Type) {
 			continue
 		}
 
@@ -196,22 +194,22 @@ func ComparePPIOModelsV2(remoteModels []PPIOModelV2, opts SyncOptions) (*SyncDif
 		}
 	}
 
-	// Find models to delete (only if DeleteUnmatchedModel is enabled)
-	// Only consider models owned by PPIO for deletion.
-	if opts.DeleteUnmatchedModel {
-		for modelID, mc := range localModelMap {
-			if mc.Owner != model.ModelOwnerPPIO {
-				continue
-			}
+	// Always detect models that exist locally but not remotely (owned by PPIO).
+	// This populates diff for informational display regardless of whether the user
+	// has opted in to deletion. Actual deletion is gated separately in
+	// executeSyncTransaction by opts.DeleteUnmatchedModel.
+	for modelID, mc := range localModelMap {
+		if mc.Owner != model.ModelOwnerPPIO {
+			continue
+		}
 
-			if _, exists := remoteModelMap[modelID]; !exists {
-				diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
-					ModelID:   modelID,
-					Action:    "delete",
-					OldConfig: buildLocalModelConfigMap(mc),
-				})
-				diff.Summary.ToDelete++
-			}
+		if _, exists := remoteModelMap[modelID]; !exists {
+			diff.Changes.Delete = append(diff.Changes.Delete, ModelDiff{
+				ModelID:   modelID,
+				Action:    "delete",
+				OldConfig: buildLocalModelConfigMap(mc),
+			})
+			diff.Summary.ToDelete++
 		}
 	}
 

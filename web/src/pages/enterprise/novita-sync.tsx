@@ -659,9 +659,14 @@ export default function NovitaSyncPage() {
                   <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{diff.summary.cross_owner ?? 0}</div>
                   <div className="text-sm text-muted-foreground">{t('enterprise.novita.shared')}</div>
                 </div>
-                <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">{diff.summary.to_delete}</div>
-                  <div className="text-sm text-muted-foreground">{t('enterprise.novita.toDelete')}</div>
+                <div className={`text-center p-3 rounded-lg ${syncOpts.delete_unmatched_model ? 'bg-red-50 dark:bg-red-900/20' : 'bg-muted/50'}`}>
+                  <div className={`text-2xl font-bold ${syncOpts.delete_unmatched_model ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground/60'}`}>{diff.summary.to_delete}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {t('enterprise.novita.toDelete')}
+                    {!syncOpts.delete_unmatched_model && diff.summary.to_delete > 0 && (
+                      <span className="block text-xs text-muted-foreground/60">{t('enterprise.novita.toDeletePreview')}</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
