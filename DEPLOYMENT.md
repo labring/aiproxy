@@ -1769,6 +1769,7 @@ LOG_SQL_DSN=postgres://postgres:xxx@10.x.x.1:5432/aiproxy
 REDIS_CONN_STRING=redis://127.0.0.1:6379
 
 NODE_CHANNEL_SET=overseas
+BATCH_UPDATE_INTERVAL_SECONDS=10
 
 FEISHU_APP_ID=xxx
 FEISHU_APP_SECRET=xxx
@@ -1859,6 +1860,7 @@ tail -50 /var/log/wireguard-health.log
 | `NODE_CHANNEL_SET` | 否 | 空 | 服务器级默认渠道集（如 `overseas`），优先匹配该 Set 的渠道，fallback 到 default |
 | `NODE_TYPE` | 否 | `domestic` | 构建时指定节点类型，控制 Dockerfile 镜像源（`domestic`/`overseas`）+ 海外自动 HEALTH_TIMEOUT=600s |
 | `HEALTH_TIMEOUT` | 否 | 90（国内）/ 600（海外） | 部署脚本健康检查超时秒数，`NODE_TYPE=overseas` 时自动 600s |
+| `BATCH_UPDATE_INTERVAL_SECONDS` | 否 | `5` | 批处理刷新间隔（秒）。海外高延迟节点建议设为 `10`~`15`，减少跨洲 DB 写入频率 |
 | `FFMPEG_ENABLED` | 否 | `false` | 启用 ffmpeg |
 | `GZIP_ENABLED` | 否 | `false` | 启用 gzip 压缩 |
 | `LOG_DETAIL_STORAGE_HOURS` | 否 | 不限 | 日志详情保留时长（小时） |
