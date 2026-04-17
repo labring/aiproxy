@@ -239,7 +239,10 @@ func awsRegionPrefix(awsRegionID string) string {
 
 func awsModelCanCrossRegion(awsModelID, awsRegionPrefix string) bool {
 	regionSet, exists := awsModelCanCrossRegionMap[awsModelID]
-	return exists && regionSet[awsRegionPrefix]
+	if !exists {
+		return true
+	}
+	return regionSet[awsRegionPrefix]
 }
 
 func awsModelCrossRegion(awsModelID, awsRegionPrefix string) string {
@@ -255,6 +258,8 @@ func awsModelID(requestModel, region string) string {
 	item, ok := AwsModelIDMap[requestModel]
 	if ok {
 		requestModel = item.ID
+	} else if !strings.HasPrefix(requestModel, "anthropic.") {
+		requestModel = "anthropic." + requestModel
 	}
 
 	regionPrefix := awsRegionPrefix(region)
