@@ -112,15 +112,28 @@ func ExecuteSync(
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	// Step 3.5: Sync multimodal models from the dedicated console API.
+	// Step 3.5: Multimodal sync — independent pipeline from chat sync above.
+	// Leaving multimodalNames nil signals EnsureNovitaChannels to preserve the
+	// multimodal channel's Models on transient upstream failure.
+	var multimodalNames []string
+
 	if cfg.MgmtToken != "" {
 		synccommon.SendProgress(progressCallback, "multimodal", "同步多模态模型（图像/视频/音频）...", 75, nil)
 
-		mmAdded, mmUpdated, mmErr := syncMultimodalModels(ctx, client, cfg.MgmtToken, exchangeRate)
+		mmAdded, mmUpdated, mmNames, mmErr := syncMultimodalModels(
+			ctx,
+			client,
+			cfg.MgmtToken,
+			exchangeRate,
+		)
 		if mmErr != nil {
 			log.Printf("Novita sync: multimodal sync failed (non-fatal): %v", mmErr)
 			result.Errors = append(result.Errors, fmt.Sprintf("multimodal sync: %v", mmErr))
 		} else {
+			result.Summary.ToAdd += mmAdded
+			result.Summary.ToUpdate += mmUpdated
+			multimodalNames = mmNames
+
 			if mmAdded > 0 || mmUpdated > 0 {
 				log.Printf("Novita sync: multimodal models added=%d updated=%d", mmAdded, mmUpdated)
 			}
@@ -136,6 +149,7 @@ func ExecuteSync(
 		opts.AllowPassthroughUnknown,
 		cfg,
 		allModels,
+		multimodalNames,
 	)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel update: %v", err))
@@ -464,10 +478,20 @@ func buildConfigFromV2Model(m *NovitaModelV2) map[string]any {
 // no Novita channels exist, it creates them automatically using the API key
 // from cfg.
 //
-// remoteModels is the list of models from the Novita upstream API. When non-nil,
-// classification is performed directly from the upstream data (ground truth) and
-// channel model lists are replaced entirely. When nil (startup refresh), only
-// channel configs are updated — model lists are left unchanged.
+// remoteModels is the list of chat models from the Novita V1/V2 upstream API.
+// When non-empty, classification is performed directly from this data and the
+// Anthropic/OpenAI channel model lists are replaced entirely. When empty (fetch
+// failed or startup refresh), those channels' Models lists are left unchanged.
+//
+// multimodalModelNames is the list of multimodal (image/video/audio) model
+// names from the dedicated multimodal API. When non-empty, the multimodal
+// channel's Models list is replaced entirely. When empty (fetch failed, mgmt
+// token missing, or startup refresh), the multimodal channel's Models list is
+// left unchanged. Supplied separately because the V1/V2 chat API does not
+// return multimodal models.
+//
+// The two update signals are intentionally independent: a transient failure of
+// one upstream API must not wipe the channel backed by the other.
 //
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
@@ -481,14 +505,15 @@ func EnsureNovitaChannels(
 	anthropicPurePassthrough, allowPassthroughUnknown *bool,
 	cfg NovitaConfigResult,
 	remoteModels []NovitaModelV2,
+	multimodalModelNames []string,
 ) (ChannelsInfo, error) {
-	// When remoteModels is nil (startup refresh), skip model list updates
-	// but still ensure channel existence and configs.
-	skipModelUpdate := len(remoteModels) == 0
+	// See EnsurePPIOChannels — same independent-skip semantics.
+	skipChatUpdate := len(remoteModels) == 0
+	skipMultimodalUpdate := len(multimodalModelNames) == 0
 
-	var anthropicModels, openaiModels, multimodalModels []string
+	var anthropicModels, openaiModels []string
 
-	if !skipModelUpdate {
+	if !skipChatUpdate {
 		openaiModels = make([]string, 0, len(remoteModels))
 
 		for i := range remoteModels {
@@ -497,9 +522,8 @@ func EnsureNovitaChannels(
 				continue
 			}
 
-			t := modeFromEndpoints(m.ModelType, m.Endpoints)
-			if t == mode.PPIONative {
-				multimodalModels = append(multimodalModels, m.ID)
+			// V1/V2 chat API never returns PPIONative; defensive skip.
+			if modeFromEndpoints(m.ModelType, m.Endpoints) == mode.PPIONative {
 				continue
 			}
 
@@ -512,14 +536,14 @@ func EnsureNovitaChannels(
 
 		slices.Sort(anthropicModels)
 		slices.Sort(openaiModels)
-		slices.Sort(multimodalModels)
 	}
 
 	return ensureNovitaChannelsFromModels(
 		anthropicModels,
 		openaiModels,
-		multimodalModels,
-		skipModelUpdate,
+		multimodalModelNames,
+		skipChatUpdate,
+		skipMultimodalUpdate,
 		autoCreate,
 		anthropicPurePassthrough,
 		allowPassthroughUnknown,
@@ -529,7 +553,7 @@ func EnsureNovitaChannels(
 
 func ensureNovitaChannelsFromModels(
 	anthropicModels, openaiModels, multimodalModels []string,
-	skipModelUpdate bool,
+	skipChatUpdate, skipMultimodalUpdate bool,
 	autoCreate bool,
 	anthropicPurePassthrough, allowPassthroughUnknown *bool,
 	cfg NovitaConfigResult,
@@ -544,8 +568,10 @@ func ensureNovitaChannelsFromModels(
 	}
 
 	// Auto-create channels when none exist and the option is enabled.
+	// Skip when both upstreams are unavailable — creating empty channels during
+	// a transient fetch failure is worse than waiting for the next successful sync.
 	if len(channels) == 0 {
-		if !autoCreate || cfg.APIKey == "" {
+		if !autoCreate || cfg.APIKey == "" || (skipChatUpdate && skipMultimodalUpdate) {
 			return info, nil
 		}
 
@@ -579,7 +605,7 @@ func ensureNovitaChannelsFromModels(
 	for i := range channels {
 		switch channels[i].Type {
 		case model.ChannelTypeAnthropic:
-			if !skipModelUpdate {
+			if !skipChatUpdate {
 				channels[i].Models = anthropicModels
 			}
 
@@ -600,7 +626,7 @@ func ensureNovitaChannelsFromModels(
 		case model.ChannelTypeNovitaMultimodal:
 			hasMultimodal = true
 
-			if !skipModelUpdate {
+			if !skipMultimodalUpdate {
 				channels[i].Models = multimodalModels
 			}
 
@@ -612,7 +638,7 @@ func ensureNovitaChannelsFromModels(
 
 		default:
 			// ChannelTypeNovita (OpenAI-compatible)
-			if !skipModelUpdate {
+			if !skipChatUpdate {
 				channels[i].Models = openaiModels
 			}
 
@@ -642,7 +668,9 @@ func ensureNovitaChannelsFromModels(
 	}
 
 	// If no multimodal channel exists yet, create one now.
-	if !hasMultimodal && autoCreate && cfg.APIKey != "" {
+	// Gate on !skipMultimodalUpdate so a transient multimodal fetch failure
+	// doesn't create an empty channel that would then mask the real upstream data.
+	if !hasMultimodal && autoCreate && cfg.APIKey != "" && !skipMultimodalUpdate {
 		mlCh := newNovitaMultimodalChannel(cfg.APIKey, multimodalModels)
 		if err := model.DB.Create(&mlCh).Error; err != nil {
 			log.Printf("Novita sync: failed to create multimodal channel: %v", err)
@@ -760,14 +788,14 @@ func syncMultimodalModels(
 	client *NovitaClient,
 	mgmtToken string,
 	exchangeRate float64,
-) (added, updated int, err error) {
+) (added, updated int, names []string, err error) {
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
-		return 0, 0, fmt.Errorf("fetch multimodal models: %w", err)
+		return 0, 0, nil, fmt.Errorf("fetch multimodal models: %w", err)
 	}
 
 	if len(mmModels) == 0 {
-		return 0, 0, nil
+		return 0, 0, nil, nil
 	}
 
 	// Collect all SKU codes for batch price lookup
@@ -805,6 +833,8 @@ func syncMultimodalModels(
 		if modelType == "" {
 			continue
 		}
+
+		names = append(names, modelName)
 
 		rawConfig := map[string]any{
 			"model_type":   modelType,
@@ -873,7 +903,9 @@ func syncMultimodalModels(
 		}
 	}
 
-	return added, updated, nil
+	slices.Sort(names)
+
+	return added, updated, names, nil
 }
 
 // novitaResponsesBase derives the Responses API base URL from an OpenAI channel's BaseURL.

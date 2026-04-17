@@ -195,18 +195,22 @@ func ExecuteSync( //nolint:cyclop
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	// Step 3.5: Sync multimodal models from the dedicated console API.
-	// This is an independent pipeline from the V1+V2 chat model sync above.
+	// Step 3.5: Multimodal sync — independent pipeline from chat sync above.
+	// Leaving multimodalNames nil signals EnsurePPIOChannels to preserve the
+	// multimodal channel's Models on transient upstream failure.
+	var multimodalNames []string
+
 	if cfg.MgmtToken != "" {
 		synccommon.SendProgress(progressCallback, "multimodal", "同步多模态模型（图像/视频/音频）...", 75, nil)
 
-		mmAdded, mmUpdated, mmErr := syncMultimodalModels(ctx, client, cfg.MgmtToken)
+		mmAdded, mmUpdated, mmNames, mmErr := syncMultimodalModels(ctx, client, cfg.MgmtToken)
 		if mmErr != nil {
 			log.Printf("PPIO sync: multimodal sync failed (non-fatal): %v", mmErr)
 			result.Errors = append(result.Errors, fmt.Sprintf("multimodal sync: %v", mmErr))
 		} else {
 			result.Summary.ToAdd += mmAdded
 			result.Summary.ToUpdate += mmUpdated
+			multimodalNames = mmNames
 
 			if mmAdded > 0 || mmUpdated > 0 {
 				log.Printf("PPIO sync: multimodal models added=%d updated=%d", mmAdded, mmUpdated)
@@ -224,6 +228,7 @@ func ExecuteSync( //nolint:cyclop
 		opts.AllowPassthroughUnknown,
 		cfg,
 		allModels,
+		multimodalNames,
 	)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("channel creation: %v", err))
@@ -372,15 +377,15 @@ func syncMultimodalModels(
 	ctx context.Context,
 	client *PPIOClient,
 	mgmtToken string,
-) (added, updated int, err error) {
+) (added, updated int, names []string, err error) {
 	// Fetch multimodal model catalog
 	mmModels, err := client.FetchMultimodalModels(ctx, mgmtToken)
 	if err != nil {
-		return 0, 0, fmt.Errorf("fetch multimodal models: %w", err)
+		return 0, 0, nil, fmt.Errorf("fetch multimodal models: %w", err)
 	}
 
 	if len(mmModels) == 0 {
-		return 0, 0, nil
+		return 0, 0, nil, nil
 	}
 
 	// Collect all SKU codes for batch price lookup
@@ -418,6 +423,8 @@ func syncMultimodalModels(
 		if modelType == "" {
 			continue
 		}
+
+		names = append(names, modelName)
 
 		rawConfig := map[string]any{
 			"model_type":   modelType,
@@ -479,7 +486,9 @@ func syncMultimodalModels(
 		}
 	}
 
-	return added, updated, nil
+	slices.Sort(names)
+
+	return added, updated, names, nil
 }
 
 // EnsurePPIOChannels classifies models from the upstream API data and writes
@@ -487,10 +496,20 @@ func syncMultimodalModels(
 // no PPIO channels exist, it creates them automatically using the API key
 // from cfg.
 //
-// remoteModels is the list of models from the PPIO upstream API. When non-nil,
-// classification is performed directly from the upstream data (ground truth) and
-// channel model lists are replaced entirely. When nil (startup refresh), only
-// channel configs are updated — model lists are left unchanged.
+// remoteModels is the list of chat models from the PPIO V1/V2 upstream API.
+// When non-nil, classification is performed directly from this data and the
+// Anthropic/OpenAI channel model lists are replaced entirely. When nil (fetch
+// failed or startup refresh), those channels' Models lists are left unchanged.
+//
+// multimodalModelNames is the list of multimodal (image/video/audio) model
+// names from the dedicated multimodal API (api-server.ppio.com). When non-nil,
+// the multimodal channel's Models list is replaced entirely. When nil (fetch
+// failed, mgmt token missing, or startup refresh), the multimodal channel's
+// Models list is left unchanged. Supplied separately because the V1/V2 chat
+// API does not return multimodal models.
+//
+// The two update signals are intentionally independent: a transient failure of
+// one upstream API must not wipe the channel backed by the other.
 //
 // anthropicPurePassthrough controls the pure_passthrough config on the Anthropic
 // channel. Pass nil to preserve the existing setting (only initializing the key
@@ -505,14 +524,16 @@ func EnsurePPIOChannels(
 	anthropicPurePassthrough, allowPassthroughUnknown *bool,
 	cfg PPIOConfigResult,
 	remoteModels []PPIOModelV2,
+	multimodalModelNames []string,
 ) (ChannelsInfo, error) {
-	// When remoteModels is nil (startup refresh), skip model list updates
-	// but still ensure channel existence and configs.
-	skipModelUpdate := len(remoteModels) == 0
+	// Empty input = "keep existing" — independent per channel-type to survive
+	// one upstream's transient failure without wiping the other's channel.
+	skipChatUpdate := len(remoteModels) == 0
+	skipMultimodalUpdate := len(multimodalModelNames) == 0
 
-	var anthropicModels, openaiModels, multimodalModels []string
+	var anthropicModels, openaiModels []string
 
-	if !skipModelUpdate {
+	if !skipChatUpdate {
 		openaiModels = make([]string, 0, len(remoteModels))
 
 		for i := range remoteModels {
@@ -521,9 +542,8 @@ func EnsurePPIOChannels(
 				continue
 			}
 
-			t := inferModeFromPPIO(m.ModelType, m.Endpoints)
-			if t == mode.PPIONative {
-				multimodalModels = append(multimodalModels, m.ID)
+			// V1/V2 chat API never returns PPIONative; defensive skip.
+			if inferModeFromPPIO(m.ModelType, m.Endpoints) == mode.PPIONative {
 				continue
 			}
 
@@ -536,14 +556,14 @@ func EnsurePPIOChannels(
 
 		slices.Sort(anthropicModels)
 		slices.Sort(openaiModels)
-		slices.Sort(multimodalModels)
 	}
 
 	return ensurePPIOChannelsFromModels(
 		anthropicModels,
 		openaiModels,
-		multimodalModels,
-		skipModelUpdate,
+		multimodalModelNames,
+		skipChatUpdate,
+		skipMultimodalUpdate,
 		autoCreate,
 		anthropicPurePassthrough,
 		allowPassthroughUnknown,
@@ -553,7 +573,7 @@ func EnsurePPIOChannels(
 
 func ensurePPIOChannelsFromModels(
 	anthropicModels, openaiModels, multimodalModels []string,
-	skipModelUpdate bool,
+	skipChatUpdate, skipMultimodalUpdate bool,
 	autoCreate bool, anthropicPurePassthrough, allowPassthroughUnknown *bool, cfg PPIOConfigResult,
 ) (ChannelsInfo, error) {
 	info := ChannelsInfo{}
@@ -566,8 +586,10 @@ func ensurePPIOChannelsFromModels(
 	}
 
 	// Auto-create channels when none exist and the option is enabled.
+	// Skip when both upstreams are unavailable — creating empty channels during
+	// a transient fetch failure is worse than waiting for the next successful sync.
 	if len(channels) == 0 {
-		if !autoCreate || cfg.APIKey == "" {
+		if !autoCreate || cfg.APIKey == "" || (skipChatUpdate && skipMultimodalUpdate) {
 			return info, nil
 		}
 
@@ -601,7 +623,7 @@ func ensurePPIOChannelsFromModels(
 	for i := range channels {
 		switch channels[i].Type {
 		case model.ChannelTypeAnthropic:
-			if !skipModelUpdate {
+			if !skipChatUpdate {
 				channels[i].Models = anthropicModels
 			}
 			// Ensure recommended defaults for PPIO's Anthropic endpoint:
@@ -625,7 +647,7 @@ func ensurePPIOChannelsFromModels(
 		case model.ChannelTypePPIOMultimodal:
 			hasMultimodal = true
 
-			if !skipModelUpdate {
+			if !skipMultimodalUpdate {
 				channels[i].Models = multimodalModels
 			}
 
@@ -638,7 +660,7 @@ func ensurePPIOChannelsFromModels(
 
 		default:
 			// ChannelTypePPIO (OpenAI-compatible)
-			if !skipModelUpdate {
+			if !skipChatUpdate {
 				channels[i].Models = openaiModels
 			}
 			// Write path_base_map so the passthrough adaptor can route
@@ -665,7 +687,9 @@ func ensurePPIOChannelsFromModels(
 	}
 
 	// If no multimodal channel exists yet, create one now.
-	if !hasMultimodal && autoCreate && cfg.APIKey != "" {
+	// Gate on !skipMultimodalUpdate so a transient multimodal fetch failure
+	// doesn't create an empty channel that would then mask the real upstream data.
+	if !hasMultimodal && autoCreate && cfg.APIKey != "" && !skipMultimodalUpdate {
 		mlCh := newPPIOMultimodalChannel(cfg.APIKey, multimodalModels)
 		if err := model.DB.Create(&mlCh).Error; err != nil {
 			log.Printf("PPIO sync: failed to create multimodal channel: %v", err)

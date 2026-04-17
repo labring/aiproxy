@@ -4,6 +4,7 @@ package ppio
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/labring/aiproxy/core/common"
@@ -70,7 +71,8 @@ func TestEnsurePPIOChannelsFromModels_UpdatesChannelConfigs(t *testing.T) {
 		[]string{"claude-sonnet-4-20250514"},
 		[]string{"deepseek-v3"},
 		[]string{"seedream-5.0-lite"},
-		false, // skipModelUpdate
+		false, // skipChatUpdate
+		false, // skipMultimodalUpdate
 		false, // autoCreate
 		&purePassthrough,
 		&allowUnknown,
@@ -222,5 +224,190 @@ func TestCreatePPIOChannels_SetsPurePassthroughAndPathBaseMap(t *testing.T) {
 
 	if !multimodalFound {
 		t.Fatalf("expected multimodal channel to be created")
+	}
+}
+
+// seedPPIOChannelsWithModels creates the three PPIO channel types pre-populated
+// with stale model lists so tests can verify which channel types get replaced
+// vs preserved under different skip-flag combinations.
+func seedPPIOChannelsWithModels(t *testing.T) {
+	t.Helper()
+
+	channels := []model.Channel{
+		{
+			Name:    "PPIO (OpenAI)",
+			Type:    model.ChannelTypePPIO,
+			BaseURL: DefaultPPIOAPIBase,
+			Key:     "ppio-key",
+			Status:  model.ChannelStatusEnabled,
+			Models:  []string{"stale-openai"},
+		},
+		{
+			Name:    "PPIO (Anthropic)",
+			Type:    model.ChannelTypeAnthropic,
+			BaseURL: DefaultPPIOAnthropicBase,
+			Key:     "ppio-key",
+			Status:  model.ChannelStatusEnabled,
+			Models:  []string{"stale-claude"},
+		},
+		{
+			Name:    "PPIO (Multimodal)",
+			Type:    model.ChannelTypePPIOMultimodal,
+			BaseURL: DefaultPPIOMultimodalBase,
+			Key:     "ppio-key",
+			Status:  model.ChannelStatusEnabled,
+			Models:  []string{"stale-seedream"},
+		},
+	}
+
+	for i := range channels {
+		if err := model.DB.Create(&channels[i]).Error; err != nil {
+			t.Fatalf("failed to seed channel %q: %v", channels[i].Name, err)
+		}
+	}
+}
+
+func modelsByType(t *testing.T) map[model.ChannelType][]string {
+	t.Helper()
+
+	var got []model.Channel
+	if err := model.DB.Order("id asc").Find(&got).Error; err != nil {
+		t.Fatalf("failed to load channels: %v", err)
+	}
+
+	out := make(map[model.ChannelType][]string, len(got))
+	for _, ch := range got {
+		out[ch.Type] = append([]string(nil), ch.Models...)
+	}
+
+	return out
+}
+
+// Regression: multimodal API fetch failure must not wipe the multimodal channel.
+// skipMultimodalUpdate=true should preserve existing Models while chat channels
+// still get their fresh lists.
+func TestEnsurePPIOChannelsFromModels_SkipMultimodalPreservesChannel(t *testing.T) {
+	setupPPIOChannelTestDB(t)
+	seedPPIOChannelsWithModels(t)
+
+	_, err := ensurePPIOChannelsFromModels(
+		[]string{"claude-sonnet-4-20250514"},
+		[]string{"deepseek-v3"},
+		nil,   // multimodal fetch skipped
+		false, // skipChatUpdate
+		true,  // skipMultimodalUpdate
+		false, // autoCreate
+		nil, nil, PPIOConfigResult{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := modelsByType(t)
+
+	if want := []string{
+		"claude-sonnet-4-20250514",
+	}; !slices.Equal(
+		got[model.ChannelTypeAnthropic],
+		want,
+	) {
+		t.Errorf("anthropic Models = %v, want %v", got[model.ChannelTypeAnthropic], want)
+	}
+
+	if want := []string{"deepseek-v3"}; !slices.Equal(got[model.ChannelTypePPIO], want) {
+		t.Errorf("openai Models = %v, want %v", got[model.ChannelTypePPIO], want)
+	}
+
+	// Critical: multimodal must be preserved, not wiped.
+	if want := []string{
+		"stale-seedream",
+	}; !slices.Equal(
+		got[model.ChannelTypePPIOMultimodal],
+		want,
+	) {
+		t.Errorf(
+			"multimodal Models = %v, want preserved %v",
+			got[model.ChannelTypePPIOMultimodal],
+			want,
+		)
+	}
+}
+
+// Regression: chat API fetch failure must not wipe OpenAI/Anthropic channels.
+// skipChatUpdate=true should preserve existing Models while multimodal channel
+// still gets its fresh list.
+func TestEnsurePPIOChannelsFromModels_SkipChatPreservesChannels(t *testing.T) {
+	setupPPIOChannelTestDB(t)
+	seedPPIOChannelsWithModels(t)
+
+	_, err := ensurePPIOChannelsFromModels(
+		nil, nil,
+		[]string{"seedream-5.0-lite"},
+		true,  // skipChatUpdate
+		false, // skipMultimodalUpdate
+		false, // autoCreate
+		nil, nil, PPIOConfigResult{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := modelsByType(t)
+
+	if want := []string{"stale-claude"}; !slices.Equal(got[model.ChannelTypeAnthropic], want) {
+		t.Errorf("anthropic Models = %v, want preserved %v", got[model.ChannelTypeAnthropic], want)
+	}
+
+	if want := []string{"stale-openai"}; !slices.Equal(got[model.ChannelTypePPIO], want) {
+		t.Errorf("openai Models = %v, want preserved %v", got[model.ChannelTypePPIO], want)
+	}
+
+	if want := []string{
+		"seedream-5.0-lite",
+	}; !slices.Equal(
+		got[model.ChannelTypePPIOMultimodal],
+		want,
+	) {
+		t.Errorf("multimodal Models = %v, want %v", got[model.ChannelTypePPIOMultimodal], want)
+	}
+}
+
+// Startup refresh path: both sources empty means preserve all channel Models,
+// only channel configs get updated.
+func TestEnsurePPIOChannelsFromModels_SkipBothPreservesAll(t *testing.T) {
+	setupPPIOChannelTestDB(t)
+	seedPPIOChannelsWithModels(t)
+
+	_, err := ensurePPIOChannelsFromModels(
+		nil, nil, nil,
+		true, true, // both skipped
+		false,
+		nil, nil, PPIOConfigResult{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := modelsByType(t)
+
+	if want := []string{"stale-claude"}; !slices.Equal(got[model.ChannelTypeAnthropic], want) {
+		t.Errorf("anthropic Models = %v, want preserved %v", got[model.ChannelTypeAnthropic], want)
+	}
+
+	if want := []string{"stale-openai"}; !slices.Equal(got[model.ChannelTypePPIO], want) {
+		t.Errorf("openai Models = %v, want preserved %v", got[model.ChannelTypePPIO], want)
+	}
+
+	if want := []string{
+		"stale-seedream",
+	}; !slices.Equal(
+		got[model.ChannelTypePPIOMultimodal],
+		want,
+	) {
+		t.Errorf(
+			"multimodal Models = %v, want preserved %v",
+			got[model.ChannelTypePPIOMultimodal],
+			want,
+		)
 	}
 }
