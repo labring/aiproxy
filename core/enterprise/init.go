@@ -35,14 +35,30 @@ func PostDBInit() {
 
 	go func() {
 		defer wg.Done()
-		if _, err := ppio.EnsurePPIOChannels(false, nil, nil, ppio.PPIOConfigResult{}, nil); err != nil {
+
+		if _, err := ppio.EnsurePPIOChannels(
+			false,
+			nil,
+			nil,
+			ppio.PPIOConfigResult{},
+			nil,
+			nil,
+		); err != nil {
 			log.Warnf("PPIO channel refresh on startup: %v", err)
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if _, err := novita.EnsureNovitaChannels(false, nil, nil, novita.NovitaConfigResult{}, nil); err != nil {
+
+		if _, err := novita.EnsureNovitaChannels(
+			false,
+			nil,
+			nil,
+			novita.NovitaConfigResult{},
+			nil,
+			nil,
+		); err != nil {
 			log.Warnf("Novita channel refresh on startup: %v", err)
 		}
 	}()
