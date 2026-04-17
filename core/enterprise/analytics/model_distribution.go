@@ -25,7 +25,10 @@ type ModelDistributionEntry struct {
 
 // GetModelDistribution returns model usage distribution within the given time range.
 // Optionally filters by departments (supports multiple IDs with descendant expansion).
-func GetModelDistribution(startTime, endTime time.Time, departmentIDs []string) ([]ModelDistributionEntry, error) {
+func GetModelDistribution(
+	startTime, endTime time.Time,
+	departmentIDs []string,
+) ([]ModelDistributionEntry, error) {
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
@@ -84,6 +87,7 @@ func GetModelDistribution(startTime, endTime time.Time, departmentIDs []string) 
 		if totalAmount > 0 {
 			pct = r.UsedAmount / totalAmount * 100.0
 		}
+
 		entries = append(entries, ModelDistributionEntry{
 			Model:        r.Model,
 			RequestCount: r.RequestCount,
@@ -127,6 +131,7 @@ func GetAllFeishuGroupIDs() ([]string, error) {
 		Pluck("group_id", &groupIDs).Error; err != nil {
 		return nil, fmt.Errorf("query all feishu group ids: %w", err)
 	}
+
 	return groupIDs, nil
 }
 
@@ -154,4 +159,3 @@ func GetGroupIDsForDepartments(departmentIDs []string) ([]string, error) {
 
 	return groupIDs, nil
 }
-

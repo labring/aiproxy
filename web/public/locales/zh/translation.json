@@ -828,7 +828,12 @@
       "deleteTemplate": "删除模板",
       "deleteTemplateConfirm": "确定要删除此模板吗？",
       "emptyState": "选择维度和度量，即可自动生成报表",
-      "page": "页"
+      "page": "页",
+      "truncationWarning": "显示前 {{shown}} 行 / 共 {{total}} 行",
+      "exportForFull": "导出完整数据",
+      "retry": "重试",
+      "recommendGranularity": "建议使用「{{recommended}}」粒度",
+      "drillRoot": "总览"
     },
     "accessControl": {
       "title": "访问控制",

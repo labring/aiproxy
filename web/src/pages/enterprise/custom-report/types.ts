@@ -51,6 +51,8 @@ export const MEASURE_FIELDS: FieldDef[] = [
     { key: "reasoning_tokens", category: "tokens" },
     { key: "image_input_tokens", category: "tokens" },
     { key: "audio_input_tokens", category: "tokens" },
+    { key: "image_output_tokens", category: "tokens" },
+    { key: "cache_creation_tokens", category: "tokens" },
     { key: "web_search_count", category: "tokens" },
     // cost
     { key: "used_amount", category: "cost" },
@@ -88,11 +90,13 @@ export const MEASURE_FIELDS: FieldDef[] = [
     { key: "throttle_rate", category: "rates" },
     { key: "cache_hit_rate", category: "rates" },
     { key: "retry_rate", category: "rates" },
-    { key: "output_input_ratio", category: "rates" },
+    { key: "client_error_rate", category: "rates" },
+    { key: "server_error_rate", category: "rates" },
+    { key: "output_input_ratio", category: "cost_structure" },
     // cost structure
     { key: "input_cost_pct", category: "cost_structure" },
     { key: "output_cost_pct", category: "cost_structure" },
-    { key: "cache_savings_pct", category: "cost_structure" },
+    { key: "cached_cost_pct", category: "cost_structure" },
     { key: "cost_per_1k_tokens", category: "cost_structure" },
     { key: "cost_per_input_1k", category: "cost_structure" },
     { key: "cost_per_output_1k", category: "cost_structure" },
@@ -121,7 +125,9 @@ const FIELD_LABELS: Record<string, { zh: string; en: string }> = {
     time_week: { zh: "周", en: "Week" },
     // requests
     request_count: { zh: "请求数", en: "Requests" },
-    retry_count: { zh: "重试数", en: "Retries" },
+    // retry_count: per-request binary counter (request had >=1 retry), not a
+    // sum of retry attempts. Keeps retry_rate in [0%, 100%].
+    retry_count: { zh: "重试请求数", en: "Retried Requests" },
     exception_count: { zh: "异常数", en: "Exceptions" },
     status_2xx: { zh: "成功数", en: "2xx" },
     status_4xx: { zh: "客户端错误", en: "4xx" },
@@ -130,13 +136,18 @@ const FIELD_LABELS: Record<string, { zh: string; en: string }> = {
     cache_hit_count: { zh: "缓存命中", en: "Cache Hits" },
     cache_creation_count: { zh: "缓存创建次数", en: "Cache Creates" },
     // tokens
-    input_tokens: { zh: "输入 Token", en: "Input Tokens" },
+    // input_tokens includes cached + cache_creation tokens (OpenAI prompt_tokens
+    // semantics). See model.Usage struct doc for the cross-protocol invariant.
+    // Use "reconciliation_tokens" for the non-cached portion.
+    input_tokens: { zh: "输入 Token (含缓存)", en: "Input Tokens (incl. cache)" },
     output_tokens: { zh: "输出 Token", en: "Output Tokens" },
     total_tokens: { zh: "总 Token", en: "Total Tokens" },
     cached_tokens: { zh: "缓存 Token", en: "Cached Tokens" },
     reasoning_tokens: { zh: "推理 Token", en: "Reasoning Tokens" },
     image_input_tokens: { zh: "图片 Token", en: "Image Tokens" },
     audio_input_tokens: { zh: "音频 Token", en: "Audio Tokens" },
+    image_output_tokens: { zh: "图片输出 Token", en: "Image Output Tokens" },
+    cache_creation_tokens: { zh: "缓存创建 Token", en: "Cache Creation Tokens" },
     web_search_count: { zh: "联网搜索", en: "Web Searches" },
     // cost
     used_amount: { zh: "总费用", en: "Total Cost" },
@@ -151,7 +162,7 @@ const FIELD_LABELS: Record<string, { zh: string; en: string }> = {
     web_search_amount: { zh: "联网搜索费用", en: "Web Search Cost" },
     // performance
     total_time_ms: { zh: "总耗时(ms)", en: "Total Time (ms)" },
-    total_ttfb_ms: { zh: "总TTFB(ms)", en: "Total TTFB (ms)" },
+    total_ttfb_ms: { zh: "总首Token耗时(ms)", en: "Total Time-to-First-Token (ms)" },
     // efficiency (per-request)
     avg_tokens_per_req: { zh: "平均Token/请求", en: "Avg Tokens/Req" },
     avg_cost_per_req: { zh: "平均费用/请求", en: "Avg Cost/Req" },
@@ -161,26 +172,33 @@ const FIELD_LABELS: Record<string, { zh: string; en: string }> = {
     avg_reasoning_per_req: { zh: "平均推理Token/请求", en: "Avg Reasoning/Req" },
     avg_latency: { zh: "平均延迟(ms)", en: "Avg Latency (ms)" },
     avg_ttfb: { zh: "平均TTFB(ms)", en: "Avg TTFB (ms)" },
-    tokens_per_second: { zh: "Token吞吐量(/s)", en: "Tokens/Second" },
-    output_speed: { zh: "输出速度(token/s)", en: "Output Speed (t/s)" },
-    // per-user
-    avg_tokens_per_user: { zh: "人均Token", en: "Avg Tokens/User" },
-    avg_cost_per_user: { zh: "人均费用", en: "Avg Cost/User" },
-    avg_requests_per_user: { zh: "人均请求数", en: "Avg Requests/User" },
+    // These measures are SUM(tokens)/SUM(wall_time) — a request-time-weighted
+    // average of per-request throughput, NOT system wall-clock throughput.
+    // Label explicitly says "单请求" / "per-request" to prevent misread.
+    tokens_per_second: { zh: "单请求平均速率 (t/s)", en: "Per-Req Token Rate (t/s)" },
+    output_speed: { zh: "单请求输出速率 (t/s)", en: "Per-Req Output Rate (t/s)" },
+    // per-user: denominator is active_users *within the current row's bucket*
+    // (e.g. per-model active users for a model row). Label says "活跃用户人均"
+    // to make the denominator explicit and avoid misreading as global per-capita.
+    avg_tokens_per_user: { zh: "活跃用户人均Token", en: "Avg Tokens/Active User" },
+    avg_cost_per_user: { zh: "活跃用户人均费用", en: "Avg Cost/Active User" },
+    avg_requests_per_user: { zh: "活跃用户人均请求数", en: "Avg Requests/Active User" },
     // rates
     success_rate: { zh: "成功率 %", en: "Success Rate %" },
     error_rate: { zh: "错误率 %", en: "Error Rate %" },
     exception_rate: { zh: "异常率 %", en: "Exception Rate %" },
     throttle_rate: { zh: "限流率 %", en: "Throttle Rate %" },
     cache_hit_rate: { zh: "缓存命中率 %", en: "Cache Hit Rate %" },
-    retry_rate: { zh: "重试率 %", en: "Retry Rate %" },
+    retry_rate: { zh: "重试请求率 %", en: "Retried Req Rate %" },
+    client_error_rate: { zh: "客户端错误率 %", en: "Client Error Rate %" },
+    server_error_rate: { zh: "服务端错误率 %", en: "Server Error Rate %" },
     output_input_ratio: { zh: "输出/输入比", en: "Output/Input Ratio" },
     // cost structure
     input_cost_pct: { zh: "输入费用占比 %", en: "Input Cost %" },
     output_cost_pct: { zh: "输出费用占比 %", en: "Output Cost %" },
-    cache_savings_pct: { zh: "缓存费用占比 %", en: "Cache Cost %" },
+    cached_cost_pct: { zh: "缓存费用占比 %", en: "Cache Cost %" },
     cost_per_1k_tokens: { zh: "千Token成本", en: "Cost/1K Tokens" },
-    cost_per_input_1k: { zh: "千输入Token成本", en: "Cost/1K Input" },
+    cost_per_input_1k: { zh: "千输入Token混合成本", en: "Blended Cost/1K Input" },
     cost_per_output_1k: { zh: "千输出Token成本", en: "Cost/1K Output" },
     // statistics
     unique_models: { zh: "使用模型数", en: "Unique Models" },
@@ -209,7 +227,7 @@ export function formatCellValue(key: string, value: unknown): string {
     }
 
     // percentages
-    if (key.endsWith("_rate") || key.endsWith("_pct")) return `${n.toFixed(2)}%`
+    if (PERCENTAGE_FIELDS.has(key)) return `${n.toFixed(2)}%`
 
     // cost fields
     if (COST_FIELDS.has(key)) return `¥${n.toFixed(4)}`
@@ -277,8 +295,8 @@ export function sortDimKeys(keys: string[], dimKey: string): string[] {
 
 export const PERCENTAGE_FIELDS = new Set([
     "success_rate", "error_rate", "exception_rate", "throttle_rate",
-    "cache_hit_rate", "retry_rate",
-    "input_cost_pct", "output_cost_pct", "cache_savings_pct",
+    "cache_hit_rate", "retry_rate", "client_error_rate", "server_error_rate",
+    "input_cost_pct", "output_cost_pct", "cached_cost_pct",
 ])
 
 export const COST_FIELDS = new Set([
@@ -287,6 +305,24 @@ export const COST_FIELDS = new Set([
     "reasoning_amount", "cache_creation_amount", "web_search_amount",
     "avg_cost_per_req", "avg_cost_per_user",
     "cost_per_1k_tokens", "cost_per_input_1k", "cost_per_output_1k",
+])
+
+// Additive measures where row values sum to the grand total — suitable for
+// showing "% of total" inline. Rates, averages, and distinct-counts are excluded.
+export const ADDITIVE_MEASURES = new Set([
+    "request_count", "retry_count", "exception_count",
+    "status_2xx", "status_4xx", "status_5xx", "status_429",
+    "cache_hit_count", "cache_creation_count",
+    "input_tokens", "output_tokens", "total_tokens",
+    "cached_tokens", "reasoning_tokens",
+    "image_input_tokens", "audio_input_tokens",
+    "image_output_tokens", "cache_creation_tokens",
+    "web_search_count",
+    "used_amount", "input_amount", "output_amount", "cached_amount",
+    "image_input_amount", "audio_input_amount", "image_output_amount",
+    "reasoning_amount", "cache_creation_amount", "web_search_amount",
+    "total_time_ms", "total_ttfb_ms",
+    "reconciliation_tokens",
 ])
 
 // ─── Report templates ───────────────────────────────────────────────────────
@@ -355,6 +391,78 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
 export const DEFAULT_DIMS = ["department"]
 export const DEFAULT_MEASURES = ["request_count", "used_amount"]
 
+// ─── Time granularity recommendation ────────────────────────────────────────
+
+/** Recommend the best time dimension based on the date range span in days. */
+export function recommendTimeGranularity(startTs: number, endTs: number): string | null {
+    const days = (endTs - startTs) / 86400
+    if (days <= 0) return null
+    if (days < 3) return "time_hour"
+    if (days <= 60) return "time_day"
+    return "time_week"
+}
+
+// ─── Drill-down hierarchy ───────────────────────────────────────────────────
+
+/** Maps a dimension to its child dimension for drill-down. null = leaf node. */
+export const DRILL_HIERARCHY: Record<string, string | null> = {
+    level1_department: "level2_department",
+    level2_department: "department",
+    department: "user_name",
+    user_name: null,
+    model: null,
+    time_week: "time_day",
+    time_day: "time_hour",
+    time_hour: null,
+}
+
+export interface DrillStep {
+    /** The dimension that was drilled from */
+    dimension: string
+    /** The value that was clicked */
+    value: string
+    /** Display label for the breadcrumb */
+    label: string
+}
+
+/** Maps a dimension to the filter field used when drilling into it. */
+export const DRILL_FILTER_MAP: Record<string, "department_ids" | "models" | "user_names"> = {
+    department: "department_ids",
+    level1_department: "department_ids",
+    level2_department: "department_ids",
+    model: "models",
+    user_name: "user_names",
+}
+
+/** Check if a dimension supports drill-down (has a child and a filter mapping). */
+export function canDrillDown(dimension: string): boolean {
+    return DRILL_HIERARCHY[dimension] != null && dimension in DRILL_FILTER_MAP
+}
+
+// ─── Measure recommendations per dimension ─────────────────────────────────
+
+/** Recommended measures for each dimension — shown with a highlight. */
+export const RECOMMENDED_MEASURES: Record<string, string[]> = {
+    department: ["used_amount", "request_count", "active_users", "avg_cost_per_user"],
+    level1_department: ["used_amount", "request_count", "active_users"],
+    level2_department: ["used_amount", "request_count", "active_users"],
+    user_name: ["used_amount", "request_count", "total_tokens", "unique_models", "success_rate"],
+    model: ["request_count", "total_tokens", "avg_latency", "tokens_per_second", "output_speed", "success_rate", "used_amount"],
+    time_day: ["request_count", "used_amount", "total_tokens", "active_users", "success_rate"],
+    time_week: ["request_count", "used_amount", "total_tokens", "active_users"],
+    time_hour: ["request_count", "avg_latency", "success_rate", "error_rate"],
+}
+
+/** Get recommended measures for the current dimension selection. */
+export function getRecommendedMeasures(dimensions: string[]): Set<string> {
+    const result = new Set<string>()
+    for (const dim of dimensions) {
+        const recs = RECOMMENDED_MEASURES[dim]
+        if (recs) recs.forEach((m) => result.add(m))
+    }
+    return result
+}
+
 // ─── Chart colors ───────────────────────────────────────────────────────────
 
 export const CHART_COLORS = [
@@ -417,10 +525,16 @@ const KPI_PRIORITY = [
     "input_tokens", "output_tokens", "avg_latency",
 ]
 
+/**
+ * Compute KPI summary items. When the backend provides `totals` (correctly
+ * weighted over the full un-limited result set), use those directly. Otherwise
+ * fall back to client-side aggregation of the visible rows.
+ */
 export function computeKpis(
     rows: Record<string, unknown>[],
     measures: string[],
     lang: string,
+    totals?: Record<string, unknown>,
 ): KpiItem[] {
     if (rows.length === 0) return []
 
@@ -430,25 +544,34 @@ export function computeKpis(
     const picked = [...ordered, ...remaining].slice(0, 4)
 
     return picked.map((key) => {
-        const isRate = PERCENTAGE_FIELDS.has(key)
         let rawValue: number
 
-        if (isRate) {
-            // Weighted average using request_count as weight
-            let weightedSum = 0
-            let totalWeight = 0
-            for (const r of rows) {
-                const v = Number(r[key] ?? 0)
-                const w = Number(r["request_count"] ?? 1)
-                if (!Number.isNaN(v) && !Number.isNaN(w)) {
-                    weightedSum += v * w
-                    totalWeight += w
-                }
-            }
-            rawValue = totalWeight > 0 ? weightedSum / totalWeight : 0
+        // Prefer backend-computed totals (correct weighted aggregation, full dataset).
+        // When totals has the key but value is null, the backend intentionally
+        // signals "no data" (e.g. per-user avg with single-user grouping) — use
+        // NaN so formatCellValue renders "-" instead of falling through to the
+        // client-side sum which would incorrectly produce 0.
+        if (totals && key in totals) {
+            rawValue = totals[key] != null ? Number(totals[key]) : NaN
         } else {
-            const values = rows.map((r) => Number(r[key] ?? 0)).filter((n) => !Number.isNaN(n))
-            rawValue = values.reduce((a, b) => a + b, 0)
+            // Fallback: client-side aggregation for backwards compatibility
+            const isRate = PERCENTAGE_FIELDS.has(key)
+            if (isRate) {
+                let weightedSum = 0
+                let totalWeight = 0
+                for (const r of rows) {
+                    const v = Number(r[key] ?? 0)
+                    const w = Number(r["request_count"] ?? 1)
+                    if (!Number.isNaN(v) && !Number.isNaN(w)) {
+                        weightedSum += v * w
+                        totalWeight += w
+                    }
+                }
+                rawValue = totalWeight > 0 ? weightedSum / totalWeight : 0
+            } else {
+                const values = rows.map((r) => Number(r[key] ?? 0)).filter((n) => !Number.isNaN(n))
+                rawValue = values.reduce((a, b) => a + b, 0)
+            }
         }
 
         return {

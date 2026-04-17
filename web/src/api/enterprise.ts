@@ -290,6 +290,7 @@ export interface CustomReportRequest {
     sort_by?: string
     sort_order?: string
     limit?: number
+    timezone_offset_seconds?: number
 }
 
 export interface CustomReportColumn {
@@ -302,6 +303,10 @@ export interface CustomReportResponse {
     columns: CustomReportColumn[]
     rows: Record<string, unknown>[]
     total: number
+    /** Grand totals aggregated over the full (un-limited) result set.
+     *  Base measures are summed; derived measures (ratios, averages) are
+     *  correctly weighted by re-computing from the summed bases. */
+    totals?: Record<string, unknown>
 }
 
 export interface FieldCatalog {
@@ -751,8 +756,8 @@ export const enterpriseApi = {
         return get<FieldCatalog>('/enterprise/analytics/custom-report/fields')
     },
 
-    generateCustomReport: (req: CustomReportRequest): Promise<CustomReportResponse> => {
-        return post<CustomReportResponse>('/enterprise/analytics/custom-report', req)
+    generateCustomReport: (req: CustomReportRequest, signal?: AbortSignal): Promise<CustomReportResponse> => {
+        return post<CustomReportResponse>('/enterprise/analytics/custom-report', req, { signal })
     },
 
     // Report Template CRUD

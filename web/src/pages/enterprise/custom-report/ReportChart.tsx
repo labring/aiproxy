@@ -6,9 +6,11 @@ import {
     type ChartType,
     CHART_COLORS,
     PERCENTAGE_FIELDS,
+    COST_FIELDS,
     TIME_DIMENSIONS,
     getLabel,
     formatDimValue,
+    formatCellValue,
     recommendChartType,
     sortRowsByTime,
 } from "./types"
@@ -51,7 +53,7 @@ function computeChartHeight(legendCount: number, fullscreen: boolean): number {
 /** Compute rotation and interval for X-axis labels */
 function xAxisLabelConfig(labels: string[]): { rotate: number; interval: number; fontSize: number } {
     const count = labels.length
-    const maxLen = Math.max(...labels.map((l) => l.length), 0)
+    const maxLen = labels.reduce((mx, l) => Math.max(mx, l.length), 0)
     if (count <= 7 && maxLen <= 10) return { rotate: 0, interval: 0, fontSize: 11 }
     if (count <= 15) return { rotate: 30, interval: 0, fontSize: 10 }
     if (count <= 31) return { rotate: 45, interval: 0, fontSize: 10 }
@@ -128,16 +130,38 @@ export function ReportChart({
             case "pie": {
                 const measure = numericMeasures[0]
                 if (!measure) return
+                const PIE_TOP_N = 15
+                const pieData = rows.slice(0, PIE_TOP_N).map((row, i) => ({
+                    name: labels[i],
+                    value: Number(row[measure] ?? 0),
+                    itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
+                }))
+                if (rows.length > PIE_TOP_N) {
+                    let othersSum = 0
+                    for (let i = PIE_TOP_N; i < rows.length; i++) {
+                        othersSum += Number(rows[i][measure] ?? 0)
+                    }
+                    if (othersSum > 0) {
+                        pieData.push({
+                            name: lang.startsWith("zh") ? "其他" : "Others",
+                            value: othersSum,
+                            itemStyle: { color: "#CBD5E1" },
+                        })
+                    }
+                }
+                const isCost = COST_FIELDS.has(measure)
                 option = {
-                    tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+                    tooltip: {
+                        trigger: "item",
+                        formatter: (p: unknown) => {
+                            const params = p as { name: string; value: number; percent: number }
+                            return `${params.name}: ${isCost ? formatCellValue(measure, params.value) : params.value} (${params.percent}%)`
+                        },
+                    },
                     series: [{
                         type: "pie",
                         radius: ["40%", "70%"],
-                        data: rows.slice(0, 15).map((row, i) => ({
-                            name: labels[i],
-                            value: Number(row[measure] ?? 0),
-                            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
-                        })),
+                        data: pieData,
                         label: { show: true, formatter: "{b}\n{d}%", color: theme.textColor },
                     }],
                 }
@@ -161,16 +185,19 @@ export function ReportChart({
                     }
                 }
 
-                const values = heatData.map((d) => d[2])
-                const minVal = Math.min(...values)
-                const maxVal = Math.max(...values)
+                let minVal = Infinity
+                let maxVal = -Infinity
+                for (const d of heatData) {
+                    if (d[2] < minVal) minVal = d[2]
+                    if (d[2] > maxVal) maxVal = d[2]
+                }
 
                 option = {
                     tooltip: {
                         position: "top",
                         formatter: (p: unknown) => {
                             const params = p as { value: [number, number, number] }
-                            return `${dim0Values[params.value[0]]} × ${dim1Values[params.value[1]]}<br/>${getLabel(measure, lang)}: ${params.value[2]}`
+                            return `${dim0Values[params.value[0]]} × ${dim1Values[params.value[1]]}<br/>${getLabel(measure, lang)}: ${formatCellValue(measure, params.value[2])}`
                         },
                     },
                     grid: { left: "15%", right: "10%", bottom: "15%", top: "5%" },
@@ -226,7 +253,7 @@ export function ReportChart({
                     option = {
                         tooltip: { formatter: (p: unknown) => {
                             const params = p as { name: string; value: number }
-                            return `${params.name}: ${params.value}`
+                            return `${params.name}: ${formatCellValue(measure, params.value)}`
                         }},
                         series: [{
                             type: "treemap",
@@ -239,14 +266,28 @@ export function ReportChart({
                         }],
                     }
                 } else {
+                    const TREE_TOP_N = 30
+                    const treeData = rows.slice(0, TREE_TOP_N).map((row, i) => ({
+                        name: labels[i],
+                        value: Number(row[measure] ?? 0),
+                    }))
+                    if (rows.length > TREE_TOP_N) {
+                        let othersSum = 0
+                        for (let i = TREE_TOP_N; i < rows.length; i++) {
+                            othersSum += Number(rows[i][measure] ?? 0)
+                        }
+                        if (othersSum > 0) {
+                            treeData.push({
+                                name: lang.startsWith("zh") ? "其他" : "Others",
+                                value: othersSum,
+                            })
+                        }
+                    }
                     option = {
                         tooltip: {},
                         series: [{
                             type: "treemap",
-                            data: rows.slice(0, 30).map((row, i) => ({
-                                name: labels[i],
-                                value: Number(row[measure] ?? 0),
-                            })),
+                            data: treeData,
                             label: { show: true, formatter: "{b}\n{c}" },
                         }],
                     }
@@ -256,8 +297,12 @@ export function ReportChart({
 
             case "radar": {
                 const maxValues = numericMeasures.map((m) => {
-                    const vals = rows.map((r) => Number(r[m] ?? 0))
-                    return Math.max(...vals, 1)
+                    let mx = 1
+                    for (const r of rows) {
+                        const v = Number(r[m] ?? 0)
+                        if (v > mx) mx = v
+                    }
+                    return mx
                 })
                 const indicator = numericMeasures.map((m, i) => ({
                     name: getLabel(m, lang),
@@ -377,6 +422,22 @@ export function ReportChart({
 
                     const singleGridTop = legendGridTop(numericMeasures.length)
 
+                    // Build a measure-aware tooltip so cost fields show ¥ prefix,
+                    // percentages show %, and null values display as "-".
+                    const measureTooltipFormatter = (params: unknown) => {
+                        const list = Array.isArray(params) ? params : [params]
+                        type TParam = { axisValueLabel: string; seriesName: string; value: number | null; marker: string }
+                        const first = list[0] as TParam | undefined
+                        if (!first) return ""
+                        let html = `<div style="font-weight:600;margin-bottom:4px">${first.axisValueLabel}</div>`
+                        for (const p of list as TParam[]) {
+                            const mKey = numericMeasures.find((k) => getLabel(k, lang) === p.seriesName) ?? ""
+                            const formatted = p.value == null ? "-" : formatCellValue(mKey, p.value)
+                            html += `<div>${p.marker} ${p.seriesName}: ${formatted}</div>`
+                        }
+                        return html
+                    }
+
                     option = {
                         tooltip: {
                             trigger: "axis",
@@ -384,6 +445,7 @@ export function ReportChart({
                             backgroundColor: isDark ? "rgba(30,30,40,0.95)" : "rgba(255,255,255,0.95)",
                             borderColor: isDark ? "#444" : "#e5e7eb",
                             textStyle: { color: isDark ? "#e5e7eb" : "#374151", fontSize: 12 },
+                            formatter: measureTooltipFormatter,
                         },
                         legend: wrapLegend(numericMeasures.map((m) => getLabel(m, lang)), theme.textColor),
                         grid: { left: "3%", right: needDualAxis ? "8%" : "4%", bottom: "3%", top: singleGridTop, containLabel: true },
@@ -399,7 +461,12 @@ export function ReportChart({
                             ]
                             : { type: "value", axisLabel: { color: theme.subTextColor }, splitLine: { lineStyle: { color: theme.splitLineColor } } },
                         series: numericMeasures.map((m, i) => {
-                            const seriesData = rows.slice(0, 50).map((row) => Number(row[m] ?? 0))
+                            // Preserve null (from safeDivide) so echarts skips the point
+                            // instead of plotting 0 for "no data" ratios.
+                            const seriesData = rows.slice(0, 50).map((row) => {
+                                const v = row[m]
+                                return v == null ? null : Number(v)
+                            })
                             // Add average markLine for single-dimension line/bar charts
                             const markLine = (seriesType === "line" || seriesType === "bar") && !isStacked && numericMeasures.length <= 2
                                 ? {

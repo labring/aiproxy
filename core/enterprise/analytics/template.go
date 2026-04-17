@@ -42,6 +42,7 @@ func HandleListTemplates(c *gin.Context) {
 	}
 
 	var templates []models.ReportTemplate
+
 	q := model.DB.Order("created_at DESC")
 	if !isAdmin(c) {
 		q = q.Where("created_by = ?", groupID)
@@ -142,7 +143,7 @@ func HandleUpdateTemplate(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]interface{}{}
+	updates := map[string]any{}
 	if req.Name != "" {
 		updates["name"] = req.Name
 	}

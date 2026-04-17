@@ -13,11 +13,27 @@ export function getTimeRange(range: TimeRange, customStart?: number, customEnd?:
     // data, but showing partial data is preferable to showing none at all.
     const nowHour = Math.floor(Date.now() / 3_600_000) * 3600
     const currentHourEnd = nowHour + 3599
+    // Start-of-day in the user's local timezone — aligned with how the backend
+    // buckets time_day/time_week when TimezoneOffsetSeconds is supplied. Using
+    // UTC-aligned arithmetic here (e.g. `nowHour - 7*86400`) would truncate the
+    // first day of the window at the UTC→local offset (e.g. a CST user would
+    // miss the first 8 hours of day −7).
+    const localMidnight = (): Date => {
+        const d = new Date()
+        d.setHours(0, 0, 0, 0)
+        return d
+    }
     switch (range) {
-        case "7d":
-            return { start: nowHour - 7 * 86400, end: currentHourEnd }
-        case "30d":
-            return { start: nowHour - 30 * 86400, end: currentHourEnd }
+        case "7d": {
+            const d = localMidnight()
+            d.setDate(d.getDate() - 7)
+            return { start: Math.floor(d.getTime() / 1000), end: currentHourEnd }
+        }
+        case "30d": {
+            const d = localMidnight()
+            d.setDate(d.getDate() - 30)
+            return { start: Math.floor(d.getTime() / 1000), end: currentHourEnd }
+        }
         case "month": {
             const d = new Date()
             d.setDate(1)

@@ -403,13 +403,38 @@ func (p *Price) GetThinkingModeOutputPriceUnit() int64 {
 	return PriceUnit
 }
 
+// Usage is the protocol-agnostic, internal representation of token usage
+// persisted to logs and group_summaries. All adaptors normalize upstream
+// provider usage into this shape.
+//
+// Cross-protocol invariant for InputTokens:
+//
+//	InputTokens ALWAYS includes CachedTokens and CacheCreationTokens
+//	(OpenAI `prompt_tokens` semantics — cached/creation are a *subset*).
+//
+// This differs from Anthropic's native wire format, where `input_tokens`
+// EXCLUDES `cache_read_input_tokens` and `cache_creation_input_tokens`.
+// Adaptors that consume Anthropic responses (anthropic, aws/claude,
+// passthrough/anthropic_passthrough) explicitly add those fields back before
+// writing to model.Usage — see:
+//   - relay/model/claude.go ClaudeUsage.ToOpenAIUsage()
+//   - relay/adaptor/passthrough/usage.go rawUsage.toModelUsage()
+//
+// Gemini and OpenAI already follow the include-cached convention upstream, so
+// their adaptors pass through directly. Analytics measures downstream
+// (core/enterprise/analytics/custom_report.go) assume this invariant — e.g.
+// reconciliation_tokens = input_tokens − cached_tokens − cache_creation_tokens.
 type Usage struct {
+	// InputTokens: total input (prompt) tokens, INCLUDING CachedTokens and
+	// CacheCreationTokens. See struct doc for the cross-protocol invariant.
 	InputTokens         ZeroNullInt64 `json:"input_tokens,omitempty"`
 	ImageInputTokens    ZeroNullInt64 `json:"image_input_tokens,omitempty"`
 	AudioInputTokens    ZeroNullInt64 `json:"audio_input_tokens,omitempty"`
 	OutputTokens        ZeroNullInt64 `json:"output_tokens,omitempty"`
 	ImageOutputTokens   ZeroNullInt64 `json:"image_output_tokens,omitempty"`
-	CachedTokens        ZeroNullInt64 `json:"cached_tokens,omitempty"`
+	// CachedTokens: subset of InputTokens that came from prompt cache reads.
+	CachedTokens ZeroNullInt64 `json:"cached_tokens,omitempty"`
+	// CacheCreationTokens: subset of InputTokens charged for cache writes.
 	CacheCreationTokens ZeroNullInt64 `json:"cache_creation_tokens,omitempty"`
 	ReasoningTokens     ZeroNullInt64 `json:"reasoning_tokens,omitempty"`
 	TotalTokens         ZeroNullInt64 `json:"total_tokens,omitempty"`

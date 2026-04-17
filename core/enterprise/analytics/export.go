@@ -43,6 +43,7 @@ func ExportAnalyticsReport(
 	if _, err := f.NewSheet(deptSheet); err != nil {
 		return nil, fmt.Errorf("create department sheet: %w", err)
 	}
+
 	addDepartmentSheet(f, deptSheet, departments, headerStyle, amountStyle)
 
 	// ── Sheet 3: User Ranking ──
@@ -50,6 +51,7 @@ func ExportAnalyticsReport(
 	if _, err := f.NewSheet(userSheet); err != nil {
 		return nil, fmt.Errorf("create user ranking sheet: %w", err)
 	}
+
 	addUserRankingSheet(f, userSheet, userRanking, headerStyle, amountStyle)
 
 	// ── Sheet 4: Model Breakdown ──
@@ -57,19 +59,29 @@ func ExportAnalyticsReport(
 	if _, err := f.NewSheet(modelSheet); err != nil {
 		return nil, fmt.Errorf("create model sheet: %w", err)
 	}
+
 	addModelBreakdownSheet(f, modelSheet, modelDist, headerStyle, amountStyle)
 
 	return f, nil
 }
 
-func addSummarySheet(f *excelize.File, sheet string, departments []DepartmentSummary, startTime, endTime time.Time, headerStyle int) {
+func addSummarySheet(
+	f *excelize.File,
+	sheet string,
+	departments []DepartmentSummary,
+	startTime, endTime time.Time,
+	headerStyle int,
+) {
 	headers := []string{"Metric", "Value"}
 	writeHeaderRow(f, sheet, headers, headerStyle)
 
 	// Calculate totals
-	var totalReqs int64
-	var totalTokens int64
-	var totalAmount float64
+	var (
+		totalReqs   int64
+		totalTokens int64
+		totalAmount float64
+	)
+
 	activeUsers := 0
 	for _, d := range departments {
 		totalReqs += d.RequestCount
@@ -78,9 +90,12 @@ func addSummarySheet(f *excelize.File, sheet string, departments []DepartmentSum
 		activeUsers += d.ActiveUsers
 	}
 
-	data := [][]interface{}{
-		{"Report Period", fmt.Sprintf("%s ~ %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02"))},
-		{"Generated At", time.Now().Format("2006-01-02 15:04:05")},
+	data := [][]any{
+		{
+			"Report Period",
+			fmt.Sprintf("%s ~ %s", startTime.Format(time.DateOnly), endTime.Format(time.DateOnly)),
+		},
+		{"Generated At", time.Now().Format(time.DateTime)},
 		{"Active Departments", len(departments)},
 		{"Active Users", activeUsers},
 		{"Total Requests", totalReqs},
@@ -90,8 +105,8 @@ func addSummarySheet(f *excelize.File, sheet string, departments []DepartmentSum
 
 	if totalReqs > 0 {
 		data = append(data,
-			[]interface{}{"Avg Cost per Request ($)", fmt.Sprintf("%.6f", totalAmount/float64(totalReqs))},
-			[]interface{}{"Avg Tokens per Request", totalTokens / totalReqs},
+			[]any{"Avg Cost per Request ($)", fmt.Sprintf("%.6f", totalAmount/float64(totalReqs))},
+			[]any{"Avg Tokens per Request", totalTokens / totalReqs},
 		)
 	}
 
@@ -105,7 +120,12 @@ func addSummarySheet(f *excelize.File, sheet string, departments []DepartmentSum
 	f.SetColWidth(sheet, "B", "B", 30)
 }
 
-func addDepartmentSheet(f *excelize.File, sheet string, departments []DepartmentSummary, headerStyle, amountStyle int) {
+func addDepartmentSheet(
+	f *excelize.File,
+	sheet string,
+	departments []DepartmentSummary,
+	headerStyle, amountStyle int,
+) {
 	headers := []string{
 		"Rank", "Department", "Active Users", "Members",
 		"Requests", "Amount ($)", "Total Tokens",
@@ -141,7 +161,12 @@ func addDepartmentSheet(f *excelize.File, sheet string, departments []Department
 	f.SetColWidth(sheet, "F", "F", 14)
 }
 
-func addUserRankingSheet(f *excelize.File, sheet string, ranking []UserRankingEntry, headerStyle, amountStyle int) {
+func addUserRankingSheet(
+	f *excelize.File,
+	sheet string,
+	ranking []UserRankingEntry,
+	headerStyle, amountStyle int,
+) {
 	headers := []string{
 		"Rank", "User Name", "Department",
 		"Requests", "Amount ($)", "Total Tokens",
@@ -171,7 +196,12 @@ func addUserRankingSheet(f *excelize.File, sheet string, ranking []UserRankingEn
 	f.SetColWidth(sheet, "E", "E", 14)
 }
 
-func addModelBreakdownSheet(f *excelize.File, sheet string, modelDist []ModelDistributionEntry, headerStyle, amountStyle int) {
+func addModelBreakdownSheet(
+	f *excelize.File,
+	sheet string,
+	modelDist []ModelDistributionEntry,
+	headerStyle, amountStyle int,
+) {
 	headers := []string{
 		"Model", "Requests", "Amount ($)", "Total Tokens",
 		"Input Tokens", "Output Tokens", "Unique Users", "Share (%)",

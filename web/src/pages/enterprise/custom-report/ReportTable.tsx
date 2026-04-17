@@ -11,16 +11,20 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { CustomReportResponse } from "@/api/enterprise"
-import { getLabel, formatCellValue, PERCENTAGE_FIELDS, COST_FIELDS, sortRowsByTime } from "./types"
+import { getLabel, formatCellValue, PERCENTAGE_FIELDS, COST_FIELDS, ADDITIVE_MEASURES, canDrillDown, sortRowsByTime } from "./types"
 
 // ─── Conditional coloring helpers ───────────────────────────────────────────
 
 function getColumnRange(rows: Record<string, unknown>[], key: string): { min: number; max: number } | null {
-    const values = rows.map((r) => Number(r[key])).filter((n) => !Number.isNaN(n))
-    if (values.length === 0) return null
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    if (min === max) return null
+    let min = Infinity
+    let max = -Infinity
+    for (const r of rows) {
+        const n = Number(r[key])
+        if (Number.isNaN(n)) continue
+        if (n < min) min = n
+        if (n > max) max = n
+    }
+    if (min === Infinity || min === max) return null
     return { min, max }
 }
 
@@ -50,6 +54,15 @@ function getDataBarWidth(value: number, max: number): number {
     return Math.max(0, Math.min(100, (value / max) * 100))
 }
 
+function formatPctOfTotal(value: number, totalRaw: unknown): string | null {
+    if (totalRaw == null) return null
+    const total = Number(totalRaw)
+    if (total <= 0 || Number.isNaN(total)) return null
+    const pct = (value / total) * 100
+    if (Number.isNaN(pct)) return null
+    return `(${pct.toFixed(1)}%)`
+}
+
 const PAGE_SIZE = 50
 
 // ─── ReportTable ────────────────────────────────────────────────────────────
@@ -60,12 +73,15 @@ export function ReportTable({
     sortBy,
     sortOrder,
     onSort,
+    onDrill,
 }: {
     data: CustomReportResponse
     dimensions: string[]
     sortBy: string | undefined
     sortOrder: "asc" | "desc"
     onSort: (key: string, order: "asc" | "desc") => void
+    /** Called when a drillable dimension cell is clicked */
+    onDrill?: (dimension: string, value: string, label: string) => void
 }) {
     const { i18n, t } = useTranslation()
     const lang = i18n.language
@@ -210,12 +226,26 @@ export function ReportTable({
                                         >
                                             {showDataBar && barWidth > 0 && (
                                                 <div
-                                                    className="absolute inset-y-0 left-0 bg-[#6A6DE6]/8 dark:bg-[#6A6DE6]/12 transition-all"
+                                                    className="absolute inset-y-0 left-0 bg-[#6A6DE6]/8 dark:bg-[#6A6DE6]/25 transition-all"
                                                     style={{ width: `${barWidth}%` }}
                                                 />
                                             )}
                                             <span className="relative">
-                                                {formatCellValue(col.key, row[col.key])}
+                                                {isDimension && onDrill && canDrillDown(col.key) ? (
+                                                    <button
+                                                        type="button"
+                                                        className="text-left hover:text-[#6A6DE6] hover:underline transition-colors cursor-pointer"
+                                                        onClick={() => onDrill(col.key, String(row[col.key] ?? ""), formatCellValue(col.key, row[col.key]))}
+                                                    >
+                                                        {formatCellValue(col.key, row[col.key])}
+                                                    </button>
+                                                ) : (
+                                                    formatCellValue(col.key, row[col.key])
+                                                )}
+                                                {!isDimension && ADDITIVE_MEASURES.has(col.key) && (() => {
+                                                    const pctStr = formatPctOfTotal(numVal, data.totals?.[col.key])
+                                                    return pctStr && <span className="ml-1 text-xs text-muted-foreground">{pctStr}</span>
+                                                })()}
                                             </span>
                                         </td>
                                     )

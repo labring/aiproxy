@@ -622,6 +622,7 @@ func BatchRecordLogs(
 		tokenID,
 		tokenName,
 		downstreamResult,
+		retryTimes,
 		usage,
 		amount,
 		summaryServiceTier,
@@ -631,6 +632,13 @@ func BatchRecordLogs(
 	return err
 }
 
+// BatchUpdateSummary records the hourly/minute rollups.
+//
+// retryTimes is the number of retries this request went through before reaching
+// its terminal status (0 for first-try successes). It is used to populate the
+// group-summary retry_count as a PER-REQUEST binary counter (incremented once
+// per request with retryTimes>0), so retry_rate stays within [0%, 100%]. The
+// channel-side summary has different semantics — it counts per failed-attempt.
 func BatchUpdateSummary(
 	now time.Time,
 	requestAt time.Time,
@@ -642,6 +650,7 @@ func BatchUpdateSummary(
 	tokenID int,
 	tokenName string,
 	downstreamResult bool,
+	retryTimes int,
 	usage Usage,
 	amount Amount,
 	serviceTier string,
@@ -708,6 +717,7 @@ func BatchUpdateSummary(
 			code,
 			amount,
 			usage,
+			retryTimes,
 			serviceTier,
 			summaryClaudeLongContext,
 		)
@@ -722,6 +732,7 @@ func BatchUpdateSummary(
 			code,
 			amount,
 			usage,
+			retryTimes,
 			serviceTier,
 			summaryClaudeLongContext,
 		)
@@ -795,6 +806,7 @@ func updateGroupSummaryData(
 	code int,
 	amount Amount,
 	usage Usage,
+	retryTimes int,
 	serviceTier string,
 	summaryClaudeLongContext bool,
 ) {
@@ -837,19 +849,24 @@ func updateGroupSummaryData(
 	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	groupSummary.Usage.Add(usage)
-	groupSummary.AddRequest(code, false)
+	// retry_count is a PER-REQUEST binary counter: +1 for any request that
+	// went through >=1 retry. Keeps retry_rate = retry_count / request_count
+	// within [0%, 100%]. (Channel-side summary counts differently — per failed
+	// attempt — which is why this is intentionally scoped to the group path.)
+	hadRetry := retryTimes > 0
+	groupSummary.AddRequest(code, hadRetry)
 	groupSummary.AddServiceTierBreakdown(
 		serviceTier,
 		usage,
 		amount,
 		totalTimeMilliseconds,
 		totalTTFBMilliseconds,
-		false,
+		hadRetry,
 		code,
 	)
 
 	if summaryClaudeLongContext {
-		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, hadRetry, code)
 		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
 		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}
@@ -871,6 +888,7 @@ func updateGroupSummaryDataMinute(
 	code int,
 	amount Amount,
 	usage Usage,
+	retryTimes int,
 	serviceTier string,
 	summaryClaudeLongContext bool,
 ) {
@@ -913,19 +931,21 @@ func updateGroupSummaryDataMinute(
 	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
 
 	groupSummary.Usage.Add(usage)
-	groupSummary.AddRequest(code, false)
+	// See updateGroupSummaryData — retry_count is per-request binary.
+	hadRetry := retryTimes > 0
+	groupSummary.AddRequest(code, hadRetry)
 	groupSummary.AddServiceTierBreakdown(
 		serviceTier,
 		usage,
 		amount,
 		totalTimeMilliseconds,
 		totalTTFBMilliseconds,
-		false,
+		hadRetry,
 		code,
 	)
 
 	if summaryClaudeLongContext {
-		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
+		groupSummary.AddClaudeLongContextBreakdown(usage, amount, hadRetry, code)
 		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
 		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
 	}

@@ -729,7 +729,12 @@
       "deleteTemplate": "Delete Template",
       "deleteTemplateConfirm": "Are you sure you want to delete this template?",
       "emptyState": "Select dimensions and measures to auto-generate a report",
-      "page": "Page"
+      "page": "Page",
+      "truncationWarning": "Showing {{shown}} of {{total}} rows",
+      "exportForFull": "Export full data",
+      "retry": "Retry",
+      "recommendGranularity": "Suggested: use {{recommended}}",
+      "drillRoot": "Overview"
     },
     "accessControl": {
       "title": "Access Control",

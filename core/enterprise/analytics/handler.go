@@ -54,6 +54,7 @@ func HandleDepartmentTrend(c *gin.Context) {
 func HandleUserRanking(c *gin.Context) {
 	startTime, endTime := parseTimeRange(c)
 	departmentID := c.Query("department_id")
+
 	limit := 50 // default
 	if ls := c.Query("limit"); ls != "" {
 		if v, err := strconv.Atoi(ls); err == nil {
@@ -192,7 +193,7 @@ func HandleExport(c *gin.Context) {
 	)
 
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Disposition", "attachment; filename="+filename)
 
 	if err := f.Write(c.Writer); err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to write excel file")

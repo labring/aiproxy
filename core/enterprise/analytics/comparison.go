@@ -27,15 +27,18 @@ type PeriodChanges struct {
 
 // ComparisonData holds current vs previous period comparison.
 type ComparisonData struct {
-	PeriodType     string      `json:"period_type"`
-	CurrentPeriod  PeriodStats `json:"current_period"`
-	PreviousPeriod PeriodStats `json:"previous_period"`
+	PeriodType     string        `json:"period_type"`
+	CurrentPeriod  PeriodStats   `json:"current_period"`
+	PreviousPeriod PeriodStats   `json:"previous_period"`
 	Changes        PeriodChanges `json:"changes"`
 }
 
 // GetPeriodComparison calculates period-over-period comparison.
 // The previous period is computed by shifting startTime back by the same duration.
-func GetPeriodComparison(startTime, endTime time.Time, departmentIDs []string) (*ComparisonData, error) {
+func GetPeriodComparison(
+	startTime, endTime time.Time,
+	departmentIDs []string,
+) (*ComparisonData, error) {
 	duration := endTime.Sub(startTime)
 	prevStart := startTime.Add(-duration)
 	prevEnd := startTime
@@ -135,6 +138,7 @@ func calcPctInt(current, previous int64) float64 {
 		}
 		return 0.0
 	}
+
 	return float64(current-previous) / float64(previous) * 100.0
 }
 
@@ -145,5 +149,6 @@ func calcPctFloat(current, previous float64) float64 {
 		}
 		return 0.0
 	}
+
 	return (current - previous) / previous * 100.0
 }

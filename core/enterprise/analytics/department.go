@@ -60,7 +60,9 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 
 	// Get all feishu users to map group_id → department hierarchy
 	var feishuUsers []models.FeishuUser
-	if err := model.DB.Select("group_id", "department_id", "level1_dept_id", "level2_dept_id").Find(&feishuUsers).Error; err != nil {
+	if err := model.DB.Select("group_id", "department_id", "level1_dept_id", "level2_dept_id").
+		Find(&feishuUsers).
+		Error; err != nil {
 		return nil, fmt.Errorf("query feishu users: %w", err)
 	}
 
@@ -93,6 +95,7 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 		if h.Level1DeptID == "" {
 			h.Level1DeptID, h.Level2DeptID = resolveHierarchyFromDeptMap(u.DepartmentID, deptMap)
 		}
+
 		resolvedHierarchy[u.DepartmentID] = h
 		groupToHierarchy[u.GroupID] = h
 	}
@@ -232,7 +235,10 @@ func GetDepartmentSummaries(startTime, endTime time.Time) ([]DepartmentSummary, 
 }
 
 // GetDepartmentTrend returns hourly usage trend data for a specific department.
-func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]DepartmentTrendPoint, error) {
+func GetDepartmentTrend(
+	departmentID string,
+	startTime, endTime time.Time,
+) ([]DepartmentTrendPoint, error) {
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
@@ -271,19 +277,24 @@ func GetDepartmentTrend(departmentID string, startTime, endTime time.Time) ([]De
 // resolveHierarchyFromDeptMap walks the parent chain in deptMap to find level-1 and level-2
 // department IDs. Level-1 is a direct child of root (parent_id = "0" or ""),
 // level-2 is a child of level-1.
-func resolveHierarchyFromDeptMap(deptID string, deptMap map[string]*models.FeishuDepartment) (level1, level2 string) {
+func resolveHierarchyFromDeptMap(
+	deptID string,
+	deptMap map[string]*models.FeishuDepartment,
+) (level1, level2 string) {
 	// Collect ancestor chain: [self, parent, grandparent, ...]
 	const maxDepth = 10
+
 	chain := make([]string, 0, maxDepth)
 	cur := deptID
 
-	for i := 0; i < maxDepth; i++ {
+	for range maxDepth {
 		dept, ok := deptMap[cur]
 		if !ok {
 			break
 		}
 
 		chain = append(chain, cur)
+
 		if dept.ParentID == "" || dept.ParentID == "0" {
 			break // reached root
 		}

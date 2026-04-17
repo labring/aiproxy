@@ -92,6 +92,9 @@ func recordSummary(
 		meta.Token.ID,
 		meta.Token.Name,
 		downstreamResult,
+		// recordSummary path is used only for 429 rate-limit gateway events
+		// (see consume.Summary in distributor.go). No retry involved.
+		0,
 		usage,
 		amount,
 		serviceTier,

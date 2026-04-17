@@ -24,6 +24,8 @@ import {
     DEFAULT_DIMS,
     DEFAULT_MEASURES,
     getLabel,
+    recommendTimeGranularity,
+    getRecommendedMeasures,
     type FieldDef,
     type ReportTemplate,
 } from "./types"
@@ -36,23 +38,31 @@ function ChipSelector({
     onChange,
     lang,
     active: activeColor = "bg-[#6A6DE6] text-white",
+    recommended,
 }: {
     fields: FieldDef[]
     selected: string[]
     onChange: (keys: string[]) => void
     lang: string
     active?: string
+    /** Keys that are recommended for the current dimension selection */
+    recommended?: Set<string>
 }) {
     return (
         <div className="flex flex-wrap gap-1.5">
             {fields.map((f) => {
                 const isActive = selected.includes(f.key)
+                const isRecommended = recommended?.has(f.key) && !isActive
                 return (
                     <Badge
                         key={f.key}
                         variant={isActive ? "default" : "outline"}
                         className={`cursor-pointer select-none transition-all text-xs px-2.5 py-1 ${
-                            isActive ? `border-transparent ${activeColor}` : "hover:bg-muted/50"
+                            isActive
+                                ? `border-transparent ${activeColor}`
+                                : isRecommended
+                                    ? "border-[#6A6DE6]/40 bg-[#6A6DE6]/5 hover:bg-[#6A6DE6]/10"
+                                    : "hover:bg-muted/50"
                         }`}
                         onClick={() => {
                             onChange(
@@ -62,6 +72,7 @@ function ChipSelector({
                             )
                         }}
                     >
+                        {isRecommended && <Zap className="w-2.5 h-2.5 mr-0.5 text-[#6A6DE6]" />}
                         {getLabel(f.key, lang)}
                         {isActive && <X className="w-3 h-3 ml-1" />}
                     </Badge>
@@ -85,6 +96,10 @@ export interface ConfigPanelProps {
     onSaveTemplate?: () => void
     isPending: boolean
     templateManagerSlot?: React.ReactNode
+    /** Start timestamp (seconds) for time granularity recommendation */
+    startTs?: number
+    /** End timestamp (seconds) for time granularity recommendation */
+    endTs?: number
 }
 
 export function ConfigPanel({
@@ -99,9 +114,21 @@ export function ConfigPanel({
     onSaveTemplate,
     isPending,
     templateManagerSlot,
+    startTs,
+    endTs,
 }: ConfigPanelProps) {
     const { t, i18n } = useTranslation()
     const lang = i18n.language
+
+    const recommendedTimeDim = useMemo(
+        () => startTs && endTs ? recommendTimeGranularity(startTs, endTs) : null,
+        [startTs, endTs],
+    )
+
+    const recommendedMeasures = useMemo(
+        () => getRecommendedMeasures(selectedDimensions),
+        [selectedDimensions],
+    )
 
     const [templatesOpen, setTemplatesOpen] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
@@ -244,6 +271,25 @@ export function ConfigPanel({
                         lang={lang}
                         active="bg-[#6A6DE6]/15 text-[#6A6DE6] border-[#6A6DE6]/30"
                     />
+                    {recommendedTimeDim && (() => {
+                        const selectedTimeDim = selectedDimensions.find((d) => TIME_DIMS.has(d))
+                        if (!selectedTimeDim || selectedTimeDim === recommendedTimeDim) return null
+                        return (
+                            <button
+                                type="button"
+                                className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 hover:underline"
+                                onClick={() => {
+                                    const next = selectedDimensions.map((d) => TIME_DIMS.has(d) ? recommendedTimeDim : d)
+                                    onDimensionsChange(next)
+                                }}
+                            >
+                                <Zap className="w-3 h-3" />
+                                {t("enterprise.customReport.recommendGranularity", {
+                                    recommended: getLabel(recommendedTimeDim, lang),
+                                })}
+                            </button>
+                        )
+                    })()}
                 </div>
 
                 {/* Measures — with search and collapsible categories */}
@@ -307,6 +353,7 @@ export function ConfigPanel({
                                         selected={selectedMeasures}
                                         onChange={onMeasuresChange}
                                         lang={lang}
+                                        recommended={recommendedMeasures}
                                     />
                                 )}
                             </div>

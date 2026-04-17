@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { type DateRange } from "react-day-picker"
 import {
     FileBarChart,
@@ -12,6 +12,9 @@ import {
     Maximize2,
     X,
     LayoutGrid,
+    AlertTriangle,
+    ChevronRight,
+    Home,
 } from "lucide-react"
 import { useHasPermission } from "@/lib/permissions"
 import { Card, CardContent } from "@/components/ui/card"
@@ -23,9 +26,13 @@ import {
     type CustomReportRequest,
     type CustomReportResponse,
 } from "@/api/enterprise"
-import { type TimeRange, getTimeRange } from "@/lib/enterprise"
+import { type TimeRange, computeTimeRangeTs } from "@/lib/enterprise"
 
-import { type ChartType, type ViewMode, type ReportTemplate, TIME_DIMENSIONS, DEFAULT_DIMS, DEFAULT_MEASURES } from "./types"
+import {
+    type ChartType, type ViewMode, type ReportTemplate, type DrillStep,
+    DEFAULT_DIMS, DEFAULT_MEASURES, formatCellValue, getLabel,
+    DRILL_HIERARCHY, DRILL_FILTER_MAP,
+} from "./types"
 import { ConfigPanel } from "./ConfigPanel"
 import { FilterBar } from "./FilterBar"
 import { KpiSummaryRow } from "./KpiSummaryRow"
@@ -61,6 +68,9 @@ export default function EnterpriseCustomReport() {
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const [pivotMeasure, setPivotMeasure] = useState<string>("")
 
+    // Drill-down state
+    const [drillPath, setDrillPath] = useState<DrillStep[]>([])
+
     // Layout state
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
@@ -68,10 +78,13 @@ export default function EnterpriseCustomReport() {
     const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
     const dialogRef = useRef<HTMLDialogElement>(null)
 
-    // Generate report mutation
+    // AbortController-based request lifecycle: each new request aborts the
+    // previous in-flight one, preventing stale-response overwrites and freeing
+    // network resources. This replaces the old sequence-number approach.
+    const abortRef = useRef<AbortController | null>(null)
     const mutation = useMutation({
-        mutationFn: (req: CustomReportRequest) => enterpriseApi.generateCustomReport(req),
-        onSuccess: (data) => setReportData(data),
+        mutationFn: ({ req, signal }: { req: CustomReportRequest; signal: AbortSignal }) =>
+            enterpriseApi.generateCustomReport(req, signal),
     })
     const mutateRef = useRef(mutation.mutate)
     mutateRef.current = mutation.mutate
@@ -84,14 +97,33 @@ export default function EnterpriseCustomReport() {
         const m = meas ?? selectedMeasures
         if (d.length === 0 || m.length === 0) return
 
-        const customStart = customDateRange?.from ? Math.floor(customDateRange.from.getTime() / 1000) : undefined
-        const customEnd = customDateRange?.to ? Math.floor(customDateRange.to.getTime() / 1000) : undefined
-        const { start, end } = getTimeRange(timeRange, customStart, customEnd)
+        const { start, end } = computeTimeRangeTs(timeRange, customDateRange)
 
         const filters: CustomReportRequest["filters"] = {}
         if (filterDepts.length > 0) filters.department_ids = filterDepts
         if (filterModels.length > 0) filters.models = filterModels
         if (filterUsers.length > 0) filters.user_names = filterUsers
+
+        // Align day/week buckets with the client's local timezone so that
+        // a selection of "April 10" shows activity from local 00:00–23:59,
+        // matching what the user sees on the dashboard. getTimezoneOffset()
+        // returns minutes-west-of-UTC (e.g. -480 for CST); we want
+        // seconds-east-of-UTC (e.g. +28800 for CST).
+        //
+        // DST caveat: getTimezoneOffset() returns the *current* offset, not
+        // the offset that applied at each historical timestamp. Queries that
+        // span a DST transition in affected zones (most of the Americas and
+        // Europe) will bucket the hours around the transition into the wrong
+        // local day. China/CST observes no DST so is unaffected. A proper
+        // fix requires server-side timezone-aware bucketing (e.g. PostgreSQL
+        // `AT TIME ZONE 'Asia/Shanghai'`); deferred since current deployment
+        // is CST-only.
+        const tzOffsetSec = -new Date().getTimezoneOffset() * 60
+
+        // Abort any in-flight request before starting a new one
+        abortRef.current?.abort()
+        const controller = new AbortController()
+        abortRef.current = controller
 
         const req: CustomReportRequest = {
             dimensions: d,
@@ -101,8 +133,11 @@ export default function EnterpriseCustomReport() {
             sort_by: sortBy,
             sort_order: sortOrder,
             limit: 200,
+            timezone_offset_seconds: tzOffsetSec,
         }
-        mutateRef.current(req)
+        mutateRef.current({ req, signal: controller.signal }, {
+            onSuccess: (data) => setReportData(data),
+        })
     }, [selectedDimensions, selectedMeasures, timeRange, customDateRange, filterDepts, filterModels, filterUsers, sortBy, sortOrder])
 
     // Handle preset template click
@@ -110,6 +145,7 @@ export default function EnterpriseCustomReport() {
         setSelectedDimensions(template.dimensions)
         setSelectedMeasures(template.measures)
         setPivotMeasure("")
+        setDrillPath([])
     }, [])
 
     // Handle saved template apply
@@ -130,6 +166,7 @@ export default function EnterpriseCustomReport() {
         setSortBy(undefined)
         setSortOrder("desc")
         setPivotMeasure("")
+        setDrillPath([])
     }, [])
 
     // Auto-generate on any config change (debounced 600ms)
@@ -140,7 +177,10 @@ export default function EnterpriseCustomReport() {
         debounceRef.current = setTimeout(() => {
             handleGenerate()
         }, 600)
-        return () => clearTimeout(debounceRef.current)
+        return () => {
+            clearTimeout(debounceRef.current)
+            abortRef.current?.abort()
+        }
     }, [selectedDimensions, selectedMeasures, timeRange, customDateRange, filterDepts, filterModels, filterUsers, handleGenerate])
 
     // Reset viewMode if pivot not available
@@ -149,42 +189,103 @@ export default function EnterpriseCustomReport() {
         if (!canPivot && viewMode === "pivot") setViewMode("table")
     }, [canPivot, viewMode])
 
+    // Clear stale pivotMeasure when the selected measure is removed
+    useEffect(() => {
+        if (pivotMeasure && !selectedMeasures.includes(pivotMeasure)) {
+            setPivotMeasure("")
+        }
+    }, [selectedMeasures, pivotMeasure])
+
     const activePivotMeasure = pivotMeasure && selectedMeasures.includes(pivotMeasure)
         ? pivotMeasure
         : selectedMeasures[0] ?? ""
 
-    // Sort handler (client-side)
+    // Sort handler — only update state; the debounced useEffect re-fetches
+    // from backend with the new sort_by/sort_order, avoiding stale-data flicker.
     const handleSort = (key: string, order: "asc" | "desc") => {
         setSortBy(key)
         setSortOrder(order)
-        if (reportData) {
-            const timeDim = selectedDimensions.find((d) => TIME_DIMENSIONS.has(d))
-            const sorted = [...reportData.rows].sort((a, b) => {
-                const va = Number(a[key]) || 0
-                const vb = Number(b[key]) || 0
-                if (va !== vb) return order === "desc" ? vb - va : va - vb
-                if (timeDim && key !== timeDim) {
-                    const ta = Number(a[timeDim] ?? 0)
-                    const tb = Number(b[timeDim] ?? 0)
-                    if (ta !== tb) return ta - tb
-                }
-                return String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
-            })
-            setReportData({ ...reportData, rows: sorted })
-        }
     }
+
+    // Map filter field names to their state setters — shared by drill/drillBack
+    const filterSetters = useMemo(() => ({
+        department_ids: setFilterDepts,
+        models: setFilterModels,
+        user_names: setFilterUsers,
+    }), [])
+
+    // Drill-down handler: click a dimension value → filter by it + drill to child dimension
+    const handleDrill = useCallback((dimension: string, value: string, label: string) => {
+        const child = DRILL_HIERARCHY[dimension]
+        const filterField = DRILL_FILTER_MAP[dimension]
+        if (!child || !filterField) return
+
+        setDrillPath((prev) => [...prev, { dimension, value, label }])
+        setSelectedDimensions((prev) =>
+            prev.map((d) => d === dimension ? child : d),
+        )
+        filterSetters[filterField]((prev) => prev.includes(value) ? prev : [...prev, value])
+        setSortBy(undefined)
+    }, [filterSetters])
+
+    // Drill breadcrumb navigation: revert to a specific level
+    const handleDrillBack = useCallback((toIndex: number) => {
+        // toIndex = -1 means go back to root (before any drill)
+        const stepsToRemove = drillPath.slice(toIndex + 1)
+        setDrillPath((prev) => prev.slice(0, toIndex + 1))
+
+        // Replay dimensions: start from current and reverse each removed step
+        let dims = [...selectedDimensions]
+        for (let i = stepsToRemove.length - 1; i >= 0; i--) {
+            const step = stepsToRemove[i]
+            const child = DRILL_HIERARCHY[step.dimension]
+            if (child) {
+                dims = dims.map((d) => d === child ? step.dimension : d)
+            }
+        }
+        setSelectedDimensions(dims)
+
+        // Remove filters added by removed steps
+        const toRemove: Record<string, Set<string>> = {}
+        for (const step of stepsToRemove) {
+            const ff = DRILL_FILTER_MAP[step.dimension]
+            if (ff) (toRemove[ff] ??= new Set()).add(step.value)
+        }
+        for (const [field, values] of Object.entries(toRemove)) {
+            filterSetters[field as keyof typeof filterSetters]((prev) => prev.filter((v) => !values.has(v)))
+        }
+
+        setSortBy(undefined)
+    }, [drillPath, selectedDimensions, filterSetters])
+
+    // Memoize time range timestamps — used by comparison query and ConfigPanel.
+    // Without useMemo, computeTimeRangeTs runs every render (calls new Date() internally).
+    const { start: tsStart, end: tsEnd } = useMemo(
+        () => computeTimeRangeTs(timeRange, customDateRange),
+        [timeRange, customDateRange],
+    )
+    const comparisonQuery = useQuery({
+        queryKey: ["custom-report-comparison", filterDepts, tsStart, tsEnd],
+        queryFn: () => enterpriseApi.getComparison(
+            filterDepts.length > 0 ? filterDepts : undefined,
+            tsStart,
+            tsEnd,
+        ),
+        enabled: !!reportData,
+        staleTime: 60_000,
+    })
 
     const canExport = useHasPermission('export_manage')
 
-    // CSV export
+    // CSV export — values are formatted identically to the on-screen table
+    // so that what the user sees is what they get in the spreadsheet.
     const handleExportCsv = () => {
         if (!reportData || reportData.rows.length === 0) return
         const cols = reportData.columns
-        const header = cols.map((c) => c.label).join(",")
+        const header = cols.map((c) => getLabel(c.key, lang)).join(",")
         const rows = reportData.rows.map((row) =>
             cols.map((c) => {
-                const v = row[c.key]
-                const s = String(v ?? "")
+                const s = formatCellValue(c.key, row[c.key])
                 if (s.includes(",") || s.includes('"') || s.includes("\n")) {
                     return `"${s.replace(/"/g, '""')}"`
                 }
@@ -244,6 +345,8 @@ export default function EnterpriseCustomReport() {
             onSaveTemplate={() => setSaveTemplateOpen(true)}
             isPending={mutation.isPending}
             templateManagerSlot={templateManagerSlot}
+            startTs={tsStart}
+            endTs={tsEnd}
         />
     )
 
@@ -331,8 +434,11 @@ export default function EnterpriseCustomReport() {
                     {/* Error state */}
                     {mutation.isError && (
                         <Card className="border-destructive shadow-sm">
-                            <CardContent className="py-4 text-center text-destructive">
-                                {mutation.error instanceof Error ? mutation.error.message : String(mutation.error)}
+                            <CardContent className="py-4 flex items-center justify-center gap-3 text-destructive">
+                                <span>{mutation.error instanceof Error ? mutation.error.message : String(mutation.error)}</span>
+                                <Button variant="outline" size="sm" onClick={() => handleGenerate()}>
+                                    {t("enterprise.customReport.retry")}
+                                </Button>
                             </CardContent>
                         </Card>
                     )}
@@ -341,7 +447,55 @@ export default function EnterpriseCustomReport() {
                     {hasResults && (
                         <>
                             {/* KPI Summary */}
-                            <KpiSummaryRow data={reportData} measures={selectedMeasures} />
+                            <KpiSummaryRow data={reportData} measures={selectedMeasures} comparison={comparisonQuery.data} />
+
+                            {/* Truncation warning */}
+                            {reportData.total > reportData.rows.length && (
+                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-300">
+                                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                                    <span>
+                                        {t("enterprise.customReport.truncationWarning", {
+                                            shown: reportData.rows.length.toLocaleString(),
+                                            total: reportData.total.toLocaleString(),
+                                        })}
+                                    </span>
+                                    {canExport && (
+                                        <Button variant="link" size="sm" className="text-amber-700 dark:text-amber-300 p-0 h-auto" onClick={handleExportCsv}>
+                                            {t("enterprise.customReport.exportForFull")}
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Drill-down breadcrumbs */}
+                            {drillPath.length > 0 && (
+                                <div className="flex items-center gap-1 text-sm flex-wrap">
+                                    <button
+                                        type="button"
+                                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                                        onClick={() => handleDrillBack(-1)}
+                                    >
+                                        <Home className="w-3.5 h-3.5" />
+                                        <span>{t("enterprise.customReport.drillRoot")}</span>
+                                    </button>
+                                    {drillPath.map((step, i) => (
+                                        <span key={i} className="flex items-center gap-1">
+                                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
+                                            <button
+                                                type="button"
+                                                className={`hover:text-foreground transition-colors ${
+                                                    i === drillPath.length - 1
+                                                        ? "text-[#6A6DE6] font-medium"
+                                                        : "text-muted-foreground"
+                                                }`}
+                                                onClick={() => handleDrillBack(i)}
+                                            >
+                                                {getLabel(step.dimension, lang)}: {step.label}
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Toolbar */}
                             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm flex flex-wrap items-center gap-2 py-1">
@@ -407,6 +561,7 @@ export default function EnterpriseCustomReport() {
                                             sortBy={sortBy}
                                             sortOrder={sortOrder}
                                             onSort={handleSort}
+                                            onDrill={handleDrill}
                                         />
                                     )}
                                     {viewMode === "chart" && (

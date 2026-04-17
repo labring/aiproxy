@@ -45,7 +45,11 @@ type DepartmentRankingEntry struct {
 
 // GetUserRanking returns users ranked by usage amount within the given time range.
 // Optionally filters by department. Limit controls how many results to return.
-func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int) ([]UserRankingEntry, error) {
+func GetUserRanking(
+	startTime, endTime time.Time,
+	departmentID string,
+	limit int,
+) ([]UserRankingEntry, error) {
 	startTimestamp := startTime.Unix()
 	endTimestamp := endTime.Unix()
 
@@ -60,6 +64,7 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		if len(matchingDepts) == 0 {
 			return []UserRankingEntry{}, nil
 		}
+
 		query = query.Where("department_id IN ?", matchingDepts)
 	}
 
@@ -77,7 +82,9 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		Name         string
 		DepartmentID string
 	}
+
 	groupUserMap := make(map[string]userInfo, len(feishuUsers))
+
 	groupIDs := make([]string, 0, len(feishuUsers))
 	for _, u := range feishuUsers {
 		if _, exists := groupUserMap[u.GroupID]; !exists {
@@ -159,6 +166,7 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 			entry.OutputTokens = agg.OutputTokens
 			entry.CachedTokens = agg.CachedTokens
 			entry.CacheCreationTokens = agg.CacheCreationTokens
+
 			entry.UniqueModels = agg.UniqueModels
 			if agg.RequestCount > 0 {
 				entry.SuccessRate = float64(agg.SuccessCount) / float64(agg.RequestCount) * 100.0
@@ -175,9 +183,11 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 		if entries[i].UsedAmount != entries[j].UsedAmount {
 			return entries[i].UsedAmount > entries[j].UsedAmount
 		}
+
 		if entries[i].UserName != entries[j].UserName {
 			return entries[i].UserName < entries[j].UserName
 		}
+
 		return entries[i].GroupID < entries[j].GroupID
 	})
 
@@ -195,7 +205,10 @@ func GetUserRanking(startTime, endTime time.Time, departmentID string, limit int
 }
 
 // GetDepartmentRanking returns departments ranked by usage amount within the given time range.
-func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]DepartmentRankingEntry, error) {
+func GetDepartmentRanking(
+	startTime, endTime time.Time,
+	limit int,
+) ([]DepartmentRankingEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -249,4 +262,3 @@ func GetDepartmentRanking(startTime, endTime time.Time, limit int) ([]Department
 
 	return entries, nil
 }
-
