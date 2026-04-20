@@ -76,12 +76,14 @@ func InitRedisClient() (err error) {
 		log.Errorf("failed to ping redis: %s", err.Error())
 	}
 
-	if err := loadAdminKeyCache(ctx); err != nil {
-		log.Errorf("failed to sync admin key cache: %s", err.Error())
-	}
-
-	if err := bootstrapAdminKeyCache(ctx); err != nil {
-		log.Errorf("failed to bootstrap admin key cache: %s", err.Error())
+	if config.GetAdminKey() != "" {
+		if err := syncAdminKeyCache(ctx, config.GetAdminKey()); err != nil {
+			log.Errorf("failed to sync admin key cache: %s", err.Error())
+		}
+	} else {
+		if err := loadAdminKeyCache(ctx); err != nil {
+			log.Errorf("failed to load admin key cache: %s", err.Error())
+		}
 	}
 
 	if hasAdminKeyCacheScope() {
@@ -92,6 +94,10 @@ func InitRedisClient() (err error) {
 }
 
 func loadAdminKeyCache(ctx context.Context) error {
+	if config.GetAdminKey() != "" {
+		return nil
+	}
+
 	adminKey, err := loadCachedAdminKey(ctx)
 	if err != nil {
 		return err
@@ -106,18 +112,12 @@ func loadAdminKeyCache(ctx context.Context) error {
 	return nil
 }
 
-func bootstrapAdminKeyCache(ctx context.Context) error {
+func syncAdminKeyCache(ctx context.Context, adminKey string) error {
 	if !hasAdminKeyCacheScope() {
 		return nil
 	}
 
-	adminKey := config.GetAdminKey()
-	if adminKey == "" {
-		return nil
-	}
-
-	_, err := RDB.SetNX(ctx, getAdminKeyCacheKey(), adminKey, 0).Result()
-	return err
+	return RDB.Set(ctx, getAdminKeyCacheKey(), adminKey, 0).Err()
 }
 
 func loadCachedAdminKey(ctx context.Context) (string, error) {
