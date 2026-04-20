@@ -242,6 +242,7 @@ func awsModelCanCrossRegion(awsModelID, awsRegionPrefix string) bool {
 	if !exists {
 		return true
 	}
+
 	return regionSet[awsRegionPrefix]
 }
 
