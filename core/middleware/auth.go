@@ -70,10 +70,7 @@ func AdminAuth(c *gin.Context) {
 func TokenAuth(c *gin.Context) {
 	log := common.GetLogger(c)
 
-	key := c.Request.Header.Get("Authorization")
-	if key == "" {
-		key = c.Request.Header.Get("X-Api-Key")
-	}
+	key := requestToken(c.Request.Header)
 
 	var (
 		token            model.TokenCache
@@ -252,6 +249,16 @@ func maskTokenKey(key string) string {
 		return "*****"
 	}
 	return key[:4] + "*****" + key[len(key)-4:]
+}
+
+func requestToken(headers http.Header) string {
+	if key := headers.Get("Authorization"); key != "" {
+		return key
+	}
+	if key := headers.Get("X-Api-Key"); key != "" {
+		return key
+	}
+	return headers.Get("X-Goog-Api-Key")
 }
 
 func normalizeTokenKey(key string) string {
