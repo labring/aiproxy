@@ -47,6 +47,16 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 		Readme:  "MiniMax API\nOpenAI-compatible base URL: https://api.minimaxi.com/v1\nAnthropic-compatible base URL: https://api.minimaxi.com/anthropic/v1\nSupports chat, embeddings, TTS, Gemini-compatible requests, and Anthropic-compatible requests\nKey format supports `api_key` or `api_key|group_id`; `group_id` remains optional for backward compatibility",
 		KeyHelp: "api_key or api_key|group_id",
 		Models:  ModelList,
+		ConfigSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"use_chat_completions_path": map[string]any{
+					"type":        "boolean",
+					"title":       "Use /chat/completions Path",
+					"description": "Send OpenAI-compatible chat requests to `/chat/completions` instead of MiniMax native `/text/chatcompletion_v2`.",
+				},
+			},
+		},
 	}
 }
 
@@ -94,7 +104,17 @@ func (a *Adaptor) GetRequestURL(
 ) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions, mode.Gemini:
-		url, err := url.JoinPath(meta.Channel.BaseURL, "/text/chatcompletion_v2")
+		cfg, err := loadConfig(meta)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		path := "/text/chatcompletion_v2"
+		if cfg.UseChatCompletionsPath {
+			path = "/chat/completions"
+		}
+
+		url, err := url.JoinPath(meta.Channel.BaseURL, path)
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}

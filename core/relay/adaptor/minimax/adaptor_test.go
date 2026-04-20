@@ -112,14 +112,15 @@ func TestMinimaxGetRequestURLChat(t *testing.T) {
 	a := &Adaptor{}
 
 	testCases := []struct {
-		name    string
-		baseURL string
-		wantURL string
+		name           string
+		baseURL        string
+		channelConfigs map[string]any
+		wantURL        string
 	}{
 		{
 			name:    "default base",
 			baseURL: baseURL,
-			wantURL: "https://api.minimaxi.com/v1/text/chatcompletion_v2",
+			wantURL: baseURL + "/text/chatcompletion_v2",
 		},
 		{
 			name:    "legacy base",
@@ -136,6 +137,14 @@ func TestMinimaxGetRequestURLChat(t *testing.T) {
 			baseURL: "https://xxx.proxyxxx.com/minimax/v1",
 			wantURL: "https://xxx.proxyxxx.com/minimax/v1/text/chatcompletion_v2",
 		},
+		{
+			name:    "config switches to chat completions path",
+			baseURL: "https://xxx.proxyxxx.com/minimax/v1",
+			channelConfigs: map[string]any{
+				"use_chat_completions_path": true,
+			},
+			wantURL: "https://xxx.proxyxxx.com/minimax/v1/chat/completions",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -145,6 +154,7 @@ func TestMinimaxGetRequestURLChat(t *testing.T) {
 				Channel: meta.ChannelMeta{
 					BaseURL: tc.baseURL,
 				},
+				ChannelConfigs: tc.channelConfigs,
 			}, nil, nil)
 
 			require.NoError(t, err)
@@ -152,6 +162,18 @@ func TestMinimaxGetRequestURLChat(t *testing.T) {
 			assert.Equal(t, tc.wantURL, reqURL.URL)
 		})
 	}
+}
+
+func TestMinimaxMetadataConfigSchema(t *testing.T) {
+	a := &Adaptor{}
+	metaInfo := a.Metadata()
+
+	properties, ok := metaInfo.ConfigSchema["properties"].(map[string]any)
+	require.True(t, ok)
+
+	field, ok := properties["use_chat_completions_path"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "boolean", field["type"])
 }
 
 func TestMinimaxGetRequestURLEmbeddingsGroupIDOptional(t *testing.T) {
@@ -167,7 +189,7 @@ func TestMinimaxGetRequestURLEmbeddingsGroupIDOptional(t *testing.T) {
 		}, nil, nil)
 
 		require.NoError(t, err)
-		assert.Equal(t, "https://api.minimaxi.com/v1/embeddings", reqURL.URL)
+		assert.Equal(t, baseURL+"/embeddings", reqURL.URL)
 	})
 
 	t.Run("with group id", func(t *testing.T) {
@@ -180,7 +202,7 @@ func TestMinimaxGetRequestURLEmbeddingsGroupIDOptional(t *testing.T) {
 		}, nil, nil)
 
 		require.NoError(t, err)
-		assert.Equal(t, "https://api.minimaxi.com/v1/embeddings?GroupId=test-group", reqURL.URL)
+		assert.Equal(t, baseURL+"/embeddings?GroupId=test-group", reqURL.URL)
 	})
 }
 
