@@ -2,7 +2,10 @@ package common
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +20,8 @@ var (
 )
 
 const defaultRedisKeyPrefix = "aiproxy"
+const adminKeyCachePrefix = "admin:key"
+const adminKeySyncInterval = 500 * time.Millisecond
 
 func RedisKeyPrefix() string {
 	if config.RedisKeyPrefix == "" {
@@ -71,5 +76,103 @@ func InitRedisClient() (err error) {
 		log.Errorf("failed to ping redis: %s", err.Error())
 	}
 
+	if err := loadAdminKeyCache(ctx); err != nil {
+		log.Errorf("failed to sync admin key cache: %s", err.Error())
+	}
+
+	if err := bootstrapAdminKeyCache(ctx); err != nil {
+		log.Errorf("failed to bootstrap admin key cache: %s", err.Error())
+	}
+
+	if hasAdminKeyCacheScope() {
+		go watchAdminKeyCache()
+	}
+
 	return nil
+}
+
+func loadAdminKeyCache(ctx context.Context) error {
+	adminKey, err := loadCachedAdminKey(ctx)
+	if err != nil {
+		return err
+	}
+	if adminKey == "" {
+		return nil
+	}
+
+	config.SetAdminKey(adminKey)
+	log.Info("admin key loaded from redis")
+
+	return nil
+}
+
+func bootstrapAdminKeyCache(ctx context.Context) error {
+	if !hasAdminKeyCacheScope() {
+		return nil
+	}
+
+	adminKey := config.GetAdminKey()
+	if adminKey == "" {
+		return nil
+	}
+
+	_, err := RDB.SetNX(ctx, getAdminKeyCacheKey(), adminKey, 0).Result()
+	return err
+}
+
+func loadCachedAdminKey(ctx context.Context) (string, error) {
+	if !hasAdminKeyCacheScope() {
+		return "", nil
+	}
+
+	adminKey, err := RDB.Get(ctx, getAdminKeyCacheKey()).Result()
+	if err == nil {
+		return adminKey, nil
+	}
+	if err != redis.Nil {
+		return "", err
+	}
+
+	return "", nil
+}
+
+func watchAdminKeyCache() {
+	ticker := time.NewTicker(adminKeySyncInterval)
+	defer ticker.Stop()
+
+	lastSeen := config.GetAdminKey()
+	for range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		adminKey, err := loadCachedAdminKey(ctx)
+		cancel()
+		if err != nil || adminKey == "" || adminKey == lastSeen {
+			continue
+		}
+
+		config.SetAdminKey(adminKey)
+		lastSeen = adminKey
+		log.Warn("admin key updated from redis")
+	}
+}
+
+func getAdminKeyCacheKey() string {
+	scopeHash := sha256.Sum256([]byte(adminKeyCacheScope()))
+	return RedisKeyf("%s:%s", adminKeyCachePrefix, hex.EncodeToString(scopeHash[:]))
+}
+
+func hasAdminKeyCacheScope() bool {
+	return adminKeyCacheScope() != ""
+}
+
+func adminKeyCacheScope() string {
+	switch {
+	case config.GetInternalToken() != "":
+		return "internal-token:" + config.GetInternalToken()
+	case os.Getenv("SEALOS_JWT_KEY") != "":
+		return "sealos-jwt:" + os.Getenv("SEALOS_JWT_KEY")
+	case config.RedisKeyPrefix != "":
+		return "redis-prefix:" + config.RedisKeyPrefix
+	default:
+		return ""
+	}
 }

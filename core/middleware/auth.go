@@ -5,7 +5,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -38,7 +37,7 @@ func ErrorResponse(c *gin.Context, code int, message string) {
 }
 
 func AdminAuth(c *gin.Context) {
-	if config.AdminKey == "" {
+	if config.GetAdminKey() == "" {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, admin key is not set")
 		c.Abort()
 		return
@@ -49,17 +48,14 @@ func AdminAuth(c *gin.Context) {
 		accessToken = c.Query("key")
 	}
 
-	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-	accessToken = strings.TrimPrefix(accessToken, "sk-")
-
-	if accessToken != config.AdminKey {
+	if !config.MatchAdminKey(accessToken) {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, no access token provided")
 		c.Abort()
 		return
 	}
 
 	c.Set(Token, &model.TokenCache{
-		Key: config.AdminKey,
+		Key: config.GetAdminKey(),
 	})
 
 	group := c.Param("group")
@@ -79,23 +75,18 @@ func TokenAuth(c *gin.Context) {
 		key = c.Request.Header.Get("X-Api-Key")
 	}
 
-	key = strings.TrimPrefix(
-		strings.TrimPrefix(key, "Bearer "),
-		"sk-",
-	)
-
 	var (
 		token            model.TokenCache
 		useInternalToken bool
 	)
 
-	if config.AdminKey != "" && config.AdminKey == key ||
-		config.InternalToken != "" && config.InternalToken == key {
+	if config.MatchAdminKey(key) || config.MatchInternalToken(key) {
 		token = model.TokenCache{
 			Key: key,
 		}
 		useInternalToken = true
 	} else {
+		key = normalizeTokenKey(key)
 		tokenCache, err := model.GetAndValidateToken(key)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error())
@@ -261,4 +252,14 @@ func maskTokenKey(key string) string {
 		return "*****"
 	}
 	return key[:4] + "*****" + key[len(key)-4:]
+}
+
+func normalizeTokenKey(key string) string {
+	if len(key) >= 7 && key[:7] == "Bearer " {
+		key = key[7:]
+	}
+	if len(key) >= 3 && key[:3] == "sk-" {
+		key = key[3:]
+	}
+	return key
 }
