@@ -19,10 +19,25 @@ func (a *Adaptor) ValidateKey(key string) error {
 }
 
 func GetAPIKeyAndGroupID(key string) (string, string, error) {
-	keys := strings.Split(key, "|")
-	if len(keys) != 2 {
+	if key == "" {
 		return "", "", errors.New("invalid key format")
 	}
 
-	return keys[0], keys[1], nil
+	keys := strings.Split(key, "|")
+	switch len(keys) {
+	case 1:
+		if keys[0] == "" {
+			return "", "", errors.New("invalid key format")
+		}
+
+		return keys[0], "", nil
+	case 2:
+		if keys[0] == "" {
+			return "", "", errors.New("invalid key format")
+		}
+
+		return keys[0], keys[1], nil
+	default:
+		return "", "", errors.New("invalid key format")
+	}
 }
