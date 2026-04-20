@@ -27,6 +27,6 @@ func SetMCPRouter(router *gin.Engine) {
 
 	publicMcpTestRoute := router.Group("/test-publicmcp")
 	{
-		publicMcpTestRoute.GET("/:group/:id/sse", mcp.PublicMCPSSEServer)
+		publicMcpTestRoute.GET("/:group/:id/sse", mcp.TestPublicMCPSSEServer)
 	}
 }
