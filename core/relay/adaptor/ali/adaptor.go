@@ -113,7 +113,7 @@ func (a *Adaptor) GetRequestURL(
 			URL:    url,
 		}, nil
 	case mode.Anthropic:
-		url, err := url.JoinPath(u, "/api/v2/apps/claude-code-proxy/v1/messages")
+		url, err := url.JoinPath(u, "/apps/anthropic/v1/messages")
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}
