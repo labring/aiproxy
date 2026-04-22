@@ -11,12 +11,20 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
+	"golang.org/x/net/http2"
 	xproxy "golang.org/x/net/proxy"
 )
 
 const (
 	defaultHeaderTimeout = time.Minute * 15
 	tlsHandshakeTimeout  = time.Second * 5
+	// h2ReadIdleTimeout triggers a PING frame when the connection has been idle
+	// for this long. Detects dead HTTP/2 connections (backend pods rotated,
+	// silent network drops, LB swap without RST) that TCP keepalive would miss.
+	h2ReadIdleTimeout = 15 * time.Second
+	// h2PingTimeout is how long to wait for a PONG before closing the connection
+	// and failing in-flight requests (which are then retryable by upper layers).
+	h2PingTimeout = 15 * time.Second
 )
 
 var (
@@ -54,6 +62,11 @@ func defaultTransportTemplate() *http.Transport {
 	transport.DialContext = defaultDialer.DialContext
 	transport.ResponseHeaderTimeout = defaultHeaderTimeout
 	transport.TLSHandshakeTimeout = tlsHandshakeTimeout
+
+	if h2, err := http2.ConfigureTransports(transport); err == nil && h2 != nil {
+		h2.ReadIdleTimeout = h2ReadIdleTimeout
+		h2.PingTimeout = h2PingTimeout
+	}
 
 	return transport
 }
