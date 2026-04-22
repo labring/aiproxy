@@ -40,6 +40,7 @@ func (a *Adaptor) ConvertRequest(
 	if aa == nil {
 		aa = GetAdaptor(meta.OriginModel)
 	}
+
 	if aa == nil {
 		return adaptor.ConvertResult{}, relaymodel.WrapperErrorWithMessage(
 			meta.Mode,
