@@ -373,6 +373,26 @@ func DoResponse(
 	case mode.Embeddings:
 		result, err = EmbeddingsHandler(meta, c, resp, nil)
 	case mode.Completions, mode.ChatCompletions:
+		var (
+			streamPreHandler  PreHandler
+			handlerPreHandler PreHandler
+		)
+
+		if meta.Mode == mode.ChatCompletions {
+			var configErr error
+
+			streamPreHandler, handlerPreHandler, configErr = getChatCompletionResponsePreHandlers(
+				meta,
+			)
+			if configErr != nil {
+				return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+					configErr,
+					"load_channel_config_failed",
+					http.StatusInternalServerError,
+				)
+			}
+		}
+
 		// Check if model required Responses API conversion
 		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
 			// Convert Responses API response back to ChatCompletion format
@@ -383,9 +403,9 @@ func DoResponse(
 			}
 		} else {
 			if utils.IsStreamResponse(resp) {
-				result, err = StreamHandler(meta, c, resp, nil)
+				result, err = StreamHandler(meta, c, resp, streamPreHandler)
 			} else {
-				result, err = Handler(meta, c, resp, nil)
+				result, err = Handler(meta, c, resp, handlerPreHandler)
 			}
 		}
 	case mode.Anthropic:
@@ -459,7 +479,8 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint",
-		Models: ModelList,
+		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
+		ConfigSchema: configSchema(),
+		Models:       ModelList,
 	}
 }
