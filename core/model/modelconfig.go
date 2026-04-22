@@ -30,7 +30,7 @@ type ModelConfig struct {
 	UpdatedAt        time.Time                 `gorm:"index;autoUpdateTime"          json:"updated_at"                   yaml:"-"`
 	Config           map[ModelConfigKey]any    `gorm:"serializer:fastjson;type:text" json:"config,omitempty"             yaml:"config,omitempty"`
 	Plugin           map[string]map[string]any `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"             yaml:"plugin,omitempty"`
-	Model            string                    `gorm:"size:64;primaryKey"            json:"model"                        yaml:"model,omitempty"`
+	Model            string                    `gorm:"size:128;primaryKey"           json:"model"                        yaml:"model,omitempty"`
 	Owner            ModelOwner                `gorm:"type:varchar(32);index"        json:"owner"                        yaml:"owner,omitempty"`
 	Type             mode.Mode                 `                                     json:"type"                         yaml:"type,omitempty"`
 	ExcludeFromTests bool                      `                                     json:"exclude_from_tests,omitempty" yaml:"exclude_from_tests,omitempty"`

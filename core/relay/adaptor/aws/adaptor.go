@@ -38,6 +38,10 @@ func (a *Adaptor) ConvertRequest(
 ) (adaptor.ConvertResult, error) {
 	aa := GetAdaptor(meta.ActualModel)
 	if aa == nil {
+		aa = GetAdaptor(meta.OriginModel)
+	}
+
+	if aa == nil {
 		return adaptor.ConvertResult{}, relaymodel.WrapperErrorWithMessage(
 			meta.Mode,
 			http.StatusInternalServerError,

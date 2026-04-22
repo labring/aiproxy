@@ -15,7 +15,7 @@ type RetryLog struct {
 	RetryAt               time.Time       `                                                         json:"retry_at,omitempty"`
 	TTFBMilliseconds      ZeroNullInt64   `                                                         json:"ttfb_milliseconds,omitempty"`
 	CreatedAt             time.Time       `gorm:"autoCreateTime;index"                              json:"created_at"`
-	Model                 string          `gorm:"size:64"                                           json:"model"`
+	Model                 string          `gorm:"size:128"                                          json:"model"`
 	RequestID             EmptyNullString `gorm:"type:char(16);index:,where:request_id is not null" json:"request_id"`
 	ID                    int             `gorm:"primaryKey"                                        json:"id"`
 	ChannelID             int             `                                                         json:"channel,omitempty"`

@@ -19,7 +19,7 @@ type SummaryMinute struct {
 
 type SummaryMinuteUnique struct {
 	ChannelID       int    `gorm:"not null;uniqueIndex:idx_summary_minute_unique,priority:1"`
-	Model           string `gorm:"size:64;not null;uniqueIndex:idx_summary_minute_unique,priority:2"`
+	Model           string `gorm:"size:128;not null;uniqueIndex:idx_summary_minute_unique,priority:2"`
 	MinuteTimestamp int64  `gorm:"not null;uniqueIndex:idx_summary_minute_unique,priority:3,sort:desc"`
 }
 

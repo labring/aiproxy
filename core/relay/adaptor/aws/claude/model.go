@@ -238,6 +238,10 @@ func awsRegionPrefix(awsRegionID string) string {
 }
 
 func awsModelCanCrossRegion(awsModelID, awsRegionPrefix string) bool {
+	if strings.HasPrefix(awsModelID, "arn:aws:bedrock:") {
+		return false
+	}
+
 	regionSet, exists := awsModelCanCrossRegionMap[awsModelID]
 	if !exists {
 		return true
@@ -256,10 +260,14 @@ func awsModelCrossRegion(awsModelID, awsRegionPrefix string) string {
 }
 
 func awsModelID(requestModel, region string) string {
+	if strings.HasPrefix(requestModel, "arn:aws:bedrock:") {
+		return requestModel
+	}
+
 	item, ok := AwsModelIDMap[requestModel]
 	if ok {
 		requestModel = item.ID
-	} else if !strings.HasPrefix(requestModel, "anthropic.") {
+	} else if strings.HasPrefix(requestModel, "claude-") {
 		requestModel = "anthropic." + requestModel
 	}
 
