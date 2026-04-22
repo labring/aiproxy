@@ -49,7 +49,7 @@ type StoreV2 struct {
 	GroupID   string    `gorm:"size:64;primaryKey:1"`
 	TokenID   int       `gorm:"primaryKey:2"`
 	ChannelID int
-	Model     string `gorm:"size:64"`
+	Model     string `gorm:"size:128"`
 }
 
 func (s *StoreV2) BeforeSave(_ *gorm.DB) error {

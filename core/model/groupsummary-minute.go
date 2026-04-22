@@ -18,7 +18,7 @@ type GroupSummaryMinute struct {
 type GroupSummaryMinuteUnique struct {
 	GroupID         string `gorm:"size:64;not null;uniqueIndex:idx_groupsummary_minute_unique,priority:1"`
 	TokenName       string `gorm:"size:32;not null;uniqueIndex:idx_groupsummary_minute_unique,priority:2"`
-	Model           string `gorm:"size:64;not null;uniqueIndex:idx_groupsummary_minute_unique,priority:3"`
+	Model           string `gorm:"size:128;not null;uniqueIndex:idx_groupsummary_minute_unique,priority:3"`
 	MinuteTimestamp int64  `gorm:"not null;uniqueIndex:idx_groupsummary_minute_unique,priority:4,sort:desc"`
 }
 
