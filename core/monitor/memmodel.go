@@ -17,7 +17,7 @@ const (
 	timeWindow      = 10 * time.Second
 	maxSliceCount   = 12
 	banDuration     = 5 * time.Minute
-	minRequestCount = 20
+	minRequestCount = 10
 	cleanupInterval = time.Minute
 )
 

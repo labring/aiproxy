@@ -899,7 +899,7 @@ local function check_channel_error()
     local already_banned = redis.call("EXISTS", banned_key) == 1
     local total_req, total_err = get_clean_req_err(stats_key)
     local error_rate = 0
-    if total_req >= 20 then
+    if total_req >= 10 then
         error_rate = total_err / total_req
     end
     local error_rate_str = tostring(error_rate)
@@ -913,7 +913,7 @@ local function check_channel_error()
 		return {1, error_rate_str}
 	end
 
-	if total_req < 20 then
+	if total_req < 10 then
 		return {0, 0}
 	end
 
@@ -998,7 +998,7 @@ local function get_clean_req_err(key)
 end
 
 local total_req, total_err = get_clean_req_err(stats_key)
-if total_req < 20 then return 0 end
+if total_req < 10 then return 0 end
 return string.format("%.2f", total_err / total_req)
 `
 

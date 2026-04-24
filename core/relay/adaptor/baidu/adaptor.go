@@ -34,6 +34,8 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
+		m == mode.Anthropic ||
+		m == mode.Gemini ||
 		m == mode.Embeddings ||
 		m == mode.Rerank ||
 		m == mode.ImagesGenerations
@@ -69,7 +71,7 @@ func (a *Adaptor) GetRequestURL(
 	// Get API path suffix based on mode
 	var pathSuffix string
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		pathSuffix = "chat"
 	case mode.Embeddings:
 		pathSuffix = "embeddings"
@@ -133,6 +135,10 @@ func (a *Adaptor) ConvertRequest(
 		return openai.ConvertRequest(meta, store, req)
 	case mode.ChatCompletions:
 		return ConvertRequest(meta, req)
+	case mode.Anthropic:
+		return ConvertClaudeRequest(meta, req)
+	case mode.Gemini:
+		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -165,6 +171,16 @@ func (a *Adaptor) DoResponse(
 			return StreamHandler(meta, c, resp)
 		}
 		return Handler(meta, c, resp)
+	case mode.Anthropic:
+		if utils.IsStreamResponse(resp) {
+			return ClaudeStreamHandler(meta, c, resp)
+		}
+		return ClaudeHandler(meta, c, resp)
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			return GeminiStreamHandler(meta, c, resp)
+		}
+		return GeminiHandler(meta, c, resp)
 	default:
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
@@ -176,7 +192,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "Baidu Wenxin Workshop v1 endpoint\nSupports chat, embeddings, rerank, and image generation\nKey format: `client_id|client_secret`",
+		Readme:  "Baidu Wenxin Workshop v1 endpoint\nSupports chat, Anthropic-compatible request conversion, Gemini-compatible request conversion, embeddings, rerank, and image generation\nKey format: `client_id|client_secret`",
 		KeyHelp: "client_id|client_secret",
 		Models:  ModelList,
 	}
