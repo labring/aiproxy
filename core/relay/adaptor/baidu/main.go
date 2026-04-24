@@ -2,7 +2,6 @@ package baidu
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/adaptor"
-	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/render"
@@ -43,36 +41,6 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		return adaptor.ConvertResult{}, err
 	}
 
-	return ConvertOpenAIRequest(meta, request)
-}
-
-func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	request, err := openai.ConvertClaudeRequestModel(meta, req)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	return ConvertOpenAIRequest(meta, request)
-}
-
-func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	result, err := openai.ConvertGeminiRequest(meta, req)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	var request relaymodel.GeneralOpenAIRequest
-	if err := sonic.ConfigDefault.NewDecoder(result.Body).Decode(&request); err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	return ConvertOpenAIRequest(meta, &request)
-}
-
-func ConvertOpenAIRequest(
-	meta *meta.Meta,
-	request *relaymodel.GeneralOpenAIRequest,
-) (adaptor.ConvertResult, error) {
 	request.Model = meta.ActualModel
 	baiduRequest := ChatRequest{
 		Messages:        request.Messages,
@@ -224,10 +192,24 @@ func Handler(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	fullTextResponse, adaptorErr := openAIResponseFromBaidu(meta, resp)
-	if adaptorErr != nil {
-		return adaptor.DoResponseResult{}, adaptorErr
+	defer resp.Body.Close()
+
+	var baiduResponse ChatResponse
+
+	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&baiduResponse)
+	if err != nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
+
+	if baiduResponse.Error != nil && baiduResponse.ErrorCode != 0 {
+		return adaptor.DoResponseResult{}, ErrorHandler(baiduResponse.Error)
+	}
+
+	fullTextResponse := response2OpenAI(meta, &baiduResponse)
 
 	jsonResponse, err := sonic.Marshal(fullTextResponse)
 	if err != nil {
@@ -245,188 +227,4 @@ func Handler(
 	_, _ = c.Writer.Write(jsonResponse)
 
 	return adaptor.DoResponseResult{Usage: fullTextResponse.Usage.ToModelUsage()}, nil
-}
-
-func ClaudeHandler(
-	meta *meta.Meta,
-	c *gin.Context,
-	resp *http.Response,
-) (adaptor.DoResponseResult, adaptor.Error) {
-	openAIResp, adaptorErr := openAIHTTPResponseFromBaidu(meta, resp)
-	if adaptorErr != nil {
-		return adaptor.DoResponseResult{}, adaptorErr
-	}
-
-	result, handlerErr := openai.ClaudeHandler(meta, c, openAIResp)
-	if openAIResp != nil && openAIResp.Body != nil {
-		_ = openAIResp.Body.Close()
-	}
-
-	return result, handlerErr
-}
-
-func GeminiHandler(
-	meta *meta.Meta,
-	c *gin.Context,
-	resp *http.Response,
-) (adaptor.DoResponseResult, adaptor.Error) {
-	openAIResp, adaptorErr := openAIHTTPResponseFromBaidu(meta, resp)
-	if adaptorErr != nil {
-		return adaptor.DoResponseResult{}, adaptorErr
-	}
-
-	result, handlerErr := openai.GeminiHandler(meta, c, openAIResp)
-	if openAIResp != nil && openAIResp.Body != nil {
-		_ = openAIResp.Body.Close()
-	}
-
-	return result, handlerErr
-}
-
-func ClaudeStreamHandler(
-	meta *meta.Meta,
-	c *gin.Context,
-	resp *http.Response,
-) (adaptor.DoResponseResult, adaptor.Error) {
-	openAIResp := openAIStreamResponseFromBaidu(meta, resp)
-
-	result, handlerErr := openai.ClaudeStreamHandler(meta, c, openAIResp)
-
-	if openAIResp != nil && openAIResp.Body != nil {
-		_ = openAIResp.Body.Close()
-	}
-
-	return result, handlerErr
-}
-
-func GeminiStreamHandler(
-	meta *meta.Meta,
-	c *gin.Context,
-	resp *http.Response,
-) (adaptor.DoResponseResult, adaptor.Error) {
-	openAIResp := openAIStreamResponseFromBaidu(meta, resp)
-
-	result, handlerErr := openai.GeminiStreamHandler(meta, c, openAIResp)
-
-	if openAIResp != nil && openAIResp.Body != nil {
-		_ = openAIResp.Body.Close()
-	}
-
-	return result, handlerErr
-}
-
-func openAIHTTPResponseFromBaidu(
-	meta *meta.Meta,
-	resp *http.Response,
-) (*http.Response, adaptor.Error) {
-	fullTextResponse, adaptorErr := openAIResponseFromBaidu(meta, resp)
-	if adaptorErr != nil {
-		return nil, adaptorErr
-	}
-
-	jsonResponse, err := sonic.Marshal(fullTextResponse)
-	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
-	}
-
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header: http.Header{
-			"Content-Type":   {"application/json"},
-			"Content-Length": {strconv.Itoa(len(jsonResponse))},
-		},
-		Body:          io.NopCloser(bytes.NewReader(jsonResponse)),
-		ContentLength: int64(len(jsonResponse)),
-	}, nil
-}
-
-func openAIResponseFromBaidu(
-	meta *meta.Meta,
-	resp *http.Response,
-) (*relaymodel.TextResponse, adaptor.Error) {
-	defer resp.Body.Close()
-
-	var baiduResponse ChatResponse
-
-	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&baiduResponse)
-	if err != nil {
-		return nil, relaymodel.WrapperOpenAIError(
-			err,
-			"unmarshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
-	}
-
-	if baiduResponse.Error != nil && baiduResponse.ErrorCode != 0 {
-		return nil, ErrorHandler(baiduResponse.Error)
-	}
-
-	return response2OpenAI(meta, &baiduResponse), nil
-}
-
-func openAIStreamResponseFromBaidu(meta *meta.Meta, resp *http.Response) *http.Response {
-	reader, writer := io.Pipe()
-
-	go func() {
-		defer resp.Body.Close()
-		defer writer.Close()
-
-		scanner, cleanup := utils.NewScanner(resp.Body)
-		defer cleanup()
-
-		for scanner.Scan() {
-			data := scanner.Bytes()
-			if !render.IsValidSSEData(data) {
-				continue
-			}
-
-			data = render.ExtractSSEData(data)
-			if render.IsSSEDone(data) {
-				break
-			}
-
-			var baiduResponse ChatStreamResponse
-			if err := sonic.Unmarshal(data, &baiduResponse); err != nil {
-				continue
-			}
-
-			response := streamResponse2OpenAI(meta, &baiduResponse)
-
-			jsonData, err := sonic.Marshal(response)
-			if err != nil {
-				continue
-			}
-
-			if _, err := writer.Write([]byte("data: ")); err != nil {
-				return
-			}
-
-			if _, err := writer.Write(jsonData); err != nil {
-				return
-			}
-
-			if _, err := writer.Write([]byte("\n\n")); err != nil {
-				return
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			_ = writer.CloseWithError(err)
-			return
-		}
-
-		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
-	}()
-
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header: http.Header{
-			"Content-Type": {"text/event-stream"},
-		},
-		Body: reader,
-	}
 }
