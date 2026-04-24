@@ -90,7 +90,7 @@ func ResponseHandler(
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,
-			Model:     meta.ActualModel,
+			Model:     meta.OriginModel,
 			ExpiresAt: time.Now().Add(time.Hour * 24 * 7), // Store for 7 days
 		})
 		if err != nil {
@@ -162,7 +162,7 @@ func ResponseStreamHandler(
 					GroupID:   meta.Group.ID,
 					TokenID:   meta.Token.ID,
 					ChannelID: meta.Channel.ID,
-					Model:     meta.ActualModel,
+					Model:     meta.OriginModel,
 					ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
 				})
 				if err != nil {
