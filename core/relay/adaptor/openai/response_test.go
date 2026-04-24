@@ -269,3 +269,45 @@ func TestResponseStreamHandlerWebSearchCountDedupAcrossEvents(t *testing.T) {
 	assert.Equal(t, "resp_ws_stream_2", result.UpstreamID)
 	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
 }
+
+func TestResponseStreamHandlerWebSearchCountFromItemEvents(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+	store := &responseTestStore{}
+	meta := &meta.Meta{
+		OriginModel: "gpt-5",
+		ActualModel: "gpt-5",
+		Group:       model.GroupCache{ID: "group-1"},
+		Token:       model.TokenCache{ID: 7},
+		Channel:     meta.ChannelMeta{ID: 9},
+	}
+
+	body := "event: response.output_item.added\n" +
+		"data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"in_progress\"},\"output_index\":2,\"sequence_number\":100}\n\n" +
+		"event: response.web_search_call.in_progress\n" +
+		"data: {\"type\":\"response.web_search_call.in_progress\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":101}\n\n" +
+		"event: response.web_search_call.searching\n" +
+		"data: {\"type\":\"response.web_search_call.searching\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":102}\n\n" +
+		"event: response.web_search_call.completed\n" +
+		"data: {\"type\":\"response.web_search_call.completed\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":103}\n\n" +
+		"event: response.output_item.done\n" +
+		"data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},\"output_index\":2,\"sequence_number\":104}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseStreamHandler(meta, store, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, model.ZeroNullInt64(1), result.Usage.WebSearchCount)
+}

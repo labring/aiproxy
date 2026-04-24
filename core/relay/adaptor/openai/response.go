@@ -19,6 +19,42 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
+func countWebSearchStreamEvent(
+	event *relaymodel.ResponseStreamEvent,
+	seen map[string]struct{},
+) int64 {
+	if event == nil {
+		return 0
+	}
+
+	addSeen := func(id string) int64 {
+		if id == "" {
+			return 0
+		}
+
+		if _, ok := seen[id]; ok {
+			return 0
+		}
+
+		seen[id] = struct{}{}
+
+		return 1
+	}
+
+	switch event.Type {
+	case string(relaymodel.EventWebSearchCallCompleted):
+		return addSeen(event.ItemID)
+	case string(relaymodel.EventOutputItemDone):
+		if event.Item != nil &&
+			event.Item.Type == "web_search_call" &&
+			event.Item.Status == relaymodel.ResponseStatusCompleted {
+			return addSeen(event.Item.ID)
+		}
+	}
+
+	return 0
+}
+
 // ConvertResponseRequest converts a response creation request
 func ConvertResponseRequest(
 	meta *meta.Meta,
@@ -194,6 +230,8 @@ func ResponseStreamHandler(
 				event.Response.WebSearchCallCount(webSearchSeen),
 			)
 		}
+
+		usage.WebSearchCount += model.ZeroNullInt64(countWebSearchStreamEvent(&event, webSearchSeen))
 
 		// Forward the event
 		render.ResponsesData(c, data)
