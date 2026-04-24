@@ -155,7 +155,10 @@ func (a *Adaptor) SetupRequestHeader(
 	rawBetas := c.Request.Header.Get(AnthropicBeta)
 
 	if rawBetas != "" {
-		req.Header.Set(AnthropicBeta, FixBetasStringWithModel(meta.ActualModel, rawBetas))
+		req.Header.Set(
+			AnthropicBeta,
+			FixBetasStringWithModel(ResolveModelName(meta.OriginModel, meta.ActualModel), rawBetas),
+		)
 	}
 
 	return nil

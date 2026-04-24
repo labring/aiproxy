@@ -22,10 +22,21 @@ import (
 func ConvertClaudeRequest(
 	meta *meta.Meta,
 	req *http.Request,
+	hooks ...OpenAIRequestHook,
 ) (adaptor.ConvertResult, error) {
 	openAIRequest, err := ConvertClaudeRequestModel(meta, req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	for _, hook := range hooks {
+		if hook == nil {
+			continue
+		}
+
+		if err := hook(openAIRequest); err != nil {
+			return adaptor.ConvertResult{}, err
+		}
 	}
 
 	// Marshal the converted request
@@ -85,6 +96,11 @@ func ConvertClaudeRequestModel(
 			IncludeUsage: true,
 		}
 	}
+
+	utils.ApplyReasoningToOpenAIRequest(
+		&openAIRequest,
+		utils.ParseClaudeReasoning(claudeRequest.Thinking, claudeRequest.OutputConfig),
+	)
 
 	return &openAIRequest, nil
 }
@@ -807,6 +823,11 @@ func ConvertClaudeToResponsesRequest(
 	if openAIRequest.ToolChoice != nil {
 		responsesReq.ToolChoice = openAIRequest.ToolChoice
 	}
+
+	utils.ApplyReasoningToResponsesRequest(
+		&responsesReq,
+		utils.ParseOpenAIReasoning(openAIRequest),
+	)
 
 	// Force non-store mode
 	storeValue := false

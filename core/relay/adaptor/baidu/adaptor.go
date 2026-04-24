@@ -79,9 +79,25 @@ func (a *Adaptor) GetRequestURL(
 		pathSuffix = "text2image"
 	}
 
-	modelEndpoint, ok := modelEndpointMap[meta.ActualModel]
+	modelName := meta.ActualModel
+	if modelName == "" {
+		modelName = meta.OriginModel
+	}
+
+	if endpointModel := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			_, ok := modelEndpointMap[modelName]
+			return ok
+		},
+	); endpointModel != "" {
+		modelName = endpointModel
+	}
+
+	modelEndpoint, ok := modelEndpointMap[modelName]
 	if !ok {
-		modelEndpoint = strings.ToLower(meta.ActualModel)
+		modelEndpoint = strings.ToLower(modelName)
 	}
 
 	// Construct full URL

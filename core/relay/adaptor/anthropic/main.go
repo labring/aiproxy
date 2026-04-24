@@ -211,35 +211,14 @@ func ConvertRequestBodyToBytes(
 
 	maxTokensNode := node.Get("max_tokens")
 	if maxTokensNode == nil || !maxTokensNode.Exists() {
+		resolvedModel := ResolveModelName(meta.OriginModel, meta.ActualModel)
 		_, _ = node.Set(
 			"max_tokens",
-			ast.NewNumber(strconv.Itoa(ModelDefaultMaxTokens(meta.ActualModel))),
+			ast.NewNumber(strconv.Itoa(ModelDefaultMaxTokens(resolvedModel))),
 		)
 	}
 
-	// Handle thinking budget tokens adjustment
-	thinkingNode := node.Get("thinking")
-	if thinkingNode != nil && thinkingNode.Exists() {
-		// Only adjust budget_tokens for "enabled" type
-		// Opus 4.6's "adaptive" type doesn't support budget_tokens
-		thinkingType, _ := thinkingNode.Get("type").String()
-		if thinkingType == relaymodel.ClaudeThinkingTypeEnabled {
-			maxTokens, err := node.Get("max_tokens").Int64()
-			if err == nil {
-				budgetTokens, _ := thinkingNode.Get("budget_tokens").Int64()
-				maxTokensInt := int(maxTokens)
-				budgetTokensInt := int(budgetTokens)
-				adjustThinkingBudgetTokens(&maxTokensInt, &budgetTokensInt)
-
-				// Update the nodes with adjusted values
-				_, _ = node.Set("max_tokens", ast.NewNumber(strconv.Itoa(maxTokensInt)))
-				_, _ = thinkingNode.Set(
-					"budget_tokens",
-					ast.NewNumber(strconv.Itoa(budgetTokensInt)),
-				)
-			}
-		}
-
+	if node.Get("thinking").Exists() {
 		// Remove temperature when thinking is enabled
 		_, _ = node.Unset("temperature")
 	}

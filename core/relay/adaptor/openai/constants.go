@@ -276,3 +276,19 @@ func IsResponsesOnlyModel(modelConfig *model.ModelConfig, modelName string) bool
 
 	return false
 }
+
+func IsResponsesOnlyModelAny(
+	modelConfig *model.ModelConfig,
+	originModel string,
+	actualModel string,
+) bool {
+	if IsResponsesOnlyModel(modelConfig, originModel) {
+		return true
+	}
+
+	if actualModel != "" && actualModel != originModel {
+		return IsResponsesOnlyModel(modelConfig, actualModel)
+	}
+
+	return false
+}

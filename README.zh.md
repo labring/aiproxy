@@ -337,6 +337,10 @@ wire_api = "chat"
 - **多协议访问**：使用任意协议（Chat Completions、Claude Messages 或 Gemini）访问仅支持 Responses 的模型
 - **透明转换**：无需客户端修改 - AI Proxy 自动处理协议转换
 
+**Reasoning / Thinking 兼容文档**：
+
+- [Thinking / Reasoning 参数兼容说明](./docs/REASONING_COMPATIBILITY.zh.md)
+
 ### MCP (模型上下文协议)
 
 AI Proxy 提供全面的 MCP 支持，扩展 AI 能力：
@@ -371,18 +375,6 @@ cd core && go build -o aiproxy .
 # 运行
 ./aiproxy
 ```
-
-## 🤝 参与贡献
-
-我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解详情。
-
-### 贡献方式
-
-- 🐛 报告错误和问题
-- 💡 建议新功能
-- 📝 改进文档
-- 🔧 提交拉取请求
-- ⭐ 为仓库点星
 
 ## 📄 开源协议
 

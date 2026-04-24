@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -13,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -105,11 +107,21 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	if meta.Mode != mode.Anthropic {
+	switch meta.Mode {
+	case mode.ChatCompletions:
+		return openai.ConvertChatCompletionsRequest(
+			meta,
+			req,
+			false,
+			patchReasoningFromNode,
+		)
+	case mode.Gemini:
+		return openai.ConvertGeminiRequest(meta, req, patchReasoningRequest)
+	case mode.Anthropic:
+		return anthropic.ConvertRequest(meta, req)
+	default:
 		return a.Adaptor.ConvertRequest(meta, store, req)
 	}
-
-	return anthropic.ConvertRequest(meta, req)
 }
 
 func (a *Adaptor) DoResponse(
@@ -196,4 +208,19 @@ func appendBetaQuery(rawURL string, c *gin.Context) (string, error) {
 	parsedURL.RawQuery = queryValues.Encode()
 
 	return parsedURL.String(), nil
+}
+
+func patchReasoningFromNode(node *ast.Node) error {
+	reasoning, err := utils.ParseOpenAIReasoningFromNode(node)
+	if err != nil {
+		return err
+	}
+
+	return utils.ApplyReasoningToDeepSeekNode(node, reasoning)
+}
+
+func patchReasoningRequest(openAIReq *relaymodel.GeneralOpenAIRequest) error {
+	reasoning := utils.ParseOpenAIReasoning(openAIReq)
+	utils.ApplyReasoningToDeepSeekRequest(openAIReq, reasoning)
+	return nil
 }

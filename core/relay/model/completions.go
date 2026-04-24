@@ -56,6 +56,9 @@ type GeneralOpenAIRequest struct {
 	TopK                 int             `json:"top_k,omitempty"`
 	NumCtx               int             `json:"num_ctx,omitempty"`
 	Stream               bool            `json:"stream,omitempty"`
+	ReasoningEffort      *string         `json:"reasoning_effort,omitempty"`
+	EnableThinking       *bool           `json:"enable_thinking,omitempty"`
+	ThinkingBudget       *int            `json:"thinking_budget,omitempty"`
 	// aiproxy control field
 	Thinking *GeneralThinking `json:"thinking,omitempty"`
 }

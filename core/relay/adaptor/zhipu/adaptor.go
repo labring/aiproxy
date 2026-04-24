@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -85,13 +86,18 @@ func (a *Adaptor) ConvertRequest(
 ) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions:
-		return openai.ConvertChatCompletionsRequest(meta, req, false)
+		return openai.ConvertChatCompletionsRequest(
+			meta,
+			req,
+			false,
+			patchReasoningFromNode,
+		)
 	case mode.Completions:
 		return openai.ConvertCompletionsRequest(meta, req)
 	case mode.Anthropic:
-		return openai.ConvertClaudeRequest(meta, req)
+		return openai.ConvertClaudeRequest(meta, req, patchReasoningRequest)
 	case mode.Gemini:
-		return openai.ConvertGeminiRequest(meta, req)
+		return openai.ConvertGeminiRequest(meta, req, patchReasoningRequest)
 	case mode.AudioTranscription:
 		return openai.ConvertSTTRequest(meta, req)
 	case mode.AudioSpeech:
@@ -103,6 +109,21 @@ func (a *Adaptor) ConvertRequest(
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
+}
+
+func patchReasoningFromNode(node *ast.Node) error {
+	reasoning, err := utils.ParseOpenAIReasoningFromNode(node)
+	if err != nil {
+		return err
+	}
+
+	return utils.ApplyReasoningToZhipuNode(node, reasoning)
+}
+
+func patchReasoningRequest(openAIReq *relaymodel.GeneralOpenAIRequest) error {
+	reasoning := utils.ParseOpenAIReasoning(openAIReq)
+	utils.ApplyReasoningToZhipuRequest(openAIReq, reasoning)
+	return nil
 }
 
 func (a *Adaptor) DoResponse(

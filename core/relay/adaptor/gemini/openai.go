@@ -54,6 +54,28 @@ func shouldAutoIncludeThoughts(modelName string) bool {
 	return true
 }
 
+func resolveGeminiFeatureModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			return strings.Contains(strings.ToLower(modelName), "gemini")
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return utils.PreferredModelName(meta.OriginModel, meta.ActualModel)
+}
+
+func isGeminiImageModel(meta *meta.Meta) bool {
+	return strings.Contains(strings.ToLower(resolveGeminiFeatureModel(meta)), "image")
+}
+
 func autoImageURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
 	if meta != nil {
 		switch meta.Channel.Type {
@@ -117,7 +139,7 @@ func buildGenerationConfig(
 	}
 
 	if len(config.ResponseModalities) == 0 &&
-		strings.Contains(meta.ActualModel, "image") {
+		isGeminiImageModel(meta) {
 		config.ResponseModalities = []string{
 			"Text",
 			"Image",
@@ -136,25 +158,21 @@ func buildGenerationConfig(
 		}
 	}
 
-	if config.ThinkingConfig == nil && req.Thinking != nil {
-		thinkingConfig := relaymodel.GeminiThinkingConfig{}
-		switch req.Thinking.Type {
-		case relaymodel.ClaudeThinkingTypeEnabled:
-			thinkingConfig.IncludeThoughts = true
-			thinkingConfig.ThinkingBudget = &req.Thinking.BudgetTokens
-		case relaymodel.ClaudeThinkingTypeDisabled:
-			thinkingConfig.IncludeThoughts = false
-		}
-
-		config.ThinkingConfig = &thinkingConfig
+	if config.ThinkingConfig == nil {
+		utils.ApplyReasoningToGeminiConfig(
+			meta.OriginModel,
+			meta.ActualModel,
+			&config,
+			utils.ParseOpenAIReasoning(req),
+		)
 	}
 
 	// https://ai.google.dev/gemini-api/docs/thinking
-	if config.ThinkingConfig == nil && shouldAutoIncludeThoughts(meta.ActualModel) {
+	if config.ThinkingConfig == nil && shouldAutoIncludeThoughts(resolveGeminiFeatureModel(meta)) {
 		// disable vertexai image model include thoughts
 		// because error call gemini-3-pro-image-preview model
 		if meta.Channel.Type != model.ChannelTypeVertexAI ||
-			!strings.Contains(meta.ActualModel, "image") {
+			!isGeminiImageModel(meta) {
 			config.ThinkingConfig = &relaymodel.GeminiThinkingConfig{
 				IncludeThoughts: true,
 			}

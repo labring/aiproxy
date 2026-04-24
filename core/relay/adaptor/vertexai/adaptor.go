@@ -38,12 +38,31 @@ type Config struct {
 	ADCJSON   string
 }
 
+func resolveFeatureModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			modelName = strings.ToLower(modelName)
+			return strings.Contains(modelName, "gemini") || strings.Contains(modelName, "claude")
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return utils.PreferredModelName(meta.OriginModel, meta.ActualModel)
+}
+
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
 	store adaptor.Store,
 	request *http.Request,
 ) (adaptor.ConvertResult, error) {
-	aa := GetAdaptor(meta.ActualModel)
+	aa := GetAdaptor(resolveFeatureModel(meta))
 	if aa == nil {
 		return adaptor.ConvertResult{}, errors.New("adaptor not found")
 	}
@@ -57,7 +76,7 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	innerAdaptor := GetAdaptor(meta.ActualModel)
+	innerAdaptor := GetAdaptor(resolveFeatureModel(meta))
 	if innerAdaptor == nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			meta.ActualModel+" adaptor not found",
@@ -94,7 +113,8 @@ func (a *Adaptor) GetRequestURL(
 		isStream = meta.GetBool("stream")
 	}
 
-	if strings.HasPrefix(meta.ActualModel, "gemini") {
+	featureModel := resolveFeatureModel(meta)
+	if strings.HasPrefix(strings.ToLower(featureModel), "gemini") {
 		if isStream {
 			suffix = "streamGenerateContent?alt=sse"
 		} else {
@@ -114,7 +134,7 @@ func (a *Adaptor) GetRequestURL(
 	}
 
 	publishers := "google"
-	if strings.Contains(meta.ActualModel, "claude") {
+	if strings.Contains(strings.ToLower(featureModel), "claude") {
 		publishers = "anthropic"
 	}
 
@@ -186,7 +206,7 @@ func (a *Adaptor) SetupRequestHeader(
 	c *gin.Context,
 	req *http.Request,
 ) error {
-	adaptor := GetAdaptor(meta.ActualModel)
+	adaptor := GetAdaptor(resolveFeatureModel(meta))
 	if adaptor == nil {
 		return relaymodel.WrapperOpenAIErrorWithMessage(
 			meta.ActualModel+" adaptor not found",

@@ -12,6 +12,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 )
 
 type Adaptor struct{}
@@ -36,9 +37,11 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	aa := GetAdaptor(meta.ActualModel)
-	if aa == nil {
-		aa = GetAdaptor(meta.OriginModel)
+	aa := GetAdaptor(
+		relayutils.PreferredModelName(meta.OriginModel, meta.ActualModel),
+	)
+	if aa == nil && meta.ActualModel != "" && meta.ActualModel != meta.OriginModel {
+		aa = GetAdaptor(meta.ActualModel)
 	}
 
 	if aa == nil {
