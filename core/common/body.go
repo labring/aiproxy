@@ -86,6 +86,22 @@ func SetRequestBody(req *http.Request, body []byte) {
 	ctx := req.Context()
 	bufCtx := context.WithValue(ctx, requestBodyKey{}, body)
 	*req = *req.WithContext(bufCtx)
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+}
+
+func GetCachedRequestBody(req *http.Request) ([]byte, bool) {
+	requestBody := req.Context().Value(requestBodyKey{})
+	if requestBody == nil {
+		return nil, false
+	}
+
+	body, ok := requestBody.([]byte)
+
+	return body, ok
 }
 
 func IsJSONContentType(ct string) bool {
@@ -100,10 +116,8 @@ func GetRequestBodyReusable(req *http.Request) ([]byte, error) {
 		return nil, nil
 	}
 
-	requestBody := req.Context().Value(requestBodyKey{})
-	if requestBody != nil {
-		b, _ := requestBody.([]byte)
-		return b, nil
+	if body, ok := GetCachedRequestBody(req); ok {
+		return body, nil
 	}
 
 	var (
@@ -119,16 +133,7 @@ func GetRequestBodyReusable(req *http.Request) ([]byte, error) {
 		}
 	}()
 
-	if req.ContentLength <= 0 ||
-		IsJSONContentType(contentType) {
-		buf, err = io.ReadAll(LimitReader(req.Body, MaxRequestBodySize))
-		if err != nil {
-			if errors.Is(err, ErrLimitedReaderExceeded) {
-				return nil, fmt.Errorf("request body too large, max: %d", MaxRequestBodySize)
-			}
-			return nil, fmt.Errorf("request body read failed: %w", err)
-		}
-	} else {
+	if req.ContentLength > 0 {
 		if req.ContentLength > MaxRequestBodySize {
 			return nil, fmt.Errorf(
 				"request body too large: %d, max: %d",
@@ -139,6 +144,14 @@ func GetRequestBodyReusable(req *http.Request) ([]byte, error) {
 
 		buf = make([]byte, req.ContentLength)
 		_, err = io.ReadFull(req.Body, buf)
+	} else {
+		buf, err = io.ReadAll(LimitReader(req.Body, MaxRequestBodySize))
+		if err != nil {
+			if errors.Is(err, ErrLimitedReaderExceeded) {
+				return nil, fmt.Errorf("request body too large, max: %d", MaxRequestBodySize)
+			}
+			return nil, fmt.Errorf("request body read failed: %w", err)
+		}
 	}
 
 	if err != nil {

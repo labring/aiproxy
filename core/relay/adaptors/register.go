@@ -21,6 +21,7 @@ import (
 	_ "github.com/labring/aiproxy/core/relay/adaptor/doubao"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/doubaoaudio"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/fake"
+	_ "github.com/labring/aiproxy/core/relay/adaptor/fakeerror"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/gemini"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/geminiopenai"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/groq"

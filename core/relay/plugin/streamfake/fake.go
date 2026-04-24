@@ -21,6 +21,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
 	"github.com/labring/aiproxy/core/relay/plugin/patch"
 	"github.com/labring/aiproxy/core/relay/render"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 var _ plugin.Plugin = (*StreamFake)(nil)
@@ -28,6 +29,7 @@ var _ plugin.Plugin = (*StreamFake)(nil)
 // StreamFake implements the stream fake functionality
 type StreamFake struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewStreamFakePlugin creates a new stream fake plugin instance
@@ -42,12 +44,12 @@ const (
 
 // getConfig retrieves the plugin configuration
 func (p *StreamFake) getConfig(meta *meta.Meta) (*Config, error) {
-	pluginConfig := &Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("stream-fake", pluginConfig); err != nil {
+	pluginConfig, err := p.configCache.Load(meta, "stream-fake", Config{})
+	if err != nil {
 		return nil, err
 	}
 
-	return pluginConfig, nil
+	return &pluginConfig, nil
 }
 
 // ConvertRequest modifies the request to enable streaming if it's originally non-streaming

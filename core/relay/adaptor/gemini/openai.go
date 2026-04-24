@@ -585,13 +585,31 @@ func processImageTasks(
 
 // Setting safety to the lowest possible values since Gemini is already powerless enough
 func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	adaptorConfig := Config{}
-
-	err := meta.ChannelConfigs.LoadConfig(&adaptorConfig)
+	cfg, err := loadConfig(meta)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
 
+	return convertRequest(meta, req, cfg)
+}
+
+func (a *Adaptor) convertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	cfg, err := a.loadConfig(meta)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return convertRequest(meta, req, cfg)
+}
+
+func convertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	adaptorConfig Config,
+) (adaptor.ConvertResult, error) {
 	textRequest, err := utils.UnmarshalGeneralOpenAIRequest(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err

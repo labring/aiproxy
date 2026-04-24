@@ -14,7 +14,7 @@ type HandleResult struct {
 	Error      adaptor.Error
 	Usage      model.Usage
 	UpstreamID string
-	Detail     *RequestDetail
+	BodyDetail *BodyDetail
 }
 
 func Handle(
@@ -22,19 +22,19 @@ func Handle(
 	c *gin.Context,
 	meta *meta.Meta,
 	store adaptor.Store,
+	opts ...BodyDetailOption,
 ) *HandleResult {
 	log := common.GetLogger(c)
 
-	result, detail, respErr := DoHelper(adaptor, c, meta, store)
+	result, detail, respErr := DoHelper(adaptor, c, meta, store, opts...)
 	if respErr != nil {
-		var logDetail *RequestDetail
-		if detail != nil && config.DebugEnabled {
-			logDetail = detail
+		if detail != nil && config.DebugEnabled &&
+			(detail.RequestBody != "" || detail.ResponseBody != "") {
 			log.Errorf(
 				"handle failed: %+v\nrequest detail:\n%s\nresponse detail:\n%s",
 				respErr,
-				logDetail.RequestBody,
-				logDetail.ResponseBody,
+				detail.RequestBody,
+				detail.ResponseBody,
 			)
 		} else {
 			log.Errorf("handle failed: %+v", respErr)
@@ -44,13 +44,13 @@ func Handle(
 			Error:      respErr,
 			Usage:      result.Usage,
 			UpstreamID: result.UpstreamID,
-			Detail:     detail,
+			BodyDetail: detail,
 		}
 	}
 
 	return &HandleResult{
 		Usage:      result.Usage,
 		UpstreamID: result.UpstreamID,
-		Detail:     detail,
+		BodyDetail: detail,
 	}
 }

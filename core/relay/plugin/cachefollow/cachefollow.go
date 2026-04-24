@@ -16,6 +16,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
 	"github.com/labring/aiproxy/core/relay/render"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 const (
@@ -27,6 +28,7 @@ var _ plugin.Plugin = (*Plugin)(nil)
 
 type Plugin struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 func NewCacheFollowPlugin() plugin.Plugin {
@@ -34,12 +36,12 @@ func NewCacheFollowPlugin() plugin.Plugin {
 }
 
 func (p *Plugin) getConfig(meta *meta.Meta) (*Config, error) {
-	pluginConfig := &Config{}
-	if err := meta.ModelConfig.LoadPluginConfig(PluginName, pluginConfig); err != nil {
+	pluginConfig, err := p.configCache.Load(meta, PluginName, Config{})
+	if err != nil {
 		return nil, err
 	}
 
-	return pluginConfig, nil
+	return &pluginConfig, nil
 }
 
 func getFollowedChannelTTL(retention string, defaultTTL time.Duration) time.Duration {

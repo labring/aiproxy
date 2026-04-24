@@ -21,6 +21,7 @@ var _ plugin.Plugin = (*ThinkPlugin)(nil)
 // ThinkPlugin implements the think content splitting functionality
 type ThinkPlugin struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewThinkPlugin creates a new think plugin instance
@@ -30,12 +31,12 @@ func NewThinkPlugin() plugin.Plugin {
 
 // getConfig retrieves the plugin configuration
 func (p *ThinkPlugin) getConfig(meta *meta.Meta) (*Config, error) {
-	pluginConfig := &Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("think-split", pluginConfig); err != nil {
+	pluginConfig, err := p.configCache.Load(meta, "think-split", Config{})
+	if err != nil {
 		return nil, err
 	}
 
-	return pluginConfig, nil
+	return &pluginConfig, nil
 }
 
 // DoResponse handles the response processing to split think content

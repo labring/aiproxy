@@ -17,6 +17,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 var _ plugin.Plugin = (*Plugin)(nil)
@@ -34,6 +35,7 @@ const lazyPatchesKey = "_lazy_patches"
 // Plugin implements JSON request patching functionality
 type Plugin struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewPatchPlugin creates a new patch plugin instance
@@ -99,9 +101,8 @@ func (p *Plugin) ConvertRequest(
 
 // loadConfig loads patch configuration from model config
 func (p *Plugin) loadConfig(meta *meta.Meta) *Config {
-	// Load plugin config from model config
-	var config Config
-	if err := meta.ModelConfig.LoadPluginConfig(PluginName, &config); err != nil {
+	config, err := p.configCache.Load(meta, PluginName, Config{})
+	if err != nil {
 		return &Config{}
 	}
 

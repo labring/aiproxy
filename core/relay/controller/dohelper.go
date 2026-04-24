@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -18,7 +19,6 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
-	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,6 +31,7 @@ const (
 type responseWriter struct {
 	gin.ResponseWriter
 	body        *bytes.Buffer
+	bodyLimit   int
 	firstByteAt time.Time
 }
 
@@ -39,10 +40,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 		rw.firstByteAt = time.Now()
 	}
 
-	if rw.body.Len()+len(b) <= maxBufferSize {
-		rw.body.Write(b)
-	} else {
-		rw.body.Write(b[:maxBufferSize-rw.body.Len()])
+	if rw.body != nil && rw.bodyLimit > rw.body.Len() {
+		remain := min(rw.bodyLimit-rw.body.Len(), len(b))
+
+		if remain > 0 {
+			rw.body.Write(b[:remain])
+		}
 	}
 
 	return rw.ResponseWriter.Write(b)
@@ -77,10 +80,17 @@ func putBuffer(buf *bytes.Buffer) {
 	bufferPool.Put(buf)
 }
 
-type RequestDetail struct {
+type BodyDetail struct {
 	RequestBody  string
 	ResponseBody string
 	FirstByteAt  time.Time
+}
+
+type BodyDetailOption struct {
+	IncludeRequestBody  bool
+	IncludeResponseBody bool
+	MaxRequestBodySize  int64
+	MaxResponseBodySize int64
 }
 
 func DoHelper(
@@ -88,15 +98,19 @@ func DoHelper(
 	c *gin.Context,
 	meta *meta.Meta,
 	store adaptor.Store,
+	opts ...BodyDetailOption,
 ) (
 	adaptor.DoResponseResult,
-	*RequestDetail,
+	*BodyDetail,
 	adaptor.Error,
 ) {
-	detail := RequestDetail{}
+	detail := BodyDetail{}
+	detailOption := mergeBodyDetailOptions(opts...)
 
-	if err := storeRequestBody(meta, c, &detail); err != nil {
-		return adaptor.DoResponseResult{}, nil, err
+	if requestBody, err := requestBodyDetail(c, detailOption); err != nil {
+		common.GetLogger(c).Warnf("get request body detail failed: %v", err)
+	} else {
+		detail.RequestBody = requestBody
 	}
 
 	// donot use c.Request.Context() because it will be canceled by the client
@@ -123,7 +137,7 @@ func DoHelper(
 		defer resp.Body.Close()
 	}
 
-	result, relayErr := handleResponse(a, c, meta, store, resp, &detail)
+	result, relayErr := handleResponse(a, c, meta, store, resp, &detail, detailOption)
 	if relayErr != nil {
 		return adaptor.DoResponseResult{}, &detail, relayErr
 	}
@@ -141,30 +155,6 @@ func DoHelper(
 	}
 
 	return result, &detail, nil
-}
-
-func storeRequestBody(meta *meta.Meta, c *gin.Context, detail *RequestDetail) adaptor.Error {
-	switch {
-	case meta.Mode == mode.AudioTranscription,
-		meta.Mode == mode.AudioTranslation,
-		meta.Mode == mode.ImagesEdits:
-		return nil
-	case !common.IsJSONContentType(c.GetHeader("Content-Type")):
-		return nil
-	default:
-		reqBody, err := common.GetRequestBodyReusable(c.Request)
-		if err != nil {
-			return relaymodel.WrapperErrorWithMessage(
-				meta.Mode,
-				http.StatusBadRequest,
-				"get request body failed: "+err.Error(),
-			)
-		}
-
-		detail.RequestBody = conv.BytesToString(reqBody)
-
-		return nil
-	}
 }
 
 func prepareAndDoRequest(
@@ -320,14 +310,25 @@ func handleResponse(
 	meta *meta.Meta,
 	store adaptor.Store,
 	resp *http.Response,
-	detail *RequestDetail,
+	detail *BodyDetail,
+	opt BodyDetailOption,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	buf := getBuffer()
-	defer putBuffer(buf)
+	var (
+		buf       *bytes.Buffer
+		bodyLimit int
+	)
+
+	bodyLimit = responseBodyCaptureLimit(opt)
+
+	if bodyLimit > 0 {
+		buf = getBuffer()
+		defer putBuffer(buf)
+	}
 
 	rw := &responseWriter{
 		ResponseWriter: c.Writer,
 		body:           buf,
+		bodyLimit:      bodyLimit,
 	}
 
 	rawWriter := c.Writer
@@ -339,13 +340,13 @@ func handleResponse(
 	c.Writer = rw
 
 	result, relayErr := a.DoResponse(meta, store, c, resp)
-	if relayErr != nil {
+	if relayErr != nil && opt.IncludeResponseBody && opt.MaxResponseBodySize >= 0 {
 		respBody, _ := relayErr.MarshalJSON()
-		detail.ResponseBody = conv.BytesToString(respBody)
-	} else {
+		detail.ResponseBody = limitBodyDetail(conv.BytesToString(respBody), opt.MaxResponseBodySize)
+	} else if rw.body != nil {
 		// copy body buffer
 		// do not use bytes conv
-		detail.ResponseBody = rw.body.String()
+		detail.ResponseBody = limitBodyDetail(rw.body.String(), opt.MaxResponseBodySize)
 	}
 
 	if result.UpstreamID == "" && resp != nil && resp.Header != nil &&
@@ -354,6 +355,59 @@ func handleResponse(
 	}
 
 	return result, relayErr
+}
+
+func mergeBodyDetailOptions(opts ...BodyDetailOption) BodyDetailOption {
+	if len(opts) == 0 {
+		return BodyDetailOption{}
+	}
+
+	return opts[0]
+}
+
+func requestBodyDetail(c *gin.Context, opt BodyDetailOption) (string, error) {
+	if !opt.IncludeRequestBody ||
+		opt.MaxRequestBodySize < 0 ||
+		c == nil ||
+		c.Request == nil ||
+		!common.IsJSONContentType(c.GetHeader("Content-Type")) {
+		return "", nil
+	}
+
+	body, err := common.GetRequestBodyReusable(c.Request)
+	if err != nil {
+		return "", err
+	}
+
+	return limitBodyDetail(conv.BytesToString(body), opt.MaxRequestBodySize), nil
+}
+
+func limitBodyDetail(body string, maxSize int64) string {
+	if maxSize != 0 && int64(len(body)) > maxSize {
+		body = body[:min(len(body), int(maxSize)+1)]
+	}
+
+	for len(body) > 0 && !utf8.ValidString(body) {
+		body = body[:len(body)-1]
+	}
+
+	return body
+}
+
+func responseBodyCaptureLimit(opt BodyDetailOption) int {
+	if !opt.IncludeResponseBody || opt.MaxResponseBodySize < 0 {
+		return 0
+	}
+
+	if opt.MaxResponseBodySize == 0 {
+		return maxBufferSize
+	}
+
+	if opt.MaxResponseBodySize >= int64(maxBufferSize) {
+		return maxBufferSize
+	}
+
+	return int(opt.MaxResponseBodySize + 1)
 }
 
 func updateUsageMetrics(usage model.Usage, log *log.Entry) {

@@ -40,7 +40,21 @@ func ConvertRequest(
 	req *http.Request,
 	callbacks ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
-	newBody, err := ConvertRequestToBytes(meta, req, callbacks...)
+	cfg, err := loadConfig(meta)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return convertRequest(meta, req, cfg, callbacks...)
+}
+
+func convertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	cfg Config,
+	callbacks ...func(node *ast.Node) error,
+) (adaptor.ConvertResult, error) {
+	newBody, err := convertRequestToBytes(meta, req, cfg, callbacks...)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
@@ -121,13 +135,27 @@ func ConvertRequestToBytes(
 	req *http.Request,
 	callbacks ...func(node *ast.Node) error,
 ) ([]byte, error) {
+	cfg, err := loadConfig(meta)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertRequestToBytes(meta, req, cfg, callbacks...)
+}
+
+func convertRequestToBytes(
+	meta *meta.Meta,
+	req *http.Request,
+	cfg Config,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) {
 	// Parse request body into AST node
 	node, err := common.UnmarshalRequest2NodeReusable(req)
 	if err != nil {
 		return nil, err
 	}
 
-	return ConvertRequestBodyToBytes(meta, req.Context(), &node, callbacks...)
+	return convertRequestBodyToBytes(meta, req.Context(), &node, cfg, callbacks...)
 }
 
 func resetCacheTTLWithContentsNode(contents *ast.Node) error {
@@ -153,11 +181,21 @@ func ConvertRequestBodyToBytes(
 	node *ast.Node,
 	callbacks ...func(node *ast.Node) error,
 ) ([]byte, error) { // Process image content if present
-	adaptorConfig := Config{}
-	if err := meta.ChannelConfigs.LoadConfig(&adaptorConfig); err != nil {
+	adaptorConfig, err := loadConfig(meta)
+	if err != nil {
 		return nil, err
 	}
 
+	return convertRequestBodyToBytes(meta, ctx, node, adaptorConfig, callbacks...)
+}
+
+func convertRequestBodyToBytes(
+	meta *meta.Meta,
+	ctx context.Context,
+	node *ast.Node,
+	adaptorConfig Config,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) {
 	if adaptorConfig.DisableContextManagement {
 		_, _ = node.Unset("context_management")
 	} else if len(adaptorConfig.SupportedContextManagementEditsType) > 0 {
