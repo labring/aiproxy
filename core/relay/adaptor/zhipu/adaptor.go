@@ -36,6 +36,9 @@ func (a *Adaptor) DoResponse(
 	case mode.Embeddings:
 		return EmbeddingsHandler(c, resp)
 	default:
+		if resp.StatusCode != http.StatusOK {
+			return adaptor.DoResponseResult{}, ErrorHandler(resp)
+		}
 		return openai.DoResponse(meta, store, c, resp)
 	}
 }
