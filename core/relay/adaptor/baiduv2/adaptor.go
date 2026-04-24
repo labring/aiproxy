@@ -33,7 +33,10 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Rerank
+	return m == mode.ChatCompletions ||
+		m == mode.Anthropic ||
+		m == mode.Gemini ||
+		m == mode.Rerank
 }
 
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Fm2vrveyu
@@ -55,7 +58,7 @@ func (a *Adaptor) GetRequestURL(
 	_ *gin.Context,
 ) (adaptor.RequestURL, error) {
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -102,7 +105,7 @@ func (a *Adaptor) ConvertRequest(
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
-	case mode.ChatCompletions, mode.Rerank:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini, mode.Rerank:
 		actModel := meta.ActualModel
 
 		v2Model := toV2ModelName(actModel)
@@ -133,7 +136,7 @@ func (a *Adaptor) DoResponse(
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
-	case mode.ChatCompletions, mode.Rerank:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini, mode.Rerank:
 		return openai.DoResponse(meta, store, c, resp)
 	default:
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
@@ -146,7 +149,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "Baidu Qianfan v2 endpoint\nSupports chat completions and rerank\nSome model names are remapped to official v2 route names\nKey format: `ak|sk`",
+		Readme:  "Baidu Qianfan v2 endpoint\nSupports chat completions, Anthropic-compatible request conversion, Gemini-compatible request conversion, and rerank\nSome model names are remapped to official v2 route names\nKey format: `ak|sk`",
 		KeyHelp: "ak|sk",
 		Models:  ModelList,
 	}

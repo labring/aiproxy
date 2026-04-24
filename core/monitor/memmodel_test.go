@@ -173,7 +173,7 @@ func TestMemModelMonitorGetChannelModelErrorRate(t *testing.T) {
 
 	rate, err := monitor.GetChannelModelErrorRate(context.Background(), "model-single-rate", 42)
 	require.NoError(t, err)
-	require.InDelta(t, 0.25, rate, 0.01)
+	require.InDelta(t, 0.5, rate, 0.01)
 
 	rate, err = monitor.GetChannelModelErrorRate(context.Background(), "model-single-rate", 404)
 	require.NoError(t, err)

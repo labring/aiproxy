@@ -36,7 +36,8 @@ func (a *Adaptor) DefaultBaseURL() string {
 func (a *Adaptor) SupportMode(m mode.Mode) bool {
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
 func supportClaudeCodeProxy(modelName string) bool {
@@ -99,6 +100,10 @@ func (a *Adaptor) DoResponse(
 			result, err = anthropic.Handler(meta, c, resp)
 		}
 	default:
+		if resp.StatusCode != http.StatusOK {
+			return adaptor.DoResponseResult{}, ErrorHandler(resp)
+		}
+
 		result, err = a.Adaptor.DoResponse(meta, store, c, resp)
 	}
 
@@ -117,7 +122,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme: "Streamlake OpenAI-compatible endpoint\nSupports chat, completions, and Anthropic-compatible requests\nKAT Coder models can use the Claude Code Proxy path `/claude-code-proxy/v1/messages`",
+		Readme: "Streamlake OpenAI-compatible endpoint\nSupports chat, completions, Anthropic-compatible requests, and Gemini-compatible request conversion\nKAT Coder models can use the Claude Code Proxy path `/claude-code-proxy/v1/messages`",
 		Models: ModelList,
 	}
 }

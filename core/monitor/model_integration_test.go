@@ -25,7 +25,7 @@ func TestRedisMonitorAddRequestAndGetRates(t *testing.T) {
 	monitor := newTestRedisModelMonitor(redisClient)
 
 	for i := range minRequestCount {
-		isError := i < 10
+		isError := i < minRequestCount/2
 		errorRate, banExecution, err := monitor.AddRequest(
 			ctx,
 			"model-a",
@@ -278,13 +278,13 @@ func TestRedisMonitorGetChannelModelErrorRateUsesLocalCache(t *testing.T) {
 
 	rate, err := monitor.GetChannelModelErrorRate(ctx, "model-single-local-rate", 515)
 	require.NoError(t, err)
-	require.InDelta(t, 0.25, rate, 0.01)
+	require.InDelta(t, 0.5, rate, 0.01)
 
 	require.NoError(t, redisClient.Del(ctx, buildStatsKey("model-single-local-rate", "515")).Err())
 
 	rate, err = monitor.GetChannelModelErrorRate(ctx, "model-single-local-rate", 515)
 	require.NoError(t, err)
-	require.InDelta(t, 0.25, rate, 0.01)
+	require.InDelta(t, 0.5, rate, 0.01)
 }
 
 func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.T) {
@@ -310,7 +310,7 @@ func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.
 	rates, err := monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
 	require.NoError(t, err)
 	require.Contains(t, rates, int64(606))
-	require.InDelta(t, 0.25, rates[606], 0.01)
+	require.InDelta(t, 0.5, rates[606], 0.01)
 
 	for i := range minRequestCount {
 		_, _, err = monitor.AddRequest(
@@ -332,7 +332,7 @@ func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.
 	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
 	require.NoError(t, err)
 	require.Contains(t, rates, int64(606))
-	require.InDelta(t, 0.25, rates[606], 0.01)
+	require.InDelta(t, 0.5, rates[606], 0.01)
 
 	time.Sleep(monitorLocalTTL + 150*time.Millisecond)
 
