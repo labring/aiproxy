@@ -7,7 +7,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/relay/adaptor"
-	"github.com/labring/aiproxy/core/relay/adaptor/openai"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
@@ -21,7 +20,7 @@ func EmbeddingsHandler(
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return adaptor.DoResponseResult{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
