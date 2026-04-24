@@ -56,7 +56,7 @@ func TestMinimaxGetRequestURLAnthropic(t *testing.T) {
 	ctx.Request = httptest.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
-		"/v1/messages?beta=tool-code",
+		"/v1/messages?beta=true",
 		nil,
 	)
 
@@ -68,27 +68,27 @@ func TestMinimaxGetRequestURLAnthropic(t *testing.T) {
 		{
 			name:    "new openai compatible base",
 			baseURL: baseURL,
-			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=tool-code",
+			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=true",
 		},
 		{
 			name:    "legacy openai compatible base",
 			baseURL: legacyBaseURL,
-			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=tool-code",
+			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=true",
 		},
 		{
 			name:    "anthropic base kept as is",
 			baseURL: anthropicBaseURL,
-			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=tool-code",
+			wantURL: "https://api.minimaxi.com/anthropic/v1/messages?beta=true",
 		},
 		{
 			name:    "proxy base preserves host",
 			baseURL: "https://xxx.proxyxxx.com/v1",
-			wantURL: "https://xxx.proxyxxx.com/anthropic/v1/messages?beta=tool-code",
+			wantURL: "https://xxx.proxyxxx.com/anthropic/v1/messages?beta=true",
 		},
 		{
 			name:    "proxy base preserves prefix",
 			baseURL: "https://xxx.proxyxxx.com/minimax/v1",
-			wantURL: "https://xxx.proxyxxx.com/minimax/anthropic/v1/messages?beta=tool-code",
+			wantURL: "https://xxx.proxyxxx.com/minimax/anthropic/v1/messages?beta=true",
 		},
 	}
 
@@ -218,7 +218,8 @@ func TestMinimaxSetupRequestHeaderAnthropic(t *testing.T) {
 		nil,
 	)
 	ctx.Request.Header.Set("Anthropic-Version", "2023-06-01")
-	ctx.Request.Header.Set("Anthropic-Beta", "test-beta")
+	ctx.Request.Header.Add("Anthropic-Beta", "token-efficient-tools-2025-02-19")
+	ctx.Request.Header.Add("Anthropic-Beta", "context-management-2025-06-27")
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -239,5 +240,9 @@ func TestMinimaxSetupRequestHeaderAnthropic(t *testing.T) {
 	assert.Empty(t, req.Header.Get("Authorization"))
 	assert.Equal(t, "test-key", req.Header.Get(anthropic.AnthropicTokenHeader))
 	assert.Equal(t, "2023-06-01", req.Header.Get("Anthropic-Version"))
-	assert.Equal(t, "test-beta", req.Header.Get("Anthropic-Beta"))
+	assert.Equal(
+		t,
+		"token-efficient-tools-2025-02-19,context-management-2025-06-27",
+		req.Header.Get("Anthropic-Beta"),
+	)
 }

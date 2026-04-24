@@ -84,11 +84,8 @@ func (a *Adaptor) SetupRequestHeader(
 			anthropicVersion = v
 		}
 
-		if rawBetas := c.Request.Header.Get(anthropic.AnthropicBeta); rawBetas != "" {
-			req.Header.Set(
-				anthropic.AnthropicBeta,
-				anthropic.FixBetasStringWithModel(meta.ActualModel, rawBetas),
-			)
+		if rawBetas := anthropicBetaHeader(c.Request.Header); rawBetas != "" {
+			req.Header.Set(anthropic.AnthropicBeta, rawBetas)
 		}
 	}
 
@@ -134,18 +131,9 @@ func (a *Adaptor) GetRequestURL(
 			return adaptor.RequestURL{}, err
 		}
 
-		if c != nil {
-			if beta := c.Query("beta"); beta != "" {
-				parsedURL, err := url.Parse(targetURL)
-				if err != nil {
-					return adaptor.RequestURL{}, err
-				}
-
-				queryValues := parsedURL.Query()
-				queryValues.Set("beta", beta)
-				parsedURL.RawQuery = queryValues.Encode()
-				targetURL = parsedURL.String()
-			}
+		targetURL, err = appendBetaQuery(targetURL, c)
+		if err != nil {
+			return adaptor.RequestURL{}, err
 		}
 
 		return adaptor.RequestURL{
@@ -246,6 +234,10 @@ func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 }
 
 func resolveAnthropicBaseURL(rawBaseURL string) (string, error) {
+	if rawBaseURL == "" {
+		rawBaseURL = baseURL
+	}
+
 	parsedURL, err := url.Parse(rawBaseURL)
 	if err != nil {
 		return "", err
@@ -275,6 +267,32 @@ func resolveAnthropicBaseURL(rawBaseURL string) (string, error) {
 	parsedURL.RawPath = ""
 	parsedURL.RawQuery = ""
 	parsedURL.Fragment = ""
+
+	return parsedURL.String(), nil
+}
+
+func anthropicBetaHeader(header http.Header) string {
+	return strings.Join(header.Values(anthropic.AnthropicBeta), ",")
+}
+
+func appendBetaQuery(rawURL string, c *gin.Context) (string, error) {
+	if c == nil || c.Request == nil {
+		return rawURL, nil
+	}
+
+	beta := c.Query("beta")
+	if beta == "" {
+		return rawURL, nil
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	queryValues := parsedURL.Query()
+	queryValues.Set("beta", beta)
+	parsedURL.RawQuery = queryValues.Encode()
 
 	return parsedURL.String(), nil
 }
