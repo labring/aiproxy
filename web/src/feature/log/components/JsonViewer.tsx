@@ -13,6 +13,7 @@ interface JsonViewerProps {
     displayDataTypes?: boolean
     displayObjectSize?: boolean
     collapseStringsAfterLength?: number
+    fallbackToRawText?: boolean
 }
 
 export function JsonViewer({
@@ -23,19 +24,37 @@ export function JsonViewer({
     displayDataTypes = false,
     displayObjectSize = false,
     collapseStringsAfterLength = 100,
+    fallbackToRawText = false,
 }: JsonViewerProps) {
     const { theme } = useTheme()
 
     let parsedSrc = src
+    let shouldRenderRawText = false
 
     // 尝试解析字符串形式的JSON
     if (typeof src === 'string') {
         try {
             parsedSrc = JSON.parse(src)
         } catch {
-            // 如果解析失败，显示原始字符串
-            parsedSrc = { value: src }
+            if (fallbackToRawText) {
+                shouldRenderRawText = true
+            } else {
+                parsedSrc = src
+            }
         }
+    }
+
+    if (shouldRenderRawText) {
+        return (
+            <pre
+                className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border bg-transparent p-2 text-[13px]"
+                style={{
+                    fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                }}
+            >
+                {String(src)}
+            </pre>
+        )
     }
 
     return (

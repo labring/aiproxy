@@ -288,7 +288,8 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                                 <JsonViewer
                                     src={requestBody}
                                     collapsed={1}
-                                    name="request"
+                                    name={false}
+                                    fallbackToRawText
                                 />
                                 {requestTruncated && (
                                     <div className="text-xs text-amber-600 mt-1">⚠️ {t('log.contentTruncated')}</div>
@@ -316,7 +317,8 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                                 <JsonViewer
                                     src={responseBody}
                                     collapsed={1}
-                                    name="response"
+                                    name={false}
+                                    fallbackToRawText
                                 />
                                 {responseTruncated && (
                                     <div className="text-xs text-amber-600 mt-1">⚠️ {t('log.contentTruncated')}</div>
