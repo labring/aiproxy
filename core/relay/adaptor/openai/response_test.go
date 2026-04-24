@@ -230,3 +230,42 @@ func TestResponseStreamHandlerWebSearchCountWithoutUsage(t *testing.T) {
 	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
 	assert.Zero(t, result.Usage.TotalTokens)
 }
+
+func TestResponseStreamHandlerWebSearchCountDedupAcrossEvents(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+	store := &responseTestStore{}
+	meta := &meta.Meta{
+		OriginModel: "gpt-5",
+		ActualModel: "gpt-5",
+		Group:       model.GroupCache{ID: "group-1"},
+		Token:       model.TokenCache{ID: 7},
+		Channel:     meta.ChannelMeta{ID: 9},
+	}
+
+	body := "event: response.in_progress\n" +
+		"data: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"in_progress\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
+		"event: response.web_search_call.completed\n" +
+		"data: {\"type\":\"response.web_search_call.completed\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseStreamHandler(meta, store, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_ws_stream_2", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
+}

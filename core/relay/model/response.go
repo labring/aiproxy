@@ -306,12 +306,17 @@ type ResponseStreamEvent struct {
 	SequenceNumber int            `json:"sequence_number,omitempty"`
 }
 
-func (r *Response) WebSearchCallCount() int64 {
+func (r *Response) WebSearchCallCount(seenMaps ...map[string]struct{}) int64 {
 	if r == nil || len(r.Output) == 0 {
 		return 0
 	}
 
-	seen := make(map[string]struct{})
+	var seen map[string]struct{}
+	if len(seenMaps) > 0 && seenMaps[0] != nil {
+		seen = seenMaps[0]
+	} else {
+		seen = make(map[string]struct{})
+	}
 
 	var count int64
 

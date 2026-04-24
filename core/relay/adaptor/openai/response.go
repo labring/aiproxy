@@ -108,7 +108,7 @@ func ResponseHandler(
 	webSearchCount := response.WebSearchCallCount()
 	if response.Usage != nil {
 		usage := response.Usage.ToModelUsage()
-		usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
+		usage.WebSearchCount += model.ZeroNullInt64(webSearchCount)
 
 		return adaptor.DoResponseResult{Usage: usage, UpstreamID: response.ID}, nil
 	}
@@ -144,8 +144,9 @@ func ResponseStreamHandler(
 	defer cleanup()
 
 	var (
-		usage      model.Usage
-		responseID string
+		usage         model.Usage
+		responseID    string
+		webSearchSeen = make(map[string]struct{})
 	)
 
 	for scanner.Scan() {
@@ -189,7 +190,9 @@ func ResponseStreamHandler(
 				usage = event.Response.Usage.ToModelUsage()
 			}
 
-			usage.WebSearchCount = model.ZeroNullInt64(event.Response.WebSearchCallCount())
+			usage.WebSearchCount += model.ZeroNullInt64(
+				event.Response.WebSearchCallCount(webSearchSeen),
+			)
 		}
 
 		// Forward the event
