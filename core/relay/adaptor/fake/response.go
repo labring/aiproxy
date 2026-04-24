@@ -433,7 +433,7 @@ func writeResponses(
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,
-			Model:     actualModel(meta, reqCtx),
+			Model:     meta.OriginModel,
 			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
 		})
 	}
