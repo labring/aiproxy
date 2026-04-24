@@ -8,9 +8,11 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -165,4 +167,52 @@ func TestConvertImagesEditsRequest_CanExcludeModel(t *testing.T) {
 
 	assert.Nil(t, convertedReq.MultipartForm.Value["model"])
 	assert.Equal(t, "edit prompt", convertedReq.MultipartForm.Value["prompt"][0])
+}
+
+func TestImagesStreamHandlerPassesEventsAndExtractsUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/images/generations",
+		nil,
+	)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type": {"text/event-stream"},
+		},
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`event: image_generation.partial_image`,
+			`data: {"type":"image_generation.partial_image","partial_image_index":0,"b64_json":"partial"}`,
+			"",
+			`event: image_generation.completed`,
+			`data: {"type":"image_generation.completed","b64_json":"final","usage":{"input_tokens":10,"output_tokens":20,"total_tokens":30,"input_tokens_details":{"text_tokens":4,"image_tokens":6},"output_tokens_details":{"image_tokens":20}}}`,
+			"",
+		}, "\n"))),
+	}
+
+	result, err := ImagesStreamHandler(
+		meta.NewMeta(nil, mode.ImagesGenerations, "gpt-image-1", model.ModelConfig{}),
+		c,
+		resp,
+	)
+
+	require.Nil(t, err)
+	assert.Equal(t, model.ZeroNullInt64(10), result.Usage.InputTokens)
+	assert.Equal(t, model.ZeroNullInt64(6), result.Usage.ImageInputTokens)
+	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.OutputTokens)
+	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.ImageOutputTokens)
+	assert.Equal(t, model.ZeroNullInt64(30), result.Usage.TotalTokens)
+
+	body := recorder.Body.String()
+	assert.Contains(t, body, `data: {"type":"image_generation.partial_image"`)
+	assert.Contains(t, body, `data: {"type":"image_generation.completed"`)
+	assert.NotContains(t, body, `event: image_generation.partial_image`)
+	assert.NotContains(t, body, `event: image_generation.completed`)
+	assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 }

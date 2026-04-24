@@ -339,6 +339,7 @@ func ConvertRequest(
 	}
 }
 
+//nolint:gocyclo
 func DoResponse(
 	meta *meta.Meta,
 	store adaptor.Store,
@@ -361,7 +362,11 @@ func DoResponse(
 	case mode.ResponsesInputItems:
 		result, err = GetInputItemsHandler(meta, c, resp)
 	case mode.ImagesGenerations, mode.ImagesEdits:
-		result, err = ImagesHandler(meta, c, resp)
+		if utils.IsStreamResponse(resp) {
+			result, err = ImagesStreamHandler(meta, c, resp)
+		} else {
+			result, err = ImagesHandler(meta, c, resp)
+		}
 	case mode.AudioTranscription, mode.AudioTranslation:
 		result, err = STTHandler(meta, c, resp)
 	case mode.AudioSpeech:

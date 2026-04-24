@@ -17,6 +17,8 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/render"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 func ConvertImagesRequest(
@@ -223,4 +225,76 @@ func ImagesHandler(
 	}
 
 	return adaptor.DoResponseResult{Usage: usage}, nil
+}
+
+func ImagesStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
+	}
+
+	defer resp.Body.Close()
+
+	log := common.GetLogger(c)
+
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
+
+	usage := model.Usage{
+		InputTokens:  meta.RequestUsage.InputTokens,
+		OutputTokens: meta.RequestUsage.OutputTokens,
+		TotalTokens:  meta.RequestUsage.InputTokens + meta.RequestUsage.OutputTokens,
+	}
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if !render.IsValidSSEData(line) {
+			continue
+		}
+
+		data := render.ExtractSSEData(line)
+
+		node, err := sonic.Get(data)
+		if err != nil {
+			log.Error("error unmarshalling image stream response: " + err.Error())
+			render.OpenaiBytesData(c, data)
+			continue
+		}
+
+		if streamUsage, err := getImageStreamUsage(&node); err != nil {
+			log.Error("error unmarshalling image stream usage: " + err.Error())
+		} else if streamUsage != nil {
+			usage = streamUsage.ToModelUsage()
+		}
+
+		render.OpenaiBytesData(c, data)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("error reading image stream: " + err.Error())
+	}
+
+	return adaptor.DoResponseResult{Usage: usage}, nil
+}
+
+func getImageStreamUsage(node *ast.Node) (*relaymodel.ImageUsage, error) {
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		return nil, nil
+	}
+
+	usageRaw, err := usageNode.Raw()
+	if err != nil {
+		return nil, err
+	}
+
+	var usage relaymodel.ImageUsage
+	if err := sonic.UnmarshalString(usageRaw, &usage); err != nil {
+		return nil, err
+	}
+
+	return &usage, nil
 }
