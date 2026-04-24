@@ -105,10 +105,21 @@ func ResponseHandler(
 	_, _ = c.Writer.Write(responseBody)
 
 	// Calculate usage
+	webSearchCount := response.WebSearchCallCount()
 	if response.Usage != nil {
 		usage := response.Usage.ToModelUsage()
+		usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
 
 		return adaptor.DoResponseResult{Usage: usage, UpstreamID: response.ID}, nil
+	}
+
+	if webSearchCount > 0 {
+		return adaptor.DoResponseResult{
+			Usage: model.Usage{
+				WebSearchCount: model.ZeroNullInt64(webSearchCount),
+			},
+			UpstreamID: response.ID,
+		}, nil
 	}
 
 	return adaptor.DoResponseResult{UpstreamID: response.ID}, nil
@@ -173,8 +184,12 @@ func ResponseStreamHandler(
 		}
 
 		// Update usage if available
-		if event.Response != nil && event.Response.Usage != nil {
-			usage = event.Response.Usage.ToModelUsage()
+		if event.Response != nil {
+			if event.Response.Usage != nil {
+				usage = event.Response.Usage.ToModelUsage()
+			}
+
+			usage.WebSearchCount = model.ZeroNullInt64(event.Response.WebSearchCallCount())
 		}
 
 		// Forward the event

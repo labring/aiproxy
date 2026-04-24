@@ -142,3 +142,91 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 	assert.Equal(t, "resp_123", result.UpstreamID)
 	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.TotalTokens)
 }
+
+func TestResponseHandlerWebSearchCount(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+	store := &responseTestStore{}
+	meta := &meta.Meta{
+		OriginModel: "gpt-5",
+		ActualModel: "gpt-5",
+		Group:       model.GroupCache{ID: "group-1"},
+		Token:       model.TokenCache{ID: 7},
+		Channel:     meta.ChannelMeta{ID: 9},
+	}
+
+	body := `{
+		"id":"resp_ws_123",
+		"object":"response",
+		"created_at":1,
+		"status":"completed",
+		"model":"gpt-5",
+		"output":[
+			{"id":"ws_1","type":"web_search_call","status":"completed"},
+			{"id":"ws_2","type":"web_search_call","status":"completed"},
+			{"id":"ws_1","type":"web_search_call","status":"completed"},
+			{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}
+		],
+		"parallel_tool_calls":true,
+		"store":false,
+		"usage":{"input_tokens":7,"output_tokens":13,"total_tokens":20}
+	}`
+	resp := &http.Response{
+		StatusCode: http.StatusCreated,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseHandler(meta, store, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_ws_123", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.TotalTokens)
+	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
+}
+
+func TestResponseStreamHandlerWebSearchCountWithoutUsage(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+	store := &responseTestStore{}
+	meta := &meta.Meta{
+		OriginModel: "gpt-5",
+		ActualModel: "gpt-5",
+		Group:       model.GroupCache{ID: "group-1"},
+		Token:       model.TokenCache{ID: 7},
+		Channel:     meta.ChannelMeta{ID: 9},
+	}
+
+	body := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_stream\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_stream\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseStreamHandler(meta, store, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_ws_stream", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
+	assert.Zero(t, result.Usage.TotalTokens)
+}

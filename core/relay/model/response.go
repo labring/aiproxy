@@ -306,6 +306,34 @@ type ResponseStreamEvent struct {
 	SequenceNumber int            `json:"sequence_number,omitempty"`
 }
 
+func (r *Response) WebSearchCallCount() int64 {
+	if r == nil || len(r.Output) == 0 {
+		return 0
+	}
+
+	seen := make(map[string]struct{})
+
+	var count int64
+
+	for _, item := range r.Output {
+		if item.Type != "web_search_call" {
+			continue
+		}
+
+		if item.ID != "" {
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+
+			seen[item.ID] = struct{}{}
+		}
+
+		count++
+	}
+
+	return count
+}
+
 func (u *ResponseUsage) ToModelUsage() model.Usage {
 	usage := model.Usage{
 		InputTokens:  model.ZeroNullInt64(u.InputTokens),
