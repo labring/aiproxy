@@ -143,7 +143,7 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.TotalTokens)
 }
 
-func TestResponseHandlerWebSearchCount(t *testing.T) {
+func TestResponseHandlerWebSearchCountFromToolUsage(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -157,43 +157,46 @@ func TestResponseHandlerWebSearchCount(t *testing.T) {
 	)
 	store := &responseTestStore{}
 	meta := &meta.Meta{
-		OriginModel: "gpt-5",
-		ActualModel: "gpt-5",
+		OriginModel: "gpt-5.4",
+		ActualModel: "gpt-5.4",
 		Group:       model.GroupCache{ID: "group-1"},
 		Token:       model.TokenCache{ID: 7},
 		Channel:     meta.ChannelMeta{ID: 9},
 	}
 
 	body := `{
-		"id":"resp_ws_123",
+		"id":"resp_tool_usage_123",
 		"object":"response",
-		"created_at":1,
+		"created_at":1777053463,
 		"status":"completed",
-		"model":"gpt-5",
+		"model":"gpt-5.4",
 		"output":[
-			{"id":"ws_1","type":"web_search_call","status":"completed"},
-			{"id":"ws_2","type":"web_search_call","status":"completed"},
-			{"id":"ws_1","type":"web_search_call","status":"completed"},
-			{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}
+			{"type":"reasoning","summary":[]},
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}
 		],
-		"parallel_tool_calls":true,
-		"store":false,
-		"usage":{"input_tokens":7,"output_tokens":13,"total_tokens":20}
+		"tool_usage":{"web_search":{"num_requests":1}},
+		"usage":{
+			"input_tokens":15065,
+			"input_tokens_details":{"cached_tokens":10880},
+			"output_tokens":256,
+			"output_tokens_details":{"reasoning_tokens":81},
+			"total_tokens":15321
+		}
 	}`
 	resp := &http.Response{
-		StatusCode: http.StatusCreated,
+		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewBufferString(body)),
 		Header:     make(http.Header),
 	}
 
 	result, err := ResponseHandler(meta, store, c, resp)
 	require.Nil(t, err)
-	assert.Equal(t, "resp_ws_123", result.UpstreamID)
-	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.TotalTokens)
-	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
+	assert.Equal(t, "resp_tool_usage_123", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(15321), result.Usage.TotalTokens)
+	assert.Equal(t, model.ZeroNullInt64(1), result.Usage.WebSearchCount)
 }
 
-func TestResponseStreamHandlerWebSearchCountWithoutUsage(t *testing.T) {
+func TestResponseStreamHandlerWebSearchCountFromToolUsage(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -207,17 +210,17 @@ func TestResponseStreamHandlerWebSearchCountWithoutUsage(t *testing.T) {
 	)
 	store := &responseTestStore{}
 	meta := &meta.Meta{
-		OriginModel: "gpt-5",
-		ActualModel: "gpt-5",
+		OriginModel: "gpt-5.4",
+		ActualModel: "gpt-5.4",
 		Group:       model.GroupCache{ID: "group-1"},
 		Token:       model.TokenCache{ID: 7},
 		Channel:     meta.ChannelMeta{ID: 9},
 	}
 
 	body := "event: response.created\n" +
-		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_stream\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_stream_tool_usage\",\"object\":\"response\",\"created_at\":1777053463,\"status\":\"in_progress\",\"model\":\"gpt-5.4\",\"output\":[],\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":1}},\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
 		"event: response.completed\n" +
-		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_stream\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n"
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_stream_tool_usage\",\"object\":\"response\",\"created_at\":1777053474,\"status\":\"completed\",\"model\":\"gpt-5.4\",\"output\":[{\"type\":\"reasoning\",\"summary\":[]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"done\"}]}],\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":1}},\"parallel_tool_calls\":true,\"store\":false,\"usage\":{\"input_tokens\":15065,\"input_tokens_details\":{\"cached_tokens\":10880},\"output_tokens\":256,\"output_tokens_details\":{\"reasoning_tokens\":81},\"total_tokens\":15321}}}\n\n"
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewBufferString(body)),
@@ -226,88 +229,7 @@ func TestResponseStreamHandlerWebSearchCountWithoutUsage(t *testing.T) {
 
 	result, err := ResponseStreamHandler(meta, store, c, resp)
 	require.Nil(t, err)
-	assert.Equal(t, "resp_ws_stream", result.UpstreamID)
-	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
-	assert.Zero(t, result.Usage.TotalTokens)
-}
-
-func TestResponseStreamHandlerWebSearchCountDedupAcrossEvents(t *testing.T) {
-	t.Parallel()
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodPost,
-		"/v1/responses",
-		nil,
-	)
-	store := &responseTestStore{}
-	meta := &meta.Meta{
-		OriginModel: "gpt-5",
-		ActualModel: "gpt-5",
-		Group:       model.GroupCache{ID: "group-1"},
-		Token:       model.TokenCache{ID: 7},
-		Channel:     meta.ChannelMeta{ID: 9},
-	}
-
-	body := "event: response.in_progress\n" +
-		"data: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"in_progress\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
-		"event: response.web_search_call.completed\n" +
-		"data: {\"type\":\"response.web_search_call.completed\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n" +
-		"event: response.completed\n" +
-		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_stream_2\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-5\",\"output\":[{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},{\"id\":\"ws_2\",\"type\":\"web_search_call\",\"status\":\"completed\"}],\"parallel_tool_calls\":true,\"store\":false}}\n\n"
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewBufferString(body)),
-		Header:     make(http.Header),
-	}
-
-	result, err := ResponseStreamHandler(meta, store, c, resp)
-	require.Nil(t, err)
-	assert.Equal(t, "resp_ws_stream_2", result.UpstreamID)
-	assert.Equal(t, model.ZeroNullInt64(2), result.Usage.WebSearchCount)
-}
-
-func TestResponseStreamHandlerWebSearchCountFromItemEvents(t *testing.T) {
-	t.Parallel()
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodPost,
-		"/v1/responses",
-		nil,
-	)
-	store := &responseTestStore{}
-	meta := &meta.Meta{
-		OriginModel: "gpt-5",
-		ActualModel: "gpt-5",
-		Group:       model.GroupCache{ID: "group-1"},
-		Token:       model.TokenCache{ID: 7},
-		Channel:     meta.ChannelMeta{ID: 9},
-	}
-
-	body := "event: response.output_item.added\n" +
-		"data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"in_progress\"},\"output_index\":2,\"sequence_number\":100}\n\n" +
-		"event: response.web_search_call.in_progress\n" +
-		"data: {\"type\":\"response.web_search_call.in_progress\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":101}\n\n" +
-		"event: response.web_search_call.searching\n" +
-		"data: {\"type\":\"response.web_search_call.searching\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":102}\n\n" +
-		"event: response.web_search_call.completed\n" +
-		"data: {\"type\":\"response.web_search_call.completed\",\"item_id\":\"ws_1\",\"output_index\":2,\"sequence_number\":103}\n\n" +
-		"event: response.output_item.done\n" +
-		"data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\"},\"output_index\":2,\"sequence_number\":104}\n\n"
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewBufferString(body)),
-		Header:     make(http.Header),
-	}
-
-	result, err := ResponseStreamHandler(meta, store, c, resp)
-	require.Nil(t, err)
+	assert.Equal(t, "resp_ws_stream_tool_usage", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(15321), result.Usage.TotalTokens)
 	assert.Equal(t, model.ZeroNullInt64(1), result.Usage.WebSearchCount)
 }

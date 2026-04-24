@@ -223,6 +223,28 @@ type ResponseUsage struct {
 	OutputTokensDetails *ResponseUsageDetails `json:"output_tokens_details,omitempty"`
 }
 
+type ResponseToolUsageWebSearch struct {
+	NumRequests int64 `json:"num_requests,omitempty"`
+}
+
+type ResponseToolUsageTokensDetails struct {
+	ImageTokens int64 `json:"image_tokens,omitempty"`
+	TextTokens  int64 `json:"text_tokens,omitempty"`
+}
+
+type ResponseToolUsageImageGen struct {
+	InputTokens         int64                           `json:"input_tokens,omitempty"`
+	InputTokensDetails  *ResponseToolUsageTokensDetails `json:"input_tokens_details,omitempty"`
+	OutputTokens        int64                           `json:"output_tokens,omitempty"`
+	OutputTokensDetails *ResponseToolUsageTokensDetails `json:"output_tokens_details,omitempty"`
+	TotalTokens         int64                           `json:"total_tokens,omitempty"`
+}
+
+type ResponseToolUsage struct {
+	ImageGen  *ResponseToolUsageImageGen  `json:"image_gen,omitempty"`
+	WebSearch *ResponseToolUsageWebSearch `json:"web_search,omitempty"`
+}
+
 // Response represents an OpenAI response object
 type Response struct {
 	ID                   string             `json:"id"`
@@ -244,6 +266,7 @@ type Response struct {
 	Text                 ResponseText       `json:"text"`
 	ToolChoice           any                `json:"tool_choice"`
 	Tools                []ResponseTool     `json:"tools"`
+	ToolUsage            *ResponseToolUsage `json:"tool_usage,omitempty"`
 	TopP                 float64            `json:"top_p"`
 	Truncation           string             `json:"truncation"`
 	Usage                *ResponseUsage     `json:"usage"`
@@ -306,37 +329,29 @@ type ResponseStreamEvent struct {
 	SequenceNumber int            `json:"sequence_number,omitempty"`
 }
 
-func (r *Response) WebSearchCallCount(seenMaps ...map[string]struct{}) int64 {
-	if r == nil || len(r.Output) == 0 {
+func (r *Response) ToolUsageWebSearchCallCount() int64 {
+	if r == nil || r.ToolUsage == nil || r.ToolUsage.WebSearch == nil {
 		return 0
 	}
 
-	var seen map[string]struct{}
-	if len(seenMaps) > 0 && seenMaps[0] != nil {
-		seen = seenMaps[0]
-	} else {
-		seen = make(map[string]struct{})
+	return r.ToolUsage.WebSearch.NumRequests
+}
+
+func (r *Response) ToModelUsage() model.Usage {
+	if r == nil {
+		return model.Usage{}
 	}
 
-	var count int64
-
-	for _, item := range r.Output {
-		if item.Type != "web_search_call" {
-			continue
-		}
-
-		if item.ID != "" {
-			if _, ok := seen[item.ID]; ok {
-				continue
-			}
-
-			seen[item.ID] = struct{}{}
-		}
-
-		count++
+	var usage model.Usage
+	if r.Usage != nil {
+		usage = r.Usage.ToModelUsage()
 	}
 
-	return count
+	if count := r.ToolUsageWebSearchCallCount(); count > 0 {
+		usage.WebSearchCount = model.ZeroNullInt64(count)
+	}
+
+	return usage
 }
 
 func (u *ResponseUsage) ToModelUsage() model.Usage {

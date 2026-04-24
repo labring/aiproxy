@@ -19,42 +19,6 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
-func countWebSearchStreamEvent(
-	event *relaymodel.ResponseStreamEvent,
-	seen map[string]struct{},
-) int64 {
-	if event == nil {
-		return 0
-	}
-
-	addSeen := func(id string) int64 {
-		if id == "" {
-			return 0
-		}
-
-		if _, ok := seen[id]; ok {
-			return 0
-		}
-
-		seen[id] = struct{}{}
-
-		return 1
-	}
-
-	switch event.Type {
-	case relaymodel.EventWebSearchCallCompleted:
-		return addSeen(event.ItemID)
-	case relaymodel.EventOutputItemDone:
-		if event.Item != nil &&
-			event.Item.Type == "web_search_call" &&
-			event.Item.Status == relaymodel.ResponseStatusCompleted {
-			return addSeen(event.Item.ID)
-		}
-	}
-
-	return 0
-}
-
 // ConvertResponseRequest converts a response creation request
 func ConvertResponseRequest(
 	meta *meta.Meta,
@@ -141,21 +105,9 @@ func ResponseHandler(
 	_, _ = c.Writer.Write(responseBody)
 
 	// Calculate usage
-	webSearchCount := response.WebSearchCallCount()
-	if response.Usage != nil {
-		usage := response.Usage.ToModelUsage()
-		usage.WebSearchCount += model.ZeroNullInt64(webSearchCount)
-
+	usage := response.ToModelUsage()
+	if response.Usage != nil || usage.WebSearchCount > 0 {
 		return adaptor.DoResponseResult{Usage: usage, UpstreamID: response.ID}, nil
-	}
-
-	if webSearchCount > 0 {
-		return adaptor.DoResponseResult{
-			Usage: model.Usage{
-				WebSearchCount: model.ZeroNullInt64(webSearchCount),
-			},
-			UpstreamID: response.ID,
-		}, nil
 	}
 
 	return adaptor.DoResponseResult{UpstreamID: response.ID}, nil
@@ -180,9 +132,8 @@ func ResponseStreamHandler(
 	defer cleanup()
 
 	var (
-		usage         model.Usage
-		responseID    string
-		webSearchSeen = make(map[string]struct{})
+		usage      model.Usage
+		responseID string
 	)
 
 	for scanner.Scan() {
@@ -222,18 +173,8 @@ func ResponseStreamHandler(
 
 		// Update usage if available
 		if event.Response != nil {
-			if event.Response.Usage != nil {
-				usage = event.Response.Usage.ToModelUsage()
-			}
-
-			usage.WebSearchCount += model.ZeroNullInt64(
-				event.Response.WebSearchCallCount(webSearchSeen),
-			)
+			usage = event.Response.ToModelUsage()
 		}
-
-		usage.WebSearchCount += model.ZeroNullInt64(
-			countWebSearchStreamEvent(&event, webSearchSeen),
-		)
 
 		// Forward the event
 		render.ResponsesData(c, data)
