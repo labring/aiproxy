@@ -126,8 +126,10 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 		Channel:        meta.ChannelMeta{ID: 9},
 	}
 
-	body := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_123\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"prompt_cache_retention\":\"24h\"}}\n\n" +
-		"data: [DONE]\n\n"
+	body := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_123\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"model\":\"gpt-5\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"prompt_cache_retention\":\"24h\"}}\n\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_123\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-5\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"prompt_cache_retention\":\"24h\",\"usage\":{\"input_tokens\":7,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":13,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":20}}}\n\n"
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewBufferString(body)),
@@ -138,4 +140,5 @@ func TestResponseStreamHandlerPromptCacheRetention(t *testing.T) {
 	require.Nil(t, err)
 	require.Empty(t, store.savedIfNotExist)
 	assert.Equal(t, "resp_123", result.UpstreamID)
+	assert.Equal(t, model.ZeroNullInt64(20), result.Usage.TotalTokens)
 }
