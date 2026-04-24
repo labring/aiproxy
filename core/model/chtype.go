@@ -54,6 +54,7 @@ const (
 	ChannelTypeZhipuCoding             ChannelType = 52
 	ChannelTypeFake                    ChannelType = 53
 	ChannelTypeAntLing                 ChannelType = 54
+	ChannelTypeFakeError               ChannelType = 55
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -99,4 +100,5 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeZhipuCoding:             "zhipu coding",
 	ChannelTypeFake:                    "fake",
 	ChannelTypeAntLing:                 "antling",
+	ChannelTypeFakeError:               "fake-error",
 }

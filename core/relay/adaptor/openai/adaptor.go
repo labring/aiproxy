@@ -18,7 +18,9 @@ import (
 
 var _ adaptor.Adaptor = (*Adaptor)(nil)
 
-type Adaptor struct{}
+type Adaptor struct {
+	configCache utils.ChannelConfigCache[Config]
+}
 
 func init() {
 	registry.Register(model.ChannelTypeOpenAI, &Adaptor{})

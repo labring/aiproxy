@@ -14,7 +14,9 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
-type Adaptor struct{}
+type Adaptor struct {
+	configCache utils.ChannelConfigCache[Config]
+}
 
 func init() {
 	registry.Register(model.ChannelTypeGoogleGemini, &Adaptor{})
@@ -111,9 +113,9 @@ func (a *Adaptor) ConvertRequest(
 	case mode.Embeddings:
 		return ConvertEmbeddingRequest(meta, req)
 	case mode.ChatCompletions:
-		return ConvertRequest(meta, req)
+		return a.convertRequest(meta, req)
 	case mode.Anthropic:
-		return ConvertClaudeRequest(meta, req)
+		return a.convertClaudeRequest(meta, req)
 	case mode.Gemini:
 		return NativeConvertRequest(meta, req)
 	default:

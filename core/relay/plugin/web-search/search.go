@@ -43,7 +43,8 @@ type GetChannel func(modelName string) (*model.Channel, error)
 // WebSearch implements web search functionality
 type WebSearch struct {
 	noop.Noop
-	GetChannel GetChannel
+	GetChannel  GetChannel
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewWebSearchPlugin creates a new web search plugin
@@ -93,12 +94,7 @@ func getRewriteUsage(m *meta.Meta) *model.Usage {
 }
 
 func (p *WebSearch) getConfig(meta *meta.Meta) (Config, error) {
-	pluginConfig := Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("web-search", &pluginConfig); err != nil {
-		return Config{}, err
-	}
-
-	return pluginConfig, nil
+	return p.configCache.Load(meta, "web-search", Config{})
 }
 
 func lazyRemoveSearchOption(meta *meta.Meta) {

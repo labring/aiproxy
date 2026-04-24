@@ -6,14 +6,9 @@ type Config struct {
 	MapReasoningToReasoningContent bool `json:"map_reasoning_to_reasoning_content"`
 }
 
-func loadConfig(meta *meta.Meta) (Config, error) {
+func (a *Adaptor) loadConfig(meta *meta.Meta) (Config, error) {
 	cfg := Config{}
-
-	if err := meta.ChannelConfigs.LoadConfig(&cfg); err != nil {
-		return Config{}, err
-	}
-
-	return cfg, nil
+	return a.configCache.Load(meta, cfg)
 }
 
 func configSchema() map[string]any {
@@ -32,7 +27,13 @@ func configSchema() map[string]any {
 func getChatCompletionResponsePreHandlers(
 	meta *meta.Meta,
 ) (streamPreHandler, handlerPreHandler PreHandler, err error) {
-	cfg, err := loadConfig(meta)
+	return (&Adaptor{}).getChatCompletionResponsePreHandlers(meta)
+}
+
+func (a *Adaptor) getChatCompletionResponsePreHandlers(
+	meta *meta.Meta,
+) (streamPreHandler, handlerPreHandler PreHandler, err error) {
+	cfg, err := a.loadConfig(meta)
 	if err != nil {
 		return nil, nil, err
 	}

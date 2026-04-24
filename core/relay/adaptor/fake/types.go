@@ -1,10 +1,15 @@
 package fake
 
-import relaymodel "github.com/labring/aiproxy/core/relay/model"
+import (
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/utils"
+)
 
 const baseURL = "https://fake.local/v1"
 
-type Adaptor struct{}
+type Adaptor struct {
+	configCache utils.ChannelConfigCache[Config]
+}
 
 type Config struct {
 	StaticText        string         `json:"static_text"`

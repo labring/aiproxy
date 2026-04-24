@@ -18,6 +18,7 @@ import (
 
 type Adaptor struct {
 	openai.Adaptor
+	configCache utils.ChannelConfigCache[Config]
 }
 
 func init() {
@@ -101,7 +102,7 @@ func (a *Adaptor) GetRequestURL(
 ) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.ChatCompletions, mode.Gemini:
-		cfg, err := loadConfig(meta)
+		cfg, err := a.loadConfig(meta)
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}

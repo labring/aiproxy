@@ -43,13 +43,21 @@ func stopReasonClaude2OpenAI(reason string) string {
 	}
 }
 
-//nolint:gocyclo
 func OpenAIConvertRequest(meta *meta.Meta, req *http.Request) (*relaymodel.ClaudeRequest, error) {
-	adaptorConfig := Config{}
-	if err := meta.ChannelConfigs.LoadConfig(&adaptorConfig); err != nil {
+	adaptorConfig, err := loadConfig(meta)
+	if err != nil {
 		return nil, err
 	}
 
+	return openAIConvertRequest(meta, req, adaptorConfig)
+}
+
+//nolint:gocyclo
+func openAIConvertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	adaptorConfig Config,
+) (*relaymodel.ClaudeRequest, error) {
 	resolvedModel := ResolveModelName(meta.OriginModel, meta.ActualModel)
 
 	var textRequest relaymodel.ClaudeOpenAIRequest

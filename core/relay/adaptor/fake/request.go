@@ -9,10 +9,15 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-func loadConfig(meta *meta.Meta) Config {
+func (a *Adaptor) loadConfig(meta *meta.Meta) Config {
 	cfg := defaultConfig()
-	_ = meta.ChannelConfigs.LoadConfig(&cfg)
-	return cfg
+
+	loaded, err := a.configCache.Load(meta, cfg)
+	if err != nil {
+		return cfg
+	}
+
+	return loaded
 }
 
 func parseRequest(

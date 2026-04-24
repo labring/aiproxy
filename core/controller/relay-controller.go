@@ -147,7 +147,7 @@ func relayHandler(c *gin.Context, meta *meta.Meta, mc *model.ModelCaches) *contr
 
 	adaptor = wrapPlugin(c.Request.Context(), mc, adaptor)
 
-	return controller.Handle(adaptor, c, meta, adaptorStore)
+	return controller.Handle(adaptor, c, meta, adaptorStore, buildBodyDetailOption(meta))
 }
 
 func defaultPriceFunc(_ *gin.Context, mc model.ModelConfig) (model.Price, error) {
@@ -342,21 +342,25 @@ func recordResult(
 
 	var detail *model.RequestDetail
 
-	firstByteAt := result.Detail.FirstByteAt
-	if config.GetSaveAllLogDetail() || meta.ModelConfig.ForceSaveDetail || code != http.StatusOK {
-		requestBodyMaxSize := effectiveDetailBodyMaxSize(
-			meta.ModelConfig.RequestBodyStorageMaxSize,
-			config.GetLogDetailRequestBodyMaxSize(),
-		)
-		responseBodyMaxSize := effectiveDetailBodyMaxSize(
-			meta.ModelConfig.ResponseBodyStorageMaxSize,
-			config.GetLogDetailResponseBodyMaxSize(),
-		)
+	var firstByteAt time.Time
+	if result.BodyDetail != nil {
+		firstByteAt = result.BodyDetail.FirstByteAt
+	}
 
-		if requestBodyMaxSize >= 0 || responseBodyMaxSize >= 0 {
+	if config.GetSaveAllLogDetail() || meta.ModelConfig.ForceSaveDetail || code != http.StatusOK {
+		if result.BodyDetail != nil {
+			requestBodyMaxSize := effectiveDetailBodyMaxSize(
+				meta.ModelConfig.RequestBodyStorageMaxSize,
+				config.GetLogDetailRequestBodyMaxSize(),
+			)
+			responseBodyMaxSize := effectiveDetailBodyMaxSize(
+				meta.ModelConfig.ResponseBodyStorageMaxSize,
+				config.GetLogDetailResponseBodyMaxSize(),
+			)
+
 			detail = &model.RequestDetail{
-				RequestBody:  result.Detail.RequestBody,
-				ResponseBody: result.Detail.ResponseBody,
+				RequestBody:  result.BodyDetail.RequestBody,
+				ResponseBody: result.BodyDetail.ResponseBody,
 			}
 			detail.ApplyBodySizeLimits(requestBodyMaxSize, responseBodyMaxSize)
 		}
@@ -398,6 +402,24 @@ func effectiveDetailBodyMaxSize(modelLimit, globalLimit int64) int64 {
 	}
 
 	return globalLimit
+}
+
+func buildBodyDetailOption(meta *meta.Meta) controller.BodyDetailOption {
+	requestBodyMaxSize := effectiveDetailBodyMaxSize(
+		meta.ModelConfig.RequestBodyStorageMaxSize,
+		config.GetLogDetailRequestBodyMaxSize(),
+	)
+	responseBodyMaxSize := effectiveDetailBodyMaxSize(
+		meta.ModelConfig.ResponseBodyStorageMaxSize,
+		config.GetLogDetailResponseBodyMaxSize(),
+	)
+
+	return controller.BodyDetailOption{
+		IncludeRequestBody:  requestBodyMaxSize >= 0,
+		IncludeResponseBody: responseBodyMaxSize >= 0,
+		MaxRequestBodySize:  requestBodyMaxSize,
+		MaxResponseBodySize: responseBodyMaxSize,
+	}
 }
 
 type retryState struct {

@@ -25,6 +25,18 @@ type testAdaptor struct {
 		store adaptor.Store,
 		req *http.Request,
 	) (adaptor.ConvertResult, error)
+	doRequest func(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+		req *http.Request,
+	) (*http.Response, error)
+	doResponse func(
+		meta *meta.Meta,
+		store adaptor.Store,
+		c *gin.Context,
+		resp *http.Response,
+	) (adaptor.DoResponseResult, adaptor.Error)
 }
 
 func (a testAdaptor) Metadata() adaptor.Metadata {
@@ -68,20 +80,28 @@ func (a testAdaptor) ConvertRequest(
 }
 
 func (a testAdaptor) DoRequest(
-	_ *meta.Meta,
-	_ adaptor.Store,
-	_ *gin.Context,
-	_ *http.Request,
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
 ) (*http.Response, error) {
+	if a.doRequest != nil {
+		return a.doRequest(meta, store, c, req)
+	}
+
 	panic("unexpected DoRequest call")
 }
 
 func (a testAdaptor) DoResponse(
-	_ *meta.Meta,
-	_ adaptor.Store,
-	_ *gin.Context,
-	_ *http.Response,
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
+	if a.doResponse != nil {
+		return a.doResponse(meta, store, c, resp)
+	}
+
 	panic("unexpected DoResponse call")
 }
 
@@ -207,4 +227,168 @@ func TestPrepareAndDoRequestConvertRequestEOF(t *testing.T) {
 
 	require.Equal(t, http.StatusServiceUnavailable, err.StatusCode())
 	require.Contains(t, err.Error(), "request eof")
+}
+
+func TestHandleCapturesBoundedBodyDetail(t *testing.T) {
+	c, relayMeta := newTestRelayContext()
+	requestBody := "1234567890"
+
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Body = io.NopCloser(strings.NewReader(requestBody))
+	c.Request.ContentLength = int64(len(requestBody))
+
+	result := Handle(
+		testAdaptor{
+			convertRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *http.Request,
+			) (adaptor.ConvertResult, error) {
+				return adaptor.ConvertResult{Body: http.NoBody}, nil
+			},
+			doRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *gin.Context,
+				_ *http.Request,
+			) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("upstream")),
+					Header:     make(http.Header),
+				}, nil
+			},
+			doResponse: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				c *gin.Context,
+				_ *http.Response,
+			) (adaptor.DoResponseResult, adaptor.Error) {
+				_, _ = c.Writer.WriteString("abcdefgh")
+				return adaptor.DoResponseResult{}, nil
+			},
+		},
+		c,
+		relayMeta,
+		nil,
+		BodyDetailOption{
+			IncludeRequestBody:  true,
+			IncludeResponseBody: true,
+			MaxRequestBodySize:  4,
+			MaxResponseBodySize: 3,
+		},
+	)
+
+	require.NoError(t, result.Error)
+	require.NotNil(t, result.BodyDetail)
+	require.Equal(t, "12345", result.BodyDetail.RequestBody)
+	require.Equal(t, "abcd", result.BodyDetail.ResponseBody)
+	require.False(t, result.BodyDetail.FirstByteAt.IsZero())
+}
+
+func TestHandleWithoutBodyDetailOptionSkipsBodies(t *testing.T) {
+	c, relayMeta := newTestRelayContext()
+	requestBody := "1234567890"
+
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Body = io.NopCloser(strings.NewReader(requestBody))
+	c.Request.ContentLength = int64(len(requestBody))
+
+	result := Handle(
+		testAdaptor{
+			convertRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *http.Request,
+			) (adaptor.ConvertResult, error) {
+				return adaptor.ConvertResult{Body: http.NoBody}, nil
+			},
+			doRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *gin.Context,
+				_ *http.Request,
+			) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("upstream")),
+					Header:     make(http.Header),
+				}, nil
+			},
+			doResponse: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				c *gin.Context,
+				_ *http.Response,
+			) (adaptor.DoResponseResult, adaptor.Error) {
+				_, _ = c.Writer.WriteString("abcdefgh")
+				return adaptor.DoResponseResult{}, nil
+			},
+		},
+		c,
+		relayMeta,
+		nil,
+	)
+
+	require.NoError(t, result.Error)
+	require.NotNil(t, result.BodyDetail)
+	require.Empty(t, result.BodyDetail.RequestBody)
+	require.Empty(t, result.BodyDetail.ResponseBody)
+	require.False(t, result.BodyDetail.FirstByteAt.IsZero())
+}
+
+func TestHandleBodyDetailTruncatesOnRuneBoundary(t *testing.T) {
+	c, relayMeta := newTestRelayContext()
+	requestBody := `{"text":"你好世界"}`
+
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Body = io.NopCloser(strings.NewReader(requestBody))
+	c.Request.ContentLength = int64(len(requestBody))
+
+	result := Handle(
+		testAdaptor{
+			convertRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *http.Request,
+			) (adaptor.ConvertResult, error) {
+				return adaptor.ConvertResult{Body: http.NoBody}, nil
+			},
+			doRequest: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				_ *gin.Context,
+				_ *http.Request,
+			) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("upstream")),
+					Header:     make(http.Header),
+				}, nil
+			},
+			doResponse: func(
+				_ *meta.Meta,
+				_ adaptor.Store,
+				c *gin.Context,
+				_ *http.Response,
+			) (adaptor.DoResponseResult, adaptor.Error) {
+				_, _ = c.Writer.WriteString("你好世界")
+				return adaptor.DoResponseResult{}, nil
+			},
+		},
+		c,
+		relayMeta,
+		nil,
+		BodyDetailOption{
+			IncludeRequestBody:  true,
+			IncludeResponseBody: true,
+			MaxRequestBodySize:  11,
+			MaxResponseBodySize: 4,
+		},
+	)
+
+	require.NoError(t, result.Error)
+	require.NotNil(t, result.BodyDetail)
+	require.Equal(t, `{"text":"你`, result.BodyDetail.RequestBody)
+	require.Equal(t, "你", result.BodyDetail.ResponseBody)
 }

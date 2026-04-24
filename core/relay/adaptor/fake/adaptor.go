@@ -101,7 +101,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	_ *http.Request,
 ) (*http.Response, error) {
-	cfg := loadConfig(meta)
+	cfg := a.loadConfig(meta)
 	reqCtx := getRequestContext(meta)
 	usage := buildUsage(cfg)
 
@@ -134,7 +134,7 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	_ *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	cfg := loadConfig(meta)
+	cfg := a.loadConfig(meta)
 	usage := buildUsage(cfg)
 	reqCtx := getRequestContext(meta)
 

@@ -22,6 +22,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/utils"
 	gcache "github.com/patrickmn/go-cache"
 	"github.com/redis/go-redis/v9"
 )
@@ -56,7 +57,8 @@ type Item struct {
 // Cache implements caching functionality for AI requests
 type Cache struct {
 	noop.Noop
-	rdb *redis.Client
+	rdb         *redis.Client
+	configCache utils.PluginConfigCache[Config]
 }
 
 var (
@@ -142,7 +144,7 @@ func putBuffer(buf *bytes.Buffer) {
 }
 
 // getPluginConfig retrieves the plugin configuration from metadata
-func getPluginConfig(meta *meta.Meta) (config *Config, err error) {
+func (c *Cache) getPluginConfig(meta *meta.Meta) (config *Config, err error) {
 	v, ok := meta.Get(pluginConfigCacheKey)
 	if ok {
 		config, ok := v.(*Config)
@@ -154,7 +156,9 @@ func getPluginConfig(meta *meta.Meta) (config *Config, err error) {
 	}
 
 	pluginConfig := Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("cache", &pluginConfig); err != nil {
+
+	pluginConfig, err = c.configCache.Load(meta, "cache", pluginConfig)
+	if err != nil {
 		return nil, err
 	}
 
@@ -244,7 +248,7 @@ func (c *Cache) ConvertRequest(
 	req *http.Request,
 	do adaptor.ConvertRequest,
 ) (adaptor.ConvertResult, error) {
-	pluginConfig, err := getPluginConfig(meta)
+	pluginConfig, err := c.getPluginConfig(meta)
 	if err != nil {
 		return do.ConvertRequest(meta, store, req)
 	}
@@ -351,7 +355,7 @@ func (c *Cache) DoResponse(
 	resp *http.Response,
 	do adaptor.DoResponse,
 ) (result adaptor.DoResponseResult, adapterErr adaptor.Error) {
-	pluginConfig, err := getPluginConfig(meta)
+	pluginConfig, err := c.getPluginConfig(meta)
 	if err != nil {
 		return do.DoResponse(meta, store, ctx, resp)
 	}

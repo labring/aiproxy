@@ -18,13 +18,31 @@ import (
 )
 
 func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	adaptorConfig := Config{}
-
-	err := meta.ChannelConfigs.LoadConfig(&adaptorConfig)
+	cfg, err := loadConfig(meta)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
 
+	return convertClaudeRequest(meta, req, cfg)
+}
+
+func (a *Adaptor) convertClaudeRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	cfg, err := a.loadConfig(meta)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return convertClaudeRequest(meta, req, cfg)
+}
+
+func convertClaudeRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	adaptorConfig Config,
+) (adaptor.ConvertResult, error) {
 	textRequest, err := openai.ConvertClaudeRequestModel(meta, req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
