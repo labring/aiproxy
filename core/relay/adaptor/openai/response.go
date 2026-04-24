@@ -42,9 +42,9 @@ func countWebSearchStreamEvent(
 	}
 
 	switch event.Type {
-	case string(relaymodel.EventWebSearchCallCompleted):
+	case relaymodel.EventWebSearchCallCompleted:
 		return addSeen(event.ItemID)
-	case string(relaymodel.EventOutputItemDone):
+	case relaymodel.EventOutputItemDone:
 		if event.Item != nil &&
 			event.Item.Type == "web_search_call" &&
 			event.Item.Status == relaymodel.ResponseStatusCompleted {
@@ -231,7 +231,9 @@ func ResponseStreamHandler(
 			)
 		}
 
-		usage.WebSearchCount += model.ZeroNullInt64(countWebSearchStreamEvent(&event, webSearchSeen))
+		usage.WebSearchCount += model.ZeroNullInt64(
+			countWebSearchStreamEvent(&event, webSearchSeen),
+		)
 
 		// Forward the event
 		render.ResponsesData(c, data)
