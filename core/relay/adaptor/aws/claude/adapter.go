@@ -100,7 +100,10 @@ func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byt
 	}
 
 	if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
-		req.AnthropicBeta = fixBetas(meta.ActualModel, strings.Split(betas, ","))
+		req.AnthropicBeta = fixBetas(
+			anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+			strings.Split(betas, ","),
+		)
 	}
 
 	return sonic.Marshal(req)
@@ -115,11 +118,17 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
 			_, _ = node.SetAny(
 				"anthropic_beta",
-				fixBetas(meta.ActualModel, strings.Split(betas, ",")),
+				fixBetas(
+					anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+					strings.Split(betas, ","),
+				),
 			)
 		}
 
-		if strings.Contains(meta.ActualModel, "4-6") {
+		if strings.Contains(
+			strings.ToLower(anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel)),
+			"4-6",
+		) {
 			_, _ = node.Unset("context_management")
 		} else {
 			anthropic.RemoveContextManagenetEdits(node, func(t string) bool {
@@ -177,7 +186,10 @@ func (a *Adaptor) DoRequest(
 		)
 	}
 
-	awsModelID := awsModelID(meta.ActualModel, region)
+	awsModelID := awsModelID(
+		anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+		region,
+	)
 
 	awsClient, err := utils.AwsClientFromMeta(meta)
 	if err != nil {

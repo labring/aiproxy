@@ -156,7 +156,7 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		// Check if model requires Responses API
-		if openai.IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if openai.IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			// Azure Responses API format
 			url, err := url.JoinPath(
 				meta.Channel.BaseURL,

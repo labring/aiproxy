@@ -215,6 +215,20 @@ func TestIsResponsesOnlyModel(t *testing.T) {
 	}
 }
 
+func TestIsResponsesOnlyModelAny(t *testing.T) {
+	t.Run("prefers origin model match", func(t *testing.T) {
+		assert.True(t, openai.IsResponsesOnlyModelAny(nil, "gpt-5-codex", "mapped-model"))
+	})
+
+	t.Run("falls back to actual model match", func(t *testing.T) {
+		assert.True(t, openai.IsResponsesOnlyModelAny(nil, "custom-model", "gpt-5-codex"))
+	})
+
+	t.Run("returns false when neither matches", func(t *testing.T) {
+		assert.False(t, openai.IsResponsesOnlyModelAny(nil, "custom-model", "mapped-model"))
+	})
+}
+
 func TestConvertChatCompletionToResponsesRequest(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -227,7 +227,7 @@ func (a *Adaptor) ConvertRequest(
 	case mode.Anthropic:
 		return anthropic.ConvertRequest(meta, req)
 	case mode.Gemini:
-		return openai.ConvertGeminiRequest(meta, req)
+		return ConvertGeminiRequest(meta, req)
 	case mode.Responses,
 		mode.ResponsesGet,
 		mode.ResponsesDelete,

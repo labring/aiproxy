@@ -228,6 +228,215 @@ func TestConvertRequest_Gemini25ProAutoInjectsThinkingConfig(t *testing.T) {
 	assert.True(t, geminiReq.GenerationConfig.ThinkingConfig.IncludeThoughts)
 }
 
+func TestConvertRequest_ReasoningEffortToThinkingConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		modelName        string
+		reasoningEffort  string
+		expectedBudget   *int
+		expectedLevel    string
+		expectedThoughts bool
+	}{
+		{
+			name:             "gemini 2.5 uses thinking budget",
+			modelName:        "gemini-2.5-pro",
+			reasoningEffort:  "high",
+			expectedBudget:   new(16384),
+			expectedThoughts: true,
+		},
+		{
+			name:             "gemini 3 pro uses thinking level",
+			modelName:        "gemini-3-pro",
+			reasoningEffort:  "high",
+			expectedLevel:    "high",
+			expectedThoughts: false,
+		},
+		{
+			name:             "gemini 2.5 flash disables thinking with none",
+			modelName:        "gemini-2.5-flash",
+			reasoningEffort:  "none",
+			expectedBudget:   new(0),
+			expectedThoughts: false,
+		},
+		{
+			name:             "gemini 2.5 pro none uses minimum budget",
+			modelName:        "gemini-2.5-pro",
+			reasoningEffort:  "none",
+			expectedBudget:   new(128),
+			expectedThoughts: false,
+		},
+		{
+			name:             "gemini 3 pro cannot disable thinking",
+			modelName:        "gemini-3-pro",
+			reasoningEffort:  "none",
+			expectedLevel:    "low",
+			expectedThoughts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &model.Channel{
+				Type: model.ChannelTypeGoogleGemini,
+			}
+			meta := meta.NewMeta(
+				channel,
+				mode.ChatCompletions,
+				tt.modelName,
+				model.ModelConfig{},
+			)
+
+			openAIReq := relaymodel.GeneralOpenAIRequest{
+				Model:           tt.modelName,
+				ReasoningEffort: &tt.reasoningEffort,
+				Messages: []relaymodel.Message{
+					{
+						Role:    "user",
+						Content: "hello",
+					},
+				},
+			}
+
+			jsonData, _ := sonic.Marshal(openAIReq)
+			req, _ := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost/v1/chat/completions",
+				bytes.NewBuffer(jsonData),
+			)
+
+			result, err := gemini.ConvertRequest(meta, req)
+			assert.NoError(t, err)
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var geminiReq relaymodel.GeminiChatRequest
+
+			err = json.Unmarshal(bodyBytes, &geminiReq)
+			assert.NoError(t, err)
+			assert.NotNil(t, geminiReq.GenerationConfig)
+			assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig)
+
+			if tt.expectedBudget != nil {
+				assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+				assert.Equal(
+					t,
+					*tt.expectedBudget,
+					*geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget,
+				)
+			} else {
+				assert.Nil(t, geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+			}
+
+			assert.Equal(
+				t,
+				tt.expectedLevel,
+				geminiReq.GenerationConfig.ThinkingConfig.ThinkingLevel,
+			)
+			assert.Equal(
+				t,
+				tt.expectedThoughts,
+				geminiReq.GenerationConfig.ThinkingConfig.IncludeThoughts,
+			)
+		})
+	}
+}
+
+func TestConvertRequest_ReasoningBudgetNotClampedByMaxOutputTokens(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-pro",
+		model.ModelConfig{},
+	)
+
+	reasoningEffort := "high"
+	maxTokens := 1000
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model:           "gemini-2.5-pro",
+		ReasoningEffort: &reasoningEffort,
+		MaxTokens:       maxTokens,
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "hello",
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.NotNil(t, geminiReq.GenerationConfig)
+	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig)
+	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+	assert.Equal(t, 16384, *geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+}
+
+func TestConvertRequest_ReasoningUsesOriginModelNameFirst(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-pro",
+		model.ModelConfig{},
+	)
+	meta.ActualModel = "mapped-upstream-model"
+
+	reasoningEffort := "none"
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model:           "gemini-2.5-pro",
+		ReasoningEffort: &reasoningEffort,
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "hello",
+			},
+		},
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.NotNil(t, geminiReq.GenerationConfig)
+	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig)
+	assert.NotNil(t, geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+	assert.Equal(t, 128, *geminiReq.GenerationConfig.ThinkingConfig.ThinkingBudget)
+}
+
 func TestConvertRequest_DisableAutoImageURLToBase64(t *testing.T) {
 	channel := &model.Channel{
 		Type: model.ChannelTypeGoogleGemini,

@@ -115,7 +115,7 @@ func (a *Adaptor) GetRequestURL(
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		// Check if model requires Responses API
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			url, err := url.JoinPath(u, "/responses")
 			if err != nil {
 				return adaptor.RequestURL{}, err
@@ -302,13 +302,13 @@ func ConvertRequest(
 		return ConvertCompletionsRequest(meta, req)
 	case mode.ChatCompletions:
 		// Check if model requires Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			return ConvertChatCompletionToResponsesRequest(meta, req)
 		}
 		return ConvertChatCompletionsRequest(meta, req, false)
 	case mode.Anthropic:
 		// Check if model requires Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			return ConvertClaudeToResponsesRequest(meta, req)
 		}
 		return ConvertClaudeRequest(meta, req)
@@ -330,7 +330,7 @@ func ConvertRequest(
 		return ConvertVideoGetJobsContentRequest(meta, req)
 	case mode.Gemini:
 		// Check if model requires Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			return ConvertGeminiToResponsesRequest(meta, req)
 		}
 		return ConvertGeminiRequest(meta, req)
@@ -399,7 +399,7 @@ func DoResponse(
 		}
 
 		// Check if model required Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			// Convert Responses API response back to ChatCompletion format
 			if utils.IsStreamResponse(resp) {
 				result, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
@@ -415,7 +415,7 @@ func DoResponse(
 		}
 	case mode.Anthropic:
 		// Check if model required Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			// Convert Responses API response back to Claude format
 			if utils.IsStreamResponse(resp) {
 				result, err = ConvertResponsesToClaudeStreamResponse(meta, c, resp)
@@ -437,7 +437,7 @@ func DoResponse(
 		result, err = VideoGetJobsContentHandler(meta, store, c, resp)
 	case mode.Gemini:
 		// Check if model required Responses API conversion
-		if IsResponsesOnlyModel(&meta.ModelConfig, meta.ActualModel) {
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
 			// Convert Responses API response back to Gemini format
 			if utils.IsStreamResponse(resp) {
 				result, err = ConvertResponsesToGeminiStreamResponse(meta, c, resp)

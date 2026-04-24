@@ -8,6 +8,7 @@ import (
 
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/meta"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
 func TestConvertGeminiRequestToStruct_Tools(t *testing.T) {
@@ -270,5 +271,56 @@ func TestConvertGeminiRequestToStruct_TemperatureOnly(t *testing.T) {
 
 	if claudeReq.TopP != nil {
 		t.Errorf("Expected TopP to be nil")
+	}
+}
+
+func TestConvertGeminiRequestToStruct_NormalizesThinkingForAdaptiveModels(t *testing.T) {
+	requestJSON := `{
+		"contents": [
+			{
+				"parts": [{"text": "test"}],
+				"role": "user"
+			}
+		],
+		"generationConfig": {
+			"maxOutputTokens": 4096,
+			"thinkingConfig": {
+				"thinkingBudget": 2048,
+				"includeThoughts": true
+			}
+		}
+	}`
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1beta/models/gemini-pro:generateContent",
+		strings.NewReader(requestJSON),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	meta := &meta.Meta{
+		ActualModel: "claude-opus-4-7",
+	}
+
+	claudeReq, err := anthropic.ConvertGeminiRequestToStruct(meta, req)
+	if err != nil {
+		t.Fatalf("ConvertGeminiRequestToStruct failed: %v", err)
+	}
+
+	if claudeReq.Thinking == nil {
+		t.Fatal("expected thinking to be set")
+	}
+
+	if claudeReq.Thinking.Type != relaymodel.ClaudeThinkingTypeAdaptive {
+		t.Fatalf("expected adaptive thinking, got %s", claudeReq.Thinking.Type)
+	}
+
+	if claudeReq.Thinking.BudgetTokens != 0 {
+		t.Fatalf("expected budget_tokens to be removed, got %d", claudeReq.Thinking.BudgetTokens)
 	}
 }

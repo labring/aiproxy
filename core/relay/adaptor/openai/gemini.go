@@ -19,8 +19,14 @@ import (
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
+type OpenAIRequestHook func(*relaymodel.GeneralOpenAIRequest) error
+
 // ConvertGeminiRequest converts a Gemini native request to OpenAI format
-func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
+func ConvertGeminiRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	hooks ...OpenAIRequestHook,
+) (adaptor.ConvertResult, error) {
 	// Parse Gemini request
 	geminiReq, err := utils.UnmarshalGeminiChatRequest(req)
 	if err != nil {
@@ -73,6 +79,16 @@ func ConvertGeminiRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 
 	// Convert tool config
 	openaiReq.ToolChoice = convertGeminiToolConfigToOpenAI(geminiReq)
+
+	for _, hook := range hooks {
+		if hook == nil {
+			continue
+		}
+
+		if err := hook(&openaiReq); err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+	}
 
 	// Marshal to JSON
 	data, err := sonic.Marshal(openaiReq)
@@ -523,6 +539,11 @@ func convertGeminiGenerationConfigToOpenAI(
 				}
 			}
 		}
+
+		utils.ApplyReasoningToOpenAIRequest(
+			openaiReq,
+			utils.ParseGeminiReasoning(geminiReq.GenerationConfig.ThinkingConfig),
+		)
 	}
 }
 
@@ -755,6 +776,13 @@ func ConvertGeminiToResponsesRequest(
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
 			responsesReq.MaxOutputTokens = geminiReq.GenerationConfig.MaxOutputTokens
 		}
+	}
+
+	if geminiReq.GenerationConfig != nil {
+		utils.ApplyReasoningToResponsesRequest(
+			&responsesReq,
+			utils.ParseGeminiReasoning(geminiReq.GenerationConfig.ThinkingConfig),
+		)
 	}
 
 	// Convert tools

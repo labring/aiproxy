@@ -35,6 +35,25 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 
 var v1ModelMap = map[string]struct{}{}
 
+func requestVersionModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			_, ok := v1ModelMap[modelName]
+			return ok
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return meta.ActualModel
+}
+
 func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	u := meta.Channel.BaseURL
 	if u == "" {
@@ -42,7 +61,7 @@ func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	}
 
 	version := "v1beta"
-	if _, ok := v1ModelMap[meta.ActualModel]; ok {
+	if _, ok := v1ModelMap[requestVersionModel(meta)]; ok {
 		version = "v1"
 	}
 

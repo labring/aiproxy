@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bytedance/sonic"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -141,6 +142,70 @@ func TestAdaptorGetRequestURL(t *testing.T) {
 	}
 }
 
+func TestAdaptorGetRequestURL_UsesOriginModelNameFirst(t *testing.T) {
+	adaptor := &Adaptor{}
+	channel := &coremodel.Channel{
+		BaseURL: "https://ark.cn-beijing.volces.com",
+	}
+
+	t.Run("origin bot model keeps bot endpoint", func(t *testing.T) {
+		m := meta.NewMeta(channel, mode.Gemini, "bot-123", coremodel.ModelConfig{})
+		m.ActualModel = "mapped-model"
+
+		got, err := adaptor.GetRequestURL(m, nil, nil)
+		if err != nil {
+			t.Fatalf("GetRequestURL returned error: %v", err)
+		}
+
+		if got.URL != "https://ark.cn-beijing.volces.com/api/v3/bots/chat/completions" {
+			t.Fatalf("unexpected URL: %s", got.URL)
+		}
+	})
+
+	t.Run("origin vision model keeps multimodal embeddings endpoint", func(t *testing.T) {
+		m := meta.NewMeta(channel, mode.Embeddings, "doubao-vision", coremodel.ModelConfig{})
+		m.ActualModel = "mapped-model"
+
+		got, err := adaptor.GetRequestURL(m, nil, nil)
+		if err != nil {
+			t.Fatalf("GetRequestURL returned error: %v", err)
+		}
+
+		if got.URL != "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal" {
+			t.Fatalf("unexpected URL: %s", got.URL)
+		}
+	})
+}
+
+func TestHandlerPreHandler_UsesOriginModelNameFirst(t *testing.T) {
+	m := meta.NewMeta(nil, mode.ChatCompletions, "bot-123", coremodel.ModelConfig{})
+	m.ActualModel = "mapped-model"
+
+	node, err := sonic.Get([]byte(`{
+		"bot_usage": {
+			"model_usage": [{"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}],
+			"action_usage": [{"count": 4}]
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("failed to build node: %v", err)
+	}
+
+	websearchCount := int64(0)
+	if err := handlerPreHandler(m, &node, &websearchCount); err != nil {
+		t.Fatalf("handlerPreHandler returned error: %v", err)
+	}
+
+	usageNode := node.Get("usage")
+	if usageNode.Check() != nil {
+		t.Fatal("expected usage to be copied from bot_usage.model_usage")
+	}
+
+	if websearchCount != 4 {
+		t.Fatalf("expected websearchCount=4, got %d", websearchCount)
+	}
+}
+
 func TestAdaptorConvertRequestGemini(t *testing.T) {
 	adaptor := &Adaptor{}
 	m := meta.NewMeta(
@@ -189,5 +254,298 @@ func TestAdaptorConvertRequestGemini(t *testing.T) {
 
 	if openAIReq.Messages[0].Role != relaymodel.RoleUser {
 		t.Fatalf("expected user message, got %s", openAIReq.Messages[0].Role)
+	}
+
+	if openAIReq.Thinking != nil {
+		t.Fatalf("expected thinking to stay unset by default, got %#v", openAIReq.Thinking)
+	}
+}
+
+func TestAdaptorConvertRequestGeminiReasoning(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.Gemini,
+		"doubao-seed-1-6",
+		coremodel.ModelConfig{},
+	)
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1beta/models/doubao-seed-1-6:generateContent",
+		strings.NewReader(`{
+			"generationConfig":{"thinkingConfig":{"thinkingBudget":2048,"includeThoughts":true}},
+			"contents":[{"role":"user","parts":[{"text":"hello"}]}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if openAIReq.Thinking == nil {
+		t.Fatal("expected thinking to be set")
+	}
+
+	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
+		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
+	}
+
+	if openAIReq.ReasoningEffort != nil {
+		t.Fatal("expected reasoning_effort to be removed")
+	}
+}
+
+func TestAdaptorConvertRequestChatReasoning(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.ChatCompletions,
+		"doubao-seed-1-6",
+		coremodel.ModelConfig{},
+	)
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(`{
+			"model":"doubao-seed-1-6",
+			"reasoning_effort":"high",
+			"messages":[{"role":"user","content":"hello"}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if openAIReq.Thinking == nil {
+		t.Fatal("expected thinking to be set")
+	}
+
+	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
+		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
+	}
+}
+
+func TestAdaptorConvertRequestChatReasoningDisabled(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.ChatCompletions,
+		"doubao-seed-1-6",
+		coremodel.ModelConfig{},
+	)
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(`{
+			"model":"doubao-seed-1-6",
+			"reasoning_effort":"none",
+			"messages":[{"role":"user","content":"hello"}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if openAIReq.Thinking == nil {
+		t.Fatal("expected thinking to be set")
+	}
+
+	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeDisabled {
+		t.Fatalf("expected thinking.type disabled, got %s", openAIReq.Thinking.Type)
+	}
+}
+
+func TestAdaptorConvertRequestChatDeepseekReasonerPrompt(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.ChatCompletions,
+		"doubao-seed-1-6",
+		coremodel.ModelConfig{},
+	)
+	m.OriginModel = "deepseek-reasoner"
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(`{
+			"model":"doubao-seed-1-6",
+			"messages":[{"role":"user","content":"hello"}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if len(openAIReq.Messages) < 2 {
+		t.Fatalf("expected injected system prompt, got %d messages", len(openAIReq.Messages))
+	}
+
+	if openAIReq.Messages[0].Role != relaymodel.RoleSystem {
+		t.Fatalf("expected first message to be system, got %s", openAIReq.Messages[0].Role)
+	}
+}
+
+func TestAdaptorConvertRequestChatDeepseekReasonerPrompt_UsesActualModelFallback(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.ChatCompletions,
+		"alias-model",
+		coremodel.ModelConfig{},
+	)
+	m.ActualModel = "deepseek-reasoner"
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(`{
+			"model":"alias-model",
+			"messages":[{"role":"user","content":"hello"}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if len(openAIReq.Messages) < 2 {
+		t.Fatalf("expected injected system prompt, got %d messages", len(openAIReq.Messages))
+	}
+
+	if openAIReq.Messages[0].Role != relaymodel.RoleSystem {
+		t.Fatalf("expected first message to be system, got %s", openAIReq.Messages[0].Role)
+	}
+}
+
+func TestAdaptorConvertRequestAnthropicReasoning(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.Anthropic,
+		"doubao-seed-1-6",
+		coremodel.ModelConfig{},
+	)
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/messages",
+		strings.NewReader(`{
+			"model":"doubao-seed-1-6",
+			"thinking":{"type":"enabled","budget_tokens":2048},
+			"messages":[{"role":"user","content":"hello"}]
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	result, err := adaptor.ConvertRequest(m, nil, req)
+	if err != nil {
+		t.Fatalf("ConvertRequest returned error: %v", err)
+	}
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("failed to read converted body: %v", err)
+	}
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal converted body: %v", err)
+	}
+
+	if openAIReq.Thinking == nil {
+		t.Fatal("expected thinking to be set")
+	}
+
+	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
+		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
+	}
+
+	if openAIReq.ReasoningEffort != nil {
+		t.Fatal("expected reasoning_effort to be removed")
 	}
 }

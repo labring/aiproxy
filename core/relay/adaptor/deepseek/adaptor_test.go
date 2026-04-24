@@ -3,14 +3,19 @@ package deepseek
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -174,4 +179,93 @@ func TestDeepseekSetupRequestHeaderAnthropic(t *testing.T) {
 		"token-efficient-tools-2025-02-19,context-management-2025-06-27",
 		req.Header.Get(anthropic.AnthropicBeta),
 	)
+}
+
+func TestDeepseekConvertRequestReasoning(t *testing.T) {
+	adaptor := &Adaptor{}
+
+	t.Run("chat reasoning_effort maps to thinking", func(t *testing.T) {
+		m := meta.NewMeta(nil, mode.ChatCompletions, "deepseek-chat", coremodel.ModelConfig{})
+		req, err := http.NewRequestWithContext(
+			context.Background(),
+			http.MethodPost,
+			"/v1/chat/completions",
+			strings.NewReader(`{
+				"model":"deepseek-chat",
+				"reasoning_effort":"high",
+				"messages":[{"role":"user","content":"hello"}]
+			}`),
+		)
+		require.NoError(t, err)
+
+		result, err := adaptor.ConvertRequest(m, nil, req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(result.Body)
+		require.NoError(t, err)
+
+		var openAIReq relaymodel.GeneralOpenAIRequest
+		require.NoError(t, json.Unmarshal(body, &openAIReq))
+		require.NotNil(t, openAIReq.Thinking)
+		assert.Equal(t, relaymodel.ClaudeThinkingTypeEnabled, openAIReq.Thinking.Type)
+		assert.Nil(t, openAIReq.ReasoningEffort)
+	})
+
+	t.Run("chat reasoning_effort none disables thinking", func(t *testing.T) {
+		m := meta.NewMeta(nil, mode.ChatCompletions, "deepseek-chat", coremodel.ModelConfig{})
+		req, err := http.NewRequestWithContext(
+			context.Background(),
+			http.MethodPost,
+			"/v1/chat/completions",
+			strings.NewReader(`{
+				"model":"deepseek-chat",
+				"reasoning_effort":"none",
+				"messages":[{"role":"user","content":"hello"}]
+			}`),
+		)
+		require.NoError(t, err)
+
+		result, err := adaptor.ConvertRequest(m, nil, req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(result.Body)
+		require.NoError(t, err)
+
+		var openAIReq relaymodel.GeneralOpenAIRequest
+		require.NoError(t, json.Unmarshal(body, &openAIReq))
+		require.NotNil(t, openAIReq.Thinking)
+		assert.Equal(t, relaymodel.ClaudeThinkingTypeDisabled, openAIReq.Thinking.Type)
+		assert.Nil(t, openAIReq.ReasoningEffort)
+	})
+
+	t.Run("gemini thinking maps to deepseek thinking", func(t *testing.T) {
+		m := meta.NewMeta(nil, mode.Gemini, "deepseek-chat", coremodel.ModelConfig{})
+		req, err := http.NewRequestWithContext(
+			context.Background(),
+			http.MethodPost,
+			"/v1beta/models/gemini-pro:generateContent",
+			strings.NewReader(`{
+				"generationConfig": {
+					"thinkingConfig": {
+						"thinkingBudget": 2048,
+						"includeThoughts": true
+					}
+				},
+				"contents":[{"role":"user","parts":[{"text":"hello"}]}]
+			}`),
+		)
+		require.NoError(t, err)
+
+		result, err := adaptor.ConvertRequest(m, nil, req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(result.Body)
+		require.NoError(t, err)
+
+		var openAIReq relaymodel.GeneralOpenAIRequest
+		require.NoError(t, json.Unmarshal(body, &openAIReq))
+		require.NotNil(t, openAIReq.Thinking)
+		assert.Equal(t, relaymodel.ClaudeThinkingTypeEnabled, openAIReq.Thinking.Type)
+		assert.Nil(t, openAIReq.ReasoningEffort)
+	})
 }

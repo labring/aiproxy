@@ -13,6 +13,80 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
+func TestConvertGeminiRequest_MapsThinkingConfigToReasoningEffort(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestJSON    string
+		expectedEffort string
+	}{
+		{
+			name: "thinking level maps directly",
+			requestJSON: `{
+				"generationConfig": {
+					"thinkingConfig": {
+						"thinkingLevel": "high"
+					}
+				},
+				"contents": [{"role":"user","parts":[{"text":"hello"}]}]
+			}`,
+			expectedEffort: "high",
+		},
+		{
+			name: "thinking budget maps to effort",
+			requestJSON: `{
+				"generationConfig": {
+					"thinkingConfig": {
+						"thinkingBudget": 2048,
+						"includeThoughts": true
+					}
+				},
+				"contents": [{"role":"user","parts":[{"text":"hello"}]}]
+			}`,
+			expectedEffort: "low",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				"/v1beta/models/gemini-pro:generateContent",
+				strings.NewReader(tt.requestJSON),
+			)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+
+			meta := &meta.Meta{ActualModel: "gpt-5"}
+
+			result, err := openai.ConvertGeminiRequest(meta, req)
+			if err != nil {
+				t.Fatalf("ConvertGeminiRequest failed: %v", err)
+			}
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var openAIReq relaymodel.GeneralOpenAIRequest
+			if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
+				t.Fatalf("failed to unmarshal result body: %v", err)
+			}
+
+			if openAIReq.ReasoningEffort == nil {
+				t.Fatal("expected reasoning_effort to be set")
+			}
+
+			if *openAIReq.ReasoningEffort != tt.expectedEffort {
+				t.Fatalf(
+					"expected reasoning_effort %s, got %s",
+					tt.expectedEffort,
+					*openAIReq.ReasoningEffort,
+				)
+			}
+		})
+	}
+}
+
 func TestConvertGeminiRequest_ToolResponse(t *testing.T) {
 	// Reproduce the user's scenario:
 	// 1. Setup message (User)

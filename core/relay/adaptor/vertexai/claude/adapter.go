@@ -85,7 +85,13 @@ func (a *Adaptor) SetupRequestHeader(
 	if betas != "" {
 		req.Header.Set(
 			anthropic.AnthropicBeta,
-			strings.Join(fixBetas(meta.ActualModel, strings.Split(betas, ",")), ","),
+			strings.Join(
+				fixBetas(
+					anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+					strings.Split(betas, ","),
+				),
+				",",
+			),
 		)
 	}
 

@@ -47,6 +47,8 @@ func ConvertGeminiRequestToStruct(
 	meta *meta.Meta,
 	req *http.Request,
 ) (*relaymodel.ClaudeRequest, error) {
+	resolvedModel := ResolveModelName(meta.OriginModel, meta.ActualModel)
+
 	// Parse Gemini request
 	geminiReq, err := utils.UnmarshalGeminiChatRequest(req)
 	if err != nil {
@@ -56,7 +58,7 @@ func ConvertGeminiRequestToStruct(
 	// Convert to Claude format
 	claudeReq := relaymodel.ClaudeRequest{
 		Model:     meta.ActualModel,
-		MaxTokens: ModelDefaultMaxTokens(meta.ActualModel),
+		MaxTokens: ModelDefaultMaxTokens(resolvedModel),
 		Messages:  []relaymodel.ClaudeMessage{},
 		System:    convertGeminiSystemInstruction(geminiReq),
 	}
@@ -104,6 +106,28 @@ func ConvertGeminiRequestToStruct(
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
 			claudeReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
 		}
+	}
+
+	reasoning := utils.ParseGeminiReasoning(nil)
+	if geminiReq.GenerationConfig != nil {
+		reasoning = utils.ParseGeminiReasoning(geminiReq.GenerationConfig.ThinkingConfig)
+	}
+
+	utils.ApplyReasoningToClaudeRequest(
+		resolvedModel,
+		&claudeReq.MaxTokens,
+		&claudeReq.Thinking,
+		&claudeReq.OutputConfig,
+		reasoning,
+	)
+
+	if claudeReq.Thinking != nil {
+		normalizeClaudeThinking(
+			resolvedModel,
+			&claudeReq.MaxTokens,
+			&claudeReq.Thinking,
+			&claudeReq.OutputConfig,
+		)
 	}
 
 	// Convert tools

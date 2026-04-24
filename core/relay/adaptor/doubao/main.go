@@ -13,6 +13,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -20,11 +21,32 @@ func init() {
 	registry.Register(model.ChannelTypeDoubao, &Adaptor{})
 }
 
+func featureModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			modelName = strings.ToLower(modelName)
+			return strings.HasPrefix(modelName, "bot-") || strings.Contains(modelName, "vision")
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return utils.PreferredModelName(meta.OriginModel, meta.ActualModel)
+}
+
 func GetRequestURL(meta *meta.Meta) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
+
+	modelName := strings.ToLower(featureModel(meta))
 	switch meta.Mode {
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
-		if strings.HasPrefix(meta.ActualModel, "bot-") {
+		if strings.HasPrefix(modelName, "bot-") {
 			url, err := url.JoinPath(u, "/api/v3/bots/chat/completions")
 			if err != nil {
 				return adaptor.RequestURL{}, err
@@ -46,7 +68,7 @@ func GetRequestURL(meta *meta.Meta) (adaptor.RequestURL, error) {
 			URL:    url,
 		}, nil
 	case mode.Embeddings:
-		if strings.Contains(meta.ActualModel, "vision") {
+		if strings.Contains(modelName, "vision") {
 			url, err := url.JoinPath(u, "/api/v3/embeddings/multimodal")
 			if err != nil {
 				return adaptor.RequestURL{}, err
@@ -164,16 +186,24 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
+	reasoningHook := func(openAIReq *relaymodel.GeneralOpenAIRequest) error {
+		reasoning := utils.ParseOpenAIReasoning(openAIReq)
+		utils.ApplyReasoningToDoubaoRequest(openAIReq, reasoning)
+		return nil
+	}
+
 	switch meta.Mode {
 	case mode.Embeddings:
-		if strings.Contains(meta.ActualModel, "vision") {
+		if strings.Contains(strings.ToLower(featureModel(meta)), "vision") {
 			return openai.ConvertEmbeddingsRequest(meta, req, false, patchEmbeddingsVisionInput)
 		}
 		return openai.ConvertEmbeddingsRequest(meta, req, true)
 	case mode.ChatCompletions:
 		return ConvertChatCompletionsRequest(meta, req)
+	case mode.Anthropic:
+		return openai.ConvertClaudeRequest(meta, req, reasoningHook)
 	case mode.Gemini:
-		return openai.ConvertGeminiRequest(meta, req)
+		return openai.ConvertGeminiRequest(meta, req, reasoningHook)
 	default:
 		return openai.ConvertRequest(meta, store, req)
 	}
