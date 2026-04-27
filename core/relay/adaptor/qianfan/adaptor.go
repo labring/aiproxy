@@ -2,6 +2,7 @@ package qianfan
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
@@ -10,10 +11,12 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 type Adaptor struct {
 	openai.Adaptor
+	configCache utils.ChannelConfigCache[Config]
 }
 
 func init() {
@@ -34,6 +37,28 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.Embeddings
 }
 
+func (a *Adaptor) SetupRequestHeader(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) error {
+	if err := a.Adaptor.SetupRequestHeader(meta, store, c, req); err != nil {
+		return err
+	}
+
+	cfg, err := a.loadConfig(meta)
+	if err != nil {
+		return err
+	}
+
+	if appID := strings.TrimSpace(cfg.AppID); appID != "" {
+		req.Header.Set("Appid", appID)
+	}
+
+	return nil
+}
+
 func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	store adaptor.Store,
@@ -49,7 +74,8 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:  "Baidu Qianfan OpenAI-compatible endpoint\nSupports chat, completions, embeddings, Anthropic-compatible request conversion, and Gemini-compatible request conversion\nKey format example: `bce-v3/aaa/bbb`",
-		KeyHelp: "bce-v3/aaa/bbb",
+		Readme:       "Baidu Qianfan OpenAI-compatible endpoint\nSupports chat, completions, embeddings, Anthropic-compatible request conversion, and Gemini-compatible request conversion\nKey format example: `bce-v3/aaa/bbb`\nChannel config `appid` sets the upstream `appid` request header.",
+		KeyHelp:      "bce-v3/aaa/bbb",
+		ConfigSchema: configSchema(),
 	}
 }
