@@ -10,13 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAdaptorSupportModeGemini(t *testing.T) {
@@ -51,7 +50,7 @@ func TestAdaptorSetupRequestHeaderWithAppID(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
-	assert.Equal(t, "app-test", req.Header.Get("appid"))
+	assert.Equal(t, "app-test", req.Header.Get("Appid"))
 }
 
 func TestAdaptorSetupRequestHeaderWithoutAppID(t *testing.T) {
@@ -75,7 +74,7 @@ func TestAdaptorSetupRequestHeaderWithoutAppID(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
-	assert.Empty(t, req.Header.Get("appid"))
+	assert.Empty(t, req.Header.Get("Appid"))
 }
 
 func TestAdaptorMetadataConfigSchema(t *testing.T) {

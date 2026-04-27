@@ -53,7 +53,7 @@ func (a *Adaptor) SetupRequestHeader(
 	}
 
 	if appID := strings.TrimSpace(cfg.AppID); appID != "" {
-		req.Header.Set("appid", appID)
+		req.Header.Set("Appid", appID)
 	}
 
 	return nil
