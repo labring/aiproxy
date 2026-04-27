@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -21,6 +25,69 @@ func TestAdaptorSupportModeGemini(t *testing.T) {
 	if !adaptor.SupportMode(mode.Gemini) {
 		t.Fatal("expected Gemini mode to be supported")
 	}
+}
+
+func TestAdaptorSetupRequestHeaderWithAppID(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		&coremodel.Channel{
+			Key: "test-key",
+			Configs: coremodel.ChannelConfigs{
+				"appid": " app-test ",
+			},
+		},
+		mode.ChatCompletions,
+		"ernie-4.5-turbo-128k",
+		coremodel.ModelConfig{},
+	)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"https://qianfan.baidubce.com/v2/chat/completions",
+		nil,
+	)
+
+	err := adaptor.SetupRequestHeader(m, nil, nil, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
+	assert.Equal(t, "app-test", req.Header.Get("appid"))
+}
+
+func TestAdaptorSetupRequestHeaderWithoutAppID(t *testing.T) {
+	adaptor := &Adaptor{}
+	m := meta.NewMeta(
+		&coremodel.Channel{
+			Key: "test-key",
+		},
+		mode.ChatCompletions,
+		"ernie-4.5-turbo-128k",
+		coremodel.ModelConfig{},
+	)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"https://qianfan.baidubce.com/v2/chat/completions",
+		nil,
+	)
+
+	err := adaptor.SetupRequestHeader(m, nil, nil, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
+	assert.Empty(t, req.Header.Get("appid"))
+}
+
+func TestAdaptorMetadataConfigSchema(t *testing.T) {
+	adaptor := &Adaptor{}
+	metaInfo := adaptor.Metadata()
+
+	properties, ok := metaInfo.ConfigSchema["properties"].(map[string]any)
+	require.True(t, ok)
+
+	field, ok := properties["appid"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "string", field["type"])
 }
 
 func TestAdaptorConvertRequestGemini(t *testing.T) {
