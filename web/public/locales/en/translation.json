@@ -915,7 +915,7 @@
       "setsPlaceholder": "Enter group name and press enter to add",
       "priority": "Priority",
       "priorityPlaceholder": "1-100, default 10",
-      "priorityHelp": "Lower value means higher priority, default is 10",
+      "priorityHelp": "Higher value means higher priority. Effective priority is dynamically adjusted by error rate. Default is 10",
       "skipTlsVerify": "Skip TLS Verification",
       "skipTlsVerifyHelp": "Enable this only when you trust the upstream service and need to bypass certificate verification.",
       "enabledNoPermissionBan": "Temporarily Exclude No-Permission Models",
