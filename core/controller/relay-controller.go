@@ -37,6 +37,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin/thinksplit"
 	"github.com/labring/aiproxy/core/relay/plugin/timeout"
 	websearch "github.com/labring/aiproxy/core/relay/plugin/web-search"
+	log "github.com/sirupsen/logrus"
 )
 
 // https://platform.openai.com/docs/api-reference/chat
@@ -379,6 +380,11 @@ func recordResult(
 		log.Data["amount"] = strconv.FormatFloat(amount, 'f', -1, 64)
 	}
 
+	asyncUsageStatus := model.AsyncUsageStatusNone
+	if downstreamResult && result.Error == nil && result.AsyncUsage {
+		asyncUsageStatus = model.AsyncUsageStatusPending
+	}
+
 	consume.AsyncConsume(
 		gbc.Consumer,
 		code,
@@ -393,7 +399,41 @@ func recordResult(
 		downstreamResult,
 		metadata,
 		result.UpstreamID,
+		asyncUsageStatus,
 	)
+
+	if asyncUsageStatus == model.AsyncUsageStatusPending {
+		saveAsyncUsageInfo(meta, price, result)
+	}
+}
+
+func saveAsyncUsageInfo(
+	meta *meta.Meta,
+	price model.Price,
+	result *controller.HandleResult,
+) {
+	if result.UpstreamID == "" {
+		log.Warnf("skip async usage without upstream id, request_id: %s", meta.RequestID)
+		return
+	}
+
+	if err := model.CreateAsyncUsageInfo(&model.AsyncUsageInfo{
+		RequestID:      meta.RequestID,
+		RequestAt:      meta.RequestAt,
+		Mode:           int(meta.Mode),
+		Model:          meta.OriginModel,
+		ChannelID:      meta.Channel.ID,
+		BaseURL:        meta.Channel.BaseURL,
+		GroupID:        meta.Group.ID,
+		TokenID:        meta.Token.ID,
+		TokenName:      meta.Token.Name,
+		Price:          price,
+		ServiceTier:    meta.RequestServiceTier,
+		UpstreamID:     result.UpstreamID,
+		DownstreamDone: true,
+	}); err != nil {
+		log.Errorf("failed to save async usage info: %v", err)
+	}
 }
 
 func effectiveDetailBodyMaxSize(modelLimit, globalLimit int64) int64 {

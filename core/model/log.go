@@ -46,30 +46,31 @@ func (d *RequestDetail) ApplyBodySizeLimits(requestMaxSize, responseMaxSize int6
 }
 
 type Log struct {
-	RequestDetail    *RequestDetail  `gorm:"foreignKey:LogID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"request_detail,omitempty"`
-	RequestAt        time.Time       `                                                                      json:"request_at"`
-	RetryAt          time.Time       `                                                                      json:"retry_at,omitempty"`
-	TTFBMilliseconds ZeroNullInt64   `                                                                      json:"ttfb_milliseconds,omitempty"`
-	CreatedAt        time.Time       `gorm:"autoCreateTime;index"                                           json:"created_at"`
-	TokenName        string          `gorm:"size:32"                                                        json:"token_name,omitempty"`
-	Endpoint         EmptyNullString `gorm:"size:64"                                                        json:"endpoint,omitempty"`
-	Content          EmptyNullString `gorm:"type:text"                                                      json:"content,omitempty"`
-	GroupID          string          `gorm:"size:64"                                                        json:"group,omitempty"`
-	Model            string          `gorm:"size:128"                                                       json:"model"`
-	RequestID        EmptyNullString `gorm:"type:char(16);index:,where:request_id is not null"              json:"request_id"`
-	UpstreamID       EmptyNullString `gorm:"type:varchar(256)"                                              json:"upstream_id,omitempty"`
-	ID               int             `gorm:"primaryKey"                                                     json:"id"`
-	TokenID          int             `gorm:"index"                                                          json:"token_id,omitempty"`
-	ChannelID        int             `                                                                      json:"channel,omitempty"`
-	Code             int             `gorm:"index"                                                          json:"code,omitempty"`
-	Mode             int             `                                                                      json:"mode,omitempty"`
-	IP               EmptyNullString `gorm:"size:45;index:,where:ip is not null"                            json:"ip,omitempty"`
-	RetryTimes       ZeroNullInt64   `                                                                      json:"retry_times,omitempty"`
-	Price            Price           `gorm:"embedded"                                                       json:"price,omitempty"`
-	Usage            Usage           `gorm:"embedded"                                                       json:"usage,omitempty"`
-	Amount           Amount          `gorm:"embedded"                                                       json:"amount,omitempty"`
-	ServiceTier      string          `gorm:"size:16"                                                        json:"service_tier,omitempty"`
-	PromptCacheKey   EmptyNullString `gorm:"type:text"                                                      json:"prompt_cache_key,omitempty"`
+	RequestDetail    *RequestDetail   `gorm:"foreignKey:LogID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"request_detail,omitempty"`
+	RequestAt        time.Time        `                                                                      json:"request_at"`
+	RetryAt          time.Time        `                                                                      json:"retry_at,omitempty"`
+	TTFBMilliseconds ZeroNullInt64    `                                                                      json:"ttfb_milliseconds,omitempty"`
+	CreatedAt        time.Time        `gorm:"autoCreateTime;index"                                           json:"created_at"`
+	TokenName        string           `gorm:"size:32"                                                        json:"token_name,omitempty"`
+	Endpoint         EmptyNullString  `gorm:"size:64"                                                        json:"endpoint,omitempty"`
+	Content          EmptyNullString  `gorm:"type:text"                                                      json:"content,omitempty"`
+	GroupID          string           `gorm:"size:64"                                                        json:"group,omitempty"`
+	Model            string           `gorm:"size:128"                                                       json:"model"`
+	RequestID        EmptyNullString  `gorm:"type:char(16);index:,where:request_id is not null"              json:"request_id"`
+	UpstreamID       EmptyNullString  `gorm:"type:varchar(256)"                                              json:"upstream_id,omitempty"`
+	AsyncUsageStatus AsyncUsageStatus `                                                                      json:"async_usage_status,omitempty"`
+	ID               int              `gorm:"primaryKey"                                                     json:"id"`
+	TokenID          int              `gorm:"index"                                                          json:"token_id,omitempty"`
+	ChannelID        int              `                                                                      json:"channel,omitempty"`
+	Code             int              `gorm:"index"                                                          json:"code,omitempty"`
+	Mode             int              `                                                                      json:"mode,omitempty"`
+	IP               EmptyNullString  `gorm:"size:45;index:,where:ip is not null"                            json:"ip,omitempty"`
+	RetryTimes       ZeroNullInt64    `                                                                      json:"retry_times,omitempty"`
+	Price            Price            `gorm:"embedded"                                                       json:"price,omitempty"`
+	Usage            Usage            `gorm:"embedded"                                                       json:"usage,omitempty"`
+	Amount           Amount           `gorm:"embedded"                                                       json:"amount,omitempty"`
+	ServiceTier      string           `gorm:"size:16"                                                        json:"service_tier,omitempty"`
+	PromptCacheKey   EmptyNullString  `gorm:"type:text"                                                      json:"prompt_cache_key,omitempty"`
 	// https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
 	User     EmptyNullString   `gorm:"type:text"                     json:"user,omitempty"`
 	Metadata map[string]string `gorm:"serializer:fastjson;type:text" json:"metadata,omitempty"`
@@ -214,6 +215,11 @@ func CleanLog(batchSize int, optimize bool) (err error) {
 		return err
 	}
 
+	err = cleanAsyncUsageInfo(batchSize)
+	if err != nil {
+		return err
+	}
+
 	if optimize {
 		return optimizeLog()
 	}
@@ -275,6 +281,15 @@ func cleanLog(batchSize int) error {
 		Where("expires_at < ?", time.Now()).
 		Delete(&StoreV2{}).
 		Error
+}
+
+func cleanAsyncUsageInfo(batchSize int) error {
+	logStorageHours := config.GetLogStorageHours()
+	if logStorageHours == 0 {
+		return nil
+	}
+
+	return CleanupFinishedAsyncUsages(time.Duration(logStorageHours)*time.Hour, batchSize)
 }
 
 func optimizeLog() error {
@@ -346,6 +361,7 @@ func RecordConsumeLog(
 	promptCacheKey string,
 	upstreamID string,
 	serviceTier string,
+	asyncUsageStatus AsyncUsageStatus,
 ) error {
 	if createAt.IsZero() {
 		createAt = time.Now()
@@ -391,6 +407,7 @@ func RecordConsumeLog(
 		PromptCacheKey:   EmptyNullString(promptCacheKey),
 		UpstreamID:       EmptyNullString(upstreamID),
 		ServiceTier:      serviceTier,
+		AsyncUsageStatus: asyncUsageStatus,
 	}
 
 	return LogDB.Create(log).Error

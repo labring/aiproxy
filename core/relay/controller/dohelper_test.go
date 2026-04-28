@@ -16,6 +16,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,6 +119,25 @@ func newTestRelayContext() (*gin.Context, *meta.Meta) {
 	)
 
 	return c, meta.NewMeta(nil, mode.ChatCompletions, "gpt-4o-mini", model.ModelConfig{})
+}
+
+func TestUpdateUsageMetricsIncludesAsyncUsage(t *testing.T) {
+	entry := logrus.NewEntry(logrus.New())
+	entry.Data = logrus.Fields{}
+
+	updateUsageMetrics(adaptor.DoResponseResult{
+		Usage: model.Usage{
+			InputTokens:  10,
+			OutputTokens: 5,
+		},
+		AsyncUsage: true,
+	}, entry)
+
+	require.Equal(t, model.ZeroNullInt64(10), entry.Data["t_input"])
+	require.Equal(t, model.ZeroNullInt64(5), entry.Data["t_output"])
+	require.Equal(t, model.ZeroNullInt64(15), entry.Data["t_total"])
+	require.Equal(t, true, entry.Data["async_usage"])
+	require.NotContains(t, entry.Data, "async_usage_status")
 }
 
 func TestPrepareAndDoRequestConvertRequestReturnsAdaptorError(t *testing.T) {

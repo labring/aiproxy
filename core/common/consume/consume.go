@@ -35,6 +35,7 @@ func AsyncConsume(
 	downstreamResult bool,
 	metadata map[string]string,
 	upstreamID string,
+	asyncUsageStatus model.AsyncUsageStatus,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
@@ -65,6 +66,7 @@ func AsyncConsume(
 		downstreamResult,
 		metadata,
 		upstreamID,
+		asyncUsageStatus,
 	)
 }
 
@@ -84,6 +86,7 @@ func Consume(
 	downstreamResult bool,
 	metadata map[string]string,
 	upstreamID string,
+	asyncUsageStatus model.AsyncUsageStatus,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
@@ -119,6 +122,7 @@ func Consume(
 		downstreamResult,
 		metadata,
 		upstreamID,
+		asyncUsageStatus,
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())

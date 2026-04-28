@@ -839,8 +839,6 @@ func ConvertGeminiToResponsesRequest(
 		return adaptor.ConvertResult{}, err
 	}
 
-	fmt.Println(string(jsonData))
-
 	return adaptor.ConvertResult{
 		Header: http.Header{
 			"Content-Type":   {"application/json"},
@@ -964,11 +962,8 @@ func ConvertResponsesToGeminiResponse(
 		}
 	}
 
-	usage := model.Usage{}
-
 	// Convert usage
 	if responsesResp.Usage != nil {
-		usage = responsesResp.Usage.ToModelUsage()
 		geminiUsage := responsesResp.Usage.ToGeminiUsage()
 		geminiResp.UsageMetadata = &geminiUsage
 	}
@@ -987,7 +982,11 @@ func ConvertResponsesToGeminiResponse(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(geminiRespData)))
 	_, _ = c.Writer.Write(geminiRespData)
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{
+		Usage:      responsesResp.ToModelUsage(),
+		UpstreamID: responsesResp.ID,
+		AsyncUsage: responseNeedsAsyncUsage(&responsesResp),
+	}, nil
 }
 
 // ConvertResponsesToGeminiStreamResponse converts Responses API stream to Gemini stream
@@ -1007,7 +1006,11 @@ func ConvertResponsesToGeminiStreamResponse(
 	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
 	defer cleanup()
 
-	var usage model.Usage
+	var (
+		usage        model.Usage
+		responseID   string
+		lastResponse *relaymodel.Response
+	)
 
 	state := &geminiStreamState{
 		meta: meta,
@@ -1034,6 +1037,15 @@ func ConvertResponsesToGeminiStreamResponse(
 			continue
 		}
 
+		if event.Response != nil {
+			if responseID == "" {
+				responseID = event.Response.ID
+			}
+
+			lastResponse = event.Response
+			usage = event.Response.ToModelUsage()
+		}
+
 		// Handle events
 		// Note: Gemini format requires complete JSON for function calls,
 		// so we handle function_call_arguments.done (complete), not function_call_arguments.delta (streaming)
@@ -1045,10 +1057,6 @@ func ConvertResponsesToGeminiStreamResponse(
 		case relaymodel.EventFunctionCallArgumentsDone:
 			state.handleFunctionCallArgumentsDone(&event)
 		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
-			if event.Response != nil && event.Response.Usage != nil {
-				usage = event.Response.Usage.ToModelUsage()
-			}
-
 			state.handleResponseCompleted(&event)
 		}
 	}
@@ -1057,7 +1065,11 @@ func ConvertResponsesToGeminiStreamResponse(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: responseID,
+		AsyncUsage: responseNeedsAsyncUsage(lastResponse),
+	}, nil
 }
 
 // geminiStreamState manages state for Gemini stream conversion

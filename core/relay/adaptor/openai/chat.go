@@ -1140,13 +1140,11 @@ func ConvertResponsesToChatCompletionResponse(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(chatRespData)))
 	_, _ = c.Writer.Write(chatRespData)
 
-	if responsesResp.Usage != nil {
-		usage := responsesResp.Usage.ToModelUsage()
-
-		return adaptor.DoResponseResult{Usage: usage}, nil
-	}
-
-	return adaptor.DoResponseResult{}, nil
+	return adaptor.DoResponseResult{
+		Usage:      responsesResp.ToModelUsage(),
+		UpstreamID: responsesResp.ID,
+		AsyncUsage: responseNeedsAsyncUsage(&responsesResp),
+	}, nil
 }
 
 // ConvertResponsesToChatCompletionStreamResponse converts Responses API stream to ChatCompletion stream
@@ -1166,7 +1164,11 @@ func ConvertResponsesToChatCompletionStreamResponse(
 	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
 	defer cleanup()
 
-	var usage model.Usage
+	var (
+		usage        model.Usage
+		responseID   string
+		lastResponse *relaymodel.Response
+	)
 
 	state := &chatCompletionStreamState{
 		meta: meta,
@@ -1193,6 +1195,15 @@ func ConvertResponsesToChatCompletionStreamResponse(
 			continue
 		}
 
+		if event.Response != nil {
+			if responseID == "" {
+				responseID = event.Response.ID
+			}
+
+			lastResponse = event.Response
+			usage = event.Response.ToModelUsage()
+		}
+
 		// Handle event and get response
 		var chatStreamResp *relaymodel.ChatCompletionsStreamResponse
 
@@ -1208,10 +1219,6 @@ func ConvertResponsesToChatCompletionStreamResponse(
 		case relaymodel.EventOutputItemDone:
 			chatStreamResp = state.handleOutputItemDone(&event)
 		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
-			if event.Response != nil && event.Response.Usage != nil {
-				usage = event.Response.Usage.ToModelUsage()
-			}
-
 			chatStreamResp = state.handleResponseCompleted(&event)
 		}
 
@@ -1231,5 +1238,9 @@ func ConvertResponsesToChatCompletionStreamResponse(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return adaptor.DoResponseResult{Usage: usage}, nil
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: responseID,
+		AsyncUsage: responseNeedsAsyncUsage(lastResponse),
+	}, nil
 }

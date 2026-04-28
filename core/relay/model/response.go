@@ -34,6 +34,7 @@ type ResponseStatus = string
 
 const (
 	ResponseStatusInProgress ResponseStatus = "in_progress"
+	ResponseStatusQueued     ResponseStatus = "queued"
 	ResponseStatusCompleted  ResponseStatus = "completed"
 	ResponseStatusFailed     ResponseStatus = "failed"
 	ResponseStatusIncomplete ResponseStatus = "incomplete"
@@ -251,6 +252,7 @@ type Response struct {
 	Object               string             `json:"object"`
 	CreatedAt            int64              `json:"created_at"`
 	Status               ResponseStatus     `json:"status"`
+	Background           *bool              `json:"background,omitempty"`
 	Error                *ResponseError     `json:"error"`
 	IncompleteDetails    *IncompleteDetails `json:"incomplete_details"`
 	Instructions         *string            `json:"instructions"`
@@ -349,6 +351,25 @@ func (r *Response) ToModelUsage() model.Usage {
 
 	if count := r.ToolUsageWebSearchCallCount(); count > 0 {
 		usage.WebSearchCount = model.ZeroNullInt64(count)
+	}
+
+	if r.ToolUsage != nil && r.ToolUsage.ImageGen != nil {
+		imageUsage := r.ToolUsage.ImageGen
+		usage.InputTokens += model.ZeroNullInt64(imageUsage.InputTokens)
+		usage.OutputTokens += model.ZeroNullInt64(imageUsage.OutputTokens)
+		usage.TotalTokens += model.ZeroNullInt64(imageUsage.TotalTokens)
+
+		if imageUsage.InputTokensDetails != nil {
+			usage.ImageInputTokens += model.ZeroNullInt64(
+				imageUsage.InputTokensDetails.ImageTokens,
+			)
+		}
+
+		if imageUsage.OutputTokensDetails != nil {
+			usage.ImageOutputTokens += model.ZeroNullInt64(
+				imageUsage.OutputTokensDetails.ImageTokens,
+			)
+		}
 	}
 
 	return usage

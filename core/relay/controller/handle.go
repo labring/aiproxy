@@ -14,6 +14,7 @@ type HandleResult struct {
 	Error      adaptor.Error
 	Usage      model.Usage
 	UpstreamID string
+	AsyncUsage bool
 	BodyDetail *BodyDetail
 }
 
@@ -44,6 +45,7 @@ func Handle(
 			Error:      respErr,
 			Usage:      result.Usage,
 			UpstreamID: result.UpstreamID,
+			AsyncUsage: result.AsyncUsage,
 			BodyDetail: detail,
 		}
 	}
@@ -51,6 +53,7 @@ func Handle(
 	return &HandleResult{
 		Usage:      result.Usage,
 		UpstreamID: result.UpstreamID,
+		AsyncUsage: result.AsyncUsage,
 		BodyDetail: detail,
 	}
 }
