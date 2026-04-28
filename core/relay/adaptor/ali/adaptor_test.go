@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -145,6 +147,33 @@ func TestAdaptorConvertRequestResponses(t *testing.T) {
 
 	if !responseReq.Stream {
 		t.Fatal("expected stream to remain enabled")
+	}
+}
+
+func TestAdaptorDoResponseResponsesDeleteNoContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	adaptor := &Adaptor{}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	resp := &http.Response{
+		StatusCode: http.StatusNoContent,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	_, err := adaptor.DoResponse(
+		&meta.Meta{Mode: mode.ResponsesDelete},
+		nil,
+		ctx,
+		resp,
+	)
+	if err != nil {
+		t.Fatalf("DoResponse returned error: %v", err)
+	}
+
+	if ctx.Writer.Status() != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, ctx.Writer.Status())
 	}
 }
 

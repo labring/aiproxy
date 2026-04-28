@@ -1,6 +1,7 @@
 package qianfan
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -34,7 +35,35 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.Completions ||
 		m == mode.Anthropic ||
 		m == mode.Gemini ||
-		m == mode.Embeddings
+		m == mode.Embeddings ||
+		m == mode.Responses ||
+		m == mode.ResponsesGet ||
+		m == mode.ResponsesDelete ||
+		m == mode.ResponsesInputItems
+}
+
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
+	if meta.Mode == mode.ResponsesCancel {
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
+	}
+
+	return a.Adaptor.GetRequestURL(meta, store, c)
+}
+
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	if meta.Mode == mode.ResponsesCancel {
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
+	}
+
+	return a.Adaptor.ConvertRequest(meta, store, req)
 }
 
 func (a *Adaptor) SetupRequestHeader(
@@ -65,7 +94,7 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK {
+	if !adaptor.IsSuccessfulResponseStatus(meta.Mode, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
@@ -74,7 +103,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "Baidu Qianfan OpenAI-compatible endpoint\nSupports chat, completions, embeddings, Anthropic-compatible request conversion, and Gemini-compatible request conversion\nKey format example: `bce-v3/aaa/bbb`\nChannel config `appid` sets the upstream `appid` request header.",
+		Readme:       "Baidu Qianfan OpenAI-compatible endpoint\nSupports chat, completions, embeddings, Responses API, Anthropic-compatible request conversion, and Gemini-compatible request conversion\nKey format example: `bce-v3/aaa/bbb`\nChannel config `appid` sets the upstream `appid` request header.",
 		KeyHelp:      "bce-v3/aaa/bbb",
 		ConfigSchema: configSchema(),
 	}

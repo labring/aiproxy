@@ -2,8 +2,10 @@ package adaptor
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type BasicError[T any] struct {
@@ -27,5 +29,16 @@ func NewError[T any](statusCode int, err T) Error {
 	return BasicError[T]{
 		error:      err,
 		statusCode: statusCode,
+	}
+}
+
+func IsSuccessfulResponseStatus(m mode.Mode, statusCode int) bool {
+	switch m {
+	case mode.Responses:
+		return statusCode == http.StatusOK || statusCode == http.StatusCreated
+	case mode.ResponsesDelete:
+		return statusCode == http.StatusOK || statusCode == http.StatusNoContent
+	default:
+		return statusCode == http.StatusOK
 	}
 }
