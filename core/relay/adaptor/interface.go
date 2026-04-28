@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
-	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type StoreCache struct {
@@ -85,7 +84,7 @@ type DoResponse interface {
 
 type Adaptor interface {
 	Metadata() Metadata
-	SupportMode(mode mode.Mode) bool
+	SupportMode(meta *meta.Meta) bool
 	DefaultBaseURL() string
 	GetRequestURL
 	SetupRequestHeader

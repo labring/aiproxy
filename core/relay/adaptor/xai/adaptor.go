@@ -31,7 +31,7 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK {
+	if !adaptor.IsSuccessfulResponseStatus(meta.Mode, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 

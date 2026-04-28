@@ -82,7 +82,7 @@ func testSingleModel(
 			return nil, errors.New("adaptor not found")
 		}
 
-		if !a.SupportMode(modelConfig.Type) {
+		if !a.SupportMode(meta.NewMeta(channel, modelConfig.Type, modelName, modelConfig)) {
 			return nil, fmt.Errorf("%s not supported by adaptor", modelConfig.Type)
 		}
 	}

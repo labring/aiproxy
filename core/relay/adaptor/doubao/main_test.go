@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/bytedance/sonic"
+	"github.com/gin-gonic/gin"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -31,7 +33,7 @@ func TestAdaptorSupportMode(t *testing.T) {
 		mode.ResponsesInputItems,
 	}
 	for _, m := range supportedModes {
-		if !adaptor.SupportMode(m) {
+		if !adaptor.SupportMode(&meta.Meta{Mode: m}) {
 			t.Fatalf("expected mode %s to be supported", m)
 		}
 	}
@@ -41,7 +43,7 @@ func TestAdaptorSupportMode(t *testing.T) {
 		mode.ImagesGenerations,
 	}
 	for _, m := range unsupportedModes {
-		if adaptor.SupportMode(m) {
+		if adaptor.SupportMode(&meta.Meta{Mode: m}) {
 			t.Fatalf("expected mode %s to be unsupported", m)
 		}
 	}
@@ -175,6 +177,33 @@ func TestAdaptorGetRequestURL_UsesOriginModelNameFirst(t *testing.T) {
 			t.Fatalf("unexpected URL: %s", got.URL)
 		}
 	})
+}
+
+func TestAdaptorDoResponseResponsesDeleteNoContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	adaptor := &Adaptor{}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	resp := &http.Response{
+		StatusCode: http.StatusNoContent,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	_, err := adaptor.DoResponse(
+		&meta.Meta{Mode: mode.ResponsesDelete},
+		nil,
+		ctx,
+		resp,
+	)
+	if err != nil {
+		t.Fatalf("DoResponse returned error: %v", err)
+	}
+
+	if ctx.Writer.Status() != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, ctx.Writer.Status())
+	}
 }
 
 func TestHandlerPreHandler_UsesOriginModelNameFirst(t *testing.T) {

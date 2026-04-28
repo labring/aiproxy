@@ -14,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/render"
 	"github.com/labring/aiproxy/core/relay/utils"
@@ -56,7 +57,7 @@ func ResponseHandler(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+	if !adaptor.IsSuccessfulResponseStatus(mode.Responses, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
@@ -120,7 +121,7 @@ func ResponseStreamHandler(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK {
+	if !adaptor.IsSuccessfulResponseStatus(mode.Responses, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
@@ -212,7 +213,7 @@ func DeleteResponseHandler(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+	if !adaptor.IsSuccessfulResponseStatus(mode.ResponsesDelete, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 

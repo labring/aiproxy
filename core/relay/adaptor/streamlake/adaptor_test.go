@@ -18,7 +18,7 @@ import (
 func TestAdaptorSupportModeGemini(t *testing.T) {
 	adaptor := &Adaptor{}
 
-	if !adaptor.SupportMode(mode.Gemini) {
+	if !adaptor.SupportMode(&meta.Meta{Mode: mode.Gemini}) {
 		t.Fatal("expected Gemini mode to be supported")
 	}
 }
