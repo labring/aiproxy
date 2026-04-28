@@ -322,17 +322,146 @@ func TestGetPendingAsyncUsagesSkipsFutureNextPollAt(t *testing.T) {
 	}
 }
 
+func TestTryClaimAsyncUsageInfoIsAtomic(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.AsyncUsageInfo{}); err != nil {
+		t.Fatalf("migrate async usage info: %v", err)
+	}
+
+	now := time.Now()
+
+	info := &model.AsyncUsageInfo{
+		RequestID:  "claim",
+		Status:     model.AsyncUsageStatusPending,
+		NextPollAt: now.Add(-time.Second),
+	}
+	if err := db.Create(info).Error; err != nil {
+		t.Fatalf("seed async usage info: %v", err)
+	}
+
+	claimed, err := model.TryClaimAsyncUsageInfo(
+		info,
+		"token-1",
+		now.Add(time.Minute),
+		now,
+	)
+	if err != nil {
+		t.Fatalf("claim async usage: %v", err)
+	}
+
+	if !claimed {
+		t.Fatal("expected first claim to succeed")
+	}
+
+	second := &model.AsyncUsageInfo{ID: info.ID}
+
+	claimed, err = model.TryClaimAsyncUsageInfo(
+		second,
+		"token-2",
+		now.Add(time.Minute),
+		now,
+	)
+	if err != nil {
+		t.Fatalf("claim async usage second time: %v", err)
+	}
+
+	if claimed {
+		t.Fatal("expected second claim to fail")
+	}
+
+	var got model.AsyncUsageInfo
+	if err := db.First(&got, info.ID).Error; err != nil {
+		t.Fatalf("get async usage info: %v", err)
+	}
+
+	if got.ProcessingToken != "token-1" {
+		t.Fatalf("expected token-1, got %q", got.ProcessingToken)
+	}
+}
+
+func TestRenewAsyncUsageClaimRequiresToken(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.AsyncUsageInfo{}); err != nil {
+		t.Fatalf("migrate async usage info: %v", err)
+	}
+
+	now := time.Now()
+
+	info := &model.AsyncUsageInfo{
+		RequestID:       "renew",
+		Status:          model.AsyncUsageStatusPending,
+		NextPollAt:      now.Add(time.Minute),
+		ProcessingToken: "token-1",
+	}
+	if err := db.Create(info).Error; err != nil {
+		t.Fatalf("seed async usage info: %v", err)
+	}
+
+	renewed, err := model.RenewAsyncUsageClaim(
+		info.ID,
+		"token-2",
+		now.Add(2*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("renew wrong token: %v", err)
+	}
+
+	if renewed {
+		t.Fatal("expected wrong token renewal to fail")
+	}
+
+	renewUntil := now.Add(3 * time.Minute)
+
+	renewed, err = model.RenewAsyncUsageClaim(info.ID, "token-1", renewUntil)
+	if err != nil {
+		t.Fatalf("renew correct token: %v", err)
+	}
+
+	if !renewed {
+		t.Fatal("expected correct token renewal to succeed")
+	}
+
+	var got model.AsyncUsageInfo
+	if err := db.First(&got, info.ID).Error; err != nil {
+		t.Fatalf("get async usage info: %v", err)
+	}
+
+	if !got.NextPollAt.After(now.Add(2 * time.Minute)) {
+		t.Fatalf("expected renewed next poll at, got %s", got.NextPollAt)
+	}
+}
+
 func TestAsyncUsageBackoffDelay(t *testing.T) {
 	tests := []struct {
 		retry int
 		want  time.Duration
 	}{
-		{retry: 0, want: 10 * time.Second},
-		{retry: 1, want: 10 * time.Second},
-		{retry: 2, want: 20 * time.Second},
-		{retry: 3, want: 40 * time.Second},
-		{retry: 5, want: 160 * time.Second},
-		{retry: 6, want: 3 * time.Minute},
+		{retry: 0, want: 3 * time.Second},
+		{retry: 1, want: 3 * time.Second},
+		{retry: 2, want: 6 * time.Second},
+		{retry: 3, want: 12 * time.Second},
+		{retry: 5, want: 48 * time.Second},
+		{retry: 7, want: 3 * time.Minute},
 		{retry: 10, want: 3 * time.Minute},
 	}
 

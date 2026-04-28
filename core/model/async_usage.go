@@ -16,7 +16,7 @@ const (
 )
 
 const (
-	AsyncUsageDefaultPollDelay = 10 * time.Second
+	AsyncUsageDefaultPollDelay = 3 * time.Second
 	AsyncUsageMaxPollDelay     = 3 * time.Minute
 )
 
@@ -41,6 +41,7 @@ type AsyncUsageInfo struct {
 	RetryCount      int              `                                     json:"retry_count"`
 	DownstreamDone  bool             `                                     json:"downstream_done"`
 	BalanceConsumed bool             `                                     json:"balance_consumed"`
+	ProcessingToken string           `gorm:"size:64;index"                 json:"-"`
 	NextPollAt      time.Time        `gorm:"index"                         json:"next_poll_at"`
 	CreatedAt       time.Time        `                                     json:"created_at"`
 	UpdatedAt       time.Time        `                                     json:"updated_at"`
@@ -82,6 +83,69 @@ func GetPendingAsyncUsagesDue(
 	return infos, err
 }
 
+func TryClaimAsyncUsageInfo(
+	info *AsyncUsageInfo,
+	token string,
+	leaseUntil time.Time,
+	now time.Time,
+) (bool, error) {
+	if info == nil || info.ID == 0 || token == "" {
+		return false, nil
+	}
+
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND status = ?", info.ID, int(AsyncUsageStatusPending)).
+		Where(
+			LogDB.
+				Where("next_poll_at <= ?", now).
+				Or("next_poll_at IS NULL"),
+		).
+		Updates(map[string]any{
+			"processing_token": token,
+			"next_poll_at":     leaseUntil,
+			"updated_at":       now,
+		})
+	if tx.Error != nil {
+		return false, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil
+	}
+
+	info.ProcessingToken = token
+	info.NextPollAt = leaseUntil
+	info.UpdatedAt = now
+
+	return true, nil
+}
+
+func RenewAsyncUsageClaim(
+	id int,
+	token string,
+	leaseUntil time.Time,
+) (bool, error) {
+	if id == 0 || token == "" {
+		return false, nil
+	}
+
+	now := time.Now()
+
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND status = ? AND processing_token = ?", id, int(AsyncUsageStatusPending), token).
+		Updates(map[string]any{
+			"next_poll_at": leaseUntil,
+			"updated_at":   now,
+		})
+	if tx.Error != nil {
+		return false, tx.Error
+	}
+
+	return tx.RowsAffected > 0, nil
+}
+
 func AsyncUsageBackoffDelay(
 	retryCount int,
 ) time.Duration {
@@ -103,6 +167,112 @@ func AsyncUsageBackoffDelay(
 func UpdateAsyncUsageInfo(info *AsyncUsageInfo) error {
 	info.UpdatedAt = time.Now()
 	return LogDB.Save(info).Error
+}
+
+func MarkAsyncUsageBalanceConsumed(info *AsyncUsageInfo) error {
+	return updateClaimedAsyncUsageInfo(info, map[string]any{
+		"balance_consumed": true,
+	})
+}
+
+func RetryClaimedAsyncUsageInfo(info *AsyncUsageInfo) error {
+	return updateClaimedAsyncUsageInfo(info, map[string]any{
+		"retry_count":      info.RetryCount,
+		"error":            info.Error,
+		"next_poll_at":     info.NextPollAt,
+		"processing_token": "",
+	})
+}
+
+func TouchClaimedAsyncUsageInfo(info *AsyncUsageInfo) error {
+	return updateClaimedAsyncUsageInfo(info, map[string]any{
+		"error":            "",
+		"next_poll_at":     info.NextPollAt,
+		"processing_token": "",
+	})
+}
+
+func FailClaimedAsyncUsageInfo(info *AsyncUsageInfo) (bool, error) {
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND processing_token = ?", info.ID, info.ProcessingToken).
+		Updates(map[string]any{
+			"status":           int(AsyncUsageStatusFailed),
+			"error":            info.Error,
+			"processing_token": "",
+			"updated_at":       time.Now(),
+		})
+	if tx.Error != nil {
+		return false, tx.Error
+	}
+
+	return tx.RowsAffected > 0, nil
+}
+
+func CompleteClaimedAsyncUsageInfo(
+	info *AsyncUsageInfo,
+	usage Usage,
+	amount Amount,
+) (bool, error) {
+	updates := &AsyncUsageInfo{
+		Status:          AsyncUsageStatusCompleted,
+		Usage:           usage,
+		Amount:          amount,
+		Error:           "",
+		ProcessingToken: "",
+		UpdatedAt:       time.Now(),
+	}
+
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND processing_token = ?", info.ID, info.ProcessingToken).
+		Select(
+			"Status",
+			"Usage",
+			"InputAmount",
+			"ImageInputAmount",
+			"AudioInputAmount",
+			"OutputAmount",
+			"ImageOutputAmount",
+			"CachedAmount",
+			"CacheCreationAmount",
+			"WebSearchAmount",
+			"UsedAmount",
+			"Error",
+			"ProcessingToken",
+			"UpdatedAt",
+		).
+		Updates(updates)
+	if tx.Error != nil {
+		return false, tx.Error
+	}
+
+	return tx.RowsAffected > 0, nil
+}
+
+func updateClaimedAsyncUsageInfo(
+	info *AsyncUsageInfo,
+	updates map[string]any,
+) error {
+	if info == nil || info.ProcessingToken == "" {
+		return NotFoundError("async usage claim")
+	}
+
+	updates["updated_at"] = time.Now()
+
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND processing_token = ?", info.ID, info.ProcessingToken).
+		Updates(updates)
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return NotFoundError("async usage claim")
+	}
+
+	return nil
 }
 
 func UpdateLogUsageByRequestID(

@@ -264,10 +264,11 @@ func CleanLogTask(ctx context.Context) {
 }
 
 const (
-	asyncUsagePollInterval = time.Second * 10
-	asyncUsageBatchSize    = 50
-	asyncUsageConcurrency  = 10
-	asyncUsageMaxRetry     = 10
+	asyncUsagePollInterval    = time.Second * 3
+	asyncUsageProcessingLease = time.Minute * 3
+	asyncUsageBatchSize       = 50
+	asyncUsageConcurrency     = 10
+	asyncUsageMaxRetry        = 10
 )
 
 func AsyncUsagePollTask(ctx context.Context) {
@@ -279,16 +280,28 @@ func AsyncUsagePollTask(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !trylock.Lock("runAsyncUsagePoll", asyncUsagePollInterval-time.Second) {
-				continue
-			}
+			for {
+				fullBatch := processAsyncUsages(ctx)
+				if !fullBatch {
+					break
+				}
 
-			processAsyncUsages(ctx)
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				log.Debugf(
+					"async usage poll: batch full, continue immediately batch_size=%d",
+					asyncUsageBatchSize,
+				)
+			}
 		}
 	}
 }
 
-func processAsyncUsages(ctx context.Context) {
+func processAsyncUsages(ctx context.Context) bool {
 	infos, err := model.GetPendingAsyncUsages(asyncUsageBatchSize)
 	if err != nil {
 		notify.ErrorThrottle(
@@ -298,16 +311,40 @@ func processAsyncUsages(ctx context.Context) {
 			err.Error(),
 		)
 
-		return
+		return false
 	}
 
 	if len(infos) == 0 {
-		return
+		return false
+	}
+
+	claimedInfos := make([]*model.AsyncUsageInfo, 0, len(infos))
+	for _, info := range infos {
+		claimed, err := claimAsyncUsage(info)
+		if err != nil {
+			notify.ErrorThrottle(
+				"asyncUsageClaim",
+				time.Minute*5,
+				"claim async usage failed",
+				err.Error(),
+			)
+
+			continue
+		}
+
+		if claimed {
+			claimedInfos = append(claimedInfos, info)
+		}
+	}
+
+	if len(claimedInfos) == 0 {
+		return len(infos) == asyncUsageBatchSize
 	}
 
 	log.Debugf(
-		"async usage poll: pending=%d batch_size=%d concurrency=%d",
+		"async usage poll: pending=%d claimed=%d batch_size=%d concurrency=%d",
 		len(infos),
+		len(claimedInfos),
 		asyncUsageBatchSize,
 		asyncUsageConcurrency,
 	)
@@ -316,11 +353,11 @@ func processAsyncUsages(ctx context.Context) {
 
 	var wg sync.WaitGroup
 
-	for _, info := range infos {
+	for _, info := range claimedInfos {
 		select {
 		case <-ctx.Done():
 			wg.Wait()
-			return
+			return false
 		case sem <- struct{}{}:
 		}
 
@@ -337,9 +374,35 @@ func processAsyncUsages(ctx context.Context) {
 	}
 
 	wg.Wait()
+
+	return len(infos) == asyncUsageBatchSize
+}
+
+func claimAsyncUsage(info *model.AsyncUsageInfo) (bool, error) {
+	now := time.Now()
+	token := common.ShortUUID()
+	leaseUntil := now.Add(asyncUsageProcessingLease)
+
+	claimed, err := model.TryClaimAsyncUsageInfo(info, token, leaseUntil, now)
+	if err != nil || !claimed {
+		return claimed, err
+	}
+
+	log.Debugf(
+		"async usage poll: claimed id=%d request_id=%s upstream_id=%s lease_until=%s",
+		info.ID,
+		info.RequestID,
+		info.UpstreamID,
+		leaseUntil.Format(time.RFC3339),
+	)
+
+	return true, nil
 }
 
 func processOneAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo) {
+	stopRenew := startAsyncUsageClaimRenewal(ctx, info)
+	defer stopRenew()
+
 	log.Debugf(
 		"async usage poll: start id=%d request_id=%s upstream_id=%s mode=%d model=%s channel_id=%d retry=%d next_poll_at=%s",
 		info.ID,
@@ -354,6 +417,18 @@ func processOneAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo) {
 
 	channel, err := model.GetChannelByID(info.ChannelID)
 	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Debugf(
+				"async usage poll: retry id=%d request_id=%s reason=channel_get_error err=%v",
+				info.ID,
+				info.RequestID,
+				err,
+			)
+			scheduleAsyncUsageRetry(info, fmt.Errorf("get channel: %w", err))
+
+			return
+		}
+
 		log.Debugf(
 			"async usage poll: fail id=%d request_id=%s reason=channel_not_found err=%v",
 			info.ID,
@@ -450,6 +525,63 @@ func processOneAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo) {
 	)
 }
 
+func startAsyncUsageClaimRenewal(
+	ctx context.Context,
+	info *model.AsyncUsageInfo,
+) func() {
+	done := make(chan struct{})
+	interval := asyncUsageProcessingLease / 3
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				leaseUntil := time.Now().Add(asyncUsageProcessingLease)
+
+				renewed, err := model.RenewAsyncUsageClaim(
+					info.ID,
+					info.ProcessingToken,
+					leaseUntil,
+				)
+				if err != nil {
+					notify.ErrorThrottle(
+						"asyncUsageRenewClaim",
+						time.Minute*5,
+						"renew async usage claim failed",
+						err.Error(),
+					)
+
+					continue
+				}
+
+				if !renewed {
+					log.Debugf(
+						"async usage poll: claim lost id=%d request_id=%s upstream_id=%s",
+						info.ID,
+						info.RequestID,
+						info.UpstreamID,
+					)
+
+					return
+				}
+
+				info.NextPollAt = leaseUntil
+			}
+		}
+	}()
+
+	return func() {
+		close(done)
+	}
+}
+
 func completeAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo, usage model.Usage) error {
 	price := info.Price
 	price.PerRequestPrice = 0
@@ -475,7 +607,7 @@ func completeAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo, usage m
 		}
 
 		info.BalanceConsumed = true
-		if err := model.UpdateAsyncUsageInfo(info); err != nil {
+		if err := model.MarkAsyncUsageBalanceConsumed(info); err != nil {
 			return fmt.Errorf("update async usage balance consumed: %w", err)
 		}
 	}
@@ -512,8 +644,13 @@ func completeAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo, usage m
 	info.Amount = amount
 	info.Error = ""
 
-	if err := model.UpdateAsyncUsageInfo(info); err != nil {
+	completed, err := model.CompleteClaimedAsyncUsageInfo(info, usage, amount)
+	if err != nil {
 		return fmt.Errorf("update async usage info: %w", err)
+	}
+
+	if !completed {
+		return errors.New("async usage claim lost")
 	}
 
 	return nil
@@ -549,7 +686,7 @@ func scheduleAsyncUsageRetry(info *model.AsyncUsageInfo, err error) {
 		err,
 	)
 
-	if updateErr := model.UpdateAsyncUsageInfo(info); updateErr != nil {
+	if updateErr := model.RetryClaimedAsyncUsageInfo(info); updateErr != nil {
 		notify.ErrorThrottle(
 			"asyncUsageUpdateRetry",
 			time.Minute*5,
@@ -563,7 +700,7 @@ func touchAsyncUsagePollCursor(info *model.AsyncUsageInfo) {
 	info.Error = ""
 	info.NextPollAt = time.Now().Add(model.AsyncUsageDefaultPollDelay)
 
-	if err := model.UpdateAsyncUsageInfo(info); err != nil {
+	if err := model.TouchClaimedAsyncUsageInfo(info); err != nil {
 		notify.ErrorThrottle(
 			"asyncUsageTouchPending",
 			time.Minute*5,
@@ -624,6 +761,29 @@ func markAsyncUsageFailed(info *model.AsyncUsageInfo, errMsg string) {
 	info.Status = model.AsyncUsageStatusFailed
 	info.Error = errMsg
 
+	updated, err := model.FailClaimedAsyncUsageInfo(info)
+	if err != nil {
+		notify.ErrorThrottle(
+			"asyncUsageMarkFailed",
+			time.Minute*5,
+			"mark async usage failed",
+			err.Error(),
+		)
+
+		return
+	}
+
+	if !updated {
+		log.Debugf(
+			"async usage poll: skip mark failed after claim lost id=%d request_id=%s upstream_id=%s",
+			info.ID,
+			info.RequestID,
+			info.UpstreamID,
+		)
+
+		return
+	}
+
 	if err := model.IgnoreNotFound(
 		model.UpdateLogAsyncUsageStatusByRequestID(info.RequestID, model.AsyncUsageStatusFailed),
 	); err != nil {
@@ -631,15 +791,6 @@ func markAsyncUsageFailed(info *model.AsyncUsageInfo, errMsg string) {
 			"asyncUsageUpdateLogStatus",
 			time.Minute*5,
 			"update async usage log status failed",
-			err.Error(),
-		)
-	}
-
-	if err := model.UpdateAsyncUsageInfo(info); err != nil {
-		notify.ErrorThrottle(
-			"asyncUsageMarkFailed",
-			time.Minute*5,
-			"mark async usage failed",
 			err.Error(),
 		)
 	}

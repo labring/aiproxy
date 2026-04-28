@@ -56,10 +56,11 @@ func TestCompleteAsyncUsageIgnoresMissingLog(t *testing.T) {
 	})
 
 	info := &model.AsyncUsageInfo{
-		RequestID: "missing_log",
-		RequestAt: time.Now(),
-		Status:    model.AsyncUsageStatusPending,
-		Model:     "gpt-5.4",
+		RequestID:       "missing_log",
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		ProcessingToken: "claim-token",
 	}
 	require.NoError(t, model.CreateAsyncUsageInfo(info))
 
@@ -175,11 +176,12 @@ func TestTouchAsyncUsagePollCursorAdvancesUpdatedAtAndNextPollAt(t *testing.T) {
 	oldUpdatedAt := time.Now().Add(-time.Hour)
 	oldNextPollAt := time.Now().Add(-time.Minute)
 	info := &model.AsyncUsageInfo{
-		RequestID:  "pending",
-		Status:     model.AsyncUsageStatusPending,
-		UpdatedAt:  oldUpdatedAt,
-		NextPollAt: oldNextPollAt,
-		Error:      "previous error",
+		RequestID:       "pending",
+		Status:          model.AsyncUsageStatusPending,
+		UpdatedAt:       oldUpdatedAt,
+		NextPollAt:      oldNextPollAt,
+		Error:           "previous error",
+		ProcessingToken: "claim-token",
 	}
 	require.NoError(t, db.Create(info).Error)
 
@@ -192,4 +194,5 @@ func TestTouchAsyncUsagePollCursorAdvancesUpdatedAtAndNextPollAt(t *testing.T) {
 	require.True(t, got.UpdatedAt.After(oldUpdatedAt))
 	require.True(t, got.NextPollAt.After(beforeTouch))
 	require.Empty(t, got.Error)
+	require.Empty(t, got.ProcessingToken)
 }
