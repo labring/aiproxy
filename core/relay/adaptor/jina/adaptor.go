@@ -7,12 +7,17 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeJina, &Adaptor{})
 }
 
 const baseURL = "https://api.jina.ai/v1"
@@ -39,7 +44,7 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Rerank:
 		return RerankHandler(meta, c, resp)
@@ -50,10 +55,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://jina.ai",
-			"Embeddings、Rerank Support",
-		},
+		Readme: "https://jina.ai\nSupports embeddings and rerank\nAlso supports Gemini-compatible request conversion through the OpenAI-compatible layer",
 		Models: ModelList,
 	}
 }

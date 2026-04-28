@@ -3,13 +3,13 @@ package aws
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/aws/utils"
@@ -27,7 +27,8 @@ const (
 type Adaptor struct{}
 
 type Request struct {
-	AnthropicVersion string `json:"anthropic_version"`
+	AnthropicBeta    []string `json:"anthropic_beta,omitempty"`
+	AnthropicVersion string   `json:"anthropic_version"`
 	*relaymodel.ClaudeRequest
 }
 
@@ -46,6 +47,8 @@ func (a *Adaptor) ConvertRequest(
 		data, err = handleChatCompletionsRequest(meta, request)
 	case mode.Anthropic:
 		data, err = handleAnthropicRequest(meta, request)
+	case mode.Gemini:
+		data, err = handleGeminiRequest(meta, request)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -60,6 +63,24 @@ func (a *Adaptor) ConvertRequest(
 		Header: nil,
 		Body:   nil,
 	}, nil
+}
+
+var unsupportedBetas = map[string]struct{}{
+	"tool-examples-2025-10-29":        {},
+	"prompt-caching-scope-2026-01-05": {},
+	"advanced-tool-use-2025-11-20":    {},
+}
+
+func fixBetas(model string, betas []string) []string {
+	return anthropic.FixBetasWithModel(model, betas, func(e string) bool {
+		_, ok := unsupportedBetas[e]
+		return ok
+	})
+}
+
+var supportedContextManagementEditsType = map[string]struct{}{
+	"clear_tool_uses_20250919": {},
+	"clear_thinking_20251015":  {},
 }
 
 func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byte, error) {
@@ -78,6 +99,13 @@ func handleChatCompletionsRequest(meta *meta.Meta, request *http.Request) ([]byt
 		ClaudeRequest:    claudeReq,
 	}
 
+	if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
+		req.AnthropicBeta = fixBetas(
+			anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+			strings.Split(betas, ","),
+		)
+	}
+
 	return sonic.Marshal(req)
 }
 
@@ -86,6 +114,31 @@ func handleAnthropicRequest(meta *meta.Meta, request *http.Request) ([]byte, err
 		if _, err := node.Unset("model"); err != nil {
 			return err
 		}
+
+		if betas := request.Header.Get(anthropic.AnthropicBeta); betas != "" {
+			_, _ = node.SetAny(
+				"anthropic_beta",
+				fixBetas(
+					anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+					strings.Split(betas, ","),
+				),
+			)
+		}
+
+		if strings.Contains(
+			strings.ToLower(anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel)),
+			"4-6",
+		) {
+			_, _ = node.Unset("context_management")
+		} else {
+			anthropic.RemoveContextManagenetEdits(node, func(t string) bool {
+				_, ok := supportedContextManagementEditsType[t]
+				return ok
+			})
+		}
+
+		anthropic.RemoveToolsExamples(node)
+		anthropic.RemoveToolsCustomDeferLoading(node)
 
 		stream, _ := node.Get("stream").Bool()
 		meta.Set("stream", stream)
@@ -133,14 +186,10 @@ func (a *Adaptor) DoRequest(
 		)
 	}
 
-	awsModelID, err := awsModelID(meta.ActualModel, region)
-	if err != nil {
-		return nil, relaymodel.WrapperErrorWithMessage(
-			meta.Mode,
-			http.StatusInternalServerError,
-			err.Error(),
-		)
-	}
+	awsModelID := awsModelID(
+		anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
+		region,
+	)
 
 	awsClient, err := utils.AwsClientFromMeta(meta)
 	if err != nil {
@@ -200,21 +249,22 @@ func (a *Adaptor) DoResponse(
 	meta *meta.Meta,
 	_ adaptor.Store,
 	c *gin.Context,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Anthropic:
 		if meta.GetBool("stream") {
-			usage, err = StreamHandler(meta, c)
-		} else {
-			usage, err = Handler(meta, c)
+			return StreamHandler(meta, c)
 		}
+		return Handler(meta, c)
+	case mode.Gemini:
+		if meta.GetBool("stream") {
+			return GeminiStreamHandler(meta, c)
+		}
+		return GeminiHandler(meta, c)
 	default:
 		if meta.GetBool("stream") {
-			usage, err = OpenaiStreamHandler(meta, c)
-		} else {
-			usage, err = OpenaiHandler(meta, c)
+			return OpenaiStreamHandler(meta, c)
 		}
+		return OpenaiHandler(meta, c)
 	}
-
-	return usage, err
 }

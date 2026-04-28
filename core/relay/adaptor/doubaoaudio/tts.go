@@ -147,7 +147,7 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResul
 
 	payloadArr := make([]byte, 4)
 	binary.BigEndian.PutUint32(payloadArr, uint32(len(compressedData)))
-	clientRequest := make([]byte, len(defaultHeader))
+	clientRequest := make([]byte, len(defaultHeader), len(defaultHeader)+4+len(compressedData))
 	copy(clientRequest, defaultHeader)
 	clientRequest = append(clientRequest, payloadArr...)
 	clientRequest = append(clientRequest, compressedData...)
@@ -189,7 +189,7 @@ func TTSDoResponse(
 	meta *meta.Meta,
 	c *gin.Context,
 	_ *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	log := common.GetLogger(c)
 
 	conn, ok := meta.MustGet("ws_conn").(*websocket.Conn)
@@ -208,7 +208,7 @@ func TTSDoResponse(
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			return usage, relaymodel.WrapperOpenAIError(
+			return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 				err,
 				"doubao_wss_read_msg_failed",
 				http.StatusInternalServerError,
@@ -217,7 +217,7 @@ func TTSDoResponse(
 
 		resp, err := parseResponse(message)
 		if err != nil {
-			return usage, relaymodel.WrapperOpenAIError(
+			return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 				err,
 				"doubao_tts_parse_response_failed",
 				http.StatusInternalServerError,
@@ -246,7 +246,7 @@ func TTSDoResponse(
 		})
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 func gzipCompress(input []byte) ([]byte, error) {

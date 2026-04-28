@@ -61,7 +61,7 @@ spec:
   backup:
     cronExpression: {{.Values.pgsql.backup.cron}}
     enabled: true
-    method: dump
+    method: pg-basebackup
     pitrEnabled: true
     retentionPeriod: {{.Values.pgsql.backup.retentionPeriod}}
   clusterDefinitionRef: postgresql

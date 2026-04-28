@@ -251,6 +251,7 @@ func GetGroupBalanceConsumer(
 
 const (
 	GroupBalanceNotEnough = "group_balance_not_enough"
+	GroupMinimumBalance   = 0.3
 )
 
 func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
@@ -296,7 +297,7 @@ func checkGroupBalance(c *gin.Context, group model.GroupCache) bool {
 		)
 	}
 
-	if !gbc.CheckBalance(0) {
+	if !gbc.CheckBalance(GroupMinimumBalance) {
 		AbortLogWithMessage(
 			c,
 			http.StatusForbidden,
@@ -322,11 +323,12 @@ func CheckRelayMode(requestMode, modelMode mode.Mode) bool {
 	}
 
 	switch requestMode {
-	case mode.ChatCompletions, mode.Completions, mode.Anthropic,
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Gemini,
 		mode.Responses, mode.ResponsesGet, mode.ResponsesDelete, mode.ResponsesCancel, mode.ResponsesInputItems:
 		return modelMode == mode.ChatCompletions ||
 			modelMode == mode.Completions ||
 			modelMode == mode.Anthropic ||
+			modelMode == mode.Gemini ||
 			modelMode == mode.Responses ||
 			modelMode == mode.ResponsesGet ||
 			modelMode == mode.ResponsesDelete ||
@@ -438,6 +440,35 @@ func distribute(c *gin.Context, mode mode.Mode) {
 	}
 
 	c.Set(RequestUser, user)
+	SetLogRequestUser(log.Data, user)
+
+	promptCacheKey, err := getPromptCacheKey(c, mode)
+	if err != nil {
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+
+		return
+	}
+
+	c.Set(PromptCacheKey, promptCacheKey)
+	SetLogPromptCacheKey(log.Data, promptCacheKey)
+
+	requestServiceTier, err := getRequestServiceTier(c, mode)
+	if err != nil {
+		AbortLogWithMessage(
+			c,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+
+		return
+	}
+
+	c.Set(RequestServiceTier, requestServiceTier)
+	SetLogServiceTier(log.Data, requestServiceTier)
 
 	metadata, err := getRequestMetadata(c, mode)
 	if err != nil {
@@ -454,20 +485,14 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	if err := checkGroupModelRPMAndTPM(c, group, mc, token.Name); err != nil {
 		errMsg := err.Error()
-		consume.AsyncConsume(
-			nil,
+
+		consume.Summary(
 			http.StatusTooManyRequests,
 			time.Time{},
 			NewMetaByContext(c, nil, mode),
 			model.Usage{},
 			model.Price{},
-			errMsg,
-			c.ClientIP(),
-			0,
-			nil,
 			true,
-			user,
-			metadata,
 		)
 		AbortLogWithMessage(c, http.StatusTooManyRequests, errMsg)
 
@@ -483,6 +508,10 @@ func GetRequestModel(c *gin.Context) string {
 
 func GetRequestUser(c *gin.Context) string {
 	return c.GetString(RequestUser)
+}
+
+func GetPromptCacheKey(c *gin.Context) string {
+	return c.GetString(PromptCacheKey)
 }
 
 func GetChannelID(c *gin.Context) int {
@@ -528,6 +557,9 @@ func NewMetaByContext(c *gin.Context,
 	jobID := GetJobID(c)
 	generationID := GetGenerationID(c)
 	responseID := GetResponseID(c)
+	promptCacheKey := GetPromptCacheKey(c)
+	user := GetRequestUser(c)
+	requestServiceTier := GetRequestServiceTier(c)
 
 	opts = append(
 		opts,
@@ -539,6 +571,9 @@ func NewMetaByContext(c *gin.Context,
 		meta.WithJobID(jobID),
 		meta.WithGenerationID(generationID),
 		meta.WithResponseID(responseID),
+		meta.WithPromptCacheKey(promptCacheKey),
+		meta.WithUser(user),
+		meta.WithRequestServiceTier(requestServiceTier),
 	)
 
 	return meta.NewMeta(
@@ -548,6 +583,59 @@ func NewMetaByContext(c *gin.Context,
 		modelConfig,
 		opts...,
 	)
+}
+
+func getRequestBodyNode(c *gin.Context) (*ast.Node, error) {
+	if cached, ok := c.Get(RequestBodyNode); ok {
+		node, ok := cached.(*ast.Node)
+		if !ok {
+			return nil, fmt.Errorf("request body node type error: %T", cached)
+		}
+
+		return node, nil
+	}
+
+	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	if err != nil {
+		return nil, err
+	}
+
+	c.Set(RequestBodyNode, &node)
+
+	return &node, nil
+}
+
+func getStringFieldFromNode(node *ast.Node, key, errMessage string) (string, error) {
+	field := node.Get(key)
+	if field == nil || !field.Exists() || field.TypeSafe() == ast.V_NULL {
+		return "", nil
+	}
+
+	value, err := field.String()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", errMessage, err)
+	}
+
+	return value, nil
+}
+
+func getMetadataFromNode(node *ast.Node) (map[string]string, error) {
+	field := node.Get("metadata")
+	if field == nil || !field.Exists() || field.TypeSafe() == ast.V_NULL {
+		return nil, nil
+	}
+
+	raw, err := field.Raw()
+	if err != nil {
+		return nil, fmt.Errorf("get request metadata failed: %w", err)
+	}
+
+	var metadata map[string]string
+	if err := sonic.UnmarshalString(raw, &metadata); err != nil {
+		return nil, fmt.Errorf("get request metadata failed: %w", err)
+	}
+
+	return metadata, nil
 }
 
 // https://platform.openai.com/docs/api-reference/chat
@@ -575,24 +663,28 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 	case m == mode.VideoGenerationsGetJobs:
 		jobID := c.Param("id")
 
-		store, err := model.CacheGetStore(group, tokenID, jobID)
+		store, err := model.CacheGetStore(group, tokenID, model.VideoJobStoreID(jobID))
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(JobID, store.ID)
+		c.Set(JobID, jobID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
 	case m == mode.VideoGenerationsContent:
 		generationID := c.Param("id")
 
-		store, err := model.CacheGetStore(group, tokenID, generationID)
+		store, err := model.CacheGetStore(
+			group,
+			tokenID,
+			model.VideoGenerationStoreID(generationID),
+		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(GenerationID, store.ID)
+		c.Set(GenerationID, generationID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
@@ -600,111 +692,185 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		m == mode.ResponsesCancel || m == mode.ResponsesInputItems:
 		responseID := c.Param("response_id")
 
-		store, err := model.CacheGetStore(group, tokenID, responseID)
+		store, err := model.CacheGetStore(group, tokenID, model.ResponseStoreID(responseID))
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		c.Set(ResponseID, store.ID)
+		c.Set(ResponseID, responseID)
 		c.Set(ChannelID, store.ChannelID)
 
 		return store.Model, nil
 	case m == mode.Responses:
-		body, err := common.GetRequestBodyReusable(c.Request)
+		node, err := getRequestBodyNode(c)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		responseID, err := GetPreviousResponseIDFromJSON(body)
+		responseID, err := getStringFieldFromNode(
+			node,
+			"previous_response_id",
+			"get request previous response id failed",
+		)
 		if err != nil {
-			return "", fmt.Errorf("get request previous response id failed: %w", err)
+			return "", err
 		}
 
-		modelName, err := GetModelFromJSON(body)
+		modelName, err := getStringFieldFromNode(node, "model", "get request model failed")
 		if err != nil {
 			return "", err
 		}
 
 		if responseID != "" {
-			store, err := model.CacheGetStore(group, tokenID, responseID)
+			store, err := model.CacheGetStore(
+				group,
+				tokenID,
+				model.ResponseStoreID(responseID),
+			)
 			if err != nil {
 				return "", fmt.Errorf("get request model failed: %w", err)
 			}
 
-			c.Set(ResponseID, store.ID)
+			c.Set(ResponseID, responseID)
 			c.Set(ChannelID, store.ChannelID)
 		}
 
 		return modelName, nil
+	case m == mode.Gemini:
+		modelName := strings.TrimPrefix(c.Param("model"), "/")
+		modelName, _, _ = strings.Cut(modelName, ":")
+
+		return modelName, nil
 	default:
-		body, err := common.GetRequestBodyReusable(c.Request)
+		node, err := getRequestBodyNode(c)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		return GetModelFromJSON(body)
+		return getStringFieldFromNode(node, "model", "get request model failed")
 	}
 }
 
 func GetModelFromJSON(body []byte) (string, error) {
-	node, err := sonic.GetWithOptions(body, ast.SearchOptions{}, "model")
+	node, err := sonic.Get(body)
 	if err != nil {
-		if errors.Is(err, ast.ErrNotExist) {
-			return "", nil
-		}
 		return "", fmt.Errorf("get request model failed: %w", err)
 	}
 
-	return node.String()
+	return getStringFieldFromNode(&node, "model", "get request model failed")
 }
 
 func GetPreviousResponseIDFromJSON(body []byte) (string, error) {
-	node, err := sonic.GetWithOptions(body, ast.SearchOptions{}, "previous_response_id")
+	node, err := sonic.Get(body)
 	if err != nil {
-		if errors.Is(err, ast.ErrNotExist) {
-			return "", nil
-		}
 		return "", fmt.Errorf("get request model failed: %w", err)
 	}
 
-	return node.String()
+	return getStringFieldFromNode(&node, "previous_response_id", "get request model failed")
+}
+
+func getPromptCacheKey(c *gin.Context, m mode.Mode) (string, error) {
+	switch m {
+	case mode.Responses, mode.ChatCompletions:
+	default:
+		return "", nil
+	}
+
+	node, err := getRequestBodyNode(c)
+	if err != nil {
+		return "", fmt.Errorf("get request prompt_cache_key failed: %w", err)
+	}
+
+	return getStringFieldFromNode(node, "prompt_cache_key", "get request prompt_cache_key failed")
+}
+
+func GetPromptCacheKeyFromJSON(body []byte) (string, error) {
+	node, err := sonic.Get(body)
+	if err != nil {
+		return "", fmt.Errorf("get request prompt_cache_key failed: %w", err)
+	}
+
+	return getStringFieldFromNode(&node, "prompt_cache_key", "get request prompt_cache_key failed")
+}
+
+func getRequestServiceTier(c *gin.Context, m mode.Mode) (string, error) {
+	switch m {
+	case mode.ChatCompletions, mode.Completions, mode.Responses, mode.Anthropic, mode.Gemini:
+	default:
+		return "", nil
+	}
+
+	node, err := getRequestBodyNode(c)
+	if err != nil {
+		return "", fmt.Errorf("get request service_tier failed: %w", err)
+	}
+
+	return getRequestServiceTierFromNode(node, m)
+}
+
+func getRequestServiceTierFromNode(node *ast.Node, m mode.Mode) (string, error) {
+	switch m {
+	case mode.Gemini:
+		return getStringFieldFromNode(node, "serviceTier", "get request serviceTier failed")
+	case mode.ChatCompletions, mode.Completions, mode.Responses, mode.Anthropic:
+		return getStringFieldFromNode(node, "service_tier", "get request service_tier failed")
+	default:
+		return "", nil
+	}
+}
+
+func GetRequestServiceTier(c *gin.Context) string {
+	return c.GetString(RequestServiceTier)
 }
 
 // https://platform.openai.com/docs/api-reference/chat
 func getRequestUser(c *gin.Context, m mode.Mode) (string, error) {
 	switch m {
 	case mode.ChatCompletions,
+		mode.Responses,
 		mode.Completions,
 		mode.Embeddings,
 		mode.ImagesGenerations,
 		mode.AudioSpeech,
 		mode.Rerank,
-		mode.Anthropic:
-		body, err := common.GetRequestBodyReusable(c.Request)
+		mode.Anthropic,
+		mode.Gemini:
+		node, err := getRequestBodyNode(c)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
-		return GetRequestUserFromJSON(body)
+		return getRequestUserFromNode(node, m)
 	default:
 		return "", nil
 	}
 }
 
-func GetRequestUserFromJSON(body []byte) (string, error) {
-	node, err := sonic.GetWithOptions(body, ast.SearchOptions{}, "user")
+func GetRequestUserFromJSON(body []byte, m mode.Mode) (string, error) {
+	node, err := sonic.Get(body)
 	if err != nil {
-		if errors.Is(err, ast.ErrNotExist) {
-			return "", nil
-		}
 		return "", fmt.Errorf("get request user failed: %w", err)
 	}
 
-	if node.Exists() {
-		return node.String()
+	return getRequestUserFromNode(&node, m)
+}
+
+func getRequestUserFromNode(node *ast.Node, m mode.Mode) (string, error) {
+	if m == mode.Anthropic {
+		userIDNode := node.GetByPath("metadata", "user_id")
+		if userIDNode != nil && userIDNode.Valid() && userIDNode.TypeSafe() != ast.V_NULL {
+			userID, err := userIDNode.String()
+			if err != nil {
+				return "", fmt.Errorf("get request user failed: %w", err)
+			}
+
+			if userID != "" {
+				return userID, nil
+			}
+		}
 	}
 
-	return "", nil
+	return getStringFieldFromNode(node, "user", "get request user failed")
 }
 
 func getRequestMetadata(c *gin.Context, m mode.Mode) (map[string]string, error) {
@@ -715,27 +881,24 @@ func getRequestMetadata(c *gin.Context, m mode.Mode) (map[string]string, error) 
 		mode.ImagesGenerations,
 		mode.AudioSpeech,
 		mode.Rerank,
-		mode.Anthropic:
-		body, err := common.GetRequestBodyReusable(c.Request)
+		mode.Anthropic,
+		mode.Gemini:
+		node, err := getRequestBodyNode(c)
 		if err != nil {
 			return nil, fmt.Errorf("get request metadata failed: %w", err)
 		}
 
-		return GetRequestMetadataFromJSON(body)
+		return getMetadataFromNode(node)
 	default:
 		return nil, nil
 	}
 }
 
-type RequestWithMetadata struct {
-	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
 func GetRequestMetadataFromJSON(body []byte) (map[string]string, error) {
-	var requestWithMetadata RequestWithMetadata
-	if err := sonic.Unmarshal(body, &requestWithMetadata); err != nil {
+	node, err := sonic.Get(body)
+	if err != nil {
 		return nil, fmt.Errorf("get request metadata failed: %w", err)
 	}
 
-	return requestWithMetadata.Metadata, nil
+	return getMetadataFromNode(&node)
 }

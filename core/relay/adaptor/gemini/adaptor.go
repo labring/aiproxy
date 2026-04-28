@@ -7,13 +7,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
-type Adaptor struct{}
+type Adaptor struct {
+	configCache utils.ChannelConfigCache[Config]
+}
+
+func init() {
+	registry.Register(model.ChannelTypeGoogleGemini, &Adaptor{})
+}
 
 const baseURL = "https://generativelanguage.googleapis.com"
 
@@ -21,13 +28,35 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Anthropic ||
-		m == mode.Embeddings
+		m == mode.Embeddings ||
+		m == mode.Gemini
 }
 
 var v1ModelMap = map[string]struct{}{}
+
+func requestVersionModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			_, ok := v1ModelMap[modelName]
+			return ok
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return meta.ActualModel
+}
 
 func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	u := meta.Channel.BaseURL
@@ -36,7 +65,7 @@ func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	}
 
 	version := "v1beta"
-	if _, ok := v1ModelMap[meta.ActualModel]; ok {
+	if _, ok := v1ModelMap[requestVersionModel(meta)]; ok {
 		version = "v1"
 	}
 
@@ -46,7 +75,11 @@ func getRequestURL(meta *meta.Meta, action string) adaptor.RequestURL {
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	var action string
 	switch meta.Mode {
 	case mode.Embeddings:
@@ -55,7 +88,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		action = "generateContent"
 	}
 
-	if meta.GetBool("stream") {
+	if meta.GetBool("stream") ||
+		(meta.Mode == mode.Gemini && utils.IsGeminiStreamRequest(c.Request.URL.Path)) {
 		action = "streamGenerateContent?alt=sse"
 	}
 
@@ -81,9 +115,11 @@ func (a *Adaptor) ConvertRequest(
 	case mode.Embeddings:
 		return ConvertEmbeddingRequest(meta, req)
 	case mode.ChatCompletions:
-		return ConvertRequest(meta, req)
+		return a.convertRequest(meta, req)
 	case mode.Anthropic:
-		return ConvertClaudeRequest(meta, req)
+		return a.convertClaudeRequest(meta, req)
+	case mode.Gemini:
+		return NativeConvertRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -95,7 +131,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
@@ -103,40 +139,59 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Embeddings:
-		usage, err = EmbeddingHandler(meta, c, resp)
+		return EmbeddingHandler(meta, c, resp)
 	case mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
-			usage, err = StreamHandler(meta, c, resp)
-		} else {
-			usage, err = Handler(meta, c, resp)
+			return StreamHandler(meta, c, resp)
 		}
+		return Handler(meta, c, resp)
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
-			usage, err = ClaudeStreamHandler(meta, c, resp)
-		} else {
-			usage, err = ClaudeHandler(meta, c, resp)
+			return ClaudeStreamHandler(meta, c, resp)
 		}
+		return ClaudeHandler(meta, c, resp)
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			return NativeStreamHandler(meta, c, resp)
+		}
+		return NativeHandler(meta, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
 		)
 	}
-
-	return usage, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://ai.google.dev",
-			"Chat、Embeddings、Image generation Support",
-		},
+		Readme: "https://ai.google.dev\nGoogle Gemini native API\nSupports chat, embeddings, native Gemini requests, and image generation",
 		Models: ModelList,
-		Config: ConfigTemplates,
+		ConfigSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"safety": map[string]any{
+					"type":        "string",
+					"title":       "Safety Threshold",
+					"description": "Safety blocking threshold applied to all Gemini safety categories.",
+					"enum": []string{
+						relaymodel.GeminiSafetyThresholdBlockNone,
+						relaymodel.GeminiSafetyThresholdBlockLowAndAbove,
+						relaymodel.GeminiSafetyThresholdBlockMediumAndAbove,
+						relaymodel.GeminiSafetyThresholdBlockOnlyHigh,
+					},
+				},
+				"disable_auto_image_url_to_base64": map[string]any{
+					"type":        "boolean",
+					"title":       "Disable Auto Image URL To Base64",
+					"description": "Keep image URLs unchanged instead of downloading and converting them to base64.",
+				},
+			},
+		},
 	}
 }

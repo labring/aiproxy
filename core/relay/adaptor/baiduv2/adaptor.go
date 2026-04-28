@@ -11,6 +11,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -18,6 +19,10 @@ import (
 )
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeBaiduV2, &Adaptor{})
+}
 
 const (
 	baseURL = "https://qianfan.baidubce.com/v2"
@@ -27,8 +32,13 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Rerank
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
+	return m == mode.ChatCompletions ||
+		m == mode.Anthropic ||
+		m == mode.Gemini ||
+		m == mode.Rerank
 }
 
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Fm2vrveyu
@@ -44,9 +54,13 @@ func toV2ModelName(modelName string) string {
 	return strings.ToLower(modelName)
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -77,7 +91,7 @@ func (a *Adaptor) SetupRequestHeader(
 	_ *gin.Context,
 	req *http.Request,
 ) error {
-	token, err := GetBearerToken(context.Background(), meta.Channel.Key)
+	token, err := GetBearerToken(context.Background(), meta.Channel.Key, meta.Channel.ProxyURL)
 	if err != nil {
 		return err
 	}
@@ -93,7 +107,7 @@ func (a *Adaptor) ConvertRequest(
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
-	case mode.ChatCompletions, mode.Rerank:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini, mode.Rerank:
 		actModel := meta.ActualModel
 
 		v2Model := toV2ModelName(actModel)
@@ -114,7 +128,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
@@ -122,12 +136,12 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
-	case mode.ChatCompletions, mode.Rerank:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini, mode.Rerank:
 		return openai.DoResponse(meta, store, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			nil,
 			http.StatusBadRequest,
@@ -137,6 +151,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Baidu Qianfan v2 endpoint\nSupports chat completions, Anthropic-compatible request conversion, Gemini-compatible request conversion, and rerank\nSome model names are remapped to official v2 route names\nKey format: `ak|sk`",
 		KeyHelp: "ak|sk",
 		Models:  ModelList,
 	}

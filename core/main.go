@@ -42,6 +42,10 @@ func main() {
 
 	config.ReloadEnv()
 
+	if err := ensureAdminKey(); err != nil {
+		log.Warn("failed to ensure AdminKey: " + err.Error())
+	}
+
 	common.InitLog(log.StandardLogger(), config.DebugEnabled)
 
 	printLoadedEnvFiles()
@@ -79,6 +83,16 @@ func main() {
 	log.Info("usage alert task started")
 
 	go task.UsageAlertTask(ctx)
+
+	log.Info("async usage poll task started")
+
+	go task.AsyncUsagePollTask(ctx)
+
+	if common.RedisEnabled {
+		log.Info("redis health check task started")
+
+		go task.RedisHealthCheckTask(ctx)
+	}
 
 	log.Info("update channels balance task started")
 

@@ -10,8 +10,10 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -21,16 +23,23 @@ type Adaptor struct {
 	openai.Adaptor
 }
 
+func init() {
+	registry.Register(model.ChannelTypeStreamlake, &Adaptor{})
+}
+
 const baseURL = "https://wanqing.streamlakeapi.com/api/gateway/v1/endpoints"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
 func supportClaudeCodeProxy(modelName string) bool {
@@ -38,7 +47,11 @@ func supportClaudeCodeProxy(modelName string) bool {
 		strings.Contains(strings.ToLower(modelName), "coder")
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch {
@@ -53,7 +66,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.R
 			URL:    url,
 		}, nil
 	default:
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
 	}
 }
 
@@ -75,23 +88,43 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
+	var (
+		result adaptor.DoResponseResult
+		err    adaptor.Error
+	)
+
 	switch {
 	case meta.Mode == mode.Anthropic && supportClaudeCodeProxy(meta.OriginModel):
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.StreamHandler(meta, c, resp)
+			result, err = anthropic.StreamHandler(meta, c, resp)
 		} else {
-			usage, err = anthropic.Handler(meta, c, resp)
+			result, err = anthropic.Handler(meta, c, resp)
 		}
 	default:
-		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
+		if resp.StatusCode != http.StatusOK {
+			return adaptor.DoResponseResult{}, ErrorHandler(resp)
+		}
+
+		result, err = a.Adaptor.DoResponse(meta, store, c, resp)
 	}
 
-	return usage, err
+	// Handle rate limit error: convert 400 with specific message to 429
+	if err != nil && strings.Contains(err.Error(), "Request rate increased too quickl") {
+		err = relaymodel.WrapperError(
+			meta.Mode,
+			http.StatusTooManyRequests,
+			err,
+			relaymodel.WithType("rate_limit_error"),
+		)
+	}
+
+	return result, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Streamlake OpenAI-compatible endpoint\nSupports chat, completions, Anthropic-compatible requests, and Gemini-compatible request conversion\nKAT Coder models can use the Claude Code Proxy path `/claude-code-proxy/v1/messages`",
 		Models: ModelList,
 	}
 }

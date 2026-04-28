@@ -9,6 +9,7 @@ import {
 import { ChannelForm } from './ChannelForm'
 import { Channel } from '@/types/channel'
 import { AnimatePresence, motion } from "motion/react"
+import { useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     dialogEnterExitAnimation,
@@ -20,7 +21,7 @@ import {
 interface ChannelDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    mode: 'create' | 'update'
+    mode: 'create' | 'update' | 'copy'
     channel?: Channel | null
 }
 
@@ -32,45 +33,53 @@ export function ChannelDialog({
 }: ChannelDialogProps) {
     const { t } = useTranslation()
 
-    console.log('ChannelDialog opened with mode:', mode, 'channel:', channel);
-
     // Determine title and description based on mode
-    const title = mode === 'create' ? t("channel.dialog.createTitle") : t("channel.dialog.updateTitle")
-    const description = mode === 'create'
-        ? t("channel.dialog.createDescription")
-        : t("channel.dialog.updateDescription")
+    const title = mode === 'update'
+        ? t("channel.dialog.updateTitle")
+        : t("channel.dialog.createTitle")
+    const description = mode === 'update'
+        ? t("channel.dialog.updateDescription")
+        : t("channel.dialog.createDescription")
 
-    // Default values for form
-    const defaultValues = mode === 'update' && channel
+    // Default values for form - memoized to avoid new object reference every render
+    // Use channel data if available (for both update and copy)
+    const defaultValues = useMemo(() => channel
         ? {
             type: channel.type,
-            name: channel.name,
+            name: mode === 'update' ? channel.name : '',
             key: channel.key,
             base_url: channel.base_url,
+            proxy_url: channel.proxy_url,
             models: channel.models || [],
             model_mapping: channel.model_mapping || {},
-            sets: channel.sets || []
+            sets: channel.sets || [],
+            priority: channel.priority,
+            skip_tls_verify: channel.skip_tls_verify ?? false,
+            enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
+            warn_error_rate: channel.warn_error_rate,
+            max_error_rate: channel.max_error_rate !== undefined && channel.max_error_rate > 0
+                ? channel.max_error_rate
+                : undefined,
+            configs_text: channel.configs ? JSON.stringify(channel.configs, null, 2) : ''
         }
         : {
             type: 0,
             name: '',
             key: '',
             base_url: '',
+            proxy_url: '',
             models: [],
             model_mapping: {},
-            sets: []
-        }
+            sets: [],
+            priority: 10,
+            skip_tls_verify: false,
+            enabled_no_permission_ban: false,
+            warn_error_rate: undefined,
+            max_error_rate: undefined,
+            configs_text: ''
+        }, [mode, channel])
 
-    // Log for debugging
-    if (mode === 'update') {
-        console.log('Update mode detected. Channel ID:', channel?.id);
-        // Make sure channel ID exists
-        if (!channel || !channel.id) {
-            console.error('ERROR: No channel ID available for update!');
-        } else {
-            console.log('Will pass channelId:', channel.id, 'to ChannelForm');
-        }
-    }
+    const handleSuccess = useCallback(() => onOpenChange(false), [onOpenChange])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,7 +104,7 @@ export function ChannelDialog({
                                         channelId={channel?.id}
                                         channel={channel}
                                         defaultValues={defaultValues}
-                                        onSuccess={() => onOpenChange(false)}
+                                        onSuccess={handleSuccess}
                                     />
                                 </motion.div>
                             </motion.div>

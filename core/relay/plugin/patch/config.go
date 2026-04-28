@@ -205,4 +205,68 @@ var DefaultPredefinedPatches = []PatchRule{
 			},
 		},
 	},
+	{
+		Name:        "gpt5_remove_top_p",
+		Description: "Remove top_p field for GPT-5 models",
+		Conditions: []PatchCondition{
+			{
+				Key:      "model",
+				Operator: OperatorContains,
+				Value:    "gpt-5",
+			},
+			{
+				Key:      "top_p",
+				Operator: OperatorExists,
+			},
+		},
+		Operations: []PatchOperation{
+			{
+				Op:  OpDelete,
+				Key: "top_p",
+			},
+		},
+	},
+	{
+		Name:        "gemini_gpt5_remove_generation_config_top_p",
+		Description: "Remove generationConfig.topP for GPT-5 models in Gemini format",
+		Conditions: []PatchCondition{
+			{
+				Key:      "model",
+				Operator: OperatorContains,
+				Value:    "gpt-5",
+			},
+			{
+				Key:      "generationConfig.topP",
+				Operator: OperatorExists,
+			},
+		},
+		Operations: []PatchOperation{
+			{
+				Op:  OpDelete,
+				Key: "generationConfig.topP",
+			},
+		},
+	},
+	{
+		Name:        "gemini3_remove_tool_choice_auto",
+		Description: "Remove tool_choice when it is 'auto' for Gemini 3 models",
+		Conditions: []PatchCondition{
+			{
+				Key:      "model",
+				Operator: OperatorContains,
+				Value:    "gemini-3",
+			},
+			{
+				Key:      "tool_choice",
+				Operator: OperatorEquals,
+				Value:    "auto",
+			},
+		},
+		Operations: []PatchOperation{
+			{
+				Op:  OpDelete,
+				Key: "tool_choice",
+			},
+		},
+	},
 }

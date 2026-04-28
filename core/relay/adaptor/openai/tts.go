@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -68,9 +66,9 @@ func TTSHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	if utils.IsStreamResponse(resp) {
@@ -96,7 +94,7 @@ func TTSHandler(
 
 		render.OpenaiAudioDone(c, usage)
 
-		return usage.ToModelUsage(), nil
+		return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 	}
 
 	c.Writer.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
@@ -110,24 +108,20 @@ func TTSHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 func ttsStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	var totalUsage *relaymodel.TextToSpeechUsage
 
@@ -181,5 +175,5 @@ func ttsStreamHandler(
 		render.OpenaiAudioDone(c, *totalUsage)
 	}
 
-	return totalUsage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: totalUsage.ToModelUsage()}, nil
 }

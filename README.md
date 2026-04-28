@@ -14,7 +14,7 @@
 
 ## 🚀 Overview
 
-AI Proxy is a powerful, production-ready AI gateway that provides intelligent request routing, comprehensive monitoring, and seamless multi-tenant management. Built with OpenAI-compatible and Anthropic protocols, it serves as the perfect middleware for AI applications requiring reliability, scalability, and advanced features.
+AI Proxy is a powerful, production-ready AI gateway that provides intelligent request routing, comprehensive monitoring, and seamless multi-tenant management. Built with OpenAI-compatible, Anthropic and Gemini protocols, it serves as the perfect middleware for AI applications requiring reliability, scalability, and advanced features.
 
 ## ✨ Key Features
 
@@ -23,7 +23,8 @@ AI Proxy is a powerful, production-ready AI gateway that provides intelligent re
 - **Smart Retry Logic**: Intelligent retry strategies with automatic error recovery
 - **Priority-based Channel Selection**: Route requests based on channel priority and error rates
 - **Load Balancing**: Efficiently distribute traffic across multiple AI providers
-- **Protocol Conversion**: Seamless Claude to OpenAI API protocol conversion
+- **Protocol Conversion**: Seamless protocol conversion between OpenAI Chat Completions, Claude Messages, Gemini, and OpenAI Responses API
+  - Chat/Claude/Gemini → Responses API: Use responses-only models with any protocol
 
 ### 📊 **Comprehensive Monitoring & Analytics**
 
@@ -78,7 +79,7 @@ graph TB
     Gateway --> Router[Intelligent Router]
     Gateway --> Monitor[Monitoring & Analytics]
     Gateway --> Plugins[Plugin System]
-    
+
     Plugins --> CachePlugin[Cache Plugin]
     Plugins --> SearchPlugin[Web Search Plugin]
     Plugins --> ThinkSplitPlugin[Think Split Plugin]
@@ -88,12 +89,12 @@ graph TB
     Router --> Provider2[Anthropic]
     Router --> Provider3[Azure OpenAI]
     Router --> ProviderN[Other Providers]
-    
+
     Gateway --> MCP[MCP Servers]
     MCP --> PublicMCP[Public MCP]
     MCP --> GroupMCP[Organization MCP]
     MCP --> EmbedMCP[Embedded MCP]
-    
+
     Monitor --> Alerts[Alert System]
     Monitor --> Analytics[Analytics Dashboard]
     Monitor --> Logs[Audit Logs]
@@ -140,6 +141,7 @@ docker-compose up -d
 ```bash
 LISTEN=:3000                    # Server listen address
 ADMIN_KEY=your-admin-key        # Admin API key
+DISABLE_WEB_ROOT=true           # Redirect only `/` to GitHub, keep other web routes available
 ```
 
 #### **Database Configuration**
@@ -282,7 +284,7 @@ Deploy instantly on Sealos with built-in model capabilities:
 ### FastGPT Integration
 
 Seamlessly integrate with FastGPT for enhanced AI workflows:
-[FastGPT Documentation](https://doc.tryfastgpt.ai/docs/development/modelconfig/ai-proxy/)
+[FastGPT Documentation](https://doc.fastgpt.cn/docs/introduction/development/modelConfig/ai-proxy)
 
 ### Claude Code Integration
 
@@ -294,6 +296,50 @@ export ANTHROPIC_AUTH_TOKEN=sk-xxx
 export ANTHROPIC_MODEL=gpt-5
 export ANTHROPIC_SMALL_FAST_MODEL=gpt-5-nano
 ```
+
+### Gemini CLI Integration
+
+Use AI Proxy with Gemini CLI by configuring these environment variables:
+
+```bash
+export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3000
+export GEMINI_API_KEY=sk-xxx
+```
+
+Alternatively, you can use the `/auth` command in the Gemini CLI to output the `GEMINI_API_KEY`.
+
+### Codex Integration
+
+Use AI Proxy with Codex by configuring `~/.codex/config.toml`:
+
+```toml
+# Recall that in TOML, root keys must be listed before tables.
+model = "gpt-4o"
+model_provider = "aiproxy"
+
+[model_providers.aiproxy]
+# Name of the provider that will be displayed in the Codex UI.
+name = "AIProxy"
+# The path `/chat/completions` will be amended to this URL to make the POST
+# request for the chat completions.
+base_url = "http://127.0.0.1:3000/v1"
+# If `env_key` is set, identifies an environment variable that must be set when
+# using Codex with this provider. The value of the environment variable must be
+# non-empty and will be used in the `Bearer TOKEN` HTTP header for the POST request.
+env_key = "AIPROXY_API_KEY"
+# Valid values for wire_api are "chat" and "responses". Defaults to "chat" if omitted.
+wire_api = "chat"
+```
+
+**Protocol Conversion Support**:
+
+- **Responses-only models**: AI Proxy automatically converts Chat/Claude/Gemini requests to Responses API format for models that only support the Responses API
+- **Multi-protocol access**: Use any protocol (Chat Completions, Claude Messages, or Gemini) to access responses-only models
+- **Transparent conversion**: No client-side changes needed - AI Proxy handles protocol translation automatically
+
+**Reasoning / Thinking Compatibility Docs**:
+
+- [Thinking / Reasoning Compatibility](./docs/REASONING_COMPATIBILITY.md)
 
 ### MCP (Model Context Protocol)
 
@@ -329,18 +375,6 @@ cd core && go build -o aiproxy .
 # Run
 ./aiproxy
 ```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Ways to Contribute
-
-- 🐛 Report bugs and issues
-- 💡 Suggest new features
-- 📝 Improve documentation
-- 🔧 Submit pull requests
-- ⭐ Star the repository
 
 ## 📄 License
 

@@ -75,9 +75,9 @@ func RerankHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -88,7 +88,7 @@ func RerankHandler(
 
 	err := common.UnmarshalResponse(resp, &rerankResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -121,7 +121,7 @@ func RerankHandler(
 
 	jsonResponse, err := sonic.Marshal(&rerankResp)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -136,5 +136,5 @@ func RerankHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }

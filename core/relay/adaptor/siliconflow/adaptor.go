@@ -7,6 +7,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -17,6 +18,10 @@ type Adaptor struct {
 	openai.Adaptor
 }
 
+func init() {
+	registry.Register(model.ChannelTypeSiliconflow, &Adaptor{})
+}
+
 const baseURL = "https://api.siliconflow.cn/v1"
 
 func (a *Adaptor) DefaultBaseURL() string {
@@ -25,6 +30,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "SiliconFlow API\nOpenAI-compatible chat, embeddings, audio, and rerank endpoints\nSupports Gemini-compatible request conversion",
 		Models: ModelList,
 	}
 }
@@ -36,34 +42,28 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.AudioSpeech:
-		_, err = a.Adaptor.DoResponse(meta, store, c, resp)
+		result, err := a.Adaptor.DoResponse(meta, store, c, resp)
 		if err != nil {
-			return model.Usage{}, err
+			return adaptor.DoResponseResult{}, err
 		}
 
 		size := c.Writer.Size()
-		usage = model.Usage{
+		result.Usage = model.Usage{
 			OutputTokens: model.ZeroNullInt64(size),
 			TotalTokens:  model.ZeroNullInt64(size),
 		}
+
+		return result, nil
 	case mode.Rerank:
 		if resp.StatusCode != http.StatusOK {
-			return model.Usage{}, ErrorHandler(resp)
+			return adaptor.DoResponseResult{}, ErrorHandler(resp)
 		}
 
-		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
-		if err != nil {
-			return model.Usage{}, err
-		}
+		return a.Adaptor.DoResponse(meta, store, c, resp)
 	default:
-		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
-		if err != nil {
-			return model.Usage{}, err
-		}
+		return a.Adaptor.DoResponse(meta, store, c, resp)
 	}
-
-	return usage, nil
 }

@@ -1,6 +1,6 @@
 // src/api/model.ts
 import { get, post, del } from "./index";
-import { ModelConfig, ModelCreateRequest } from "@/types/model";
+import { ModelConfig, ModelCreateRequest, ModelSaveRequest } from "@/types/model";
 
 // Define the type for model sets response
 export interface ModelSetsResponse {
@@ -9,8 +9,20 @@ export interface ModelSetsResponse {
       id: number;
       type: number;
       name: string;
+      priority: number;
+      weight: number; // 权重百分比 (0-100)
     }>;
   };
+}
+
+export interface DefaultModelsResponse {
+  models: string[];
+  mapping: Record<string, string>;
+}
+
+export interface AllDefaultModelsResponse {
+  models: Record<string, string[]>;
+  mapping: Record<string, Record<string, string>>;
 }
 
 export const modelApi = {
@@ -48,5 +60,21 @@ export const modelApi = {
   deleteModel: async (model: string): Promise<void> => {
     await del(`model_config/${model}`);
     return;
+  },
+
+  // Batch save model configs (for import)
+  saveModels: async (configs: ModelSaveRequest[]): Promise<void> => {
+    await post("model_configs/", configs);
+    return;
+  },
+
+  getDefaultModelsByType: async (type: number): Promise<DefaultModelsResponse> => {
+    const response = await get<DefaultModelsResponse>(`models/default/${type}`);
+    return response;
+  },
+
+  getAllDefaultModels: async (): Promise<AllDefaultModelsResponse> => {
+    const response = await get<AllDefaultModelsResponse>('models/default');
+    return response;
   },
 };

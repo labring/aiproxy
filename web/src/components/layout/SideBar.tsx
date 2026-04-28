@@ -13,6 +13,8 @@ import {
     Github,
     LogOut,
     MessageCircle,
+    Trophy,
+    Users,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
@@ -39,12 +41,6 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             display: true,
         },
         {
-            title: t("sidebar.key"),
-            icon: Bot,
-            href: ROUTES.KEY,
-            display: true,
-        },
-        {
             title: t("sidebar.channel"),
             icon: Database,
             href: ROUTES.CHANNEL,
@@ -57,15 +53,33 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
             display: true,
         },
         {
-            title: t("sidebar.mcp"),
-            icon: MessageCircle,
-            href: ROUTES.MCP,
-            display: true,
-        },
-        {
             title: t("sidebar.log"),
             icon: Calendar,
             href: ROUTES.LOG,
+            display: true,
+        },
+        {
+            title: t("sidebar.group"),
+            icon: Users,
+            href: ROUTES.GROUP,
+            display: true,
+        },
+        {
+            title: t("sidebar.consumptionRanking"),
+            icon: Trophy,
+            href: ROUTES.CONSUMPTION_RANKING,
+            display: true,
+        },
+        {
+            title: t("sidebar.key"),
+            icon: Bot,
+            href: ROUTES.KEY,
+            display: true,
+        },
+        {
+            title: t("sidebar.mcp"),
+            icon: MessageCircle,
+            href: ROUTES.MCP,
             display: true,
         },
         {
@@ -87,6 +101,8 @@ function createSidebarConfig(t: TFunction): SidebarItem[] {
 
 interface SidebarDisplayConfig {
     monitor?: boolean
+    group?: boolean
+    consumptionRanking?: boolean
     key?: boolean
     channel?: boolean
     model?: boolean
@@ -113,6 +129,8 @@ export function Sidebar({ displayConfig = {}, collapsed = false, onToggle }: Sid
     const sidebarItems = createSidebarConfig(t).map((item) => {
         // Determine which config property based on path name
         let configKey: keyof SidebarDisplayConfig = "monitor"
+        if (item.href === ROUTES.GROUP) configKey = "group"
+        if (item.href === ROUTES.CONSUMPTION_RANKING) configKey = "consumptionRanking"
         if (item.href === ROUTES.KEY) configKey = "key"
         if (item.href === ROUTES.CHANNEL) configKey = "channel"
         if (item.href === ROUTES.MODEL) configKey = "model"

@@ -10,6 +10,7 @@ import { ModelForm } from './ModelForm'
 import { ModelConfig } from '@/types/model'
 import { AnimatePresence, motion } from "motion/react"
 import { useTranslation } from 'react-i18next'
+import { useMemo } from 'react'
 import {
     dialogEnterExitAnimation,
     dialogContentAnimation,
@@ -38,30 +39,30 @@ export function ModelDialog({
         ? t("model.dialog.createDescription")
         : t("model.dialog.updateDescription")
 
-    // Default values for form
-    const defaultValues = mode === 'update' && model
+    // Default values for form - use model data if available (for both update and copy)
+    const defaultValues = useMemo(() => model
         ? {
-            model: model.model,
+            ...model,
+            model: mode === 'create' ? '' : model.model,
+            owner: model.owner ?? '',
             type: model.type,
-            rpm: model.rpm,
-            tpm: model.tpm,
-            retry_times: model.retry_times,
-            timeout: model.timeout,
-            max_error_rate: model.max_error_rate,
-            force_save_detail: model.force_save_detail,
+            timeout: model.timeout_config?.request_timeout,
+            stream_timeout: model.timeout_config?.stream_request_timeout,
+            price: model.price,
             plugin: model.plugin
         }
         : {
             model: '',
+            owner: '',
             type: 1
-        }
+        }, [mode, model])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <AnimatePresence mode="wait">
                 {open && (
                     <motion.div {...dialogEnterExitAnimation}>
-                        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-0">
+                        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto p-0">
                             <motion.div {...dialogContentAnimation}>
                                 <motion.div {...dialogHeaderAnimation}>
                                     <DialogHeader className="p-6 pb-3">
@@ -77,6 +78,7 @@ export function ModelDialog({
                                     <ModelForm
                                         mode={mode}
                                         defaultValues={defaultValues}
+                                        baseModelConfig={mode === 'update' ? model : null}
                                         onSuccess={() => onOpenChange(false)}
                                     />
                                 </motion.div>

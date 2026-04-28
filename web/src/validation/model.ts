@@ -33,6 +33,12 @@ const pluginSchema = z.object({
         add_cache_hit_header: z.boolean().optional(),
         cache_hit_header: z.string().optional(),
     }).optional(),
+    cachefollow: z.object({
+        enable: z.boolean(),
+        enable_generic_follow: z.boolean().optional(),
+        followed_channel_ttl_seconds: z.number().nonnegative('Followed channel TTL must be a non-negative number').optional(),
+        recent_channel_update_debounce_seconds: z.number().nonnegative('Recent channel update debounce must be a non-negative number').optional(),
+    }).optional(),
     "web-search": z.object({
         enable: z.boolean(),
         force_search: z.boolean().optional(),
@@ -69,15 +75,96 @@ const pluginSchema = z.object({
     }).optional(),
 }).optional()
 
+// Price condition schema
+const priceConditionSchema = z.object({
+    input_token_min: z.number().optional(),
+    input_token_max: z.number().optional(),
+    output_token_min: z.number().optional(),
+    output_token_max: z.number().optional(),
+    start_time: z.number().optional(),
+    end_time: z.number().optional(),
+    service_tier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).or(z.literal('')).optional(),
+})
+
+// Price schema (used for conditional prices)
+const basePriceSchema = z.object({
+    input_price: z.number().optional(),
+    input_price_unit: z.number().optional(),
+    output_price: z.number().optional(),
+    output_price_unit: z.number().optional(),
+    per_request_price: z.number().optional(),
+    cached_price: z.number().optional(),
+    cached_price_unit: z.number().optional(),
+    cache_creation_price: z.number().optional(),
+    cache_creation_price_unit: z.number().optional(),
+    image_input_price: z.number().optional(),
+    image_input_price_unit: z.number().optional(),
+    image_output_price: z.number().optional(),
+    image_output_price_unit: z.number().optional(),
+    audio_input_price: z.number().optional(),
+    audio_input_price_unit: z.number().optional(),
+    thinking_mode_output_price: z.number().optional(),
+    thinking_mode_output_price_unit: z.number().optional(),
+    web_search_price: z.number().optional(),
+    web_search_price_unit: z.number().optional(),
+})
+
+const conditionalPriceSchema = z.object({
+    condition: priceConditionSchema,
+    price: basePriceSchema,
+})
+
+export const priceSchema = z.object({
+    input_price: z.number().optional(),
+    input_price_unit: z.number().optional(),
+    output_price: z.number().optional(),
+    output_price_unit: z.number().optional(),
+    per_request_price: z.number().optional(),
+    cached_price: z.number().optional(),
+    cached_price_unit: z.number().optional(),
+    cache_creation_price: z.number().optional(),
+    cache_creation_price_unit: z.number().optional(),
+    image_input_price: z.number().optional(),
+    image_input_price_unit: z.number().optional(),
+    image_output_price: z.number().optional(),
+    image_output_price_unit: z.number().optional(),
+    audio_input_price: z.number().optional(),
+    audio_input_price_unit: z.number().optional(),
+    thinking_mode_output_price: z.number().optional(),
+    thinking_mode_output_price_unit: z.number().optional(),
+    web_search_price: z.number().optional(),
+    web_search_price_unit: z.number().optional(),
+    conditional_prices: z.array(conditionalPriceSchema).optional(),
+}).optional()
+
+const modelConfigSchema = z.object({
+    max_input_tokens: z.number().nonnegative('Max input tokens must be a non-negative number').optional(),
+    max_output_tokens: z.number().nonnegative('Max output tokens must be a non-negative number').optional(),
+    max_context_tokens: z.number().nonnegative('Max context tokens must be a non-negative number').optional(),
+    vision: z.boolean().optional(),
+    tool_choice: z.boolean().optional(),
+    coder: z.boolean().optional(),
+    limited_time_free: z.boolean().optional(),
+    support_formats: z.array(z.string()).optional(),
+    support_voices: z.array(z.string()).optional(),
+}).optional()
+
 export const modelCreateSchema = z.object({
     model: z.string().min(1, 'Model name is required'),
+    config: modelConfigSchema,
+    owner: z.string().optional(),
     type: z.number().min(0, 'Type is required'),
     rpm: z.number().nonnegative('RPM must be a non-negative number').optional(),
     tpm: z.number().nonnegative('TPM must be a non-negative number').optional(),
     retry_times: z.number().nonnegative('Retry times must be a non-negative number').optional(),
     timeout: z.number().nonnegative('Timeout must be a non-negative number').optional(),
-    max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
+    stream_timeout: z.number().nonnegative('Stream timeout must be a non-negative number').optional(),
     force_save_detail: z.boolean().optional(),
+    request_body_storage_max_size: z.number().optional(),
+    response_body_storage_max_size: z.number().optional(),
+    summary_service_tier: z.boolean().optional(),
+    summary_claude_long_context: z.boolean().optional(),
+    price: priceSchema,
     plugin: pluginSchema,
 })
 

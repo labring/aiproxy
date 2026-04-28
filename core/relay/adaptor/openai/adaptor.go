@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -17,7 +18,13 @@ import (
 
 var _ adaptor.Adaptor = (*Adaptor)(nil)
 
-type Adaptor struct{}
+type Adaptor struct {
+	configCache utils.ChannelConfigCache[Config]
+}
+
+func init() {
+	registry.Register(model.ChannelTypeOpenAI, &Adaptor{})
+}
 
 const baseURL = "https://api.openai.com/v1"
 
@@ -25,7 +32,9 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
 		m == mode.Embeddings ||
@@ -41,6 +50,7 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.VideoGenerationsGetJobs ||
 		m == mode.VideoGenerationsContent ||
 		m == mode.Anthropic ||
+		m == mode.Gemini ||
 		m == mode.Responses ||
 		m == mode.ResponsesGet ||
 		m == mode.ResponsesDelete ||
@@ -49,7 +59,11 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 }
 
 //nolint:gocyclo
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
@@ -103,7 +117,20 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 			Method: http.MethodGet,
 			URL:    url,
 		}, nil
-	case mode.ChatCompletions, mode.Anthropic:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
+		// Check if model requires Responses API
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			url, err := url.JoinPath(u, "/responses")
+			if err != nil {
+				return adaptor.RequestURL{}, err
+			}
+
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    url,
+			}, nil
+		}
+
 		url, err := url.JoinPath(u, "/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -278,13 +305,21 @@ func ConvertRequest(
 	case mode.Completions:
 		return ConvertCompletionsRequest(meta, req)
 	case mode.ChatCompletions:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			return ConvertChatCompletionToResponsesRequest(meta, req)
+		}
 		return ConvertChatCompletionsRequest(meta, req, false)
 	case mode.Anthropic:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			return ConvertClaudeToResponsesRequest(meta, req)
+		}
 		return ConvertClaudeRequest(meta, req)
 	case mode.ImagesGenerations:
 		return ConvertImagesRequest(meta, req)
 	case mode.ImagesEdits:
-		return ConvertImagesEditsRequest(meta, req)
+		return ConvertImagesEditsRequest(meta, req, true)
 	case mode.AudioTranscription, mode.AudioTranslation:
 		return ConvertSTTRequest(meta, req)
 	case mode.AudioSpeech:
@@ -297,71 +332,138 @@ func ConvertRequest(
 		return ConvertVideoGetJobsRequest(meta, req)
 	case mode.VideoGenerationsContent:
 		return ConvertVideoGetJobsContentRequest(meta, req)
+	case mode.Gemini:
+		// Check if model requires Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			return ConvertGeminiToResponsesRequest(meta, req)
+		}
+		return ConvertGeminiRequest(meta, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
+//nolint:gocyclo
 func DoResponse(
 	meta *meta.Meta,
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (result adaptor.DoResponseResult, err adaptor.Error) {
 	switch meta.Mode {
 	case mode.Responses:
 		if utils.IsStreamResponse(resp) {
-			usage, err = ResponseStreamHandler(meta, store, c, resp)
+			result, err = ResponseStreamHandler(meta, store, c, resp)
 		} else {
-			usage, err = ResponseHandler(meta, store, c, resp)
+			result, err = ResponseHandler(meta, store, c, resp)
 		}
 	case mode.ResponsesGet:
-		usage, err = GetResponseHandler(meta, c, resp)
+		result, err = GetResponseHandler(meta, c, resp)
 	case mode.ResponsesDelete:
-		usage, err = DeleteResponseHandler(meta, c, resp)
+		result, err = DeleteResponseHandler(meta, c, resp)
 	case mode.ResponsesCancel:
-		usage, err = CancelResponseHandler(meta, c, resp)
+		result, err = CancelResponseHandler(meta, c, resp)
 	case mode.ResponsesInputItems:
-		usage, err = GetInputItemsHandler(meta, c, resp)
+		result, err = GetInputItemsHandler(meta, c, resp)
 	case mode.ImagesGenerations, mode.ImagesEdits:
-		usage, err = ImagesHandler(meta, c, resp)
-	case mode.AudioTranscription, mode.AudioTranslation:
-		usage, err = STTHandler(meta, c, resp)
-	case mode.AudioSpeech:
-		usage, err = TTSHandler(meta, c, resp)
-	case mode.Rerank:
-		usage, err = RerankHandler(meta, c, resp)
-	case mode.Moderations:
-		usage, err = ModerationsHandler(meta, c, resp)
-	case mode.Embeddings:
-		usage, err = EmbeddingsHandler(meta, c, resp, nil)
-	case mode.Completions, mode.ChatCompletions:
 		if utils.IsStreamResponse(resp) {
-			usage, err = StreamHandler(meta, c, resp, nil)
+			result, err = ImagesStreamHandler(meta, c, resp)
 		} else {
-			usage, err = Handler(meta, c, resp, nil)
+			result, err = ImagesHandler(meta, c, resp)
+		}
+	case mode.AudioTranscription, mode.AudioTranslation:
+		result, err = STTHandler(meta, c, resp)
+	case mode.AudioSpeech:
+		result, err = TTSHandler(meta, c, resp)
+	case mode.Rerank:
+		result, err = RerankHandler(meta, c, resp)
+	case mode.Moderations:
+		result, err = ModerationsHandler(meta, c, resp)
+	case mode.Embeddings:
+		result, err = EmbeddingsHandler(meta, c, resp, nil)
+	case mode.Completions, mode.ChatCompletions:
+		var (
+			streamPreHandler  PreHandler
+			handlerPreHandler PreHandler
+		)
+
+		if meta.Mode == mode.ChatCompletions {
+			var configErr error
+
+			streamPreHandler, handlerPreHandler, configErr = getChatCompletionResponsePreHandlers(
+				meta,
+			)
+			if configErr != nil {
+				return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+					configErr,
+					"load_channel_config_failed",
+					http.StatusInternalServerError,
+				)
+			}
+		}
+
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			// Convert Responses API response back to ChatCompletion format
+			if utils.IsStreamResponse(resp) {
+				result, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
+			} else {
+				result, err = ConvertResponsesToChatCompletionResponse(meta, c, resp)
+			}
+		} else {
+			if utils.IsStreamResponse(resp) {
+				result, err = StreamHandler(meta, c, resp, streamPreHandler)
+			} else {
+				result, err = Handler(meta, c, resp, handlerPreHandler)
+			}
 		}
 	case mode.Anthropic:
-		if utils.IsStreamResponse(resp) {
-			usage, err = ClaudeStreamHandler(meta, c, resp)
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			// Convert Responses API response back to Claude format
+			if utils.IsStreamResponse(resp) {
+				result, err = ConvertResponsesToClaudeStreamResponse(meta, c, resp)
+			} else {
+				result, err = ConvertResponsesToClaudeResponse(meta, c, resp)
+			}
 		} else {
-			usage, err = ClaudeHandler(meta, c, resp)
+			if utils.IsStreamResponse(resp) {
+				result, err = ClaudeStreamHandler(meta, c, resp)
+			} else {
+				result, err = ClaudeHandler(meta, c, resp)
+			}
 		}
 	case mode.VideoGenerationsJobs:
-		usage, err = VideoHandler(meta, store, c, resp)
+		result, err = VideoHandler(meta, store, c, resp)
 	case mode.VideoGenerationsGetJobs:
-		usage, err = VideoGetJobsHandler(meta, store, c, resp)
+		result, err = VideoGetJobsHandler(meta, store, c, resp)
 	case mode.VideoGenerationsContent:
-		usage, err = VideoGetJobsContentHandler(meta, store, c, resp)
+		result, err = VideoGetJobsContentHandler(meta, store, c, resp)
+	case mode.Gemini:
+		// Check if model required Responses API conversion
+		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			// Convert Responses API response back to Gemini format
+			if utils.IsStreamResponse(resp) {
+				result, err = ConvertResponsesToGeminiStreamResponse(meta, c, resp)
+			} else {
+				result, err = ConvertResponsesToGeminiResponse(meta, c, resp)
+			}
+		} else {
+			if utils.IsStreamResponse(resp) {
+				result, err = GeminiStreamHandler(meta, c, resp)
+			} else {
+				result, err = GeminiHandler(meta, c, resp)
+			}
+		}
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
 		)
 	}
 
-	return usage, err
+	return result, err
 }
 
 const MetaResponseFormat = "response_format"
@@ -372,7 +474,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
@@ -380,16 +482,14 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (result adaptor.DoResponseResult, err adaptor.Error) {
 	return DoResponse(meta, store, c, resp)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"OpenAI compatibility",
-			"Anthropic conversation",
-		},
-		Models: ModelList,
+		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
+		ConfigSchema: configSchema(),
+		Models:       ModelList,
 	}
 }

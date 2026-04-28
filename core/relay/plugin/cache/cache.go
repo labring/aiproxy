@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/utils"
 	gcache "github.com/patrickmn/go-cache"
 	"github.com/redis/go-redis/v9"
 )
@@ -55,7 +57,8 @@ type Item struct {
 // Cache implements caching functionality for AI requests
 type Cache struct {
 	noop.Noop
-	rdb *redis.Client
+	rdb         *redis.Client
+	configCache utils.PluginConfigCache[Config]
 }
 
 var (
@@ -69,6 +72,19 @@ var (
 		},
 	}
 )
+
+func jitterCacheTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+
+	jitter := ttl / 10
+	if jitter <= 0 {
+		return ttl
+	}
+
+	return ttl + time.Duration(rand.Int64N(int64(jitter)*2+1)) - jitter
+}
 
 // NewCachePlugin creates a new cache plugin
 func NewCachePlugin(rdb *redis.Client) plugin.Plugin {
@@ -128,7 +144,7 @@ func putBuffer(buf *bytes.Buffer) {
 }
 
 // getPluginConfig retrieves the plugin configuration from metadata
-func getPluginConfig(meta *meta.Meta) (config *Config, err error) {
+func (c *Cache) getPluginConfig(meta *meta.Meta) (config *Config, err error) {
 	v, ok := meta.Get(pluginConfigCacheKey)
 	if ok {
 		config, ok := v.(*Config)
@@ -140,7 +156,9 @@ func getPluginConfig(meta *meta.Meta) (config *Config, err error) {
 	}
 
 	pluginConfig := Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("cache", &pluginConfig); err != nil {
+
+	pluginConfig, err = c.configCache.Load(meta, "cache", pluginConfig)
+	if err != nil {
 		return nil, err
 	}
 
@@ -207,6 +225,8 @@ func (c *Cache) getFromCache(ctx context.Context, key string) (*Item, bool) {
 
 // setToCache stores item in cache (Redis and/or memory)
 func (c *Cache) setToCache(ctx context.Context, key string, item Item, ttl time.Duration) {
+	ttl = jitterCacheTTL(ttl)
+
 	// Set to Redis if available
 	if c.rdb != nil {
 		if err := c.setToRedis(ctx, key, &item, ttl); err == nil {
@@ -228,7 +248,7 @@ func (c *Cache) ConvertRequest(
 	req *http.Request,
 	do adaptor.ConvertRequest,
 ) (adaptor.ConvertResult, error) {
-	pluginConfig, err := getPluginConfig(meta)
+	pluginConfig, err := c.getPluginConfig(meta)
 	if err != nil {
 		return do.ConvertRequest(meta, store, req)
 	}
@@ -334,8 +354,8 @@ func (c *Cache) DoResponse(
 	ctx *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (usage model.Usage, adapterErr adaptor.Error) {
-	pluginConfig, err := getPluginConfig(meta)
+) (result adaptor.DoResponseResult, adapterErr adaptor.Error) {
+	pluginConfig, err := c.getPluginConfig(meta)
 	if err != nil {
 		return do.DoResponse(meta, store, ctx, resp)
 	}
@@ -360,7 +380,7 @@ func (c *Cache) DoResponse(
 		c.writeCacheHeader(ctx, pluginConfig, "hit")
 		_, _ = ctx.Writer.Write(item.Body)
 
-		return item.Usage, nil
+		return adaptor.DoResponseResult{Usage: item.Usage}, nil
 	}
 
 	if !pluginConfig.Enable {
@@ -395,7 +415,7 @@ func (c *Cache) DoResponse(
 		item := Item{
 			Body:   bytes.Clone(rw.cacheBody.Bytes()),
 			Header: headerMap,
-			Usage:  usage,
+			Usage:  result.Usage,
 		}
 
 		ttl := time.Duration(pluginConfig.TTL) * time.Second

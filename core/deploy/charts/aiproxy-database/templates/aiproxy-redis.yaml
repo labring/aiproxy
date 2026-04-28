@@ -61,7 +61,7 @@ spec:
   backup:
     cronExpression: {{.Values.redis.backup.cron}}
     enabled: true
-    method: dump
+    method: datafile
     pitrEnabled: true
     retentionPeriod: {{.Values.redis.backup.retentionPeriod}}
   clusterDefinitionRef: redis

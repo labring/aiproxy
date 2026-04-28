@@ -46,9 +46,17 @@ func SetAPIRouter(router *gin.Engine) {
 			dashboardV2Route.GET("/:group", controller.GetGroupTimeSeriesModelData)
 		}
 
+		dashboardV3Route := apiRouter.Group("/dashboardv3")
+		{
+			dashboardV3Route.GET("/", controller.GetTimeSeriesModelDataV3)
+			dashboardV3Route.GET("/:group", controller.GetGroupTimeSeriesModelDataV3)
+		}
+
 		groupsRoute := apiRouter.Group("/groups")
 		{
 			groupsRoute.GET("/", controller.GetGroups)
+			groupsRoute.GET("/ranking", controller.GetConsumptionRanking)
+			groupsRoute.GET("/consumption_ranking", controller.GetConsumptionRanking)
 			groupsRoute.GET("/search", controller.SearchGroups)
 			groupsRoute.POST("/batch_delete", controller.DeleteGroups)
 			groupsRoute.POST("/batch_status", controller.UpdateGroupsStatus)
@@ -107,6 +115,7 @@ func SetAPIRouter(router *gin.Engine) {
 			channelsRoute.GET("/search", controller.SearchChannels)
 			channelsRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelsRoute.POST("/batch_delete", controller.DeleteChannels)
+			channelsRoute.POST("/batch_info", controller.GetChannelBatchInfo)
 			channelsRoute.GET("/test", controller.TestAllChannels)
 
 			importRoute := channelsRoute.Group("/import")
@@ -124,6 +133,14 @@ func SetAPIRouter(router *gin.Engine) {
 			channelRoute.DELETE("/:id", controller.DeleteChannel)
 			channelRoute.GET("/:id/test", controller.TestChannelModels)
 			channelRoute.GET("/:id/test/*model", controller.TestChannel)
+			channelRoute.POST(
+				"/test-preview",
+				controller.TestChannelPreview,
+			) // 测试未保存的渠道配置（单个模型）
+			channelRoute.POST(
+				"/test-preview-all",
+				controller.TestChannelPreviewAll,
+			) // 测试未保存的渠道配置（所有模型）
 			channelRoute.GET("/:id/update_balance", controller.UpdateChannelBalance)
 		}
 
@@ -154,6 +171,7 @@ func SetAPIRouter(router *gin.Engine) {
 
 		logsRoute := apiRouter.Group("/logs")
 		{
+			logsRoute.GET("/export", controller.ExportLogs)
 			logsRoute.GET("/", controller.GetLogs)
 			logsRoute.DELETE("/", controller.DeleteHistoryLogs)
 			logsRoute.GET("/search", controller.SearchLogs)
@@ -163,6 +181,7 @@ func SetAPIRouter(router *gin.Engine) {
 
 		logRoute := apiRouter.Group("/log")
 		{
+			logRoute.GET("/:group/export", controller.ExportGroupLogs)
 			logRoute.GET("/:group", controller.GetGroupLogs)
 			logRoute.GET("/:group/search", controller.SearchGroupLogs)
 			logRoute.GET("/:group/detail/:log_id", controller.GetGroupLogDetail)
@@ -188,12 +207,21 @@ func SetAPIRouter(router *gin.Engine) {
 		monitorRoute := apiRouter.Group("/monitor")
 		{
 			monitorRoute.GET("/", controller.GetAllChannelModelErrorRates)
+			monitorRoute.GET("/runtime_metrics", controller.GetRuntimeMetrics)
+			monitorRoute.GET("/group_summary_metrics", controller.GetGroupSummaryMetrics)
+			monitorRoute.GET("/group_token_metrics/:group", controller.GetGroupTokenMetrics)
+			monitorRoute.GET("/group_model_metrics/:group", controller.GetGroupModelMetrics)
+			monitorRoute.GET(
+				"/group_tokenname_model_metrics/:group",
+				controller.GetGroupTokennameModelMetrics,
+			)
+			monitorRoute.POST("/batch_group_token_metrics", controller.BatchGetGroupTokenMetrics)
+			monitorRoute.GET("/models", controller.GetModelsErrorRate)
+			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 			monitorRoute.GET("/:id", controller.GetChannelModelErrorRates)
 			monitorRoute.DELETE("/", controller.ClearAllModelErrors)
 			monitorRoute.DELETE("/:id", controller.ClearChannelAllModelErrors)
 			monitorRoute.DELETE("/:id/*model", controller.ClearChannelModelErrors)
-			monitorRoute.GET("/models", controller.GetModelsErrorRate)
-			monitorRoute.GET("/banned_channels", controller.GetAllBannedModelChannels)
 		}
 
 		publicsMcpRoute := apiRouter.Group("/mcp/publics")

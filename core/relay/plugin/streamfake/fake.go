@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -22,6 +21,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
 	"github.com/labring/aiproxy/core/relay/plugin/patch"
 	"github.com/labring/aiproxy/core/relay/render"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 var _ plugin.Plugin = (*StreamFake)(nil)
@@ -29,6 +29,7 @@ var _ plugin.Plugin = (*StreamFake)(nil)
 // StreamFake implements the stream fake functionality
 type StreamFake struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewStreamFakePlugin creates a new stream fake plugin instance
@@ -43,12 +44,12 @@ const (
 
 // getConfig retrieves the plugin configuration
 func (p *StreamFake) getConfig(meta *meta.Meta) (*Config, error) {
-	pluginConfig := &Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("stream-fake", pluginConfig); err != nil {
+	pluginConfig, err := p.configCache.Load(meta, "stream-fake", Config{})
+	if err != nil {
 		return nil, err
 	}
 
-	return pluginConfig, nil
+	return &pluginConfig, nil
 }
 
 // ConvertRequest modifies the request to enable streaming if it's originally non-streaming
@@ -108,7 +109,7 @@ func (p *StreamFake) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Only process chat completions
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
@@ -135,7 +136,7 @@ func (p *StreamFake) handleFakeStreamResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	log := common.GetLogger(c)
 	// Create a custom response writer to collect streaming data
 	rw := &fakeStreamResponseWriter{
@@ -148,16 +149,16 @@ func (p *StreamFake) handleFakeStreamResponse(
 	}()
 
 	// Process the streaming response
-	usage, relayErr := do.DoResponse(meta, store, c, resp)
+	result, relayErr := do.DoResponse(meta, store, c, resp)
 	if relayErr != nil {
-		return usage, relayErr
+		return result, relayErr
 	}
 
 	// Convert collected streaming chunks to non-streaming response
 	respBody, err := rw.convertToNonStream()
 	if err != nil {
 		log.Errorf("failed to convert to non-streaming response: %v", err)
-		return usage, relayErr
+		return result, relayErr
 	}
 
 	// Set appropriate headers for non-streaming response
@@ -173,7 +174,7 @@ func (p *StreamFake) handleFakeStreamResponse(
 	// Write the non-streaming response
 	_, _ = rw.ResponseWriter.Write(respBody)
 
-	return usage, nil
+	return result, nil
 }
 
 // fakeStreamResponseWriter captures streaming response data
@@ -187,6 +188,13 @@ type fakeStreamResponseWriter struct {
 	finishReason     relaymodel.FinishReason
 	logprobsContent  []ast.Node
 	toolCalls        []*relaymodel.ToolCall
+	contentParts     []relaymodel.MessageContent // for image/multimodal content
+	signature        string                      // for thought signature
+
+	// Azure OpenAI content filtering fields
+	promptFilterResults  *ast.Node // prompt-level filter results (from first chunk)
+	contentFilterResults *ast.Node // choice-level filter results
+	contentFilterResult  *ast.Node // choice-level filter result (alternative field name)
 }
 
 // ignore flush
@@ -209,12 +217,20 @@ func (rw *fakeStreamResponseWriter) WriteString(s string) (int, error) {
 // parseStreamingData extracts individual chunks from streaming response
 func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 	if render.IsValidSSEData(data) {
-		return nil
+		data = render.ExtractSSEData(data)
+		if len(data) == 0 || render.IsSSEDone(data) {
+			return nil
+		}
 	}
 
 	node, err := sonic.Get(data)
-	if err != nil {
-		return err
+	if err != nil || !node.Valid() {
+		return nil
+	}
+
+	choicesNode := node.Get("choices")
+	if err := choicesNode.Check(); err != nil {
+		return nil
 	}
 
 	rw.lastChunk = &node
@@ -228,25 +244,66 @@ func (rw *fakeStreamResponseWriter) parseStreamingData(data []byte) error {
 		rw.usageNode = usageNode
 	}
 
-	choicesNode := node.Get("choices")
-	if err := choicesNode.Check(); err != nil {
-		return err
+	// Extract prompt_filter_results from first chunk (only save once)
+	if rw.promptFilterResults == nil {
+		promptFilterResultsNode := node.Get("prompt_filter_results")
+		if err := promptFilterResultsNode.Check(); err == nil {
+			rw.promptFilterResults = promptFilterResultsNode
+		}
 	}
 
 	return choicesNode.ForEach(func(_ ast.Sequence, choiceNode *ast.Node) bool {
+		// Extract content_filter_results from choice (keep last non-empty value)
+		contentFilterResultsNode := choiceNode.Get("content_filter_results")
+		if err := contentFilterResultsNode.Check(); err == nil {
+			rw.contentFilterResults = contentFilterResultsNode
+		}
+
+		// Extract content_filter_result from choice (alternative field name, keep last non-empty value)
+		contentFilterResultNode := choiceNode.Get("content_filter_result")
+		if err := contentFilterResultNode.Check(); err == nil {
+			rw.contentFilterResult = contentFilterResultNode
+		}
+
 		deltaNode := choiceNode.Get("delta")
 		if err := deltaNode.Check(); err != nil {
 			return true
 		}
 
-		content, err := deltaNode.Get("content").String()
-		if err == nil {
-			rw.contentBuilder.WriteString(content)
+		contentNode := deltaNode.Get("content")
+		if err := contentNode.Check(); err == nil {
+			// Try as string first (common case)
+			if content, err := contentNode.String(); err == nil {
+				rw.contentBuilder.WriteString(content)
+			} else {
+				// Try as array (for image/multimodal content)
+				_ = contentNode.ForEach(func(_ ast.Sequence, partNode *ast.Node) bool {
+					partRaw, err := partNode.Raw()
+					if err != nil {
+						return true
+					}
+
+					var part relaymodel.MessageContent
+					if err := sonic.UnmarshalString(partRaw, &part); err != nil {
+						return true
+					}
+
+					// Keep all parts in contentParts for multimodal content
+					rw.contentParts = append(rw.contentParts, part)
+
+					return true
+				})
+			}
 		}
 
 		reasoningContent, err := deltaNode.Get("reasoning_content").String()
 		if err == nil {
 			rw.reasoningContent.WriteString(reasoningContent)
+		}
+
+		// Handle signature for thought
+		if signature, err := deltaNode.Get("signature").String(); err == nil && signature != "" {
+			rw.signature = signature
 		}
 
 		_ = deltaNode.Get("tool_calls").
@@ -314,13 +371,23 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 	}
 
 	message := map[string]any{
-		"role":    "assistant",
-		"content": rw.contentBuilder.String(),
+		"role": "assistant",
+	}
+
+	// Use contentParts if available (for image/multimodal content), otherwise use string content
+	if len(rw.contentParts) > 0 {
+		message["content"] = rw.contentParts
+	} else {
+		message["content"] = rw.contentBuilder.String()
 	}
 
 	reasoningContent := rw.reasoningContent.String()
 	if reasoningContent != "" {
 		message["reasoning_content"] = reasoningContent
+	}
+
+	if rw.signature != "" {
+		message["signature"] = rw.signature
 	}
 
 	if len(rw.toolCalls) > 0 {
@@ -333,15 +400,40 @@ func (rw *fakeStreamResponseWriter) convertToNonStream() ([]byte, error) {
 		}
 	}
 
-	_, err = lastChunk.SetAny("choices", []any{
-		map[string]any{
-			"index":         0,
-			"message":       message,
-			"finish_reason": rw.finishReason,
-		},
-	})
+	// Build choice with content filter fields
+	choice := map[string]any{
+		"index":         0,
+		"message":       message,
+		"finish_reason": rw.finishReason,
+	}
+
+	// Add content_filter_results to choice if present
+	if rw.contentFilterResults != nil {
+		contentFilterResultsRaw, err := rw.contentFilterResults.Interface()
+		if err == nil {
+			choice["content_filter_results"] = contentFilterResultsRaw
+		}
+	}
+
+	// Add content_filter_result to choice if present (alternative field name)
+	if rw.contentFilterResult != nil {
+		contentFilterResultRaw, err := rw.contentFilterResult.Interface()
+		if err == nil {
+			choice["content_filter_result"] = contentFilterResultRaw
+		}
+	}
+
+	_, err = lastChunk.SetAny("choices", []any{choice})
 	if err != nil {
 		return nil, err
+	}
+
+	// Add prompt_filter_results to response if present
+	if rw.promptFilterResults != nil {
+		_, err = lastChunk.Set("prompt_filter_results", *rw.promptFilterResults)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return lastChunk.MarshalJSON()

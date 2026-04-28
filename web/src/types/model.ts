@@ -5,14 +5,39 @@ export interface ModelConfigDetail {
     max_context_tokens?: number
     vision?: boolean
     tool_choice?: boolean
+    coder?: boolean
+    limited_time_free?: boolean
     support_formats?: string[]
     support_voices?: string[]
+    [key: string]: unknown
+}
+
+export interface PriceCondition {
+    input_token_min?: number
+    input_token_max?: number
+    output_token_min?: number
+    output_token_max?: number
+    start_time?: number
+    end_time?: number
+    service_tier?: '' | 'auto' | 'default' | 'flex' | 'scale' | 'priority'
+}
+
+export interface ConditionalPrice {
+    condition: PriceCondition
+    price: ModelPrice
+}
+
+export interface TimeoutConfig {
+    request_timeout?: number
+    stream_request_timeout?: number
 }
 
 export interface ModelPrice {
-    input_price: number
-    output_price: number
-    per_request_price: number
+    input_price?: number
+    input_price_unit?: number
+    output_price?: number
+    output_price_unit?: number
+    per_request_price?: number
     cache_creation_price?: number
     cache_creation_price_unit?: number
     cached_price?: number
@@ -21,31 +46,50 @@ export interface ModelPrice {
     image_input_price_unit?: number
     image_output_price?: number
     image_output_price_unit?: number
+    audio_input_price?: number
+    audio_input_price_unit?: number
+    thinking_mode_output_price?: number
+    thinking_mode_output_price_unit?: number
     web_search_price?: number
     web_search_price_unit?: number
+    conditional_prices?: ConditionalPrice[]
 }
 
 export interface ModelConfig {
     config?: ModelConfigDetail
-    created_at: number
-    updated_at: number
-    image_prices: number[] | null
+    created_at?: number
+    updated_at?: number
     model: string
-    owner: string
+    owner?: string
     image_batch_size?: number
     type: number
-    price: ModelPrice
-    rpm: number
+    exclude_from_tests?: boolean
+    image_quality_prices?: Record<string, Record<string, number>> | null
+    image_prices?: Record<string, number> | null
+    price?: ModelPrice
+    rpm?: number
     tpm?: number
     retry_times?: number
-    timeout?: number
-    max_error_rate?: number
+    timeout_config?: TimeoutConfig
     force_save_detail?: boolean
-    plugin: Plugin
+    request_body_storage_max_size?: number
+    response_body_storage_max_size?: number
+    summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
+    plugin?: Plugin
 }
+
+export type ModelSaveRequest = Omit<ModelConfig, 'created_at' | 'updated_at'>
+
+export const MODEL_TYPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 21] as const
+
+export const STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES = [1, 2, 12, 16, 21] as const
+
+export type ModelTypeOption = (typeof MODEL_TYPE_OPTIONS)[number]
 
 type Plugin = {
     cache: CachePlugin // 缓存插件
+    cachefollow: CacheFollowPlugin // 缓存跟随插件
     "web-search": WebSearchPlugin // 网络搜索插件
     "think-split": ThinkSplitPlugin // 思考拆分插件
     "stream-fake": StreamFakePlugin // 流式伪装插件
@@ -57,6 +101,13 @@ type CachePlugin = {
     item_max_size?: number
     add_cache_hit_header?: boolean
     cache_hit_header?: string
+}
+
+type CacheFollowPlugin = {
+    enable: boolean
+    enable_generic_follow?: boolean
+    followed_channel_ttl_seconds?: number
+    recent_channel_update_debounce_seconds?: number
 }
 
 type WebSearchPlugin = {
@@ -110,7 +161,22 @@ type SearchXNGSpec = {
 
 export interface ModelCreateRequest {
     model: string
+    config?: ModelConfigDetail
+    owner?: string
     type: number
+    exclude_from_tests?: boolean
+    rpm?: number
+    tpm?: number
+    image_quality_prices?: Record<string, Record<string, number>> | null
+    image_prices?: Record<string, number> | null
+    retry_times?: number
+    timeout_config?: TimeoutConfig
+    force_save_detail?: boolean
+    request_body_storage_max_size?: number
+    response_body_storage_max_size?: number
+    summary_service_tier?: boolean
+    summary_claude_long_context?: boolean
+    price?: ModelPrice | Record<string, unknown>
     plugin?: Plugin
 }
 
@@ -118,6 +184,7 @@ export interface ModelCreateRequest {
 export type {
     Plugin,
     CachePlugin,
+    CacheFollowPlugin,
     WebSearchPlugin,
     ThinkSplitPlugin,
     StreamFakePlugin,

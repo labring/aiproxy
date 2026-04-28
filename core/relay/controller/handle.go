@@ -11,9 +11,11 @@ import (
 
 // HandleResult contains all the information needed for consumption recording
 type HandleResult struct {
-	Error  adaptor.Error
-	Usage  model.Usage
-	Detail *RequestDetail
+	Error      adaptor.Error
+	Usage      model.Usage
+	UpstreamID string
+	AsyncUsage bool
+	BodyDetail *BodyDetail
 }
 
 func Handle(
@@ -21,33 +23,37 @@ func Handle(
 	c *gin.Context,
 	meta *meta.Meta,
 	store adaptor.Store,
+	opts ...BodyDetailOption,
 ) *HandleResult {
 	log := common.GetLogger(c)
 
-	usage, detail, respErr := DoHelper(adaptor, c, meta, store)
+	result, detail, respErr := DoHelper(adaptor, c, meta, store, opts...)
 	if respErr != nil {
-		var logDetail *RequestDetail
-		if detail != nil && config.DebugEnabled {
-			logDetail = detail
+		if detail != nil && config.DebugEnabled &&
+			(detail.RequestBody != "" || detail.ResponseBody != "") {
 			log.Errorf(
 				"handle failed: %+v\nrequest detail:\n%s\nresponse detail:\n%s",
 				respErr,
-				logDetail.RequestBody,
-				logDetail.ResponseBody,
+				detail.RequestBody,
+				detail.ResponseBody,
 			)
 		} else {
 			log.Errorf("handle failed: %+v", respErr)
 		}
 
 		return &HandleResult{
-			Error:  respErr,
-			Usage:  usage,
-			Detail: detail,
+			Error:      respErr,
+			Usage:      result.Usage,
+			UpstreamID: result.UpstreamID,
+			AsyncUsage: result.AsyncUsage,
+			BodyDetail: detail,
 		}
 	}
 
 	return &HandleResult{
-		Usage:  usage,
-		Detail: detail,
+		Usage:      result.Usage,
+		UpstreamID: result.UpstreamID,
+		AsyncUsage: result.AsyncUsage,
+		BodyDetail: detail,
 	}
 }

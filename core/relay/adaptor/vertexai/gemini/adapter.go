@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/gemini"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -22,9 +21,20 @@ func (a *Adaptor) ConvertRequest(
 	switch meta.Mode {
 	case mode.Anthropic:
 		return gemini.ConvertClaudeRequest(meta, request)
+	case mode.Gemini:
+		return gemini.NativeConvertRequest(meta, request, gemini.CleanFunctionResponseID)
 	default:
 		return gemini.ConvertRequest(meta, request)
 	}
+}
+
+func (a *Adaptor) SetupRequestHeader(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+	_ *http.Request,
+) error {
+	return nil
 }
 
 func (a *Adaptor) DoResponse(
@@ -32,21 +42,23 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
-			usage, err = gemini.ClaudeStreamHandler(meta, c, resp)
-		} else {
-			usage, err = gemini.ClaudeHandler(meta, c, resp)
+			return gemini.ClaudeStreamHandler(meta, c, resp)
 		}
+		return gemini.ClaudeHandler(meta, c, resp)
+	case mode.Gemini:
+		// For Gemini mode (native format), pass through the response as-is
+		if utils.IsStreamResponse(resp) {
+			return gemini.NativeStreamHandler(meta, c, resp)
+		}
+		return gemini.NativeHandler(meta, c, resp)
 	default:
 		if utils.IsStreamResponse(resp) {
-			usage, err = gemini.StreamHandler(meta, c, resp)
-		} else {
-			usage, err = gemini.Handler(meta, c, resp)
+			return gemini.StreamHandler(meta, c, resp)
 		}
+		return gemini.Handler(meta, c, resp)
 	}
-
-	return usage, err
 }

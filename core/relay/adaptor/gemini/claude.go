@@ -1,11 +1,9 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
@@ -20,13 +18,31 @@ import (
 )
 
 func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	adaptorConfig := Config{}
-
-	err := meta.ChannelConfig.SpecConfig(&adaptorConfig)
+	cfg, err := loadConfig(meta)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
 
+	return convertClaudeRequest(meta, req, cfg)
+}
+
+func (a *Adaptor) convertClaudeRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	cfg, err := a.loadConfig(meta)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return convertClaudeRequest(meta, req, cfg)
+}
+
+func convertClaudeRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	adaptorConfig Config,
+) (adaptor.ConvertResult, error) {
 	textRequest, err := openai.ConvertClaudeRequestModel(meta, req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
@@ -35,19 +51,27 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	textRequest.Model = meta.ActualModel
 	meta.Set("stream", textRequest.Stream)
 
-	systemContent, contents, imageTasks := buildContents(textRequest)
+	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+
+	systemContent, contents, imageTasks := buildContents(
+		textRequest,
+		!disableAutoImageURLToBase64,
+	)
 
 	// Process image tasks concurrently
 	if len(imageTasks) > 0 {
-		if err := processImageTasks(req.Context(), imageTasks); err != nil {
-			return adaptor.ConvertResult{}, err
+		if err := processImageTasks(
+			req.Context(),
+			imageTasks,
+		); err != nil {
+			common.GetLoggerFromReq(req).Warnf("process gemini image tasks failed: %v", err)
 		}
 	}
 
-	config := buildGenerationConfig(meta, textRequest, textRequest)
+	config := buildGenerationConfig(meta, req, textRequest, textRequest)
 
 	// Build actual request
-	geminiRequest := ChatRequest{
+	geminiRequest := relaymodel.GeminiChatRequest{
 		Contents:          contents,
 		SystemInstruction: systemContent,
 		SafetySettings:    buildSafetySettings(adaptorConfig.Safety),
@@ -60,8 +84,6 @@ func ConvertClaudeRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertRe
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
-
-	// fmt.Println(string(data))
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
@@ -77,18 +99,18 @@ func ClaudeHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
-	var geminiResponse ChatResponse
+	var geminiResponse relaymodel.GeminiChatResponse
 
 	err := sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&geminiResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -100,8 +122,8 @@ func ClaudeHandler(
 
 	jsonResponse, err := sonic.Marshal(claudeResponse)
 	if err != nil {
-		return claudeResponse.Usage.ToOpenAIUsage().
-				ToModelUsage(),
+		return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().
+				ToModelUsage()},
 			relaymodel.WrapperAnthropicError(
 				err,
 				"marshal_response_body_failed",
@@ -113,7 +135,10 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	return claudeResponse.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	modelUsage := claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()
+	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
+
+	return adaptor.DoResponseResult{Usage: modelUsage}, nil
 }
 
 // ClaudeStreamHandler handles streaming Gemini responses and converts them to Claude format
@@ -121,33 +146,22 @@ func ClaudeStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, openai.ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-	if strings.Contains(meta.ActualModel, "image") {
-		buf := GetImageScannerBuffer()
-		defer PutImageScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	} else {
-		buf := utils.GetScannerBuffer()
-		defer utils.PutScannerBuffer(buf)
-
-		scanner.Buffer(*buf, cap(*buf))
-	}
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var (
 		messageID           = "msg_" + common.ShortUUID()
-		contentText         strings.Builder
-		thinkingText        strings.Builder
-		usage               relaymodel.ChatUsage
+		usage               model.Usage
+		webSearchCount      int64
 		stopReason          string
 		currentContentIndex = -1
 		currentContentType  = ""
@@ -159,7 +173,7 @@ func ClaudeStreamHandler(
 	closeCurrentBlock := func() {
 		if currentContentIndex >= 0 {
 			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-				Type:  "content_block_stop",
+				Type:  relaymodel.ClaudeStreamTypeContentBlockStop,
 				Index: currentContentIndex,
 			})
 		}
@@ -176,7 +190,7 @@ func ClaudeStreamHandler(
 			break
 		}
 
-		var geminiResponse ChatResponse
+		var geminiResponse relaymodel.GeminiChatResponse
 
 		err := sonic.Unmarshal(data, &geminiResponse)
 		if err != nil {
@@ -189,11 +203,11 @@ func ClaudeStreamHandler(
 			sentMessageStart = true
 
 			messageStartResp := relaymodel.ClaudeStreamResponse{
-				Type: "message_start",
+				Type: relaymodel.ClaudeStreamTypeMessageStart,
 				Message: &relaymodel.ClaudeResponse{
 					ID:      messageID,
 					Type:    "message",
-					Role:    "assistant",
+					Role:    relaymodel.RoleAssistant,
 					Model:   meta.ActualModel,
 					Content: []relaymodel.ClaudeContent{},
 				},
@@ -213,7 +227,11 @@ func ClaudeStreamHandler(
 
 		// Update usage if available
 		if geminiResponse.UsageMetadata != nil {
-			usage = geminiResponse.UsageMetadata.ToUsage()
+			usage = geminiResponse.UsageMetadata.ToModelUsage()
+		}
+		// Track web search count from grounding metadata
+		if count := geminiResponse.GetWebSearchCount(); count > 0 {
+			webSearchCount += count
 		}
 
 		// Process each candidate
@@ -228,26 +246,35 @@ func ClaudeStreamHandler(
 				switch {
 				case part.Thought:
 					// Handle thinking content
-					if currentContentType != "thinking" {
+					if currentContentType != relaymodel.ClaudeContentTypeThinking {
 						closeCurrentBlock()
 
 						currentContentIndex++
-						currentContentType = "thinking"
+						currentContentType = relaymodel.ClaudeContentTypeThinking
 
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:  "content_block_start",
+							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
 							ContentBlock: &relaymodel.ClaudeContent{
-								Type:     "thinking",
+								Type:     relaymodel.ClaudeContentTypeThinking,
 								Thinking: "",
 							},
 						})
+
+						if part.ThoughtSignature != "" {
+							_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
+								Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
+								Index: currentContentIndex,
+								ContentBlock: &relaymodel.ClaudeContent{
+									Type:      "signature_delta",
+									Signature: part.ThoughtSignature,
+								},
+							})
+						}
 					}
 
-					thinkingText.WriteString(part.Text)
-
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type:     "thinking_delta",
@@ -256,26 +283,24 @@ func ClaudeStreamHandler(
 					})
 				case part.Text != "":
 					// Handle text content
-					if currentContentType != "text" {
+					if currentContentType != relaymodel.ClaudeContentTypeText {
 						closeCurrentBlock()
 
 						currentContentIndex++
-						currentContentType = "text"
+						currentContentType = relaymodel.ClaudeContentTypeText
 
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:  "content_block_start",
+							Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index: currentContentIndex,
 							ContentBlock: &relaymodel.ClaudeContent{
-								Type: "text",
+								Type: relaymodel.ClaudeContentTypeText,
 								Text: "",
 							},
 						})
 					}
 
-					contentText.WriteString(part.Text)
-
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type: "text_delta",
@@ -287,19 +312,20 @@ func ClaudeStreamHandler(
 					closeCurrentBlock()
 
 					currentContentIndex++
-					currentContentType = "tool_use"
+					currentContentType = relaymodel.ClaudeContentTypeToolUse
 
 					toolContent := &relaymodel.ClaudeContent{
-						Type:  "tool_use",
-						ID:    openai.CallID(),
-						Name:  part.FunctionCall.Name,
-						Input: part.FunctionCall.Args,
+						Type:      relaymodel.ClaudeContentTypeToolUse,
+						ID:        openai.CallID(),
+						Name:      part.FunctionCall.Name,
+						Input:     part.FunctionCall.Args,
+						Signature: part.ThoughtSignature,
 					}
 					toolCallsBuffer[currentContentIndex] = toolContent
 
 					// Send content_block_start for tool use
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:         "content_block_start",
+						Type:         relaymodel.ClaudeStreamTypeContentBlockStart,
 						Index:        currentContentIndex,
 						ContentBlock: toolContent,
 					})
@@ -307,7 +333,7 @@ func ClaudeStreamHandler(
 					// Send tool arguments as delta
 					args, _ := sonic.MarshalString(part.FunctionCall.Args)
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_delta",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 						Index: currentContentIndex,
 						Delta: &relaymodel.ClaudeDelta{
 							Type:        "input_json_delta",
@@ -326,29 +352,17 @@ func ClaudeStreamHandler(
 	// Close the last open content block
 	closeCurrentBlock()
 
-	// Calculate final usage if not provided
-	if usage.TotalTokens == 0 && (contentText.Len() > 0 || thinkingText.Len() > 0) {
-		totalText := contentText.String()
-		if thinkingText.Len() > 0 {
-			totalText = thinkingText.String() + "\n" + totalText
-		}
+	usage.WebSearchCount = model.ZeroNullInt64(webSearchCount)
 
-		usage = openai.ResponseText2Usage(
-			totalText,
-			meta.ActualModel,
-			int64(meta.RequestUsage.InputTokens),
-		)
-	}
-
-	claudeUsage := usage.ToClaudeUsage()
+	claudeUsage := relaymodel.ClaudeFromModelUsage(usage)
 
 	if stopReason == "" {
-		stopReason = "end_turn"
+		stopReason = relaymodel.ClaudeStopReasonEndTurn
 	}
 
 	// Send message_delta with final usage
 	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-		Type: "message_delta",
+		Type: relaymodel.ClaudeStreamTypeMessageDelta,
 		Delta: &relaymodel.ClaudeDelta{
 			StopReason: &stopReason,
 		},
@@ -360,15 +374,18 @@ func ClaudeStreamHandler(
 		Type: "message_stop",
 	})
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 // geminiResponse2Claude converts a Gemini response to Claude format
-func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.ClaudeResponse {
+func geminiResponse2Claude(
+	meta *meta.Meta,
+	response *relaymodel.GeminiChatResponse,
+) *relaymodel.ClaudeResponse {
 	claudeResponse := relaymodel.ClaudeResponse{
 		ID:           "msg_" + common.ShortUUID(),
 		Type:         "message",
-		Role:         "assistant",
+		Role:         relaymodel.RoleAssistant,
 		Model:        meta.OriginModel,
 		Content:      []relaymodel.ClaudeContent{},
 		StopReason:   "",
@@ -391,33 +408,43 @@ func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.
 			if part.FunctionCall != nil {
 				// Convert function call to tool use
 				claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-					Type:  "tool_use",
-					ID:    openai.CallID(),
-					Name:  part.FunctionCall.Name,
-					Input: part.FunctionCall.Args,
+					Type:      relaymodel.ClaudeContentTypeToolUse,
+					ID:        openai.CallID(),
+					Name:      part.FunctionCall.Name,
+					Input:     part.FunctionCall.Args,
+					Signature: part.ThoughtSignature,
 				})
 			} else if part.Text != "" {
 				if part.Thought {
 					// Add thinking content
-					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type:     "thinking",
-						Thinking: part.Text,
-					})
+					claudeResponse.Content = append(
+						claudeResponse.Content,
+						relaymodel.ClaudeContent{
+							Type:      relaymodel.ClaudeContentTypeThinking,
+							Thinking:  part.Text,
+							Signature: part.ThoughtSignature,
+						},
+					)
 				} else {
 					// Add text content
-					claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-						Type: "text",
-						Text: part.Text,
-					})
+					claudeResponse.Content = append(
+						claudeResponse.Content,
+						relaymodel.ClaudeContent{
+							Type: relaymodel.ClaudeContentTypeText,
+							Text: part.Text,
+						},
+					)
 				}
 			}
 		}
 	}
 
 	// If no content was added, ensure at least an empty text block
+	// This can happen when Gemini returns empty content after receiving a tool result,
+	// indicating it has nothing more to add beyond the tool's response
 	if len(claudeResponse.Content) == 0 {
 		claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-			Type: "text",
+			Type: relaymodel.ClaudeContentTypeText,
 			Text: "",
 		})
 	}
@@ -428,15 +455,15 @@ func geminiResponse2Claude(meta *meta.Meta, response *ChatResponse) *relaymodel.
 // geminiFinishReason2Claude converts Gemini finish reason to Claude stop reason
 func geminiFinishReason2Claude(reason string) string {
 	switch reason {
-	case "STOP":
-		return "end_turn"
-	case "MAX_TOKENS":
-		return "max_tokens"
-	case "TOOL_CALLS", "FUNCTION_CALL":
-		return "tool_use"
-	case "CONTENT_FILTER":
-		return "stop_sequence"
+	case relaymodel.GeminiFinishReasonStop:
+		return relaymodel.ClaudeStopReasonEndTurn
+	case relaymodel.GeminiFinishReasonMaxTokens:
+		return relaymodel.ClaudeStopReasonMaxTokens
+	case relaymodel.GeminiFinishReasonToolCalls, relaymodel.GeminiFinishReasonFunctionCall:
+		return relaymodel.ClaudeStopReasonToolUse
+	case relaymodel.GeminiFinishReasonSafety:
+		return relaymodel.ClaudeStopReasonStopSequence
 	default:
-		return "end_turn"
+		return relaymodel.ClaudeStopReasonEndTurn
 	}
 }

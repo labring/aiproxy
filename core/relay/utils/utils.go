@@ -1,10 +1,10 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,12 +12,12 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/labring/aiproxy/core/common"
-	model "github.com/labring/aiproxy/core/relay/model"
-	"github.com/patrickmn/go-cache"
+	"github.com/labring/aiproxy/core/relay/meta"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-func UnmarshalGeneralThinking(req *http.Request) (model.GeneralOpenAIThinkingRequest, error) {
-	var request model.GeneralOpenAIThinkingRequest
+func UnmarshalGeneralThinking(req *http.Request) (relaymodel.GeneralOpenAIThinkingRequest, error) {
+	var request relaymodel.GeneralOpenAIThinkingRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -27,8 +27,10 @@ func UnmarshalGeneralThinking(req *http.Request) (model.GeneralOpenAIThinkingReq
 	return request, nil
 }
 
-func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinkingRequest, error) {
-	var request model.GeneralOpenAIThinkingRequest
+func UnmarshalGeneralThinkingFromNode(
+	node *ast.Node,
+) (relaymodel.GeneralOpenAIThinkingRequest, error) {
+	var request relaymodel.GeneralOpenAIThinkingRequest
 
 	thinkingNode := node.Get("thinking")
 	if thinkingNode == nil || !thinkingNode.Exists() || thinkingNode.TypeSafe() == ast.V_NULL {
@@ -40,7 +42,7 @@ func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinki
 		return request, err
 	}
 
-	request.Thinking = &model.ClaudeThinking{}
+	request.Thinking = &relaymodel.ClaudeThinking{}
 
 	err = sonic.UnmarshalString(raw, request.Thinking)
 	if err != nil {
@@ -50,8 +52,10 @@ func UnmarshalGeneralThinkingFromNode(node *ast.Node) (model.GeneralOpenAIThinki
 	return request, nil
 }
 
-func UnmarshalAnthropicMessageRequest(req *http.Request) (*model.AnthropicMessageRequest, error) {
-	var request model.AnthropicMessageRequest
+func UnmarshalAnthropicMessageRequest(
+	req *http.Request,
+) (*relaymodel.AnthropicMessageRequest, error) {
+	var request relaymodel.AnthropicMessageRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -61,8 +65,8 @@ func UnmarshalAnthropicMessageRequest(req *http.Request) (*model.AnthropicMessag
 	return &request, nil
 }
 
-func UnmarshalGeneralOpenAIRequest(req *http.Request) (*model.GeneralOpenAIRequest, error) {
-	var request model.GeneralOpenAIRequest
+func UnmarshalGeneralOpenAIRequest(req *http.Request) (*relaymodel.GeneralOpenAIRequest, error) {
+	var request relaymodel.GeneralOpenAIRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -74,8 +78,8 @@ func UnmarshalGeneralOpenAIRequest(req *http.Request) (*model.GeneralOpenAIReque
 
 func UnmarshalVideoGenerationJobRequest(
 	req *http.Request,
-) (*model.VideoGenerationJobRequest, error) {
-	var request model.VideoGenerationJobRequest
+) (*relaymodel.VideoGenerationJobRequest, error) {
+	var request relaymodel.VideoGenerationJobRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -85,8 +89,8 @@ func UnmarshalVideoGenerationJobRequest(
 	return &request, nil
 }
 
-func UnmarshalImageRequest(req *http.Request) (*model.ImageRequest, error) {
-	var request model.ImageRequest
+func UnmarshalImageRequest(req *http.Request) (*relaymodel.ImageRequest, error) {
+	var request relaymodel.ImageRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -96,8 +100,8 @@ func UnmarshalImageRequest(req *http.Request) (*model.ImageRequest, error) {
 	return &request, nil
 }
 
-func UnmarshalRerankRequest(req *http.Request) (*model.RerankRequest, error) {
-	var request model.RerankRequest
+func UnmarshalRerankRequest(req *http.Request) (*relaymodel.RerankRequest, error) {
+	var request relaymodel.RerankRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -107,8 +111,19 @@ func UnmarshalRerankRequest(req *http.Request) (*model.RerankRequest, error) {
 	return &request, nil
 }
 
-func UnmarshalTTSRequest(req *http.Request) (*model.TextToSpeechRequest, error) {
-	var request model.TextToSpeechRequest
+func UnmarshalTTSRequest(req *http.Request) (*relaymodel.TextToSpeechRequest, error) {
+	var request relaymodel.TextToSpeechRequest
+
+	err := common.UnmarshalRequestReusable(req, &request)
+	if err != nil {
+		return nil, err
+	}
+
+	return &request, nil
+}
+
+func UnmarshalGeminiChatRequest(req *http.Request) (*relaymodel.GeminiChatRequest, error) {
+	var request relaymodel.GeminiChatRequest
 
 	err := common.UnmarshalRequestReusable(req, &request)
 	if err != nil {
@@ -129,67 +144,35 @@ func UnmarshalMap(req *http.Request) (map[string]any, error) {
 	return request, nil
 }
 
-const (
-	defaultHeaderTimeout = time.Minute * 15
-	tlsHandshakeTimeout  = time.Second * 5
-)
-
-var (
-	defaultTransport *http.Transport
-	defaultClient    *http.Client
-	defaultDialer    = &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	clientCache = cache.New(time.Minute, time.Minute)
-)
-
-func init() {
-	defaultTransport, _ = http.DefaultTransport.(*http.Transport)
-	if defaultTransport == nil {
-		panic("http default transport is not http.Transport type")
-	}
-
-	defaultTransport = defaultTransport.Clone()
-	defaultTransport.DialContext = defaultDialer.DialContext
-	defaultTransport.ResponseHeaderTimeout = defaultHeaderTimeout
-	defaultTransport.TLSHandshakeTimeout = tlsHandshakeTimeout
-
-	defaultClient = &http.Client{
-		Transport: defaultTransport,
-	}
-}
-
-func loadHTTPClient(timeout time.Duration) *http.Client {
-	if timeout == 0 || timeout == defaultHeaderTimeout {
-		return defaultClient
-	}
-
-	key := strconv.Itoa(int(timeout))
-
-	clientI, ok := clientCache.Get(key)
-	if ok {
-		client, ok := clientI.(*http.Client)
-		if !ok {
-			panic("unknow http client type")
-		}
-
-		return client
-	}
-
-	transport := defaultTransport.Clone()
-	transport.ResponseHeaderTimeout = timeout
-
-	client := &http.Client{
-		Transport: transport,
-	}
-	clientCache.SetDefault(key, client)
-
-	return client
-}
-
 func DoRequest(req *http.Request, timeout time.Duration) (*http.Response, error) {
-	resp, err := loadHTTPClient(timeout).Do(req)
+	client, err := LoadHTTPClientE(timeout, "")
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // request URL is from caller
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func DoRequestWithMeta(req *http.Request, m *meta.Meta) (*http.Response, error) {
+	if m == nil {
+		return DoRequest(req, 0)
+	}
+
+	client, err := LoadHTTPClientWithTLSConfigE(
+		m.RequestTimeout,
+		m.Channel.ProxyURL,
+		m.Channel.SkipTLSVerify,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // request URL is from caller
 	if err != nil {
 		return nil, err
 	}
@@ -236,4 +219,75 @@ func PutScannerBuffer(buf *[]byte) {
 	}
 
 	scannerBufferPool.Put(buf)
+}
+
+const ImageScannerBufferSize = 50 * 1024 * 1024
+
+var imageScannerBufferPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, ImageScannerBufferSize)
+		return &buf
+	},
+}
+
+//nolint:forcetypeassert
+func GetImageScannerBuffer() *[]byte {
+	v, ok := imageScannerBufferPool.Get().(*[]byte)
+	if !ok {
+		panic(fmt.Sprintf("image scanner buffer type error: %T, %v", v, v))
+	}
+
+	return v
+}
+
+func PutImageScannerBuffer(buf *[]byte) {
+	if cap(*buf) != ImageScannerBufferSize {
+		return
+	}
+
+	imageScannerBufferPool.Put(buf)
+}
+
+// IsImageModel checks if the model name indicates an image generation model
+func IsImageModel(modelName string) bool {
+	return strings.Contains(modelName, "image")
+}
+
+// NewStreamScanner creates a bufio.Scanner with appropriate buffer size based on model type.
+// Returns the scanner and a cleanup function that must be called when done.
+func NewStreamScanner(r io.Reader, modelName string) (*bufio.Scanner, func()) {
+	scanner := bufio.NewScanner(r)
+
+	if IsImageModel(modelName) {
+		buf := GetImageScannerBuffer()
+		scanner.Buffer(*buf, cap(*buf))
+
+		return scanner, func() {
+			PutImageScannerBuffer(buf)
+		}
+	}
+
+	buf := GetScannerBuffer()
+	scanner.Buffer(*buf, cap(*buf))
+
+	return scanner, func() {
+		PutScannerBuffer(buf)
+	}
+}
+
+// NewScanner creates a bufio.Scanner with standard buffer size.
+// Returns the scanner and a cleanup function that must be called when done.
+func NewScanner(r io.Reader) (*bufio.Scanner, func()) {
+	scanner := bufio.NewScanner(r)
+	buf := GetScannerBuffer()
+	scanner.Buffer(*buf, cap(*buf))
+
+	return scanner, func() {
+		PutScannerBuffer(buf)
+	}
+}
+
+// IsGeminiStreamRequest checks if the request path ends with :streamGenerateContent
+func IsGeminiStreamRequest(path string) bool {
+	return strings.HasSuffix(path, ":streamGenerateContent")
 }

@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
@@ -19,31 +21,33 @@ const (
 )
 
 type TimeoutConfig struct {
-	RequestTimeout       int64 `json:"request_timeout,omitempty"`
-	StreamRequestTimeout int64 `json:"stream_request_timeout,omitempty"`
+	RequestTimeout       int64 `json:"request_timeout,omitempty"        yaml:"request_timeout,omitempty"`
+	StreamRequestTimeout int64 `json:"stream_request_timeout,omitempty" yaml:"stream_request_timeout,omitempty"`
 }
 
 type ModelConfig struct {
-	CreatedAt        time.Time                  `gorm:"index;autoCreateTime"          json:"created_at"`
-	UpdatedAt        time.Time                  `gorm:"index;autoUpdateTime"          json:"updated_at"`
-	Config           map[ModelConfigKey]any     `gorm:"serializer:fastjson;type:text" json:"config,omitempty"`
-	Plugin           map[string]json.RawMessage `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"`
-	Model            string                     `gorm:"size:64;primaryKey"            json:"model"`
-	Owner            ModelOwner                 `gorm:"type:varchar(32);index"        json:"owner"`
-	Type             mode.Mode                  `                                     json:"type"`
-	ExcludeFromTests bool                       `                                     json:"exclude_from_tests,omitempty"`
-	RPM              int64                      `                                     json:"rpm,omitempty"`
-	TPM              int64                      `                                     json:"tpm,omitempty"`
+	CreatedAt        time.Time                 `gorm:"index;autoCreateTime"          json:"created_at"                   yaml:"-"`
+	UpdatedAt        time.Time                 `gorm:"index;autoUpdateTime"          json:"updated_at"                   yaml:"-"`
+	Config           map[ModelConfigKey]any    `gorm:"serializer:fastjson;type:text" json:"config,omitempty"             yaml:"config,omitempty"`
+	Plugin           map[string]map[string]any `gorm:"serializer:fastjson;type:text" json:"plugin,omitempty"             yaml:"plugin,omitempty"`
+	Model            string                    `gorm:"size:128;primaryKey"           json:"model"                        yaml:"model,omitempty"`
+	Owner            ModelOwner                `gorm:"type:varchar(32);index"        json:"owner"                        yaml:"owner,omitempty"`
+	Type             mode.Mode                 `                                     json:"type"                         yaml:"type,omitempty"`
+	ExcludeFromTests bool                      `                                     json:"exclude_from_tests,omitempty" yaml:"exclude_from_tests,omitempty"`
+	RPM              int64                     `                                     json:"rpm,omitempty"                yaml:"rpm,omitempty"`
+	TPM              int64                     `                                     json:"tpm,omitempty"                yaml:"tpm,omitempty"`
 	// map[size]map[quality]price_per_image
-	ImageQualityPrices map[string]map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_quality_prices,omitempty"`
+	ImageQualityPrices map[string]map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_quality_prices,omitempty" yaml:"image_quality_prices,omitempty"`
 	// map[size]price_per_image
-	ImagePrices     map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"`
-	Price           Price              `gorm:"embedded"                      json:"price,omitempty"`
-	RetryTimes      int64              `                                     json:"retry_times,omitempty"`
-	TimeoutConfig   TimeoutConfig      `gorm:"embedded"                      json:"timeout_config,omitempty"`
-	WarnErrorRate   float64            `                                     json:"warn_error_rate,omitempty"`
-	MaxErrorRate    float64            `                                     json:"max_error_rate,omitempty"`
-	ForceSaveDetail bool               `                                     json:"force_save_detail,omitempty"`
+	ImagePrices                map[string]float64 `gorm:"serializer:fastjson;type:text" json:"image_prices,omitempty"                   yaml:"image_prices,omitempty"`
+	Price                      Price              `gorm:"embedded"                      json:"price,omitempty"                          yaml:"price,omitempty"`
+	RetryTimes                 int64              `                                     json:"retry_times,omitempty"                    yaml:"retry_times,omitempty"`
+	TimeoutConfig              TimeoutConfig      `gorm:"embedded"                      json:"timeout_config,omitempty"                 yaml:"timeout_config,omitempty"`
+	ForceSaveDetail            bool               `                                     json:"force_save_detail,omitempty"              yaml:"force_save_detail,omitempty"`
+	RequestBodyStorageMaxSize  int64              `                                     json:"request_body_storage_max_size,omitempty"  yaml:"request_body_storage_max_size,omitempty"`
+	ResponseBodyStorageMaxSize int64              `                                     json:"response_body_storage_max_size,omitempty" yaml:"response_body_storage_max_size,omitempty"`
+	SummaryServiceTier         bool               `                                     json:"summary_service_tier,omitempty"           yaml:"summary_service_tier,omitempty"`
+	SummaryClaudeLongContext   bool               `                                     json:"summary_claude_long_context,omitempty"    yaml:"summary_claude_long_context,omitempty"`
 }
 
 func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
@@ -53,6 +57,10 @@ func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
 
 	if err := c.Price.ValidateConditionalPrices(); err != nil {
 		return err
+	}
+
+	if !c.SupportStreamTimeout() {
+		c.TimeoutConfig.StreamRequestTimeout = 0
 	}
 
 	return nil
@@ -72,11 +80,30 @@ func (c *ModelConfig) StreamRequestTimeout() time.Duration {
 	return timeoutSecond(c.TimeoutConfig.StreamRequestTimeout)
 }
 
+func (c *ModelConfig) SupportStreamTimeout() bool {
+	switch c.Type {
+	case mode.ChatCompletions, mode.Completions, mode.Anthropic, mode.Responses, mode.Gemini:
+		return true
+	default:
+		return false
+	}
+}
+
 func timeoutSecond(second int64) time.Duration {
 	if second == 0 {
 		return 0
 	}
 	return time.Duration(second) * time.Second
+}
+
+// jsonRawMessageDecodeHook handles decoding map or slice to json.RawMessage
+func jsonRawMessageDecodeHook(from, to reflect.Type, data any) (any, error) {
+	if to != reflect.TypeFor[json.RawMessage]() {
+		return data, nil
+	}
+
+	// Marshal the data to JSON bytes for json.RawMessage fields
+	return sonic.Marshal(data)
 }
 
 func (c *ModelConfig) LoadPluginConfig(pluginName string, config any) error {
@@ -89,7 +116,17 @@ func (c *ModelConfig) LoadPluginConfig(pluginName string, config any) error {
 		return nil
 	}
 
-	return sonic.Unmarshal(pluginConfig, config)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName:          "json",
+		Result:           config,
+		DecodeHook:       jsonRawMessageDecodeHook,
+		WeaklyTypedInput: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	return decoder.Decode(pluginConfig)
 }
 
 func (c *ModelConfig) LoadFromGroupModelConfig(groupModelConfig GroupModelConfig) ModelConfig {
@@ -108,11 +145,48 @@ func (c *ModelConfig) LoadFromGroupModelConfig(groupModelConfig GroupModelConfig
 		newC.RetryTimes = groupModelConfig.RetryTimes
 	}
 
+	if groupModelConfig.OverrideTimeoutConfig {
+		newC.TimeoutConfig = groupModelConfig.TimeoutConfig
+		if !newC.SupportStreamTimeout() {
+			newC.TimeoutConfig.StreamRequestTimeout = 0
+		}
+	}
+
 	if groupModelConfig.OverrideForceSaveDetail {
 		newC.ForceSaveDetail = groupModelConfig.ForceSaveDetail
 	}
 
+	if groupModelConfig.OverrideRequestBodyStorageMaxSize {
+		newC.RequestBodyStorageMaxSize = groupModelConfig.RequestBodyStorageMaxSize
+	}
+
+	if groupModelConfig.OverrideResponseBodyStorageMaxSize {
+		newC.ResponseBodyStorageMaxSize = groupModelConfig.ResponseBodyStorageMaxSize
+	}
+
+	if groupModelConfig.OverrideSummaryServiceTier {
+		newC.SummaryServiceTier = groupModelConfig.SummaryServiceTier
+	}
+
+	if groupModelConfig.OverrideSummaryClaudeLongContext {
+		newC.SummaryClaudeLongContext = groupModelConfig.SummaryClaudeLongContext
+	}
+
 	return newC
+}
+
+func (c *ModelConfig) ShouldSummaryServiceTier() bool {
+	if c == nil {
+		return false
+	}
+	return c.SummaryServiceTier
+}
+
+func (c *ModelConfig) ShouldSummaryClaudeLongContext() bool {
+	if c == nil {
+		return false
+	}
+	return c.SummaryClaudeLongContext
 }
 
 func (c *ModelConfig) MarshalJSON() ([]byte, error) {
@@ -219,7 +293,7 @@ func GetModelConfig(model string) (ModelConfig, error) {
 	err := DB.Model(&ModelConfig{}).
 		Where("model = ?", model).
 		Omit("created_at", "updated_at").
-		First(config).
+		First(&config).
 		Error
 
 	return config, HandleNotFound(err, ErrModelConfigNotFound)

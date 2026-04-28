@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -24,12 +24,37 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+func autoImageURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
+	if meta != nil {
+		switch meta.Channel.Type {
+		case model.ChannelTypeVertexAI, model.ChannelTypeAWS:
+			return false
+		}
+	}
+
+	return cfg.DisableAutoImageURLToBase64
+}
+
 func ConvertRequest(
 	meta *meta.Meta,
 	req *http.Request,
 	callbacks ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
-	newBody, err := ConvertRequestToBytes(meta, req, callbacks...)
+	cfg, err := loadConfig(meta)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return convertRequest(meta, req, cfg, callbacks...)
+}
+
+func convertRequest(
+	meta *meta.Meta,
+	req *http.Request,
+	cfg Config,
+	callbacks ...func(node *ast.Node) error,
+) (adaptor.ConvertResult, error) {
+	newBody, err := convertRequestToBytes(meta, req, cfg, callbacks...)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
@@ -43,9 +68,85 @@ func ConvertRequest(
 	}, nil
 }
 
+func RemoveToolsExamples(node *ast.Node) {
+	toolsNode := node.Get("tools")
+	if toolsNode != nil && toolsNode.Check() == nil {
+		_ = toolsNode.ForEach(func(path ast.Sequence, toolNode *ast.Node) bool {
+			_, _ = toolNode.Unset("input_examples")
+			return true
+		})
+	}
+}
+
+func RemoveToolsCustomDeferLoading(node *ast.Node) {
+	toolsNode := node.Get("tools")
+	if toolsNode != nil && toolsNode.Check() == nil {
+		_ = toolsNode.ForEach(func(path ast.Sequence, toolNode *ast.Node) bool {
+			_, _ = toolNode.Unset("defer_loading")
+			return true
+		})
+	}
+}
+
+func RemoveContextManagenetEdits(
+	node *ast.Node,
+	isSupportedEditsType ...func(t string) bool,
+) {
+	contextManagementNode := node.Get("context_management")
+	if contextManagementNode.Check() != nil {
+		return
+	}
+
+	editesNode := contextManagementNode.GetByPath("edits")
+	if editesNode.Check() != nil {
+		return
+	}
+
+	nodeLen, _ := editesNode.Len()
+	newEdits := make([]ast.Node, 0, nodeLen)
+	_ = editesNode.
+		ForEach(func(path ast.Sequence, node *ast.Node) bool {
+			t, err := node.Get("type").String()
+			if err != nil {
+				return true
+			}
+
+			for _, v := range isSupportedEditsType {
+				if v != nil && !v(t) {
+					return true
+				}
+			}
+
+			newEdits = append(newEdits, *node)
+
+			return true
+		})
+
+	if len(newEdits) == 0 {
+		_, _ = contextManagementNode.Unset("edits")
+		return
+	}
+
+	*editesNode = ast.NewArray(newEdits)
+}
+
 func ConvertRequestToBytes(
 	meta *meta.Meta,
 	req *http.Request,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) {
+	cfg, err := loadConfig(meta)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertRequestToBytes(meta, req, cfg, callbacks...)
+}
+
+func convertRequestToBytes(
+	meta *meta.Meta,
+	req *http.Request,
+	cfg Config,
 	callbacks ...func(node *ast.Node) error,
 ) ([]byte, error) {
 	// Parse request body into AST node
@@ -54,42 +155,115 @@ func ConvertRequestToBytes(
 		return nil, err
 	}
 
-	// Process image content if present
-	err = ConvertImage2Base64(req.Context(), &node)
+	return convertRequestBodyToBytes(meta, req.Context(), &node, cfg, callbacks...)
+}
+
+func resetCacheTTLWithContentsNode(contents *ast.Node) error {
+	if contents.Check() != nil {
+		return nil
+	}
+
+	return contents.ForEach(func(_ ast.Sequence, content *ast.Node) bool {
+		cacheControl := content.Get("cache_control")
+		if cacheControl.Check() != nil {
+			return true
+		}
+
+		_, _ = cacheControl.Unset("ttl")
+
+		return true
+	})
+}
+
+func ConvertRequestBodyToBytes(
+	meta *meta.Meta,
+	ctx context.Context,
+	node *ast.Node,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) { // Process image content if present
+	adaptorConfig, err := loadConfig(meta)
 	if err != nil {
 		return nil, err
 	}
 
+	return convertRequestBodyToBytes(meta, ctx, node, adaptorConfig, callbacks...)
+}
+
+func convertRequestBodyToBytes(
+	meta *meta.Meta,
+	ctx context.Context,
+	node *ast.Node,
+	adaptorConfig Config,
+	callbacks ...func(node *ast.Node) error,
+) ([]byte, error) {
+	if adaptorConfig.DisableContextManagement {
+		_, _ = node.Unset("context_management")
+	} else if len(adaptorConfig.SupportedContextManagementEditsType) > 0 {
+		supported := make(
+			map[string]struct{},
+			len(adaptorConfig.SupportedContextManagementEditsType),
+		)
+		for _, t := range adaptorConfig.SupportedContextManagementEditsType {
+			supported[t] = struct{}{}
+		}
+
+		RemoveContextManagenetEdits(node, func(t string) bool {
+			_, ok := supported[t]
+			return ok
+		})
+	}
+
+	if adaptorConfig.RemoveToolsExamples {
+		RemoveToolsExamples(node)
+	}
+
+	if adaptorConfig.RemoveToolsCustomDeferLoading {
+		RemoveToolsCustomDeferLoading(node)
+	}
+
+	if !autoImageURLToBase64Disabled(meta, adaptorConfig) {
+		err := ConvertImage2Base64(ctx, node)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Set the actual model in the request
-	_, err = node.Set("model", ast.NewString(meta.ActualModel))
+	_, err := node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return nil, err
+	}
+
+	err = resetCacheTTLWithContentsNode(node.Get("system"))
+	if err != nil {
+		return nil, err
+	}
+
+	messagesNode := node.Get("messages")
+	if messagesNode.Check() == nil {
+		_ = messagesNode.ForEach(func(_ ast.Sequence, messages *ast.Node) bool {
+			_ = resetCacheTTLWithContentsNode(messages.Get("content"))
+			return true
+		})
 	}
 
 	maxTokensNode := node.Get("max_tokens")
 	if maxTokensNode == nil || !maxTokensNode.Exists() {
-		_, _ = node.Set("max_tokens", ast.NewNumber("4096"))
+		resolvedModel := ResolveModelName(meta.OriginModel, meta.ActualModel)
+		_, _ = node.Set(
+			"max_tokens",
+			ast.NewNumber(strconv.Itoa(ModelDefaultMaxTokens(resolvedModel))),
+		)
 	}
 
-	// Handle thinking budget tokens adjustment
-	thinkingNode := node.Get("thinking")
-
-	maxTokens, err := node.Get("max_tokens").Int64()
-	if (thinkingNode != nil && thinkingNode.Exists()) && err == nil {
-		budgetTokens, _ := thinkingNode.Get("budget_tokens").Int64()
-		maxTokensInt := int(maxTokens)
-		budgetTokensInt := int(budgetTokens)
-		adjustThinkingBudgetTokens(&maxTokensInt, &budgetTokensInt)
-
-		// Update the nodes with adjusted values
-		_, _ = node.Set("max_tokens", ast.NewNumber(strconv.Itoa(maxTokensInt)))
-		_, _ = thinkingNode.Set(
-			"budget_tokens",
-			ast.NewNumber(strconv.Itoa(budgetTokensInt)),
-		)
-
+	if node.Get("thinking").Exists() {
 		// Remove temperature when thinking is enabled
 		_, _ = node.Unset("temperature")
+	}
+
+	if node.Get("temperature").Exists() && node.Get("top_p").Exists() {
+		// Claude does not allow both temperature and top_p to be specified
+		_, _ = node.Unset("top_p")
 	}
 
 	for _, callback := range callbacks {
@@ -97,7 +271,7 @@ func ConvertRequestToBytes(
 			continue
 		}
 
-		if err := callback(&node); err != nil {
+		if err := callback(node); err != nil {
 			return nil, err
 		}
 	}
@@ -122,7 +296,7 @@ func ConvertImage2Base64(ctx context.Context, node *ast.Node) error {
 
 		err := contentNode.ForEach(func(_ ast.Sequence, contentItem *ast.Node) bool {
 			contentType, err := contentItem.Get("type").String()
-			if err == nil && contentType == conetentTypeImage {
+			if err == nil && contentType == relaymodel.ClaudeContentTypeImage {
 				sourceNode := contentItem.Get("source")
 				if sourceNode != nil {
 					imageType, err := sourceNode.Get("type").String()
@@ -219,27 +393,24 @@ func StreamHandler(
 	m *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, m.ActualModel)
+	defer cleanup()
 
 	responseText := strings.Builder{}
 
 	var (
-		usage  *relaymodel.ChatUsage
-		writed bool
+		usage      *relaymodel.ChatUsage
+		writed     bool
+		upstreamID string
 	)
 
 	streamState := NewStreamState()
@@ -265,28 +436,32 @@ func StreamHandler(
 				}
 
 				if response != nil && response.Usage != nil {
-					usage.Add(response.Usage)
+					usage = response.Usage
+				} else if usage.PromptTokens == 0 || usage.TotalTokens == 0 {
+					complateTokens := openai.CountTokenText(
+						responseText.String(),
+						m.OriginModel,
+					)
+					usage = &relaymodel.ChatUsage{
+						PromptTokens:     int64(m.RequestUsage.InputTokens),
+						CompletionTokens: complateTokens,
+						TotalTokens:      int64(m.RequestUsage.InputTokens) + complateTokens,
+					}
 				}
 
-				return usage.ToModelUsage(), err
+				return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, err
 			}
+		}
+
+		// Capture upstream ID from response ID
+		if response != nil && response.ID != "" && upstreamID == "" {
+			upstreamID = response.ID
 		}
 
 		if response != nil {
 			switch {
 			case response.Usage != nil:
-				if usage == nil {
-					usage = &relaymodel.ChatUsage{}
-				}
-
-				usage.Add(response.Usage)
-
-				if usage.PromptTokens == 0 {
-					usage.PromptTokens = int64(m.RequestUsage.InputTokens)
-					usage.TotalTokens += int64(m.RequestUsage.InputTokens)
-				}
-
-				response.Usage = usage
+				usage = response.Usage
 
 				responseText.Reset()
 			case usage == nil:
@@ -295,6 +470,30 @@ func StreamHandler(
 				}
 			default:
 				response.Usage = usage
+			}
+		}
+
+		node, parseErr := sonic.Get(data)
+		if parseErr != nil {
+			log.Error("error unmarshalling stream response: " + parseErr.Error())
+		} else {
+			// Check if model field exists in message.model (for message_start events)
+			messageNode := node.Get("message")
+			if messageNode != nil && messageNode.Exists() {
+				modelNode := messageNode.Get("model")
+				if modelNode != nil && modelNode.Exists() {
+					_, setErr := messageNode.Set("model", ast.NewString(m.OriginModel))
+					if setErr != nil {
+						log.Error("error set response model in message: " + setErr.Error())
+					} else {
+						newData, marshalErr := node.MarshalJSON()
+						if marshalErr != nil {
+							log.Error("error marshalling stream response: " + marshalErr.Error())
+						} else {
+							data = newData
+						}
+					}
+				}
 			}
 		}
 
@@ -307,32 +506,38 @@ func StreamHandler(
 		log.Error("error reading stream: " + err.Error())
 	}
 
-	if usage == nil {
+	if usage == nil || usage.PromptTokens == 0 || usage.TotalTokens == 0 {
+		complateTokens := openai.CountTokenText(
+			responseText.String(),
+			m.OriginModel,
+		)
 		usage = &relaymodel.ChatUsage{
 			PromptTokens:     int64(m.RequestUsage.InputTokens),
-			CompletionTokens: openai.CountTokenText(responseText.String(), m.OriginModel),
-			TotalTokens: int64(
-				m.RequestUsage.InputTokens,
-			) + openai.CountTokenText(
-				responseText.String(),
-				m.OriginModel,
-			),
+			CompletionTokens: complateTokens,
+			TotalTokens:      int64(m.RequestUsage.InputTokens) + complateTokens,
 		}
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      usage.ToModelUsage(),
+		UpstreamID: upstreamID,
+	}, nil
 }
 
-func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage, adaptor.Error) {
+func Handler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	respBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperAnthropicError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperAnthropicError(
 			err,
 			"read_response_failed",
 			http.StatusInternalServerError,
@@ -341,12 +546,35 @@ func Handler(meta *meta.Meta, c *gin.Context, resp *http.Response) (model.Usage,
 
 	fullTextResponse, adaptorErr := Response2OpenAI(meta, respBody)
 	if adaptorErr != nil {
-		return model.Usage{}, adaptorErr
+		return adaptor.DoResponseResult{}, adaptorErr
+	}
+
+	log := common.GetLogger(c)
+
+	// Set model to OriginModel in response body
+	node, err := sonic.Get(respBody)
+	if err != nil {
+		log.Error("error unmarshalling stream response: " + err.Error())
+	} else {
+		_, err = node.Set("model", ast.NewString(meta.OriginModel))
+		if err != nil {
+			log.Error("error set response model: " + err.Error())
+		} else {
+			newRespBody, err := node.MarshalJSON()
+			if err != nil {
+				log.Error("error marshalling response: " + err.Error())
+			} else {
+				respBody = newRespBody
+			}
+		}
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(respBody)))
 	_, _ = c.Writer.Write(respBody)
 
-	return fullTextResponse.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{
+		Usage:      fullTextResponse.Usage.ToModelUsage(),
+		UpstreamID: fullTextResponse.ID,
+	}, nil
 }

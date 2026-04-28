@@ -6,14 +6,21 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeCloudflare, &Adaptor{})
 }
 
 const baseURL = "https://api.cloudflare.com"
@@ -30,7 +37,11 @@ func isAIGateWay(baseURL string) bool {
 		strings.HasSuffix(baseURL, "/workers-ai")
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 	isAIGateWay := isAIGateWay(u)
 
@@ -42,7 +53,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 	}
 
 	switch meta.Mode {
-	case mode.ChatCompletions:
+	case mode.ChatCompletions, mode.Gemini:
 		url, err := url.JoinPath(urlPrefix, "/v1/chat/completions")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -89,6 +100,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Cloudflare Workers AI\nDefault base URL uses the account-scoped REST API\nAlso supports AI Gateway Workers AI endpoints ending with `/workers-ai`\nChat and embeddings use OpenAI-compatible paths; other modes use `/run/{model}`",
 		Models: ModelList,
 	}
 }

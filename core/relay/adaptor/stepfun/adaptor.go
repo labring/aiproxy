@@ -6,12 +6,17 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeStepfun, &Adaptor{})
 }
 
 const baseURL = "https://api.stepfun.com/v1"
@@ -39,6 +44,7 @@ func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "StepFun API\nOpenAI-compatible endpoint\nTTS requests use a default voice when not provided\nSupports Gemini-compatible request conversion",
 		Models: ModelList,
 	}
 }

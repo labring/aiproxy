@@ -41,7 +41,7 @@
     "motion": "^12.9.1",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
-    "react-day-picker": "^8.10.1",
+    "react-day-picker": "^9.14.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.56.1",
     "react-i18next": "^15.5.1",
@@ -74,5 +74,5 @@
     "typescript-eslint": "^8.26.1",
     "vite": "^6.3.1"
   },
-  "packageManager": "pnpm@10.11.1+sha512.e519b9f7639869dc8d5c3c5dfef73b3f091094b0a006d7317353c72b124e80e1afd429732e28705ad6bfa1ee879c1fce46c128ccebd3192101f43dd67c667912"
+  "packageManager": "pnpm@10.32.0+sha512.9b2634bb3fed5601c33633f2d92593f506270a3963b8c51d2b2d6a828da615ce4e9deebef9614ccebbc13ac8d3c0f9c9ccceb583c69c8578436fa477dbb20d70"
 }

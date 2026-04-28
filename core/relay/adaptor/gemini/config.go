@@ -1,43 +1,16 @@
 package gemini
 
-import (
-	"fmt"
-
-	"github.com/labring/aiproxy/core/relay/adaptor"
-)
+import "github.com/labring/aiproxy/core/relay/meta"
 
 type Config struct {
-	Safety string `json:"safety"`
+	Safety                      string `json:"safety"`
+	DisableAutoImageURLToBase64 bool   `json:"disable_auto_image_url_to_base64"`
 }
 
-var ConfigTemplates = adaptor.ConfigTemplates{
-	"safety": {
-		Name:        "Safety",
-		Description: "Safety settings: https://ai.google.dev/gemini-api/docs/safety-settings, default is BLOCK_NONE",
-		Example:     "BLOCK_NONE",
-		Type:        adaptor.ConfigTypeString,
-		Validator: func(a any) error {
-			s, ok := a.(string)
-			if !ok {
-				return fmt.Errorf("invalid safety settings type: %v, must be a string", a)
-			}
-			switch s {
-			case "BLOCK_NONE",
-				"BLOCK_ONLY_HIGH",
-				"BLOCK_MEDIUM_AND_ABOVE",
-				"BLOCK_LOW_AND_ABOVE",
-				"HARM_BLOCK_THRESHOLD_UNSPECIFIED":
-				return nil
-			default:
-				return fmt.Errorf(
-					"invalid safety settings: %s, must be one of: BLOCK_NONE, BLOCK_ONLY_HIGH, BLOCK_MEDIUM_AND_ABOVE, BLOCK_LOW_AND_ABOVE, HARM_BLOCK_THRESHOLD_UNSPECIFIED",
-					s,
-				)
-			}
-		},
-	},
+func loadConfig(meta *meta.Meta) (Config, error) {
+	return (&Adaptor{}).loadConfig(meta)
 }
 
-func (a *Adaptor) ConfigTemplates() adaptor.ConfigTemplates {
-	return ConfigTemplates
+func (a *Adaptor) loadConfig(meta *meta.Meta) (Config, error) {
+	return a.configCache.Load(meta, Config{})
 }

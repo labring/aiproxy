@@ -7,7 +7,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -22,14 +21,14 @@ func RerankHandler(
 	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
 	respBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -40,7 +39,7 @@ func RerankHandler(
 
 	err = sonic.Unmarshal(respBody, &reRankResp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -48,18 +47,20 @@ func RerankHandler(
 	}
 
 	if reRankResp.Error != nil && reRankResp.Error.ErrorCode != 0 {
-		return model.Usage{}, ErrorHandler(reRankResp.Error)
+		return adaptor.DoResponseResult{}, ErrorHandler(reRankResp.Error)
 	}
 
 	respMap := make(map[string]any)
 
 	err = sonic.Unmarshal(respBody, &respMap)
 	if err != nil {
-		return reRankResp.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"unmarshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: reRankResp.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"unmarshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	delete(respMap, "model")
@@ -75,11 +76,13 @@ func RerankHandler(
 
 	jsonData, err := sonic.Marshal(respMap)
 	if err != nil {
-		return reRankResp.Usage.ToModelUsage(), relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return adaptor.DoResponseResult{
+				Usage: reRankResp.Usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"marshal_response_body_failed",
+				http.StatusInternalServerError,
+			)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -90,5 +93,5 @@ func RerankHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return reRankResp.Usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: reRankResp.Usage.ToModelUsage()}, nil
 }

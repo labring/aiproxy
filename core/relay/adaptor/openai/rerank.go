@@ -15,6 +15,8 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
+// need to keep model import for model.ZeroNullInt64
+
 func ConvertRerankRequest(
 	meta *meta.Meta,
 	req *http.Request,
@@ -47,9 +49,9 @@ func RerankHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -58,7 +60,7 @@ func RerankHandler(
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -69,7 +71,7 @@ func RerankHandler(
 
 	err = sonic.Unmarshal(responseBody, &rerankResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -85,21 +87,21 @@ func RerankHandler(
 	}
 
 	if rerankResponse.Meta.Tokens == nil {
-		return model.Usage{
+		return adaptor.DoResponseResult{Usage: model.Usage{
 			InputTokens: meta.RequestUsage.InputTokens,
 			TotalTokens: meta.RequestUsage.InputTokens,
-		}, nil
+		}}, nil
 	}
 
 	if rerankResponse.Meta.Tokens.InputTokens <= 0 {
 		rerankResponse.Meta.Tokens.InputTokens = int64(meta.RequestUsage.InputTokens)
 	}
 
-	return model.Usage{
+	return adaptor.DoResponseResult{Usage: model.Usage{
 		InputTokens:  model.ZeroNullInt64(rerankResponse.Meta.Tokens.InputTokens),
 		OutputTokens: model.ZeroNullInt64(rerankResponse.Meta.Tokens.OutputTokens),
 		TotalTokens: model.ZeroNullInt64(
 			rerankResponse.Meta.Tokens.InputTokens + rerankResponse.Meta.Tokens.OutputTokens,
 		),
-	}, nil
+	}}, nil
 }

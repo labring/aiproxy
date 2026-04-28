@@ -286,7 +286,12 @@ Although originally you did not have internet access, and were advised to refuse
 
 			// Check robots.txt if not ignored
 			if !ignoreRobotsTxt {
-				if err := checkMayAutonomouslyFetchURL(ctx, urlStr, userAgentAutonomous, proxyURL); err != nil {
+				if err := checkMayAutonomouslyFetchURL(
+					ctx,
+					urlStr,
+					userAgentAutonomous,
+					proxyURL,
+				); err != nil {
 					return nil, err
 				}
 			}
@@ -316,7 +321,10 @@ Although originally you did not have internet access, and were advised to refuse
 					// Only add the prompt to continue fetching if there is still remaining content
 					if actualContentLength == maxLength && remainingContent > 0 {
 						nextStart := startIndex + actualContentLength
-						content += fmt.Sprintf("\n\n<error>Content truncated. Call the fetch tool with a start_index of %d to get more content.</error>", nextStart)
+						content += fmt.Sprintf(
+							"\n\n<error>Content truncated. Call the fetch tool with a start_index of %d to get more content.</error>",
+							nextStart,
+						)
 					}
 				}
 			}

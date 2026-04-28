@@ -29,6 +29,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/plugin"
 	"github.com/labring/aiproxy/core/relay/plugin/noop"
+	"github.com/labring/aiproxy/core/relay/plugin/patch"
 	"github.com/labring/aiproxy/core/relay/utils"
 	"github.com/labring/aiproxy/mcp-servers/hosted/web-search/engine"
 	"github.com/sirupsen/logrus"
@@ -42,7 +43,8 @@ type GetChannel func(modelName string) (*model.Channel, error)
 // WebSearch implements web search functionality
 type WebSearch struct {
 	noop.Noop
-	GetChannel GetChannel
+	GetChannel  GetChannel
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewWebSearchPlugin creates a new web search plugin
@@ -92,12 +94,34 @@ func getRewriteUsage(m *meta.Meta) *model.Usage {
 }
 
 func (p *WebSearch) getConfig(meta *meta.Meta) (Config, error) {
-	pluginConfig := Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("web-search", &pluginConfig); err != nil {
-		return Config{}, err
-	}
+	return p.configCache.Load(meta, "web-search", Config{})
+}
 
-	return pluginConfig, nil
+func lazyRemoveSearchOption(meta *meta.Meta) {
+	patch.AddLazyPatch(meta, patch.PatchOperation{
+		Op: patch.OpFunction,
+		Function: func(root *ast.Node) (bool, error) {
+			ok, err := root.Unset("web_search_options")
+			if err != nil {
+				return false, err
+			}
+
+			return ok, nil
+		},
+	})
+}
+
+func fallback(
+	log *logrus.Entry,
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+	do adaptor.ConvertRequest,
+	reason string,
+) (adaptor.ConvertResult, error) {
+	log.Debugf("web-search: fallback, reason: %s", reason)
+	lazyRemoveSearchOption(meta)
+	return do.ConvertRequest(meta, store, req)
 }
 
 // ConvertRequest intercepts and modifies requests to add web search capabilities
@@ -112,9 +136,12 @@ func (p *WebSearch) ConvertRequest(
 		return do.ConvertRequest(meta, store, req)
 	}
 
+	log := common.GetLoggerFromReq(req)
+
 	// Load plugin configuration
 	pluginConfig, err := p.getConfig(meta)
 	if err != nil {
+		log.Debugf("web-search: skipping, config load error: %v", err)
 		return do.ConvertRequest(meta, store, req)
 	}
 
@@ -125,13 +152,17 @@ func (p *WebSearch) ConvertRequest(
 
 	// Apply default configuration values if needed
 	if err := p.validateAndApplyDefaults(&pluginConfig); err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, fmt.Sprintf("config validation failed: %v", err))
 	}
 
 	// Initialize search engines
 	engines, arxivExists, err := p.initializeSearchEngines(pluginConfig.SearchFrom)
-	if err != nil || len(engines) == 0 {
-		return do.ConvertRequest(meta, store, req)
+	if err != nil {
+		return fallback(log, meta, store, req, do, fmt.Sprintf("init engines failed: %v", err))
+	}
+
+	if len(engines) == 0 {
+		return fallback(log, meta, store, req, do, "no search engines configured")
 	}
 
 	// Read and parse request body
@@ -142,29 +173,29 @@ func (p *WebSearch) ConvertRequest(
 
 	var chatRequest map[string]any
 	if err := sonic.Unmarshal(body, &chatRequest); err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, fmt.Sprintf("unmarshal failed: %v", err))
 	}
 
 	// Check if web search should be enabled for this request
 	webSearchOptions, hasWebSearchOptions := chatRequest["web_search_options"].(map[string]any)
 	if !pluginConfig.ForceSearch && !hasWebSearchOptions {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "no web_search_options and forceSearch=false")
 	}
 
 	webSearchEnable, ok := webSearchOptions["enable"].(bool)
 	if ok && !webSearchEnable {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "web_search_options.enable=false")
 	}
 
 	// Extract user query from messages
 	messages, ok := chatRequest["messages"].([]any)
 	if !ok || len(messages) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "no messages in request")
 	}
 
 	queryIndex, query := p.extractUserQuery(messages)
 	if query == "" {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "empty user query")
 	}
 
 	// Prepare search rewrite prompt if configured
@@ -183,17 +214,24 @@ func (p *WebSearch) ConvertRequest(
 		searchRewritePrompt,
 	)
 	if err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(
+			log,
+			meta,
+			store,
+			req,
+			do,
+			fmt.Sprintf("generate search contexts failed: %v", err),
+		)
 	}
 
 	if len(searchContexts) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "no search contexts generated")
 	}
 
 	// Execute searches
-	searchResult := p.executeSearches(context.Background(), engines, searchContexts)
+	searchResult := p.executeSearches(log, context.Background(), engines, searchContexts)
 	if searchResult.Count == 0 || len(searchResult.Results) == 0 {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, "no search results found")
 	}
 
 	setSearchCount(meta, searchResult.Count)
@@ -206,7 +244,7 @@ func (p *WebSearch) ConvertRequest(
 	// Create new request body
 	modifiedBody, err := sonic.Marshal(chatRequest)
 	if err != nil {
-		return do.ConvertRequest(meta, store, req)
+		return fallback(log, meta, store, req, do, fmt.Sprintf("marshal failed: %v", err))
 	}
 
 	// Update the request
@@ -544,6 +582,7 @@ type searchResult struct {
 
 // executeSearches performs searches using all configured engines
 func (p *WebSearch) executeSearches(
+	log *logrus.Entry,
 	ctx context.Context,
 	engines []engine.Engine,
 	searchContexts []engine.SearchQuery,
@@ -553,10 +592,10 @@ func (p *WebSearch) executeSearches(
 		mu         sync.Mutex
 	)
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	g, ctx := errgroup.WithContext(ctx)
+	var g errgroup.Group
 
 	for _, eng := range engines {
 		for _, searchCtx := range searchContexts {
@@ -568,8 +607,9 @@ func (p *WebSearch) executeSearches(
 					ArxivCategory: searchCtx.ArxivCategory,
 				})
 				if err != nil {
-					logrus.Errorf("search error: %v", err)
-					return err
+					log.Errorf("web-search: search error with engine %T: %v", eng, err)
+					// Return nil to allow other searches to continue
+					return nil
 				}
 
 				mu.Lock()
@@ -718,7 +758,10 @@ func (rw *responseWriter) processWebSearchCount(node *ast.Node) {
 		)
 	} else {
 		// If not exists, set the value
-		_, _ = usageNode.Set("web_search_count", ast.NewNumber(strconv.FormatInt(int64(rw.webSearchCount), 10)))
+		_, _ = usageNode.Set(
+			"web_search_count",
+			ast.NewNumber(strconv.FormatInt(int64(rw.webSearchCount), 10)),
+		)
 	}
 }
 
@@ -786,7 +829,7 @@ func (p *WebSearch) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
 	}
@@ -843,13 +886,13 @@ func (p *WebSearch) doResponseWithCount(
 	resp *http.Response,
 	do adaptor.DoResponse,
 	count int,
-) (model.Usage, adaptor.Error) {
-	u, err := do.DoResponse(meta, store, c, resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	result, err := do.DoResponse(meta, store, c, resp)
 	if err != nil {
-		return model.Usage{}, err
+		return adaptor.DoResponseResult{}, err
 	}
 
-	u.WebSearchCount += model.ZeroNullInt64(int64(count))
+	result.Usage.WebSearchCount += model.ZeroNullInt64(int64(count))
 
-	return u, nil
+	return result, nil
 }

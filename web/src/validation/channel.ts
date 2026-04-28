@@ -6,9 +6,17 @@ export const channelCreateSchema = z.object({
     name: z.string().min(1, '名称不能为空'),
     key: z.string().min(1, '密钥不能为空'),
     base_url: z.string().optional(),
-    models: z.array(z.string()).min(1, '至少选择一个模型'),
+    proxy_url: z.string().optional(),
+    models: z.array(z.string()).min(0),
     model_mapping: z.record(z.string(), z.string()).optional(),
-    sets: z.array(z.string()).optional()
+    sets: z.array(z.string()).optional(),
+    priority: z.number().int().min(0).max(1000000).optional(),
+    skip_tls_verify: z.boolean().optional(),
+    enabled_no_permission_ban: z.boolean().optional(),
+    warn_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
+    max_error_rate: z.number().min(0, 'Error rate must be at least 0').max(1, 'Error rate must be at most 1').optional(),
+    configs_text: z.string().optional(),
+    useDefaultModels: z.boolean().optional(),
 })
 
 export type ChannelCreateForm = z.infer<typeof channelCreateSchema>

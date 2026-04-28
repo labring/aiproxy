@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"io"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/render"
 	"github.com/labring/aiproxy/core/relay/utils"
@@ -56,16 +56,16 @@ func ResponseHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, ErrorHanlder(resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if !adaptor.IsSuccessfulResponseStatus(mode.Responses, resp.StatusCode) {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -77,7 +77,7 @@ func ResponseHandler(
 
 	err = sonic.Unmarshal(responseBody, &response)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -87,11 +87,11 @@ func ResponseHandler(
 	// Store the response ID if needed for later retrieval
 	if response.Store && response.ID != "" {
 		err = store.SaveStore(adaptor.StoreCache{
-			ID:        response.ID,
+			ID:        model.ResponseStoreID(response.ID),
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,
-			Model:     meta.ActualModel,
+			Model:     meta.OriginModel,
 			ExpiresAt: time.Now().Add(time.Hour * 24 * 7), // Store for 7 days
 		})
 		if err != nil {
@@ -106,11 +106,13 @@ func ResponseHandler(
 	_, _ = c.Writer.Write(responseBody)
 
 	// Calculate usage
-	if response.Usage != nil {
-		return response.Usage.ToModelUsage(), nil
-	}
+	usage := response.ToModelUsage()
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: response.ID,
+		AsyncUsage: responseNeedsAsyncUsage(&response),
+	}, nil
 }
 
 // ResponseStreamHandler handles streaming response
@@ -119,24 +121,22 @@ func ResponseStreamHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if !adaptor.IsSuccessfulResponseStatus(mode.Responses, resp.StatusCode) {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
 
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	var (
-		usage      model.Usage
-		responseID string
+		usage        model.Usage
+		responseID   string
+		lastResponse *relaymodel.Response
 	)
 
 	for scanner.Scan() {
@@ -146,9 +146,6 @@ func ResponseStreamHandler(
 		}
 
 		data = render.ExtractSSEData(data)
-		if render.IsSSEDone(data) {
-			break
-		}
 
 		// Parse the stream event
 		var event relaymodel.ResponseStreamEvent
@@ -164,11 +161,11 @@ func ResponseStreamHandler(
 			responseID = event.Response.ID
 			if event.Response.Store && responseID != "" {
 				err = store.SaveStore(adaptor.StoreCache{
-					ID:        responseID,
+					ID:        model.ResponseStoreID(responseID),
 					GroupID:   meta.Group.ID,
 					TokenID:   meta.Token.ID,
 					ChannelID: meta.Channel.ID,
-					Model:     meta.ActualModel,
+					Model:     meta.OriginModel,
 					ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
 				})
 				if err != nil {
@@ -178,8 +175,9 @@ func ResponseStreamHandler(
 		}
 
 		// Update usage if available
-		if event.Response != nil && event.Response.Usage != nil {
-			usage = event.Response.Usage.ToModelUsage()
+		if event.Response != nil {
+			lastResponse = event.Response
+			usage = event.Response.ToModelUsage()
 		}
 
 		// Forward the event
@@ -190,17 +188,38 @@ func ResponseStreamHandler(
 		log.Error("error reading response stream: " + err.Error())
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: responseID,
+		AsyncUsage: responseNeedsAsyncUsage(lastResponse),
+	}, nil
+}
+
+func responseNeedsAsyncUsage(response *relaymodel.Response) bool {
+	if response == nil || response.ID == "" || response.Usage != nil {
+		return false
+	}
+
+	if usage := response.ToModelUsage(); usage.TotalTokens > 0 || usage.WebSearchCount > 0 {
+		return false
+	}
+
+	switch response.Status {
+	case relaymodel.ResponseStatusInProgress, relaymodel.ResponseStatusQueued:
+		return true
+	default:
+		return false
+	}
 }
 
 // GetResponseHandler handles GET /v1/responses/{response_id}
 func GetResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -209,17 +228,17 @@ func GetResponseHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // DeleteResponseHandler handles DELETE /v1/responses/{response_id}
 func DeleteResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if !adaptor.IsSuccessfulResponseStatus(mode.ResponsesDelete, resp.StatusCode) {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -229,17 +248,17 @@ func DeleteResponseHandler(
 	c.Status(http.StatusNoContent)
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // CancelResponseHandler handles POST /v1/responses/{response_id}/cancel
 func CancelResponseHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -248,17 +267,17 @@ func CancelResponseHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 // GetInputItemsHandler handles GET /v1/responses/{response_id}/input_items
 func GetInputItemsHandler(
-	meta *meta.Meta,
+	_ *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -267,5 +286,5 @@ func GetInputItemsHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }

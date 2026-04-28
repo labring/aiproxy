@@ -53,6 +53,7 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 			if slices.Contains(validEngines, value) {
 				return nil
 			}
+
 			return fmt.Errorf(
 				"invalid engine: %s, must be one of: %s",
 				value,
@@ -71,9 +72,11 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 			if _, err := fmt.Sscanf(value, "%d", &num); err != nil {
 				return errors.New("must be a number")
 			}
+
 			if num < 1 || num > 50 {
 				return errors.New("must be between 1 and 50")
 			}
+
 			return nil
 		},
 	},

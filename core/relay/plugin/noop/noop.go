@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/plugin"
@@ -17,9 +16,10 @@ type Noop struct{}
 func (n *Noop) GetRequestURL(
 	meta *meta.Meta,
 	store adaptor.Store,
+	c *gin.Context,
 	do adaptor.GetRequestURL,
 ) (adaptor.RequestURL, error) {
-	return do.GetRequestURL(meta, store)
+	return do.GetRequestURL(meta, store, c)
 }
 
 func (n *Noop) SetupRequestHeader(
@@ -57,6 +57,6 @@ func (n *Noop) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	return do.DoResponse(meta, store, c, resp)
 }

@@ -1,6 +1,7 @@
 package zhipucoding
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -10,9 +11,11 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/adaptor/zhipu"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -22,45 +25,69 @@ type Adaptor struct {
 	openai.Adaptor
 }
 
+func init() {
+	registry.Register(model.ChannelTypeZhipuCoding, &Adaptor{})
+}
+
 const baseURL = "https://open.bigmodel.cn"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, store adaptor.Store) (adaptor.RequestURL, error) {
-	u := meta.Channel.BaseURL
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
+	originalBaseURL := meta.Channel.BaseURL
 
 	switch meta.Mode {
 	case mode.Anthropic:
-		url, err := url.JoinPath(u, "/api/anthropic/v1/messages")
+		u, err := url.JoinPath(originalBaseURL, "/api/anthropic/v1/messages")
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}
 
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
-			URL:    url,
+			URL:    u,
 		}, nil
-	default:
-		meta.Channel.BaseURL += "/api/coding/paas/v4"
+	case mode.ChatCompletions, mode.Completions, mode.Gemini:
+		u, err := url.JoinPath(originalBaseURL, "/api/coding/paas/v4")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		originalMode := meta.Mode
+		if meta.Mode == mode.Gemini {
+			meta.Mode = mode.ChatCompletions
+		}
+
+		meta.Channel.BaseURL = u
 		defer func() {
-			meta.Channel.BaseURL = u
+			meta.Mode = originalMode
+			meta.Channel.BaseURL = originalBaseURL
 		}()
 
-		return a.Adaptor.GetRequestURL(meta, store)
+		return a.Adaptor.GetRequestURL(meta, store, c)
+	default:
+		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
-	store adaptor.Store,
+	_ adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	switch meta.Mode {
@@ -73,8 +100,14 @@ func (a *Adaptor) ConvertRequest(
 
 			return nil
 		})
+	case mode.ChatCompletions:
+		return openai.ConvertChatCompletionsRequest(meta, req, false)
+	case mode.Completions:
+		return openai.ConvertCompletionsRequest(meta, req)
+	case mode.Gemini:
+		return openai.ConvertGeminiRequest(meta, req)
 	default:
-		return a.Adaptor.ConvertRequest(meta, store, req)
+		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
 }
 
@@ -83,23 +116,36 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return adaptor.DoResponseResult{}, zhipu.ErrorHandler(resp)
+	}
+
 	switch meta.Mode {
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
-			usage, err = anthropic.StreamHandler(meta, c, resp)
-		} else {
-			usage, err = anthropic.Handler(meta, c, resp)
+			return anthropic.StreamHandler(meta, c, resp)
 		}
+		return anthropic.Handler(meta, c, resp)
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			return openai.GeminiStreamHandler(meta, c, resp)
+		}
+		return openai.GeminiHandler(meta, c, resp)
+	case mode.ChatCompletions, mode.Completions:
+		return a.Adaptor.DoResponse(meta, store, c, resp)
 	default:
-		usage, err = a.Adaptor.DoResponse(meta, store, c, resp)
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			fmt.Sprintf("unsupported mode: %s", meta.Mode),
+			"unsupported_mode",
+			http.StatusBadRequest,
+		)
 	}
-
-	return usage, err
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme: "Zhipu Coding endpoint\nChat and completions are routed to `/api/coding/paas/v4`\nAnthropic-compatible requests are routed to `/api/anthropic/v1/messages`\nGemini-compatible requests are converted to chat completions",
 		Models: zhipu.ModelList,
 	}
 }

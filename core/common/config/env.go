@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"sync/atomic"
 
 	"github.com/labring/aiproxy/core/common/env"
@@ -15,23 +16,24 @@ type tokenVariants struct {
 }
 
 var (
-	DebugEnabled          bool
-	DebugSQLEnabled       bool
-	DisableAutoMigrateDB  bool
-	AdminKey              string
-	adminKeyBearer        string
-	adminKeySK            string
-	adminKeyBearerSK      string
-	WebPath               string
-	DisableWeb            bool
-	FfmpegEnabled         bool
-	InternalToken         string
-	internalTokenBearer   string
-	internalTokenSK       string
-	internalTokenBearerSK string
-	DisableModelConfig    bool
-	Redis                 string
-	RedisKeyPrefix        string
+	DebugEnabled         bool
+	DebugSQLEnabled      bool
+	DisableAutoMigrateDB bool
+	AdminKey             string
+	WebPath              string
+	DisableWeb           bool
+	DisableWebRoot       bool
+	FfmpegEnabled        bool
+	InternalToken        string
+	DisableModelConfig   bool
+	Redis                string
+	RedisKeyPrefix       string
+	ConfigFilePath       string
+
+	// OnCall Lark configuration for urgent alerts
+	OnCallLarkAppID     string
+	OnCallLarkAppSecret string
+	OnCallLarkOpenIDs   []string // comma-separated open IDs
 
 	adminKeyState      atomic.Value
 	internalTokenState atomic.Value
@@ -54,18 +56,12 @@ func buildTokenVariants(token string) tokenVariants {
 func SetAdminKey(key string) {
 	v := buildTokenVariants(key)
 	AdminKey = v.raw
-	adminKeyBearer = v.bearer
-	adminKeySK = v.sk
-	adminKeyBearerSK = v.bearerSK
 	adminKeyState.Store(v)
 }
 
 func SetInternalToken(token string) {
 	v := buildTokenVariants(token)
 	InternalToken = v.raw
-	internalTokenBearer = v.bearer
-	internalTokenSK = v.sk
-	internalTokenBearerSK = v.bearerSK
 	internalTokenState.Store(v)
 }
 
@@ -102,11 +98,37 @@ func ReloadEnv() {
 	SetAdminKey(os.Getenv("ADMIN_KEY"))
 	WebPath = os.Getenv("WEB_PATH")
 	DisableWeb = env.Bool("DISABLE_WEB", false)
+	DisableWebRoot = env.Bool("DISABLE_WEB_ROOT", false)
 	FfmpegEnabled = env.Bool("FFMPEG_ENABLED", false)
 	SetInternalToken(os.Getenv("INTERNAL_TOKEN"))
 	DisableModelConfig = env.Bool("DISABLE_MODEL_CONFIG", false)
 	Redis = env.String("REDIS", os.Getenv("REDIS_CONN_STRING"))
 	RedisKeyPrefix = os.Getenv("REDIS_KEY_PREFIX")
+	ConfigFilePath = env.String("CONFIG_FILE_PATH", "./config.yaml")
+
+	// OnCall Lark configuration
+	OnCallLarkAppID = os.Getenv("ON_CALL_LARK_APP_ID")
+	OnCallLarkAppSecret = os.Getenv("ON_CALL_LARK_APP_SECRET")
+	OnCallLarkOpenIDs = parseOpenIDs(os.Getenv("ON_CALL_LARK_OPEN_ID"))
+}
+
+// parseOpenIDs parses comma-separated open IDs
+func parseOpenIDs(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	parts := strings.Split(s, ",")
+
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+
+	return result
 }
 
 func init() {

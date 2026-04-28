@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/utils"
@@ -19,17 +20,27 @@ import (
 
 type Adaptor struct{}
 
+func init() {
+	registry.Register(model.ChannelTypeCoze, &Adaptor{})
+}
+
 const baseURL = "https://api.coze.com"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	url, err := url.JoinPath(meta.Channel.BaseURL, "/open_api/v2/chat")
 	if err != nil {
 		return adaptor.RequestURL{}, err
@@ -117,7 +128,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
@@ -125,18 +136,16 @@ func (a *Adaptor) DoResponse(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if utils.IsStreamResponse(resp) {
-		usage, err = StreamHandler(meta, c, resp)
-	} else {
-		usage, err = Handler(meta, c, resp)
+		return StreamHandler(meta, c, resp)
 	}
-
-	return usage, err
+	return Handler(meta, c, resp)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "Coze bot chat endpoint\nOnly chat completions mode is supported\nActual model should be a bot ID; the `bot-` prefix is stripped before upstream requests\nKey format: `token|user_id`",
 		KeyHelp: "token|user_id",
 		Models:  ModelList,
 	}

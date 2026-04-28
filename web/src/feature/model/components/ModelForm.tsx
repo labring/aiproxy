@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -27,25 +29,134 @@ import { modelCreateSchema } from '@/validation/model'
 import { useCreateModel, useUpdateModel } from '../hooks'
 import { useTranslation } from 'react-i18next'
 import { ModelCreateForm } from '@/validation/model'
-import { Plugin, EngineConfig } from '@/types/model'
+import {
+    Plugin,
+    EngineConfig,
+    ModelPrice,
+    ModelCreateRequest,
+    ModelConfig,
+    ModelConfigDetail,
+    MODEL_TYPE_OPTIONS,
+    STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES,
+} from '@/types/model'
 import { AdvancedErrorDisplay } from '@/components/common/error/errorDisplay'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { useState } from 'react'
 import { ENV } from '@/utils/env'
+import { PriceFormFields } from '@/components/price/PriceFormFields'
 import { ValidationErrorDisplay } from '@/components/common/error/validationErrorDisplay'
+
+const KNOWN_PRICE_KEYS = new Set([
+    'input_price',
+    'input_price_unit',
+    'output_price',
+    'output_price_unit',
+    'per_request_price',
+    'cache_creation_price',
+    'cache_creation_price_unit',
+    'cached_price',
+    'cached_price_unit',
+    'image_input_price',
+    'image_input_price_unit',
+    'image_output_price',
+    'image_output_price_unit',
+    'audio_input_price',
+    'audio_input_price_unit',
+    'thinking_mode_output_price',
+    'thinking_mode_output_price_unit',
+    'web_search_price',
+    'web_search_price_unit',
+    'conditional_prices',
+])
+
+const MANAGED_MODEL_KEYS = new Set([
+    'config',
+    'owner',
+    'type',
+    'rpm',
+	'tpm',
+	'retry_times',
+	'timeout_config',
+	'force_save_detail',
+    'request_body_storage_max_size',
+    'response_body_storage_max_size',
+    'summary_service_tier',
+    'summary_claude_long_context',
+    'price',
+    'plugin',
+])
+
+const MANAGED_PLUGIN_KEYS = {
+    cache: new Set([
+        'enable',
+        'ttl',
+        'item_max_size',
+        'add_cache_hit_header',
+        'cache_hit_header',
+    ]),
+    cachefollow: new Set([
+        'enable',
+        'enable_generic_follow',
+        'followed_channel_ttl_seconds',
+        'recent_channel_update_debounce_seconds',
+    ]),
+    'web-search': new Set([
+        'enable',
+        'force_search',
+        'max_results',
+        'need_reference',
+        'reference_location',
+        'reference_format',
+        'default_language',
+        'prompt_template',
+        'search_from',
+    ]),
+    'think-split': new Set(['enable']),
+    'stream-fake': new Set(['enable']),
+} as const
+
+const DROPPED_CACHEFOLLOW_PLUGIN_KEYS = new Set([
+    'last_store_update_window',
+])
+
+const KNOWN_CONFIG_KEYS = new Set([
+    'max_input_tokens',
+    'max_output_tokens',
+    'max_context_tokens',
+    'vision',
+    'tool_choice',
+    'coder',
+    'limited_time_free',
+    'support_formats',
+    'support_voices',
+])
+
+const STREAM_TIMEOUT_SUPPORTED_TYPES = new Set<number>(STREAM_TIMEOUT_SUPPORTED_MODEL_TYPES)
 
 interface ModelFormProps {
     mode?: 'create' | 'update'
     onSuccess?: () => void
+    baseModelConfig?: ModelConfig | null
     defaultValues?: {
         model: string
+        config?: ModelConfig['config']
+        owner?: string
         type: number
+        exclude_from_tests?: boolean
         rpm?: number
         tpm?: number
+        image_quality_prices?: ModelConfig['image_quality_prices']
+        image_prices?: ModelConfig['image_prices']
         retry_times?: number
+        timeout_config?: ModelConfig['timeout_config']
         timeout?: number
-        max_error_rate?: number
+        stream_timeout?: number
         force_save_detail?: boolean
+        request_body_storage_max_size?: number
+        response_body_storage_max_size?: number
+        summary_service_tier?: boolean
+        summary_claude_long_context?: boolean
+        price?: ModelPrice
         plugin?: Plugin
     }
 }
@@ -53,16 +164,27 @@ interface ModelFormProps {
 export function ModelForm({
     mode = 'create',
     onSuccess,
+    baseModelConfig = null,
     defaultValues = {
         model: '',
+        owner: '',
         type: 1,
     },
 }: ModelFormProps) {
     const { t } = useTranslation()
+    const [configExpanded, setConfigExpanded] = useState(false)
 
-    // Plugin configuration expanded states
+    // Collapsible expanded states
+    const [priceExpanded, setPriceExpanded] = useState(false)
     const [cachePluginExpanded, setCachePluginExpanded] = useState(false)
     const [webSearchPluginExpanded, setWebSearchPluginExpanded] = useState(false)
+    const [configExtrasText, setConfigExtrasText] = useState(() => {
+        const extras = Object.fromEntries(
+            Object.entries(defaultValues.config || {}).filter(([key]) => !KNOWN_CONFIG_KEYS.has(key))
+        )
+        return Object.keys(extras).length > 0 ? JSON.stringify(extras, null, 2) : ''
+    })
+    const [configExtrasError, setConfigExtrasError] = useState<string | null>(null)
 
     // API hooks
     const {
@@ -90,15 +212,33 @@ export function ModelForm({
         mode: 'onChange', // 启用实时验证
         defaultValues: {
             model: defaultValues.model || '',
+            config: {
+                max_input_tokens: defaultValues.config?.max_input_tokens,
+                max_output_tokens: defaultValues.config?.max_output_tokens,
+                max_context_tokens: defaultValues.config?.max_context_tokens,
+                vision: defaultValues.config?.vision ?? false,
+                tool_choice: defaultValues.config?.tool_choice ?? false,
+                coder: defaultValues.config?.coder ?? false,
+                limited_time_free: defaultValues.config?.limited_time_free ?? false,
+                support_formats: defaultValues.config?.support_formats,
+                support_voices: defaultValues.config?.support_voices,
+            },
+            owner: defaultValues.owner ?? '',
             type: defaultValues.type || 1,
             rpm: defaultValues.rpm,
             tpm: defaultValues.tpm,
             retry_times: defaultValues.retry_times,
             timeout: defaultValues.timeout,
-            max_error_rate: defaultValues.max_error_rate,
+            stream_timeout: defaultValues.stream_timeout ?? defaultValues.timeout_config?.stream_request_timeout,
             force_save_detail: defaultValues.force_save_detail ?? false,
+            request_body_storage_max_size: defaultValues.request_body_storage_max_size,
+            response_body_storage_max_size: defaultValues.response_body_storage_max_size,
+            summary_service_tier: defaultValues.summary_service_tier ?? false,
+            summary_claude_long_context: defaultValues.summary_claude_long_context ?? false,
+            price: defaultValues.price || {},
             plugin: {
                 cache: { enable: false, ...defaultValues.plugin?.cache },
+                cachefollow: { enable: false, ...defaultValues.plugin?.cachefollow },
                 "web-search": { enable: false, search_from: [], ...defaultValues.plugin?.["web-search"] },
                 "think-split": { enable: false, ...defaultValues.plugin?.["think-split"] },
                 "stream-fake": { enable: false, ...defaultValues.plugin?.["stream-fake"] },
@@ -107,9 +247,78 @@ export function ModelForm({
     })
 
     // Watch plugin enable states
+    const watchedType = form.watch('type')
     const cacheEnabled = form.watch('plugin.cache.enable')
+    const cacheFollowEnabled = form.watch('plugin.cachefollow.enable')
     const webSearchEnabled = form.watch('plugin.web-search.enable')
     const searchEngines = form.watch('plugin.web-search.search_from') || []
+
+    const supportFormatsValue = form.watch('config.support_formats')
+    const supportVoicesValue = form.watch('config.support_voices')
+    const supportStreamTimeout = STREAM_TIMEOUT_SUPPORTED_TYPES.has(watchedType)
+
+    const configFieldVisibility = (() => {
+        switch (watchedType) {
+            case 7:
+                return {
+                    tokenFields: ['max_input_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: false,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: true,
+                }
+            case 8:
+                return {
+                    tokenFields: ['max_input_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: false,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: false,
+                }
+            case 3:
+            case 10:
+            case 11:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: watchedType === 3,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: false,
+                    showSupportVoices: false,
+                }
+            case 5:
+            case 9:
+            case 13:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_output_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: false,
+                    showVision: true,
+                    showCoder: false,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: true,
+                    showSupportVoices: false,
+                }
+            case 1:
+            case 2:
+            case 4:
+            case 6:
+            default:
+                return {
+                    tokenFields: ['max_input_tokens', 'max_output_tokens', 'max_context_tokens'] as Array<'max_input_tokens' | 'max_output_tokens' | 'max_context_tokens'>,
+                    showToolChoice: true,
+                    showVision: true,
+                    showCoder: true,
+                    showLimitedTimeFree: true,
+                    showSupportFormats: false,
+                    showSupportVoices: false,
+                }
+        }
+    })()
 
     // Available search engine types
     const availableEngineTypes = ['bing', 'google', 'arxiv', 'searchxng'] as const
@@ -222,6 +431,23 @@ export function ModelForm({
 
         // Clear previous errors
         if (clearError) clearError()
+        setConfigExtrasError(null)
+
+        let configExtras: Record<string, unknown> = {}
+        const rawConfigExtras = configExtrasText.trim()
+        if (rawConfigExtras) {
+            try {
+                const parsed = JSON.parse(rawConfigExtras) as unknown
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    setConfigExtrasError(t('model.dialog.config.extrasJsonObjectError'))
+                    return
+                }
+                configExtras = parsed as Record<string, unknown>
+            } catch {
+                setConfigExtrasError(t('model.dialog.config.extrasJsonInvalid'))
+                return
+            }
+        }
 
         // Prepare plugin data - only include enabled plugins with their configured values
         const pluginData = {}
@@ -235,6 +461,23 @@ export function ModelForm({
                     ...(data.plugin.cache.item_max_size && { item_max_size: data.plugin.cache.item_max_size }),
                     ...(data.plugin.cache.add_cache_hit_header !== undefined && { add_cache_hit_header: data.plugin.cache.add_cache_hit_header }),
                     ...(data.plugin.cache.cache_hit_header && { cache_hit_header: data.plugin.cache.cache_hit_header }),
+                }
+            })
+        }
+
+        if (data.plugin?.cachefollow?.enable) {
+            Object.assign(pluginData, {
+                cachefollow: {
+                    enable: true,
+                    ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                        enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                    }),
+                    ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
+                        followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
+                    }),
+                    ...(data.plugin.cachefollow.recent_channel_update_debounce_seconds !== undefined && {
+                        recent_channel_update_debounce_seconds: data.plugin.cachefollow.recent_channel_update_debounce_seconds,
+                    }),
                 }
             })
         }
@@ -281,39 +524,233 @@ export function ModelForm({
             })
         }
 
+        // Clean price data - remove zero/undefined values
+        const cleanPrice = (p: ModelPrice | undefined) => {
+            if (!p) return undefined
+            const cleaned: Record<string, unknown> = {}
+            for (const [k, v] of Object.entries(p)) {
+                if (k === 'conditional_prices') {
+                    if (Array.isArray(v) && v.length > 0) cleaned[k] = v
+                } else if (v !== undefined && v !== 0) {
+                    cleaned[k] = v
+                }
+            }
+            return Object.keys(cleaned).length > 0 ? cleaned : undefined
+        }
+        const priceData = cleanPrice(data.price as ModelPrice | undefined)
+
+        const baseConfig = baseModelConfig
+            ? (({ created_at, updated_at, model, ...rest }) => rest)(baseModelConfig)
+            : null
+
+        const preservedTopLevelFields = Object.fromEntries(
+            Object.entries((baseConfig || {}) as Record<string, unknown>).filter(([key]) => !MANAGED_MODEL_KEYS.has(key))
+        )
+
+        const basePriceUnknown = Object.fromEntries(
+            Object.entries(baseModelConfig?.price || {}).filter(([key]) => !KNOWN_PRICE_KEYS.has(key))
+        )
+
+        const mergedPrice = (() => {
+            if (!priceData && Object.keys(basePriceUnknown).length === 0) {
+                return undefined
+            }
+
+            return {
+                ...basePriceUnknown,
+                ...(priceData || {}),
+            } as ModelPrice
+        })()
+
+        const existingPlugin = (baseModelConfig?.plugin || {}) as Record<string, unknown>
+        const mergedPlugin: Record<string, unknown> = Object.fromEntries(
+            Object.entries(existingPlugin).filter(([key]) => !['cache', 'cachefollow', 'web-search', 'think-split', 'stream-fake'].includes(key))
+        )
+
+        if (data.plugin?.cache?.enable) {
+            const existingCachePlugin = (baseModelConfig?.plugin?.cache || {}) as Record<string, unknown>
+            const preservedCachePluginFields = Object.fromEntries(
+                Object.entries(existingCachePlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS.cache.has(key))
+            )
+            mergedPlugin.cache = {
+                ...preservedCachePluginFields,
+                enable: true,
+                ...(data.plugin.cache.ttl !== undefined && { ttl: data.plugin.cache.ttl }),
+                ...(data.plugin.cache.item_max_size !== undefined && { item_max_size: data.plugin.cache.item_max_size }),
+                ...(data.plugin.cache.add_cache_hit_header !== undefined && { add_cache_hit_header: data.plugin.cache.add_cache_hit_header }),
+                ...(data.plugin.cache.cache_hit_header !== undefined && { cache_hit_header: data.plugin.cache.cache_hit_header }),
+            }
+        }
+
+        if (data.plugin?.cachefollow?.enable) {
+            const existingCacheFollowPlugin = (baseModelConfig?.plugin?.cachefollow || {}) as Record<string, unknown>
+            const preservedCacheFollowPluginFields = Object.fromEntries(
+                Object.entries(existingCacheFollowPlugin).filter(
+                    ([key]) => !MANAGED_PLUGIN_KEYS.cachefollow.has(key) && !DROPPED_CACHEFOLLOW_PLUGIN_KEYS.has(key)
+                )
+            )
+            mergedPlugin.cachefollow = {
+                ...preservedCacheFollowPluginFields,
+                enable: true,
+                ...(data.plugin.cachefollow.enable_generic_follow !== undefined && {
+                    enable_generic_follow: data.plugin.cachefollow.enable_generic_follow,
+                }),
+                ...(data.plugin.cachefollow.followed_channel_ttl_seconds !== undefined && {
+                    followed_channel_ttl_seconds: data.plugin.cachefollow.followed_channel_ttl_seconds,
+                }),
+                ...(data.plugin.cachefollow.recent_channel_update_debounce_seconds !== undefined && {
+                    recent_channel_update_debounce_seconds: data.plugin.cachefollow.recent_channel_update_debounce_seconds,
+                }),
+            }
+        }
+
+        if (data.plugin?.['web-search']?.enable && data.plugin['web-search'].search_from && data.plugin['web-search'].search_from.length > 0) {
+            const existingWebSearchPlugin = (baseModelConfig?.plugin?.['web-search'] || {}) as Record<string, unknown>
+            const preservedWebSearchPluginFields = Object.fromEntries(
+                Object.entries(existingWebSearchPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['web-search'].has(key))
+            )
+            const cleanedSearchFrom = data.plugin['web-search'].search_from.map(engine => ({
+                type: engine.type,
+                ...(engine.max_results !== undefined && { max_results: engine.max_results }),
+                ...(engine.spec && Object.keys(engine.spec).some(key => (engine.spec as Record<string, unknown>)[key] !== undefined && (engine.spec as Record<string, unknown>)[key] !== '') && { spec: engine.spec })
+            }))
+
+            mergedPlugin['web-search'] = {
+                ...preservedWebSearchPluginFields,
+                enable: true,
+                search_from: cleanedSearchFrom,
+                ...(data.plugin['web-search'].force_search !== undefined && { force_search: data.plugin['web-search'].force_search }),
+                ...(data.plugin['web-search'].max_results !== undefined && { max_results: data.plugin['web-search'].max_results }),
+                ...(data.plugin['web-search'].need_reference !== undefined && { need_reference: data.plugin['web-search'].need_reference }),
+                ...(data.plugin['web-search'].reference_location !== undefined && { reference_location: data.plugin['web-search'].reference_location }),
+                ...(data.plugin['web-search'].reference_format !== undefined && { reference_format: data.plugin['web-search'].reference_format }),
+                ...(data.plugin['web-search'].default_language !== undefined && { default_language: data.plugin['web-search'].default_language }),
+                ...(data.plugin['web-search'].prompt_template !== undefined && { prompt_template: data.plugin['web-search'].prompt_template }),
+            }
+        }
+
+        if (data.plugin?.['think-split']?.enable) {
+            const existingThinkSplitPlugin = (baseModelConfig?.plugin?.['think-split'] || {}) as Record<string, unknown>
+            const preservedThinkSplitPluginFields = Object.fromEntries(
+                Object.entries(existingThinkSplitPlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['think-split'].has(key))
+            )
+            mergedPlugin['think-split'] = {
+                ...preservedThinkSplitPluginFields,
+                enable: true,
+            }
+        }
+
+        if (data.plugin?.['stream-fake']?.enable) {
+            const existingStreamFakePlugin = (baseModelConfig?.plugin?.['stream-fake'] || {}) as Record<string, unknown>
+            const preservedStreamFakePluginFields = Object.fromEntries(
+                Object.entries(existingStreamFakePlugin).filter(([key]) => !MANAGED_PLUGIN_KEYS['stream-fake'].has(key))
+            )
+            mergedPlugin['stream-fake'] = {
+                ...preservedStreamFakePluginFields,
+                enable: true,
+            }
+        }
+
+        const preservedTimeoutConfigFields = Object.fromEntries(
+            Object.entries((baseConfig?.timeout_config || {}) as Record<string, unknown>).filter(([key]) => (
+                key !== 'request_timeout' && key !== 'stream_request_timeout'
+            ))
+        )
+        const mergedTimeoutConfig = (() => {
+            if (data.timeout !== undefined || data.stream_timeout !== undefined) {
+                return {
+                    ...preservedTimeoutConfigFields,
+                    ...(data.timeout !== undefined && { request_timeout: Number(data.timeout) }),
+                    ...(supportStreamTimeout && data.stream_timeout !== undefined && { stream_request_timeout: Number(data.stream_timeout) }),
+                }
+            }
+            if (Object.keys(preservedTimeoutConfigFields).length > 0) {
+                return preservedTimeoutConfigFields
+            }
+            return undefined
+        })()
+
+        const cleanedConfig = (() => {
+            const config = data.config || {}
+            const nextConfig: Record<string, unknown> = {
+                ...configExtras,
+            }
+
+            for (const [key, value] of Object.entries(config)) {
+                if (Array.isArray(value)) {
+                    const trimmed = value.map((item) => String(item).trim()).filter(Boolean)
+                    if (trimmed.length > 0) {
+                        nextConfig[key] = trimmed
+                    }
+                    continue
+                }
+
+                if (typeof value === 'boolean') {
+                    if (value) {
+                        nextConfig[key] = value
+                    }
+                    continue
+                }
+
+                if (typeof value === 'string') {
+                    if (value !== '') {
+                        nextConfig[key] = value
+                    }
+                    continue
+                }
+
+                if (value !== undefined && value !== null) {
+                    nextConfig[key] = value
+                }
+            }
+
+            return Object.keys(nextConfig).length > 0 ? nextConfig as ModelConfigDetail : undefined
+        })()
+
         // Prepare data for API - 如果没有启用的插件，则不传递 plugin 字段
-        const formData: { 
-            model?: string; 
-            type: number; 
-            rpm?: number;
-            tpm?: number;
-            retry_times?: number;
-            timeout?: number;
-            max_error_rate?: number;
-            force_save_detail?: boolean;
-            plugin?: Plugin 
-        } = {
+        const formData: Omit<ModelCreateRequest, 'model'> = {
+            ...preservedTopLevelFields,
+            ...(cleanedConfig && { config: cleanedConfig }),
+            owner: data.owner ?? '',
             type: Number(data.type),
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
             ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
-            ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
-            ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
+            ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
-            ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
+            ...(data.request_body_storage_max_size !== undefined && {
+                request_body_storage_max_size: Number(data.request_body_storage_max_size),
+            }),
+            ...(data.response_body_storage_max_size !== undefined && {
+                response_body_storage_max_size: Number(data.response_body_storage_max_size),
+            }),
+            ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
+            ...(data.summary_claude_long_context !== undefined && { summary_claude_long_context: data.summary_claude_long_context }),
+            ...(mergedPrice && { price: mergedPrice }),
+            ...(Object.keys(mergedPlugin).length > 0 && { plugin: mergedPlugin as Plugin })
         }
 
         if (mode === 'create') {
             // For create mode, include the model name
             createModel({
                 model: data.model,
+                ...(cleanedConfig && { config: cleanedConfig }),
+                owner: data.owner ?? '',
                 type: Number(data.type),
                 ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
                 ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
                 ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
-                ...(data.timeout !== undefined && { timeout: Number(data.timeout) }),
-                ...(data.max_error_rate !== undefined && { max_error_rate: Number(data.max_error_rate) }),
+                ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
                 ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
+                ...(data.request_body_storage_max_size !== undefined && {
+                    request_body_storage_max_size: Number(data.request_body_storage_max_size),
+                }),
+                ...(data.response_body_storage_max_size !== undefined && {
+                    response_body_storage_max_size: Number(data.response_body_storage_max_size),
+                }),
+                ...(data.summary_service_tier !== undefined && { summary_service_tier: data.summary_service_tier }),
+                ...(data.summary_claude_long_context !== undefined && { summary_claude_long_context: data.summary_claude_long_context }),
+                ...(priceData && { price: priceData }),
                 ...(Object.keys(pluginData).length > 0 && { plugin: pluginData as Plugin })
             }, {
                 onSuccess: () => {
@@ -361,6 +798,10 @@ export function ModelForm({
                         <AdvancedErrorDisplay error={error} />
                     )}
 
+                    {configExtrasError && (
+                        <AdvancedErrorDisplay error={new Error(configExtrasError)} />
+                    )}
+
                     {/* Model name field */}
                     <FormField
                         control={form.control}
@@ -386,6 +827,25 @@ export function ModelForm({
                         )}
                     />
 
+                    <FormField
+                        control={form.control}
+                        name="owner"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("model.owner")}</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        placeholder={t("model.dialog.ownerPlaceholder")}
+                                        {...field}
+                                        value={field.value ?? ''}
+                                    />
+                                </FormControl>
+                                <FormDescription>{t("model.dialog.ownerDescription")}</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
                     {/* Model type field */}
                     <FormField
                         control={form.control}
@@ -403,7 +863,7 @@ export function ModelForm({
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13].map((type) => (
+                                        {MODEL_TYPE_OPTIONS.map((type) => (
                                             <SelectItem key={type} value={String(type)}>
                                                 {t(`modeType.${type}` as never)}
                                             </SelectItem>
@@ -495,28 +955,26 @@ export function ModelForm({
                         )}
                     />
 
-                    {/* Max Error Rate Field */}
-                    <FormField
-                        control={form.control}
-                        name="max_error_rate"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>{t("model.dialog.maxErrorRate")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="number"
-                                        placeholder={t("model.dialog.maxErrorRatePlaceholder")}
-                                        {...field}
-                                        min="0"
-                                        max="1"
-                                        step="0.01"
-                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    {supportStreamTimeout && (
+                        <FormField
+                            control={form.control}
+                            name="stream_timeout"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{t("model.dialog.streamTimeout")}</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            placeholder={t("model.dialog.streamTimeoutPlaceholder")}
+                                            {...field}
+                                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
 
                     {/* Force Save Detail Switch */}
                     <FormField
@@ -524,7 +982,10 @@ export function ModelForm({
                         name="force_save_detail"
                         render={({ field }) => (
                             <FormItem className="flex flex-row items-center justify-between py-2">
-                                <FormLabel>{t("model.dialog.forceSaveDetail")}</FormLabel>
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.forceSaveDetail")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.forceSaveDetailDescription")}</FormDescription>
+                                </div>
                                 <FormControl>
                                     <Switch
                                         checked={field.value}
@@ -535,13 +996,340 @@ export function ModelForm({
                         )}
                     />
 
+                    <FormField
+                        control={form.control}
+                        name="request_body_storage_max_size"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("model.dialog.requestBodyStorageMaxSize")}</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        type="number"
+                                        placeholder={t("model.dialog.requestBodyStorageMaxSizePlaceholder")}
+                                        {...field}
+                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : 0)}
+                                    />
+                                </FormControl>
+                                <FormDescription>{t("model.dialog.requestBodyStorageMaxSizeDescription")}</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="response_body_storage_max_size"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("model.dialog.responseBodyStorageMaxSize")}</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        type="number"
+                                        placeholder={t("model.dialog.responseBodyStorageMaxSizePlaceholder")}
+                                        {...field}
+                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : 0)}
+                                    />
+                                </FormControl>
+                                <FormDescription>{t("model.dialog.responseBodyStorageMaxSizeDescription")}</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    {/* Record Service Tier Switch */}
+                    <FormField
+                        control={form.control}
+                        name="summary_service_tier"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between py-2">
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.recordServiceTier")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.recordServiceTierDescription")}</FormDescription>
+                                </div>
+                                <FormControl>
+                                    <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="summary_claude_long_context"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between py-2">
+                                <div className="space-y-1">
+                                    <FormLabel>{t("model.dialog.recordClaudeLongContext")}</FormLabel>
+                                    <FormDescription>{t("model.dialog.recordClaudeLongContextDescription")}</FormDescription>
+                                </div>
+                                <FormControl>
+                                    <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+
+                    <Collapsible open={configExpanded} onOpenChange={setConfigExpanded}>
+                        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="text-left">
+                                <h3 className="text-sm font-medium">{t("model.dialog.config.title")}</h3>
+                                <p className="text-xs text-muted-foreground">{t("model.dialog.config.description")}</p>
+                            </div>
+                            {configExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-3 px-1 space-y-4">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                                {t("model.dialog.config.note")}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                {configFieldVisibility.tokenFields.includes('max_context_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_context_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxContextTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxContextTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.tokenFields.includes('max_input_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_input_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxInputTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxInputTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.tokenFields.includes('max_output_tokens') && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.max_output_tokens"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("model.dialog.config.maxOutputTokens")}</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder={t("model.dialog.config.maxOutputTokensPlaceholder")}
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                {configFieldVisibility.showToolChoice && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.tool_choice"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.toolChoice")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.toolChoiceDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showVision && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.vision"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.vision")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.visionDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showCoder && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.coder"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.coder")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.coderDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                {configFieldVisibility.showLimitedTimeFree && (
+                                    <FormField
+                                        control={form.control}
+                                        name="config.limited_time_free"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                                <div className="space-y-1">
+                                                    <FormLabel>{t("model.dialog.config.limitedTimeFree")}</FormLabel>
+                                                    <FormDescription>{t("model.dialog.config.limitedTimeFreeDescription")}</FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value ?? false}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+
+                            {configFieldVisibility.showSupportFormats && (
+                                <FormField
+                                    control={form.control}
+                                    name="config.support_formats"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.config.supportFormats")}</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder={t("model.dialog.config.supportFormatsPlaceholder")}
+                                                    value={(supportFormatsValue || []).join('\n')}
+                                                    onChange={(e) => {
+                                                        const values = e.target.value
+                                                            .split('\n')
+                                                            .map((item) => item.trim())
+                                                            .filter(Boolean)
+                                                        form.setValue('config.support_formats', values.length > 0 ? values : undefined, { shouldDirty: true })
+                                                    }}
+                                                    className="min-h-[96px]"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.config.supportFormatsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+
+                            {configFieldVisibility.showSupportVoices && (
+                                <FormField
+                                    control={form.control}
+                                    name="config.support_voices"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.config.supportVoices")}</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder={t("model.dialog.config.supportVoicesPlaceholder")}
+                                                    value={(supportVoicesValue || []).join('\n')}
+                                                    onChange={(e) => {
+                                                        const values = e.target.value
+                                                            .split('\n')
+                                                            .map((item) => item.trim())
+                                                            .filter(Boolean)
+                                                        form.setValue('config.support_voices', values.length > 0 ? values : undefined, { shouldDirty: true })
+                                                    }}
+                                                    className="min-h-[140px]"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.config.supportVoicesDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+
+                            <div className="space-y-2">
+                                <Label>{t("model.dialog.config.extrasJson")}</Label>
+                                <Textarea
+                                    placeholder={t("model.dialog.config.extrasJsonPlaceholder")}
+                                    value={configExtrasText}
+                                    onChange={(e) => setConfigExtrasText(e.target.value)}
+                                    className="min-h-[140px] font-mono text-xs"
+                                />
+                                <p className="text-xs text-muted-foreground">{t("model.dialog.config.extrasJsonDescription")}</p>
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+
+                    {/* Price Configuration Section */}
+                    <Collapsible open={priceExpanded} onOpenChange={setPriceExpanded}>
+                        <CollapsibleTrigger className="flex items-center justify-between w-full py-3 px-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="text-left">
+                                <h3 className="text-sm font-medium">{t("group.price.title")}</h3>
+                                <p className="text-xs text-muted-foreground">{t("group.price.description")}</p>
+                            </div>
+                            {priceExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-3 px-1">
+                            <PriceFormFields
+                                price={(form.watch('price') || {}) as ModelPrice}
+                                onChange={(p) => form.setValue('price', p as ModelCreateForm['price'])}
+                            />
+                        </CollapsibleContent>
+                    </Collapsible>
+
                     {/* Plugin Configuration Section */}
                     <div className="space-y-6">
                         <div>
                             <h3 className="text-lg font-medium">{t("model.dialog.pluginConfiguration")}</h3>
                             <p className="text-sm text-muted-foreground">{t("model.dialog.pluginConfigurationDescription")}</p>
                         </div>
-                        
+
                         <hr className="border-border" />
 
                         {/* Cache Plugin */}
@@ -655,6 +1443,95 @@ export function ModelForm({
                                 )}
                             </Collapsible>
                         </div>
+
+                        <hr className="border-border" />
+
+                        {/* Cache Follow Plugin */}
+                        <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center space-x-3">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-center space-x-2">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <div>
+                                    <Label className="text-sm font-medium">{t("model.dialog.cacheFollowPlugin.title")}</Label>
+                                    <p className="text-xs text-muted-foreground">{t("model.dialog.cacheFollowPlugin.description")}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {cacheFollowEnabled && (
+                            <div className="pl-8 pb-4 space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.enable_generic_follow"
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-start space-x-3 rounded-md border p-4">
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value ?? false}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                            <div className="space-y-1 leading-none">
+                                                <FormLabel>{t("model.dialog.cacheFollowPlugin.enableGenericFollow")}</FormLabel>
+                                                <FormDescription>{t("model.dialog.cacheFollowPlugin.enableGenericFollowDescription")}</FormDescription>
+                                            </div>
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.followed_channel_ttl_seconds"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.cacheFollowPlugin.followedChannelTTLSeconds")}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder={t("model.dialog.cacheFollowPlugin.followedChannelTTLSecondsPlaceholder")}
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.cacheFollowPlugin.followedChannelTTLSecondsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="plugin.cachefollow.recent_channel_update_debounce_seconds"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSeconds")}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder={t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSecondsPlaceholder")}
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t("model.dialog.cacheFollowPlugin.recentChannelUpdateDebounceSecondsDescription")}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
 
                         <hr className="border-border" />
 

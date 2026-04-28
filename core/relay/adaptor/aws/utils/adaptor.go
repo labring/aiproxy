@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 )
@@ -25,5 +24,5 @@ type AwsAdapter interface {
 		meta *meta.Meta,
 		store adaptor.Store,
 		c *gin.Context,
-	) (usage model.Usage, err adaptor.Error)
+	) (adaptor.DoResponseResult, adaptor.Error)
 }

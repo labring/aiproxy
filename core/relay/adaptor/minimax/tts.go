@@ -1,7 +1,6 @@
 package minimax
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
@@ -127,13 +126,13 @@ func TTSHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if utils.IsStreamResponse(resp) {
 		return ttsStreamHandler(meta, c, resp)
 	}
 
 	if err := TryErrorHanlder(resp); err != nil {
-		return model.Usage{}, err
+		return adaptor.DoResponseResult{}, err
 	}
 
 	defer resp.Body.Close()
@@ -144,7 +143,7 @@ func TTSHandler(
 
 	var result TTSResponse
 	if err := common.UnmarshalResponse(resp, &result); err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"TTS_ERROR",
 			http.StatusInternalServerError,
@@ -163,7 +162,7 @@ func TTSHandler(
 
 	audioBytes, err := hex.DecodeString(result.Data.Audio)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 			err,
 			"TTS_ERROR",
 			http.StatusInternalServerError,
@@ -187,14 +186,14 @@ func TTSHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 func ttsStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	sseFormat := meta.GetString("stream_format") == "sse"
 	audioFormat := meta.GetString("audio_format")
 
@@ -210,12 +209,8 @@ func ttsStreamHandler(
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewScanner(resp.Body)
+	defer cleanup()
 
 	usageCharacters := meta.RequestUsage.InputTokens
 
@@ -279,5 +274,5 @@ func ttsStreamHandler(
 		render.OpenaiAudioDone(c, usage)
 	}
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }

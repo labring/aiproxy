@@ -33,8 +33,9 @@ func AsyncConsume(
 	retryTimes int,
 	requestDetail *model.RequestDetail,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
+	upstreamID string,
+	asyncUsageStatus model.AsyncUsageStatus,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
@@ -63,8 +64,9 @@ func AsyncConsume(
 		retryTimes,
 		requestDetail,
 		downstreamResult,
-		user,
 		metadata,
+		upstreamID,
+		asyncUsageStatus,
 	)
 }
 
@@ -82,17 +84,27 @@ func Consume(
 	retryTimes int,
 	requestDetail *model.RequestDetail,
 	downstreamResult bool,
-	user string,
 	metadata map[string]string,
+	upstreamID string,
+	asyncUsageStatus model.AsyncUsageStatus,
 ) {
 	if !checkNeedRecordConsume(code, meta) {
 		return
 	}
 
-	amount := CalculateAmount(code, usage, modelPrice)
-	amount = consumeAmount(ctx, amount, postGroupConsumer, meta)
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice, meta.RequestServiceTier)
+	if downstreamResult {
+		// TODO: add record actual consume amount
+		_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
+	} else if amountDetail.UsedAmount != 0 {
+		log.Warnf(
+			"not downstream result but used amount is not zero, request_id: %s, used_amount: %f",
+			meta.RequestID,
+			amountDetail.UsedAmount,
+		)
+	}
 
-	selectedModelPrice := modelPrice.SelectConditionalPrice(usage)
+	selectedModelPrice := modelPrice.SelectConditionalPrice(usage, meta.RequestServiceTier)
 	selectedModelPrice.ConditionalPrices = nil
 
 	err := recordConsume(
@@ -105,16 +117,39 @@ func Consume(
 		content,
 		ip,
 		requestDetail,
-		amount,
+		amountDetail,
 		retryTimes,
 		downstreamResult,
-		user,
 		metadata,
+		upstreamID,
+		asyncUsageStatus,
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())
 		notify.ErrorThrottle("recordConsume", time.Minute*5, "record consume failed", err.Error())
 	}
+}
+
+func Summary(
+	code int,
+	firstByteAt time.Time,
+	meta *meta.Meta,
+	usage model.Usage,
+	modelPrice model.Price,
+	downstreamResult bool,
+) {
+	amountDetail := CalculateAmountDetail(code, usage, modelPrice, meta.RequestServiceTier)
+
+	recordSummary(
+		time.Now(),
+		meta,
+		code,
+		firstByteAt,
+		usage,
+		amountDetail,
+		downstreamResult,
+		meta.RequestServiceTier,
+	)
 }
 
 func checkNeedRecordConsume(code int, meta *meta.Meta) bool {
@@ -143,19 +178,23 @@ func consumeAmount(
 	return amount
 }
 
-func CalculateAmount(
+func CalculateAmountDetail(
 	code int,
 	usage model.Usage,
 	modelPrice model.Price,
-) float64 {
+	serviceTier string,
+) model.Amount {
 	if modelPrice.PerRequestPrice != 0 {
 		if code != http.StatusOK {
-			return 0
+			return model.Amount{}
 		}
-		return float64(modelPrice.PerRequestPrice)
+
+		return model.Amount{
+			UsedAmount: float64(modelPrice.PerRequestPrice),
+		}
 	}
 
-	modelPrice = modelPrice.SelectConditionalPrice(usage)
+	modelPrice = modelPrice.SelectConditionalPrice(usage, serviceTier)
 
 	inputTokens := usage.InputTokens
 	if modelPrice.ImageInputPrice > 0 {
@@ -175,6 +214,10 @@ func CalculateAmount(
 	}
 
 	outputTokens := usage.OutputTokens
+	if modelPrice.ImageOutputPrice > 0 {
+		outputTokens -= usage.ImageOutputTokens
+	}
+
 	outputPrice := float64(modelPrice.OutputPrice)
 
 	outputPriceUnit := modelPrice.GetOutputPriceUnit()
@@ -213,14 +256,40 @@ func CalculateAmount(
 		Mul(decimal.NewFromFloat(outputPrice)).
 		Div(decimal.NewFromInt(outputPriceUnit))
 
-	return inputAmount.
+	imageOutputAmount := decimal.NewFromInt(int64(usage.ImageOutputTokens)).
+		Mul(decimal.NewFromFloat(float64(modelPrice.ImageOutputPrice))).
+		Div(decimal.NewFromInt(modelPrice.GetImageOutputPriceUnit()))
+
+	usedAmount := inputAmount.
 		Add(imageInputAmount).
 		Add(audioInputAmount).
 		Add(cachedAmount).
 		Add(cacheCreationAmount).
 		Add(webSearchAmount).
 		Add(outputAmount).
+		Add(imageOutputAmount).
 		InexactFloat64()
+
+	return model.Amount{
+		InputAmount:         inputAmount.InexactFloat64(),
+		ImageInputAmount:    imageInputAmount.InexactFloat64(),
+		AudioInputAmount:    audioInputAmount.InexactFloat64(),
+		OutputAmount:        outputAmount.InexactFloat64(),
+		ImageOutputAmount:   imageOutputAmount.InexactFloat64(),
+		CachedAmount:        cachedAmount.InexactFloat64(),
+		CacheCreationAmount: cacheCreationAmount.InexactFloat64(),
+		WebSearchAmount:     webSearchAmount.InexactFloat64(),
+		UsedAmount:          usedAmount,
+	}
+}
+
+func CalculateAmount(
+	code int,
+	usage model.Usage,
+	modelPrice model.Price,
+	serviceTier string,
+) float64 {
+	return CalculateAmountDetail(code, usage, modelPrice, serviceTier).UsedAmount
 }
 
 func processGroupConsume(

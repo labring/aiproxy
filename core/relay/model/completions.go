@@ -26,33 +26,39 @@ type StreamOptions struct {
 }
 
 type GeneralOpenAIRequest struct {
-	Prompt              any             `json:"prompt,omitempty"`
-	Input               any             `json:"input,omitempty"`
-	Metadata            any             `json:"metadata,omitempty"`
-	Functions           any             `json:"functions,omitempty"`
-	LogitBias           any             `json:"logit_bias,omitempty"`
-	FunctionCall        any             `json:"function_call,omitempty"`
-	ToolChoice          any             `json:"tool_choice,omitempty"`
-	Stop                any             `json:"stop,omitempty"`
-	TopLogprobs         *int            `json:"top_logprobs,omitempty"`
-	PresencePenalty     *float64        `json:"presence_penalty,omitempty"`
-	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
-	FrequencyPenalty    *float64        `json:"frequency_penalty,omitempty"`
-	Logprobs            *bool           `json:"logprobs,omitempty"`
-	StreamOptions       *StreamOptions  `json:"stream_options,omitempty"`
-	Temperature         *float64        `json:"temperature,omitempty"`
-	TopP                *float64        `json:"top_p,omitempty"`
-	Model               string          `json:"model,omitempty"`
-	User                string          `json:"user,omitempty"`
-	Size                string          `json:"size,omitempty"`
-	Messages            []Message       `json:"messages,omitempty"`
-	Tools               []Tool          `json:"tools,omitempty"`
-	Seed                float64         `json:"seed,omitempty"`
-	MaxTokens           int             `json:"max_tokens,omitempty"`
-	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
-	TopK                int             `json:"top_k,omitempty"`
-	NumCtx              int             `json:"num_ctx,omitempty"`
-	Stream              bool            `json:"stream,omitempty"`
+	Prompt               any             `json:"prompt,omitempty"`
+	Input                any             `json:"input,omitempty"`
+	Metadata             any             `json:"metadata,omitempty"`
+	Functions            any             `json:"functions,omitempty"`
+	LogitBias            any             `json:"logit_bias,omitempty"`
+	FunctionCall         any             `json:"function_call,omitempty"`
+	ToolChoice           any             `json:"tool_choice,omitempty"`
+	Stop                 any             `json:"stop,omitempty"`
+	TopLogprobs          *int            `json:"top_logprobs,omitempty"`
+	PresencePenalty      *float64        `json:"presence_penalty,omitempty"`
+	ResponseFormat       *ResponseFormat `json:"response_format,omitempty"`
+	FrequencyPenalty     *float64        `json:"frequency_penalty,omitempty"`
+	Logprobs             *bool           `json:"logprobs,omitempty"`
+	StreamOptions        *StreamOptions  `json:"stream_options,omitempty"`
+	Temperature          *float64        `json:"temperature,omitempty"`
+	TopP                 *float64        `json:"top_p,omitempty"`
+	ServiceTier          string          `json:"service_tier,omitempty"`
+	PromptCacheKey       string          `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string          `json:"prompt_cache_retention,omitempty"`
+	Model                string          `json:"model,omitempty"`
+	User                 string          `json:"user,omitempty"`
+	Size                 string          `json:"size,omitempty"`
+	Messages             []Message       `json:"messages,omitempty"`
+	Tools                []Tool          `json:"tools,omitempty"`
+	Seed                 float64         `json:"seed,omitempty"`
+	MaxTokens            int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  int             `json:"max_completion_tokens,omitempty"`
+	TopK                 int             `json:"top_k,omitempty"`
+	NumCtx               int             `json:"num_ctx,omitempty"`
+	Stream               bool            `json:"stream,omitempty"`
+	ReasoningEffort      *string         `json:"reasoning_effort,omitempty"`
+	EnableThinking       *bool           `json:"enable_thinking,omitempty"`
+	ThinkingBudget       *int            `json:"thinking_budget,omitempty"`
 	// aiproxy control field
 	Thinking *GeneralThinking `json:"thinking,omitempty"`
 }
@@ -119,6 +125,7 @@ type TextResponse struct {
 type Message struct {
 	Content          any        `json:"content,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	Signature        string     `json:"signature,omitempty"`
 	Name             *string    `json:"name,omitempty"`
 	Role             string     `json:"role,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`

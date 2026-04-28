@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"errors"
 	"math"
 	"strings"
 
@@ -13,9 +12,15 @@ import (
 	"github.com/tiktoken-go/tokenizer"
 )
 
+const defaultMaxFuzzyTokenThreshold = 2048000
+
 func getTokenNum(tokenEncoder tokenizer.Codec, text string) int64 {
 	// Check fuzzy token threshold
 	threshold := config.GetFuzzyTokenThreshold()
+	if threshold == 0 || threshold > defaultMaxFuzzyTokenThreshold {
+		threshold = defaultMaxFuzzyTokenThreshold
+	}
+
 	textLen := len(text)
 
 	// If threshold is set and text length exceeds it, use fuzzy calculation
@@ -34,7 +39,7 @@ func getTokenNum(tokenEncoder tokenizer.Codec, text string) int64 {
 	return int64(count)
 }
 
-func CountTokenMessages(messages []model.Message, model string) int64 {
+func CountTokenMessages(messages []model.Message, model string, fetchImage bool) int64 {
 	tokenEncoder := intertiktoken.GetTokenEncoder(model)
 	// Reference:
 	// https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -95,7 +100,7 @@ func CountTokenMessages(messages []model.Message, model string) int64 {
 							detail, _ = imageURL["detail"].(string)
 						}
 
-						imageTokens, err := countImageTokens(url, detail, model)
+						imageTokens, err := countImageTokens(url, detail, model, fetchImage)
 						if err != nil {
 							log.Error("error counting image tokens: " + err.Error())
 						} else {
@@ -135,10 +140,8 @@ const (
 
 // https://platform.openai.com/docs/guides/vision/calculating-costs
 // https://github.com/openai/openai-cookbook/blob/05e3f9be4c7a2ae7ecf029a7c32065b024730ebe/examples/How_to_count_tokens_with_tiktoken.ipynb
-func countImageTokens(url, detail, model string) (_ int64, err error) {
-	fetchSize := true
-
-	var width, height int
+func countImageTokens(url, detail, model string, fetchImage bool) (_ int64, err error) {
+	width, height := 2048, 2048
 	// Reference:
 	// https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
 	// detail == "auto" is undocumented on how it works, it just said the model will use the auto
@@ -178,8 +181,9 @@ func countImageTokens(url, detail, model string) (_ int64, err error) {
 			return gpt4oMiniLowDetailCost, nil
 		}
 		return lowDetailCost, nil
-	case "high":
-		if fetchSize {
+	// case "high":
+	default:
+		if fetchImage {
 			width, height, err = image.GetImageSize(url)
 			if err != nil {
 				return 0, err
@@ -206,8 +210,6 @@ func countImageTokens(url, detail, model string) (_ int64, err error) {
 		result := numSquares*highDetailCostPerTile + additionalCost
 
 		return result, nil
-	default:
-		return 0, errors.New("invalid detail option")
 	}
 }
 

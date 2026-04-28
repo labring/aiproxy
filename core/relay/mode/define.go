@@ -48,6 +48,8 @@ func (m Mode) String() string {
 		return "ResponsesCancel"
 	case ResponsesInputItems:
 		return "ResponsesInputItems"
+	case Gemini:
+		return "Gemini"
 	default:
 		return fmt.Sprintf("Mode(%d)", m)
 	}
@@ -75,4 +77,5 @@ const (
 	ResponsesDelete
 	ResponsesCancel
 	ResponsesInputItems
+	Gemini
 )

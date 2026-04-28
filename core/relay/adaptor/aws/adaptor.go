@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,21 +8,30 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/aws/utils"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 )
 
 type Adaptor struct{}
+
+func init() {
+	registry.Register(model.ChannelTypeAWS, &Adaptor{})
+}
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return ""
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini
 }
 
 func (a *Adaptor) ConvertRequest(
@@ -31,9 +39,19 @@ func (a *Adaptor) ConvertRequest(
 	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	aa := GetAdaptor(meta.ActualModel)
+	aa := GetAdaptor(
+		relayutils.PreferredModelName(meta.OriginModel, meta.ActualModel),
+	)
+	if aa == nil && meta.ActualModel != "" && meta.ActualModel != meta.OriginModel {
+		aa = GetAdaptor(meta.ActualModel)
+	}
+
 	if aa == nil {
-		return adaptor.ConvertResult{}, errors.New("adaptor not found")
+		return adaptor.ConvertResult{}, relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
+			http.StatusInternalServerError,
+			"adaptor not found",
+		)
 	}
 
 	meta.Set("awsAdapter", aa)
@@ -73,19 +91,19 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	_ *http.Response,
-) (usage model.Usage, err adaptor.Error) {
-	adaptor, ok := meta.Get("awsAdapter")
+) (adaptor.DoResponseResult, adaptor.Error) {
+	awsAdaptor, ok := meta.Get("awsAdapter")
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"awsAdapter not found",
 			nil,
 			http.StatusInternalServerError,
 		)
 	}
 
-	v, ok := adaptor.(utils.AwsAdapter)
+	v, ok := awsAdaptor.(utils.AwsAdapter)
 	if !ok {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("aws adapter type error: %T, %v", v, v),
 			nil,
 			http.StatusInternalServerError,
@@ -102,12 +120,17 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 	}
 
 	return adaptor.Metadata{
+		Readme:  "AWS Bedrock unified adaptor\nRoutes requests to provider-specific Bedrock adaptors by model name\nSupports OpenAI-compatible chat/completions plus Anthropic-compatible and Gemini-compatible request conversion\nKey format: `region|ak|sk` or `region|apikey`",
 		Models:  models,
 		KeyHelp: "region|ak|sk or region|apikey",
 	}
 }
 
-func (a *Adaptor) GetRequestURL(_ *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	_ *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
 		URL:    "",

@@ -1,45 +1,16 @@
 definitions:
-  adaptor.ConfigTemplate:
-    properties:
-      description:
-        type: string
-      example: {}
-      name:
-        type: string
-      required:
-        type: boolean
-      type:
-        $ref: '#/definitions/adaptor.ConfigType'
-    type: object
-  adaptor.ConfigTemplates:
-    additionalProperties:
-      $ref: '#/definitions/adaptor.ConfigTemplate'
-    type: object
-  adaptor.ConfigType:
-    enum:
-    - string
-    - number
-    - bool
-    - object
-    type: string
-    x-enum-varnames:
-    - ConfigTypeString
-    - ConfigTypeNumber
-    - ConfigTypeBool
-    - ConfigTypeObject
   adaptors.AdaptorMeta:
     properties:
-      config:
-        $ref: '#/definitions/adaptor.ConfigTemplates'
+      configSchema:
+        additionalProperties: {}
+        type: object
       defaultBaseUrl:
         type: string
-      fetures:
-        items:
-          type: string
-        type: array
       keyHelp:
         type: string
       name:
+        type: string
+      readme:
         type: string
     type: object
   balance.GroupQuota:
@@ -53,10 +24,16 @@ definitions:
     properties:
       base_url:
         type: string
-      config:
-        $ref: '#/definitions/model.ChannelConfig'
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
+      enabled_auto_balance_check:
+        type: boolean
+      enabled_no_permission_ban:
+        type: boolean
       key:
         type: string
+      max_error_rate:
+        type: number
       model_mapping:
         additionalProperties:
           type: string
@@ -69,6 +46,8 @@ definitions:
         type: string
       priority:
         type: integer
+      proxy_url:
+        type: string
       sets:
         items:
           type: string
@@ -77,6 +56,8 @@ definitions:
         type: integer
       type:
         $ref: '#/definitions/model.ChannelType'
+      warn_error_rate:
+        type: number
     type: object
   controller.AddTokenRequest:
     properties:
@@ -86,11 +67,39 @@ definitions:
         type: array
       name:
         type: string
+      period_last_update_time:
+        type: integer
+      period_quota:
+        type: number
+      period_type:
+        type: string
       quota:
         type: number
       subnets:
         items:
           type: string
+        type: array
+    type: object
+  controller.BatchGroupTokenMetricsItem:
+    properties:
+      group:
+        type: string
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      token_name:
+        type: string
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
+  controller.BatchGroupTokenMetricsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/controller.BatchGroupTokenMetricsItem'
         type: array
     type: object
   controller.BuiltinModelConfig:
@@ -118,24 +127,29 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
       retry_times:
         type: integer
       rpm:
         type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
       timeout_config:
         $ref: '#/definitions/model.TimeoutConfig'
       tpm:
@@ -144,8 +158,6 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   controller.CreateGroupRequest:
     properties:
@@ -212,8 +224,13 @@ definitions:
         type: integer
       name:
         type: string
+      priority:
+        type: integer
       type:
         $ref: '#/definitions/model.ChannelType'
+      weight:
+        description: 权重百分比 (0-100)
+        type: number
     type: object
   controller.GetModelConfigsByModelsContainsRequest:
     properties:
@@ -286,6 +303,13 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: integer
+    type: object
+  controller.GroupModelMetricsResponse:
+    properties:
+      models:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeRateMetric'
+        type: object
     type: object
   controller.GroupPublicMCPDetailResponse:
     properties:
@@ -430,6 +454,44 @@ definitions:
       used_amount:
         type: number
     type: object
+  controller.GroupSummaryMetricsResponse:
+    properties:
+      groups:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeRateMetric'
+        type: object
+    type: object
+  controller.GroupTokenMetricsResponse:
+    properties:
+      tokens:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeRateMetric'
+        type: object
+    type: object
+  controller.GroupTokennameModelMetricsItem:
+    properties:
+      group:
+        type: string
+      model:
+        type: string
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      token_name:
+        type: string
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
+  controller.GroupTokennameModelMetricsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/controller.GroupTokennameModelMetricsItem'
+        type: array
+    type: object
   controller.ImportChannelFromOneAPIRequest:
     properties:
       dsn:
@@ -541,6 +603,105 @@ definitions:
       update_at:
         type: string
     type: object
+  controller.RuntimeChannelMetric:
+    properties:
+      banned_models:
+        type: integer
+      error_rate:
+        type: number
+      errors:
+        type: integer
+      models:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeModelMetric'
+        type: object
+      requests:
+        type: integer
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
+  controller.RuntimeChannelModelMetric:
+    properties:
+      banned:
+        type: boolean
+      error_rate:
+        type: number
+      errors:
+        type: integer
+      requests:
+        type: integer
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
+  controller.RuntimeMetricsResponse:
+    properties:
+      channel_models:
+        additionalProperties:
+          additionalProperties:
+            $ref: '#/definitions/controller.RuntimeChannelModelMetric'
+          type: object
+        type: object
+      channels:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeChannelMetric'
+        type: object
+      models:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeModelMetric'
+        type: object
+    type: object
+  controller.RuntimeModelMetric:
+    properties:
+      accessible_groups:
+        type: integer
+      accessible_sets:
+        items:
+          type: string
+        type: array
+      banned_channels:
+        type: integer
+      channels:
+        additionalProperties:
+          $ref: '#/definitions/controller.RuntimeChannelMetric'
+        type: object
+      error_rate:
+        type: number
+      errors:
+        type: integer
+      requests:
+        type: integer
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
+  controller.RuntimeRateMetric:
+    properties:
+      rpm:
+        type: integer
+      rps:
+        type: integer
+      tpm:
+        type: integer
+      tps:
+        type: integer
+    type: object
   controller.SaveEmbedMCPRequest:
     properties:
       enabled:
@@ -569,14 +730,34 @@ definitions:
         type: boolean
       override_price:
         type: boolean
+      override_request_body_storage_max_size:
+        type: boolean
+      override_response_body_storage_max_size:
+        type: boolean
       override_retry_times:
+        type: boolean
+      override_summary_claude_long_context:
+        type: boolean
+      override_summary_service_tier:
+        type: boolean
+      override_timeout_config:
         type: boolean
       price:
         $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
       retry_times:
         type: integer
       rpm:
         type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
+      timeout_config:
+        $ref: '#/definitions/model.TimeoutConfig'
       tpm:
         type: integer
     type: object
@@ -605,24 +786,29 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
       retry_times:
         type: integer
       rpm:
         type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
       timeout_config:
         $ref: '#/definitions/model.TimeoutConfig'
       tpm:
@@ -631,13 +817,38 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   controller.StatusData:
     properties:
       startTime:
         type: integer
+    type: object
+  controller.TestChannelRequest:
+    properties:
+      base_url:
+        type: string
+      configs:
+        additionalProperties: {}
+        type: object
+      key:
+        type: string
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      models:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      proxy_url:
+        type: string
+      type:
+        type: integer
+    required:
+    - key
+    - type
     type: object
   controller.TestResult:
     properties:
@@ -647,6 +858,32 @@ definitions:
         type: string
       success:
         type: boolean
+    type: object
+  controller.TestSingleModelRequest:
+    properties:
+      base_url:
+        type: string
+      configs:
+        additionalProperties: {}
+        type: object
+      key:
+        type: string
+      model:
+        type: string
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      proxy_url:
+        type: string
+      type:
+        type: integer
+    required:
+    - key
+    - model
+    - type
     type: object
   controller.TokenResponse:
     properties:
@@ -739,6 +976,20 @@ definitions:
       status:
         type: integer
     type: object
+  mcp.Icon:
+    properties:
+      mimeType:
+        description: Optional MIME type (e.g., "image/png", "image/svg+xml")
+        type: string
+      sizes:
+        description: Optional size specifications (e.g., ["48x48"], ["any"] for SVG)
+        items:
+          type: string
+        type: array
+      src:
+        description: URI pointing to the icon resource (HTTPS URL or data URI)
+        type: string
+    type: object
   mcp.Meta:
     properties:
       additionalFields:
@@ -756,6 +1007,16 @@ definitions:
           notifications. The receiver is not obligated to provide these
           notifications.
     type: object
+  mcp.TaskSupport:
+    enum:
+    - forbidden
+    - optional
+    - required
+    type: string
+    x-enum-varnames:
+    - TaskSupportForbidden
+    - TaskSupportOptional
+    - TaskSupportRequired
   mcp.Tool:
     properties:
       _meta:
@@ -767,9 +1028,21 @@ definitions:
         allOf:
         - $ref: '#/definitions/mcp.ToolAnnotation'
         description: Optional properties describing tool behavior
+      defer_loading:
+        description: Support for deferred loading
+        type: boolean
       description:
         description: A human-readable description of the tool.
         type: string
+      execution:
+        allOf:
+        - $ref: '#/definitions/mcp.ToolExecution'
+        description: Execution describes execution behavior for the tool
+      icons:
+        description: Icons provides visual identifiers for the tool
+        items:
+          $ref: '#/definitions/mcp.Icon'
+        type: array
       inputSchema:
         allOf:
         - $ref: '#/definitions/mcp.ToolInputSchema'
@@ -778,6 +1051,11 @@ definitions:
       name:
         description: The name of the tool.
         type: string
+      outputSchema:
+        allOf:
+        - $ref: '#/definitions/mcp.ToolOutputSchema'
+        description: A JSON Schema object defining the expected output returned by
+          the tool .
     type: object
   mcp.ToolAnnotation:
     properties:
@@ -797,11 +1075,35 @@ definitions:
         description: Human-readable title for the tool
         type: string
     type: object
+  mcp.ToolExecution:
+    properties:
+      taskSupport:
+        allOf:
+        - $ref: '#/definitions/mcp.TaskSupport'
+        description: TaskSupport indicates whether the tool supports task augmentation.
+    type: object
   mcp.ToolInputSchema:
     properties:
       $defs:
         additionalProperties: {}
         type: object
+      additionalProperties: {}
+      properties:
+        additionalProperties: {}
+        type: object
+      required:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
+    type: object
+  mcp.ToolOutputSchema:
+    properties:
+      $defs:
+        additionalProperties: {}
+        type: object
+      additionalProperties: {}
       properties:
         additionalProperties: {}
         type: object
@@ -843,6 +1145,7 @@ definitions:
     - 18
     - 19
     - 20
+    - 21
     type: integer
     x-enum-varnames:
     - Unknown
@@ -866,6 +1169,28 @@ definitions:
     - ResponsesDelete
     - ResponsesCancel
     - ResponsesInputItems
+    - Gemini
+  model.Amount:
+    properties:
+      audio_input_amount:
+        type: number
+      cache_creation_amount:
+        type: number
+      cached_amount:
+        type: number
+      image_input_amount:
+        type: number
+      image_output_amount:
+        type: number
+      input_amount:
+        type: number
+      output_amount:
+        type: number
+      used_amount:
+        type: number
+      web_search_amount:
+        type: number
+    type: object
   model.AnthropicMessageRequest:
     properties:
       messages:
@@ -889,11 +1214,13 @@ definitions:
         items:
           $ref: '#/definitions/model.ChannelTest'
         type: array
-      config:
-        $ref: '#/definitions/model.ChannelConfig'
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
       created_at:
         type: string
       enabled_auto_balance_check:
+        type: boolean
+      enabled_no_permission_ban:
         type: boolean
       id:
         type: integer
@@ -901,6 +1228,8 @@ definitions:
         type: string
       last_test_error_at:
         type: string
+      max_error_rate:
+        type: number
       model_mapping:
         additionalProperties:
           type: string
@@ -913,6 +1242,8 @@ definitions:
         type: string
       priority:
         type: integer
+      proxy_url:
+        type: string
       request_count:
         type: integer
       retry_count:
@@ -927,13 +1258,20 @@ definitions:
         $ref: '#/definitions/model.ChannelType'
       used_amount:
         type: number
+      warn_error_rate:
+        type: number
     type: object
-  model.ChannelConfig:
+  model.ChannelBasicInfo:
     properties:
-      spec:
-        items:
-          type: integer
-        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/model.ChannelType'
+    type: object
+  model.ChannelConfigs:
+    additionalProperties: {}
     type: object
   model.ChannelTest:
     properties:
@@ -1000,6 +1338,9 @@ definitions:
     - 48
     - 49
     - 50
+    - 51
+    - 52
+    - 53
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1040,20 +1381,45 @@ definitions:
     - ChannelTypeTextEmbeddingsInference
     - ChannelTypeQianfan
     - ChannelTypeSangforAICP
+    - ChannelTypeStreamlake
+    - ChannelTypeZhipuCoding
+    - ChannelTypeFake
   model.ChartData:
     properties:
+      audio_input_amount:
+        type: number
       audio_input_tokens:
+        type: integer
+      cache_creation_amount:
+        type: number
+      cache_creation_count:
         type: integer
       cache_creation_tokens:
         type: integer
+      cache_hit_count:
+        type: integer
+      cached_amount:
+        type: number
       cached_tokens:
         type: integer
+      claude_long_context:
+        $ref: '#/definitions/model.SummaryDataSet'
       exception_count:
         type: integer
+      image_input_amount:
+        type: number
       image_input_tokens:
         type: integer
+      image_output_amount:
+        type: number
+      image_output_tokens:
+        type: integer
+      input_amount:
+        type: number
       input_tokens:
         type: integer
+      output_amount:
+        type: number
       output_tokens:
         type: integer
       reasoning_tokens:
@@ -1062,15 +1428,23 @@ definitions:
         type: integer
       retry_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
+      service_tier_flex:
+        $ref: '#/definitions/model.SummaryDataSet'
+      service_tier_priority:
+        $ref: '#/definitions/model.SummaryDataSet'
+      status_2xx_count:
         type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
+      status_other_count:
         type: integer
       timestamp:
         type: integer
@@ -1081,6 +1455,8 @@ definitions:
       total_ttfb_milliseconds:
         type: integer
       used_amount:
+        type: number
+      web_search_amount:
         type: number
       web_search_count:
         type: integer
@@ -1114,6 +1490,8 @@ definitions:
         type: integer
       audio_tokens:
         type: integer
+      image_tokens:
+        type: integer
       reasoning_tokens:
         type: integer
       rejected_prediction_tokens:
@@ -1128,14 +1506,21 @@ definitions:
     type: object
   model.CreateResponseRequest:
     properties:
+      background:
+        type: boolean
+      conversation:
+        description: string or object
+      include:
+        items:
+          type: string
+        type: array
+      input: {}
       instructions:
         type: string
       max_output_tokens:
         type: integer
-      messages:
-        items:
-          $ref: '#/definitions/model.Message'
-        type: array
+      max_tool_calls:
+        type: integer
       metadata:
         additionalProperties: {}
         type: object
@@ -1145,30 +1530,53 @@ definitions:
         type: boolean
       previous_response_id:
         type: string
+      prompt_cache_key:
+        type: string
+      prompt_cache_retention:
+        type: string
+      safety_identifier:
+        type: string
+      service_tier:
+        type: string
       store:
         type: boolean
       stream:
         type: boolean
       temperature:
         type: number
+      text:
+        $ref: '#/definitions/model.ResponseText'
       tool_choice: {}
       tools:
         items:
-          $ref: '#/definitions/model.Tool'
+          $ref: '#/definitions/model.ResponseTool'
         type: array
+      top_logprobs:
+        type: integer
       top_p:
         type: number
       truncation:
         type: string
       user:
+        description: Deprecated, use prompt_cache_key
         type: string
     type: object
   model.DashboardResponse:
     properties:
+      audio_input_amount:
+        type: number
       audio_input_tokens:
+        type: integer
+      cache_creation_amount:
+        type: number
+      cache_creation_count:
         type: integer
       cache_creation_tokens:
         type: integer
+      cache_hit_count:
+        type: integer
+      cached_amount:
+        type: number
       cached_tokens:
         type: integer
       channels:
@@ -1179,10 +1587,20 @@ definitions:
         items:
           $ref: '#/definitions/model.ChartData'
         type: array
+      claude_long_context:
+        $ref: '#/definitions/model.SummaryDataSet'
       exception_count:
         type: integer
+      image_input_amount:
+        type: number
       image_input_tokens:
         type: integer
+      image_output_amount:
+        type: number
+      image_output_tokens:
+        type: integer
+      input_amount:
+        type: number
       input_tokens:
         type: integer
       max_rpm:
@@ -1193,6 +1611,8 @@ definitions:
         items:
           type: string
         type: array
+      output_amount:
+        type: number
       output_tokens:
         type: integer
       reasoning_tokens:
@@ -1203,6 +1623,12 @@ definitions:
         type: integer
       rpm:
         type: integer
+      service_tier_flex:
+        $ref: '#/definitions/model.SummaryDataSet'
+      service_tier_priority:
+        $ref: '#/definitions/model.SummaryDataSet'
+      status_2xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -1212,6 +1638,8 @@ definitions:
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_other_count:
         type: integer
       total_count:
         description: use Count.RequestCount instead
@@ -1226,7 +1654,28 @@ definitions:
         type: integer
       used_amount:
         type: number
+      web_search_amount:
+        type: number
       web_search_count:
+        type: integer
+    type: object
+  model.DashboardV3Response:
+    properties:
+      channels:
+        items:
+          type: integer
+        type: array
+      models:
+        items:
+          type: string
+        type: array
+      rpm:
+        type: integer
+      time_series:
+        items:
+          $ref: '#/definitions/model.TimeSummaryDataV2'
+        type: array
+      tpm:
         type: integer
     type: object
   model.Document:
@@ -1285,6 +1734,11 @@ definitions:
       total_tokens:
         type: integer
     type: object
+  model.ExtraContent:
+    properties:
+      google:
+        $ref: '#/definitions/model.GoogleExtraContent'
+    type: object
   model.FinishReason:
     enum:
     - stop
@@ -1335,10 +1789,16 @@ definitions:
       presence_penalty:
         type: number
       prompt: {}
+      prompt_cache_key:
+        type: string
+      prompt_cache_retention:
+        type: string
       response_format:
         $ref: '#/definitions/model.ResponseFormat'
       seed:
         type: number
+      service_tier:
+        type: string
       size:
         type: string
       stop: {}
@@ -1405,8 +1865,17 @@ definitions:
         items:
           $ref: '#/definitions/model.Log'
         type: array
+      models:
+        items:
+          type: string
+        type: array
       total:
         type: integer
+    type: object
+  model.GoogleExtraContent:
+    properties:
+      thought_signature:
+        type: string
     type: object
   model.Group:
     properties:
@@ -1435,10 +1904,20 @@ definitions:
     type: object
   model.GroupDashboardResponse:
     properties:
+      audio_input_amount:
+        type: number
       audio_input_tokens:
+        type: integer
+      cache_creation_amount:
+        type: number
+      cache_creation_count:
         type: integer
       cache_creation_tokens:
         type: integer
+      cache_hit_count:
+        type: integer
+      cached_amount:
+        type: number
       cached_tokens:
         type: integer
       channels:
@@ -1449,10 +1928,20 @@ definitions:
         items:
           $ref: '#/definitions/model.ChartData'
         type: array
+      claude_long_context:
+        $ref: '#/definitions/model.SummaryDataSet'
       exception_count:
         type: integer
+      image_input_amount:
+        type: number
       image_input_tokens:
         type: integer
+      image_output_amount:
+        type: number
+      image_output_tokens:
+        type: integer
+      input_amount:
+        type: number
       input_tokens:
         type: integer
       max_rpm:
@@ -1463,6 +1952,8 @@ definitions:
         items:
           type: string
         type: array
+      output_amount:
+        type: number
       output_tokens:
         type: integer
       reasoning_tokens:
@@ -1473,7 +1964,11 @@ definitions:
         type: integer
       rpm:
         type: integer
-      status_5xx_count:
+      service_tier_flex:
+        $ref: '#/definitions/model.SummaryDataSet'
+      service_tier_priority:
+        $ref: '#/definitions/model.SummaryDataSet'
+      status_2xx_count:
         type: integer
       status_400_count:
         type: integer
@@ -1482,6 +1977,10 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
+        type: integer
+      status_other_count:
         type: integer
       token_names:
         items:
@@ -1499,6 +1998,8 @@ definitions:
       tpm:
         type: integer
       used_amount:
+        type: number
+      web_search_amount:
         type: number
       web_search_count:
         type: integer
@@ -1576,14 +2077,34 @@ definitions:
         type: boolean
       override_price:
         type: boolean
+      override_request_body_storage_max_size:
+        type: boolean
+      override_response_body_storage_max_size:
+        type: boolean
       override_retry_times:
+        type: boolean
+      override_summary_claude_long_context:
+        type: boolean
+      override_summary_service_tier:
+        type: boolean
+      override_timeout_config:
         type: boolean
       price:
         $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
       retry_times:
         type: integer
       rpm:
         type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
+      timeout_config:
+        $ref: '#/definitions/model.TimeoutConfig'
       tpm:
         type: integer
     type: object
@@ -1603,6 +2124,15 @@ definitions:
         type: integer
       text_tokens:
         description: The number of text tokens in the input prompt.
+        type: integer
+    type: object
+  model.ImageOutputTokensDetails:
+    properties:
+      image_tokens:
+        description: The number of image output tokens generated by the model.
+        type: integer
+      text_tokens:
+        description: The number of text output tokens generated by the model.
         type: integer
     type: object
   model.ImageRequest:
@@ -1664,6 +2194,10 @@ definitions:
       output_tokens:
         description: The number of image tokens in the output image.
         type: integer
+      output_tokens_details:
+        allOf:
+        - $ref: '#/definitions/model.ImageOutputTokensDetails'
+        description: The output token details for the image generation.
       total_tokens:
         description: The total number of tokens (images and text) used for the image
           generation.
@@ -1676,6 +2210,18 @@ definitions:
     type: object
   model.InputContent:
     properties:
+      arguments:
+        type: string
+      call_id:
+        description: Fields for function_result type
+        type: string
+      id:
+        description: Fields for function_call type
+        type: string
+      name:
+        type: string
+      output:
+        type: string
       text:
         type: string
       type:
@@ -1683,11 +2229,21 @@ definitions:
     type: object
   model.InputItem:
     properties:
+      arguments:
+        type: string
+      call_id:
+        description: Fields for function_result type
+        type: string
       content:
         items:
           $ref: '#/definitions/model.InputContent'
         type: array
       id:
+        type: string
+      name:
+        description: Fields for function_call type
+        type: string
+      output:
         type: string
       role:
         type: string
@@ -1723,6 +2279,8 @@ definitions:
     type: object
   model.Log:
     properties:
+      amount:
+        $ref: '#/definitions/model.Amount'
       channel:
         type: integer
       code:
@@ -1749,6 +2307,8 @@ definitions:
         type: string
       price:
         $ref: '#/definitions/model.Price'
+      prompt_cache_key:
+        type: string
       request_at:
         type: string
       request_detail:
@@ -1759,16 +2319,18 @@ definitions:
         type: string
       retry_times:
         type: integer
+      service_tier:
+        type: string
       token_id:
         type: integer
       token_name:
         type: string
       ttfb_milliseconds:
         type: integer
+      upstream_id:
+        type: string
       usage:
         $ref: '#/definitions/model.Usage'
-      used_amount:
-        type: number
       user:
         description: https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids
         type: string
@@ -1816,6 +2378,8 @@ definitions:
         type: string
       role:
         type: string
+      signature:
+        type: string
       tool_call_id:
         type: string
       tool_calls:
@@ -1848,24 +2412,29 @@ definitions:
           type: object
         description: map[size]map[quality]price_per_image
         type: object
-      max_error_rate:
-        type: number
       model:
         type: string
       owner:
         $ref: '#/definitions/model.ModelOwner'
       plugin:
         additionalProperties:
-          items:
-            type: integer
-          type: array
+          additionalProperties: {}
+          type: object
         type: object
       price:
         $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
       retry_times:
         type: integer
       rpm:
         type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
       timeout_config:
         $ref: '#/definitions/model.TimeoutConfig'
       tpm:
@@ -1874,8 +2443,6 @@ definitions:
         $ref: '#/definitions/mode.Mode'
       updated_at:
         type: string
-      warn_error_rate:
-        type: number
     type: object
   model.ModelOwner:
     enum:
@@ -1964,16 +2531,27 @@ definitions:
     type: object
   model.OutputItem:
     properties:
+      arguments:
+        description: For function_call type
+        type: string
+      call_id:
+        description: For function_call type
+        type: string
       content:
         items:
           $ref: '#/definitions/model.OutputContent'
         type: array
       id:
         type: string
+      name:
+        description: For function_call type
+        type: string
       role:
         type: string
       status:
         $ref: '#/definitions/model.ResponseStatus'
+      summary:
+        description: 'For reasoning type: []SummaryPart or string'
       type:
         type: string
     type: object
@@ -2010,6 +2588,10 @@ definitions:
         type: number
       image_input_price_unit:
         type: integer
+      image_output_price:
+        type: number
+      image_output_price_unit:
+        type: integer
       input_price:
         type: number
       input_price_unit:
@@ -2034,6 +2616,9 @@ definitions:
     type: object
   model.PriceCondition:
     properties:
+      end_time:
+        description: Unix timestamp, 0 means no end limit
+        type: integer
       input_token_max:
         type: integer
       input_token_min:
@@ -2041,6 +2626,11 @@ definitions:
       output_token_max:
         type: integer
       output_token_min:
+        type: integer
+      service_tier:
+        type: string
+      start_time:
+        description: Unix timestamp, 0 means no start limit
         type: integer
     type: object
   model.PromptTokensDetails:
@@ -2279,8 +2869,12 @@ definitions:
         type: boolean
       previous_response_id:
         type: string
+      prompt_cache_retention:
+        type: string
       reasoning:
         $ref: '#/definitions/model.ResponseReasoning'
+      service_tier:
+        type: string
       status:
         $ref: '#/definitions/model.ResponseStatus'
       store:
@@ -2292,7 +2886,7 @@ definitions:
       tool_choice: {}
       tools:
         items:
-          $ref: '#/definitions/model.Tool'
+          $ref: '#/definitions/model.ResponseTool'
         type: array
       top_p:
         type: number
@@ -2322,7 +2916,7 @@ definitions:
       effort:
         type: string
       summary:
-        type: string
+        description: string ("detailed", "auto", "concise") or []SummaryPart in response
     type: object
   model.ResponseStatus:
     enum:
@@ -2345,6 +2939,16 @@ definitions:
     type: object
   model.ResponseTextFormat:
     properties:
+      type:
+        type: string
+    type: object
+  model.ResponseTool:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      parameters: {}
       type:
         type: string
     type: object
@@ -2387,30 +2991,40 @@ definitions:
       text:
         type: string
     type: object
-  model.SummaryDataV2:
+  model.SummaryDataSet:
     properties:
+      audio_input_amount:
+        type: number
       audio_input_tokens:
+        type: integer
+      cache_creation_amount:
+        type: number
+      cache_creation_count:
         type: integer
       cache_creation_tokens:
         type: integer
-      cached_tokens:
+      cache_hit_count:
         type: integer
-      channel_id:
+      cached_amount:
+        type: number
+      cached_tokens:
         type: integer
       exception_count:
         type: integer
-      group_id:
-        type: string
+      image_input_amount:
+        type: number
       image_input_tokens:
         type: integer
+      image_output_amount:
+        type: number
+      image_output_tokens:
+        type: integer
+      input_amount:
+        type: number
       input_tokens:
         type: integer
-      max_rpm:
-        type: integer
-      max_tpm:
-        type: integer
-      model:
-        type: string
+      output_amount:
+        type: number
       output_tokens:
         type: integer
       reasoning_tokens:
@@ -2418,6 +3032,10 @@ definitions:
       request_count:
         type: integer
       retry_count:
+        type: integer
+      status_2xx_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_400_count:
         type: integer
@@ -2427,7 +3045,92 @@ definitions:
         type: integer
       status_500_count:
         type: integer
+      status_other_count:
+        type: integer
+      total_time_milliseconds:
+        type: integer
+      total_tokens:
+        type: integer
+      total_ttfb_milliseconds:
+        type: integer
+      used_amount:
+        type: number
+      web_search_amount:
+        type: number
+      web_search_count:
+        type: integer
+    type: object
+  model.SummaryDataV2:
+    properties:
+      audio_input_amount:
+        type: number
+      audio_input_tokens:
+        type: integer
+      cache_creation_amount:
+        type: number
+      cache_creation_count:
+        type: integer
+      cache_creation_tokens:
+        type: integer
+      cache_hit_count:
+        type: integer
+      cached_amount:
+        type: number
+      cached_tokens:
+        type: integer
+      channel_id:
+        type: integer
+      claude_long_context:
+        $ref: '#/definitions/model.SummaryDataSet'
+      exception_count:
+        type: integer
+      group_id:
+        type: string
+      image_input_amount:
+        type: number
+      image_input_tokens:
+        type: integer
+      image_output_amount:
+        type: number
+      image_output_tokens:
+        type: integer
+      input_amount:
+        type: number
+      input_tokens:
+        type: integer
+      max_rpm:
+        type: integer
+      max_tpm:
+        type: integer
+      model:
+        type: string
+      output_amount:
+        type: number
+      output_tokens:
+        type: integer
+      reasoning_tokens:
+        type: integer
+      request_count:
+        type: integer
+      retry_count:
+        type: integer
+      service_tier_flex:
+        $ref: '#/definitions/model.SummaryDataSet'
+      service_tier_priority:
+        $ref: '#/definitions/model.SummaryDataSet'
+      status_2xx_count:
+        type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
+      status_other_count:
         type: integer
       timestamp:
         type: integer
@@ -2440,6 +3143,8 @@ definitions:
       total_ttfb_milliseconds:
         type: integer
       used_amount:
+        type: number
+      web_search_amount:
         type: number
       web_search_count:
         type: integer
@@ -2523,6 +3228,8 @@ definitions:
     type: object
   model.ToolCall:
     properties:
+      extra_content:
+        $ref: '#/definitions/model.ExtraContent'
       function:
         $ref: '#/definitions/model.Function'
       id:
@@ -2582,6 +3289,8 @@ definitions:
       cached_tokens:
         type: integer
       image_input_tokens:
+        type: integer
+      image_output_tokens:
         type: integer
       input_tokens:
         type: integer
@@ -2931,6 +3640,78 @@ paths:
       summary: Test channel models
       tags:
       - channel
+  /api/channel/test:
+    post:
+      consumes:
+      - application/json
+      description: Test a single model in channel without saving to database
+      parameters:
+      - description: Channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestSingleModelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.ChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test channel preview (single model)
+      tags:
+      - channel
+  /api/channel/test-all:
+    post:
+      consumes:
+      - application/json
+      description: Test all models in channel without saving to database
+      parameters:
+      - description: Return success
+        in: query
+        name: return_success
+        type: boolean
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Stream mode (SSE)
+        in: query
+        name: stream
+        type: boolean
+      - description: Channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.TestResult'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test channel preview (all models)
+      tags:
+      - channel
   /api/channels/:
     get:
       description: Returns a paginated list of channels with optional filters
@@ -3081,6 +3862,39 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Delete multiple channels
+      tags:
+      - channels
+  /api/channels/batch_info:
+    post:
+      consumes:
+      - application/json
+      description: Returns id, name, and type for a batch of channel IDs
+      parameters:
+      - description: Channel IDs
+        in: body
+        name: ids
+        required: true
+        schema:
+          items:
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.ChannelBasicInfo'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get basic info for multiple channels
       tags:
       - channels
   /api/channels/import/oneapi:
@@ -3272,6 +4086,12 @@ paths:
         in: query
         name: timespan
         type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
+        type: string
       produces:
       - application/json
       responses:
@@ -3323,6 +4143,12 @@ paths:
       - description: Time span type (minute, hour, day, month)
         in: query
         name: timespan
+        type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
         type: string
       produces:
       - application/json
@@ -3399,6 +4225,12 @@ paths:
         in: query
         name: timespan
         type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
+        type: string
       produces:
       - application/json
       responses:
@@ -3453,6 +4285,12 @@ paths:
         in: query
         name: timespan
         type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
+        type: string
       produces:
       - application/json
       responses:
@@ -3470,6 +4308,119 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get model usage data for a specific group
+      tags:
+      - dashboard
+  /api/dashboardv3/:
+    get:
+      description: Returns model-specific metrics and usage data for the given channel
+        with detailed amount breakdown
+      parameters:
+      - description: Channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardV3Response'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get model usage data for a specific channel (V3 with detailed amounts)
+      tags:
+      - dashboard
+  /api/dashboardv3/{group}:
+    get:
+      description: Returns model-specific metrics and usage data for the given group
+        with detailed amount breakdown
+      parameters:
+      - description: Group
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: 'Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count).
+          Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,output_tokens,image_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb.
+          Groups: count,usage,time,all'
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardV3Response'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get model usage data for a specific group (V3 with detailed amounts)
       tags:
       - dashboard
   /api/embedmcp/:
@@ -4115,6 +5066,62 @@ paths:
       summary: Update multiple groups status
       tags:
       - groups
+  /api/groups/consumption_ranking:
+    get:
+      description: Returns channel, model, or group consumption ranking aggregated
+        from summary data
+      parameters:
+      - default: group
+        description: 'Ranking type: channel, model, group'
+        in: query
+        name: type
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: 'Order: used_amount_desc, used_amount_asc, request_count_desc,
+          request_count_asc, total_tokens_desc, total_tokens_asc, channel_id_asc,
+          channel_id_desc, model_asc, model_desc, group_id_asc, group_id_desc'
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get consumption ranking
+      tags:
+      - groups
   /api/groups/ip_groups:
     get:
       description: Get IP group list
@@ -4150,6 +5157,62 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get IP group list
+      tags:
+      - groups
+  /api/groups/ranking:
+    get:
+      description: Returns channel, model, or group consumption ranking aggregated
+        from summary data
+      parameters:
+      - default: group
+        description: 'Ranking type: channel, model, group'
+        in: query
+        name: type
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: 'Order: used_amount_desc, used_amount_asc, request_count_desc,
+          request_count_asc, total_tokens_desc, total_tokens_asc, channel_id_asc,
+          channel_id_desc, model_asc, model_desc, group_id_asc, group_id_desc'
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get consumption ranking
       tags:
       - groups
   /api/groups/search:
@@ -4254,6 +5317,10 @@ paths:
         in: query
         name: request_id
         type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
       - description: Status code type
         in: query
         name: code_type
@@ -4262,9 +5329,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -4322,6 +5389,96 @@ paths:
       summary: Get group log detail
       tags:
       - log
+  /api/log/{group}/export:
+    get:
+      description: Streams filtered group logs as a CSV table file
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Include channel column, default false
+        in: query
+        name: include_channel
+        type: boolean
+      - description: Include retry_at column, default false
+        in: query
+        name: include_retry_at
+        type: boolean
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export group logs
+      tags:
+      - log
   /api/log/{group}/search:
     get:
       description: Search logs for a specific group with filters
@@ -4371,6 +5528,10 @@ paths:
         in: query
         name: request_id
         type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
       - description: Status code type
         in: query
         name: code_type
@@ -4379,9 +5540,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -4469,6 +5630,10 @@ paths:
         in: query
         name: request_id
         type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
       - description: Status code type
         in: query
         name: code_type
@@ -4477,9 +5642,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -4612,6 +5777,79 @@ paths:
       summary: Get log detail
       tags:
       - logs
+  /api/logs/export:
+    get:
+      description: Streams filtered global logs as a CSV table file
+      parameters:
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export global logs
+      tags:
+      - logs
   /api/logs/search:
     get:
       description: Search logs with various filters
@@ -4665,6 +5903,10 @@ paths:
         in: query
         name: request_id
         type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
       - description: Status code type
         in: query
         name: code_type
@@ -4673,9 +5915,9 @@ paths:
         in: query
         name: code
         type: integer
-      - description: With body
+      - description: Include request and response detail
         in: query
-        name: with_body
+        name: include_detail
         type: boolean
       - description: IP
         in: query
@@ -5618,6 +6860,9 @@ paths:
         - 48
         - 49
         - 50
+        - 51
+        - 52
+        - 53
         in: path
         name: type
         required: true
@@ -5932,6 +7177,126 @@ paths:
       summary: Get all banned model channels
       tags:
       - monitor
+  /api/monitor/batch_group_token_metrics:
+    post:
+      description: Returns runtime rpm/tpm summary metrics for explicit group and
+        token-name pairs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.BatchGroupTokenMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Batch get runtime metrics for api key rows
+      tags:
+      - monitor
+  /api/monitor/group_model_metrics/{group}:
+    get:
+      description: Returns runtime rpm/tpm metrics grouped by model in a group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.GroupModelMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get model runtime metrics for a group
+      tags:
+      - monitor
+  /api/monitor/group_summary_metrics:
+    get:
+      description: Returns rpm/tpm summary metrics for one or more groups
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.GroupSummaryMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get summary metrics for multiple groups
+      tags:
+      - monitor
+  /api/monitor/group_token_metrics/{group}:
+    get:
+      description: Returns runtime rpm/tpm metrics grouped by token name in a group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.GroupTokenMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get token runtime metrics for a group
+      tags:
+      - monitor
+  /api/monitor/group_tokenname_model_metrics/{group}:
+    get:
+      description: Returns runtime rpm/tpm metrics for token name and model combinations
+        in a group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.GroupTokennameModelMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get token-model runtime metrics for a group
+      tags:
+      - monitor
   /api/monitor/models:
     get:
       description: Returns a list of models error rate
@@ -5953,6 +7318,27 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get models error rate
+      tags:
+      - monitor
+  /api/monitor/runtime_metrics:
+    get:
+      description: Returns runtime rpm/tpm/error metrics sourced from reqlimit and
+        monitor
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.RuntimeMetricsResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get runtime metrics for models and channels
       tags:
       - monitor
   /api/option/:

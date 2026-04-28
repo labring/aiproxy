@@ -23,6 +23,11 @@ type TokenResponse struct {
 func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 	type Alias TokenResponse
 
+	accessedAt := int64(0)
+	if !t.AccessedAt.IsZero() {
+		accessedAt = t.AccessedAt.UnixMilli()
+	}
+
 	return sonic.Marshal(&struct {
 		*Alias
 		CreatedAt            int64 `json:"created_at"`
@@ -32,7 +37,7 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 		Alias:                (*Alias)(t),
 		CreatedAt:            t.CreatedAt.UnixMilli(),
 		PeriodLastUpdateTime: t.PeriodLastUpdateTime.UnixMilli(),
-		AccessedAt:           t.AccessedAt.UnixMilli(),
+		AccessedAt:           accessedAt,
 	})
 }
 
@@ -364,7 +369,11 @@ func AddGroupToken(c *gin.Context) {
 	token := req.ToToken()
 	token.GroupID = group
 
-	if err := model.InsertToken(token, c.Query("auto_create_group") == "true", c.Query("ignore_exist") == "true"); err != nil {
+	if err := model.InsertToken(
+		token,
+		c.Query("auto_create_group") == "true",
+		c.Query("ignore_exist") == "true",
+	); err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}

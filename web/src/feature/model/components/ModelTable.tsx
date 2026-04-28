@@ -1,9 +1,19 @@
 // src/feature/model/components/ModelTable.tsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useModels, useModelSets } from "../hooks";
 import { useChannelTypeMetas } from "@/feature/channel/hooks";
-import { ModelConfig } from "@/types/model";
+import { useRuntimeMetrics } from "@/feature/monitor/runtime-hooks";
+import { ModelConfig, ModelSaveRequest } from "@/types/model";
+import { PriceDisplay } from "@/components/price/PriceDisplay";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   MoreHorizontal,
   Plus,
@@ -11,6 +21,10 @@ import {
   RefreshCcw,
   Pencil,
   FileText,
+  Search,
+  Download,
+  Upload,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,9 +53,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChannelDialog } from "@/feature/channel/components/ChannelDialog";
+import { Channel } from "@/types/channel";
+import { channelApi } from "@/api/channel";
+import { modelApi } from "@/api/model";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { openResourceDialog, showDeletedResourceToast } from "@/utils/resource-dialog";
+import { getChannelModelMetric } from "@/utils/runtime-metrics";
 
 export function ModelTable() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State management
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
@@ -50,30 +74,78 @@ export function ModelTable() {
   const [dialogMode, setDialogMode] = useState<"create" | "update">("create");
   const [selectedModel, setSelectedModel] = useState<ModelConfig | null>(null);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
 
   // API Doc drawer state
   const [apiDocOpen, setApiDocOpen] = useState(false);
+
+  // Channel edit dialog state
+  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
   // Get models list
   const { data: models, isLoading, error, isError, refetch } = useModels();
 
   // Get model sets data
   const { data: modelSets, isLoading: isLoadingModelSets } = useModelSets();
+  const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics();
 
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
 
-  // Sort models by type for stable sorting
+  // Sort and filter models
   const sortedModels = useMemo(() => {
     if (!models) return [];
-    return [...models].sort((a, b) => {
+    let filtered = models;
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      filtered = filtered.filter(m =>
+        m.model.toLowerCase().includes(keyword) || (m.owner || '').toLowerCase().includes(keyword)
+      );
+    }
+    if (ownerFilter === '__all__') {
+      // no-op
+    } else if (ownerFilter === '__empty__') {
+      filtered = filtered.filter((m) => !m.owner);
+    } else if (ownerFilter) {
+      filtered = filtered.filter((m) => (m.owner || '') === ownerFilter);
+    }
+    return [...filtered].sort((a, b) => {
       if (a.type === b.type) {
-        // Secondary sort by model name for stability
         return a.model.localeCompare(b.model);
       }
       return a.type - b.type;
     });
-  }, [models]);
+  }, [models, searchKeyword, ownerFilter]);
+
+  const ownerOptions = useMemo(() => {
+    if (!models) {
+      return [];
+    }
+
+    const ownerSet = new Set<string>();
+    let hasEmptyOwner = false;
+
+    for (const model of models) {
+      if (model.owner) {
+        ownerSet.add(model.owner);
+      } else {
+        hasEmptyOwner = true;
+      }
+    }
+
+    const options = [...ownerSet]
+      .sort((a, b) => a.localeCompare(b))
+      .map((owner) => ({ value: owner, label: owner }));
+
+    if (hasEmptyOwner) {
+      options.push({ value: '__empty__', label: t("model.emptyOwner") });
+    }
+
+    return options;
+  }, [models, t]);
 
   // Get channel type name by type ID
   const getChannelTypeName = (typeId: number): string => {
@@ -83,15 +155,66 @@ export function ModelTable() {
     return channelTypeMetas[typeKey]?.name || `Type: ${typeId}`;
   };
 
+  const toModelSaveRequest = (model: ModelConfig): ModelSaveRequest => {
+    const { created_at, updated_at, ...rest } = model;
+    return rest;
+  };
+
+  const getConfigSummary = (config?: ModelConfig["config"]) => {
+    if (!config) return [];
+
+    const summary: string[] = [];
+    if (config.max_context_tokens) {
+      summary.push(`ctx ${config.max_context_tokens.toLocaleString()}`);
+    }
+    if (config.max_input_tokens) {
+      summary.push(`in ${config.max_input_tokens.toLocaleString()}`);
+    }
+    if (config.max_output_tokens) {
+      summary.push(`out ${config.max_output_tokens.toLocaleString()}`);
+    }
+    if (config.tool_choice) {
+      summary.push("tool");
+    }
+    if (config.vision) {
+      summary.push("vision");
+    }
+    if (config.coder) {
+      summary.push("coder");
+    }
+    if (config.limited_time_free) {
+      summary.push("free");
+    }
+    if (config.support_formats?.length) {
+      summary.push(`formats ${config.support_formats.length}`);
+    }
+    if (config.support_voices?.length) {
+      summary.push(`voices ${config.support_voices.length}`);
+    }
+    return summary;
+  };
+
+  const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`;
+
   // Create table columns
-  const columns: ColumnDef<ModelConfig>[] = [
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
     {
       accessorKey: "model",
       header: () => (
         <div className="font-medium py-3.5">{t("model.modelName")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">{row.original.model}</div>
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => {
+            navigator.clipboard.writeText(row.original.model).then(() => {
+              toast.success(t("common.copied"));
+            });
+          }}
+        >
+          {row.original.model}
+        </div>
       ),
     },
     {
@@ -100,11 +223,55 @@ export function ModelTable() {
         <div className="font-medium py-3.5">{t("model.modelType")}</div>
       ),
       cell: ({ row }) => (
-        <div className="font-medium">
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => openUpdateDialog(row.original)}
+        >
           {/* @ts-expect-error 动态翻译键 */}
           {t(`modeType.${row.original.type}`)}
         </div>
       ),
+    },
+    {
+      accessorKey: "owner",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.owner")}</div>
+      ),
+      cell: ({ row }) => (
+        <div
+          className="font-medium cursor-pointer hover:text-primary transition-colors"
+          onClick={() => openUpdateDialog(row.original)}
+        >
+          {row.original.owner || (
+            <span className="text-muted-foreground">{t("model.emptyOwner")}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "runtime",
+      header: () => (
+        <div className="font-medium py-3.5">{t("common.runtime")}</div>
+      ),
+      cell: ({ row }) => {
+        const metric = runtimeMetrics?.models?.[row.original.model];
+        if (!metric) {
+          return <div className="text-muted-foreground text-sm">-</div>;
+        }
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-xs">RPM {metric.rpm.toLocaleString()}</Badge>
+            <Badge variant="outline" className="text-xs">TPM {metric.tpm.toLocaleString()}</Badge>
+            <Badge variant="outline" className="text-xs">ERR {formatPercent(metric.error_rate)}</Badge>
+            {metric.banned_channels > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                BAN {metric.banned_channels}
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "sets",
@@ -140,26 +307,61 @@ export function ModelTable() {
                     variant="outline"
                     className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    {setName}
+                    <span>{setName || "default"}</span>
+                    <span className="ml-1 text-[11px] opacity-80">
+                      {t("model.channelCount", { count: channels.length })}
+                    </span>
                   </Badge>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-3" align="start">
                   <div className="space-y-2">
                     <h4 className="font-medium">
-                      {t("model.availableChannels")}
+                      {t("model.availableChannels")} ({t("model.channelCount", { count: channels.length })})
                     </h4>
                     <div className="flex flex-col gap-1">
-                      {channels.map((channel) => (
+                      {[...channels].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).map((channel) => (
                         <div
                           key={channel.id}
-                          className="flex items-center gap-2"
+                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
+                          onClick={() => {
+                            openResourceDialog({
+                              fetcher: () => channelApi.getChannel(channel.id),
+                              onSuccess: (fullChannel) => {
+                              setSelectedChannel(fullChannel);
+                              setChannelDialogOpen(true);
+                              },
+                              onNotFound: () => {
+                                showDeletedResourceToast(t("channel.deleted"));
+                              },
+                              onError: () => {
+                                showDeletedResourceToast(t("channel.fetchFailed"));
+                              },
+                            });
+                          }}
                         >
                           <Badge variant="secondary" className="text-xs">
                             {channel.name}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            ID: {channel.id}, {getChannelTypeName(channel.type)}
+                            ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>
+                          {(() => {
+                            const pair = getChannelModelMetric(runtimeMetrics, channel.id, modelName);
+                            if (!pair) return null;
+                            return (
+                              <div className="flex items-center gap-1 ml-auto">
+                                <Badge variant="outline" className="text-[11px]">RPM {pair.rpm}</Badge>
+                                <Badge variant="outline" className="text-[11px]">TPM {pair.tpm}</Badge>
+                                <Badge variant="outline" className="text-[11px]">ERR {formatPercent(pair.error_rate)}</Badge>
+                                {pair.banned && (
+                                  <Badge variant="destructive" className="text-[11px]">{t("channel.temporarilyExcluded")}</Badge>
+                                )}
+                              </div>
+                            );
+                          })()}
+                          <Badge variant="outline" className="text-xs ml-auto">
+                            {(channel.weight ?? 0).toFixed(1)}%
+                          </Badge>
                         </div>
                       ))}
                     </div>
@@ -180,7 +382,10 @@ export function ModelTable() {
         const plugin = row.original.plugin;
         if (!plugin) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
@@ -190,6 +395,10 @@ export function ModelTable() {
 
         if (plugin.cache?.enable) {
           enabledPlugins.push(t("model.cachePlugin"));
+        }
+
+        if (plugin.cachefollow?.enable) {
+          enabledPlugins.push(t("model.cacheFollowPlugin"));
         }
 
         if (plugin["web-search"]?.enable) {
@@ -206,19 +415,25 @@ export function ModelTable() {
 
         if (enabledPlugins.length === 0) {
           return (
-            <div className="text-muted-foreground text-sm">
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
               {t("model.noPluginConfigured")}
             </div>
           );
         }
 
         return (
-          <div className="flex flex-wrap gap-1">
+          <div
+            className="flex flex-wrap gap-1 cursor-pointer"
+            onClick={() => openUpdateDialog(row.original)}
+          >
             {enabledPlugins.map((pluginName) => (
               <Badge
                 key={pluginName}
                 variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
               >
                 {pluginName}
               </Badge>
@@ -227,16 +442,56 @@ export function ModelTable() {
         );
       },
     },
-    // {
-    //     accessorKey: 'owner',
-    //     header: () => <div className="font-medium py-3.5">{t("model.owner")}</div>,
-    //     cell: ({ row }) => <div>{row.original.owner}</div>,
-    // },
-    // {
-    //     accessorKey: 'rpm',
-    //     header: () => <div className="font-medium py-3.5">{t("model.rpm")}</div>,
-    //     cell: ({ row }) => <div>{row.original.rpm}</div>,
-    // },
+    {
+      accessorKey: "config",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.configInfo")}</div>
+      ),
+      cell: ({ row }) => {
+        const config = row.original.config;
+        const summary = getConfigSummary(config);
+
+        if (!config || summary.length === 0) {
+          return (
+            <div
+              className="text-muted-foreground text-sm cursor-pointer hover:text-primary transition-colors"
+              onClick={() => openUpdateDialog(row.original)}
+            >
+              {t("model.noConfigConfigured")}
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className="flex flex-wrap gap-1 cursor-pointer"
+            onClick={() => openUpdateDialog(row.original)}
+          >
+            {summary.slice(0, 6).map((item) => (
+              <Badge
+                key={item}
+                variant="outline"
+                className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
+              >
+                {item}
+              </Badge>
+            ))}
+            {summary.length > 6 && (
+              <Badge variant="outline" className="text-xs">
+                +{summary.length - 6}
+              </Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "price",
+      header: () => (
+        <div className="font-medium py-3.5">{t("model.priceColumn")}</div>
+      ),
+      cell: ({ row }) => <PriceDisplay price={row.original.price} />,
+    },
     {
       id: "actions",
       cell: ({ row }) => (
@@ -255,17 +510,25 @@ export function ModelTable() {
               <Pencil className="mr-2 h-4 w-4" />
               {t("model.edit")}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openCopyDialog(row.original)}>
+              <Copy className="mr-2 h-4 w-4" />
+              {t("model.copyFrom")}
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => openDeleteDialog(row.original.model)}
             >
               <Trash2 className="mr-2 h-4 w-4 text-red-600 dark:text-red-500" />
               {t("model.delete")}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportSingleModel(row.original)}>
+              <Download className="mr-2 h-4 w-4" />
+              {t("model.export")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ),
     },
-  ];
+  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
 
   // Initialize table
   const table = useReactTable({
@@ -297,6 +560,13 @@ export function ModelTable() {
     setModelDialogOpen(true);
   };
 
+  // Open copy model dialog (create mode with existing model data)
+  const openCopyDialog = (model: ModelConfig) => {
+    setDialogMode("create");
+    setSelectedModel(model);
+    setModelDialogOpen(true);
+  };
+
   // Open delete dialog
   const openDeleteDialog = (id: string) => {
     setSelectedModelId(id);
@@ -320,6 +590,84 @@ export function ModelTable() {
     }, 1000);
   };
 
+  // Export model configs to JSON file
+  const exportModels = () => {
+    if (!models || models.length === 0) {
+      toast.error(t("model.noDataToExport"));
+      return;
+    }
+
+    const exportData = models.map(toModelSaveRequest);
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `model_configs_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(t("model.exportSuccess"));
+  };
+
+  // Export single model config to JSON file
+  const exportSingleModel = (model: ModelConfig) => {
+    const exportData = [toModelSaveRequest(model)];
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `model_${model.model}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(t("model.exportSuccess"));
+  };
+
+  // Import model configs from JSON file
+  const importModels = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const configs: ModelSaveRequest[] = JSON.parse(text);
+
+      if (!Array.isArray(configs)) {
+        throw new Error(t("model.invalidFormat"));
+      }
+
+      await modelApi.saveModels(configs);
+      toast.success(t("model.importSuccess", { count: configs.length }));
+      queryClient.invalidateQueries({ queryKey: ["models"] });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("model.importFailed")
+      );
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Trigger file input click
+  const triggerImport = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <>
       <Card className="border-none shadow-none p-6 flex flex-col h-full">
@@ -329,6 +677,30 @@ export function ModelTable() {
             {t("model.management")}
           </h2>
           <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t("common.search")}
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                className="h-9 w-48 pl-8"
+              />
+            </div>
+            <div className="w-44">
+              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("model.ownerFilterPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("model.allOwners")}</SelectItem>
+                  {ownerOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <AnimatedButton>
               <Button
                 variant="outline"
@@ -346,6 +718,37 @@ export function ModelTable() {
                 {t("model.refresh")}
               </Button>
             </AnimatedButton>
+            <AnimatedButton>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportModels}
+                disabled={!models || models.length === 0}
+                className="flex items-center gap-1"
+              >
+                <Download className="h-4 w-4" />
+                {t("model.export")}
+              </Button>
+            </AnimatedButton>
+            <AnimatedButton>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={triggerImport}
+                disabled={isImporting}
+                className="flex items-center gap-1"
+              >
+                <Upload className="h-4 w-4" />
+                {isImporting ? t("model.importing") : t("model.import")}
+              </Button>
+            </AnimatedButton>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={importModels}
+              className="hidden"
+            />
             <AnimatedButton>
               <Button
                 size="sm"
@@ -368,7 +771,7 @@ export function ModelTable() {
               <DataTable
                 table={table}
                 columns={columns}
-                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas}
+                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas || isLoadingRuntimeMetrics}
                 loadingStyle="skeleton"
                 fixedHeader={true}
                 animatedRows={true}
@@ -404,6 +807,14 @@ export function ModelTable() {
           modelConfig={selectedModel}
         />
       )}
+
+      {/* Channel Edit Dialog */}
+      <ChannelDialog
+        open={channelDialogOpen}
+        onOpenChange={setChannelDialogOpen}
+        mode="update"
+        channel={selectedChannel}
+      />
     </>
   );
 }

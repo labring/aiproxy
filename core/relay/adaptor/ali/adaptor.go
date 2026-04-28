@@ -10,6 +10,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -20,13 +21,19 @@ import (
 
 type Adaptor struct{}
 
+func init() {
+	registry.Register(model.ChannelTypeAli, &Adaptor{})
+}
+
 const baseURL = "https://dashscope.aliyuncs.com"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
 		m == mode.Embeddings ||
@@ -35,10 +42,20 @@ func (a *Adaptor) SupportMode(m mode.Mode) bool {
 		m == mode.AudioSpeech ||
 		m == mode.AudioTranscription ||
 		m == mode.AudioTranslation ||
-		m == mode.Anthropic
+		m == mode.Anthropic ||
+		m == mode.Gemini ||
+		m == mode.Responses ||
+		m == mode.ResponsesGet ||
+		m == mode.ResponsesDelete ||
+		m == mode.ResponsesCancel ||
+		m == mode.ResponsesInputItems
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
@@ -112,6 +129,66 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 			Method: http.MethodPost,
 			URL:    url,
 		}, nil
+	case mode.Gemini:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/chat/completions")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
+	case mode.Responses:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/responses")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
+	case mode.ResponsesGet:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/responses", meta.ResponseID)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodGet,
+			URL:    url,
+		}, nil
+	case mode.ResponsesDelete:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/responses", meta.ResponseID)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodDelete,
+			URL:    url,
+		}, nil
+	case mode.ResponsesCancel:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/responses", meta.ResponseID, "cancel")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
+	case mode.ResponsesInputItems:
+		url, err := url.JoinPath(u, "/compatible-mode/v1/responses", meta.ResponseID, "input_items")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodGet,
+			URL:    url,
+		}, nil
 	default:
 		return adaptor.RequestURL{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -151,6 +228,14 @@ func (a *Adaptor) ConvertRequest(
 		return ConvertSTTRequest(meta, req)
 	case mode.Anthropic:
 		return anthropic.ConvertRequest(meta, req)
+	case mode.Gemini:
+		return ConvertGeminiRequest(meta, req)
+	case mode.Responses,
+		mode.ResponsesGet,
+		mode.ResponsesDelete,
+		mode.ResponsesCancel,
+		mode.ResponsesInputItems:
+		return openai.ConvertRequest(meta, store, req)
 	default:
 		return adaptor.ConvertResult{}, fmt.Errorf("unsupported mode: %s", meta.Mode)
 	}
@@ -168,7 +253,7 @@ func (a *Adaptor) DoRequest(
 	case mode.AudioTranscription:
 		return STTDoRequest(meta, req)
 	default:
-		return utils.DoRequest(req, meta.RequestTimeout)
+		return utils.DoRequestWithMeta(req, meta)
 	}
 }
 
@@ -177,7 +262,7 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.ImagesGenerations:
 		return ImageHandler(meta, c, resp)
@@ -194,11 +279,21 @@ func (a *Adaptor) DoResponse(
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
 			return anthropic.StreamHandler(meta, c, resp)
-		} else {
-			return anthropic.Handler(meta, c, resp)
 		}
+		return anthropic.Handler(meta, c, resp)
+	case mode.Gemini:
+		if utils.IsStreamResponse(resp) {
+			return openai.GeminiStreamHandler(meta, c, resp)
+		}
+		return openai.GeminiHandler(meta, c, resp)
+	case mode.Responses,
+		mode.ResponsesGet,
+		mode.ResponsesDelete,
+		mode.ResponsesCancel,
+		mode.ResponsesInputItems:
+		return openai.DoResponse(meta, store, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,
@@ -208,13 +303,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"OpenAI compatibility",
-			"Network search metering support",
-			"Rerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api",
-			"STT support: https://help.aliyun.com/zh/model-studio/sambert-speech-synthesis/",
-			"Anthropic support: /api/v2/apps/claude-code-proxy",
-		},
+		Readme: "OpenAI compatibility\nNative Responses API support\nNetwork search metering support\nRerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api\nSTT support: https://help.aliyun.com/zh/model-studio/sambert-speech-synthesis/\nAnthropic support: /api/v2/apps/claude-code-proxy\nGemini support",
 		Models: ModelList,
 	}
 }

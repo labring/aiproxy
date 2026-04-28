@@ -5,7 +5,7 @@ import { ChannelTable } from '@/feature/channel/components/ChannelTable'
 export default function ChannelPage() {
     return (
         <AnimatedRoute>
-            <div className="container mx-auto">
+            <div className="h-full">
                 <ChannelTable />
             </div>
         </AnimatedRoute>

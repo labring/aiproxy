@@ -4,9 +4,6 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/common/config"
-	"gorm.io/gorm"
 )
 
 type RetryLog struct {
@@ -18,29 +15,13 @@ type RetryLog struct {
 	RetryAt               time.Time       `                                                         json:"retry_at,omitempty"`
 	TTFBMilliseconds      ZeroNullInt64   `                                                         json:"ttfb_milliseconds,omitempty"`
 	CreatedAt             time.Time       `gorm:"autoCreateTime;index"                              json:"created_at"`
-	Model                 string          `gorm:"size:64"                                           json:"model"`
+	Model                 string          `gorm:"size:128"                                          json:"model"`
 	RequestID             EmptyNullString `gorm:"type:char(16);index:,where:request_id is not null" json:"request_id"`
 	ID                    int             `gorm:"primaryKey"                                        json:"id"`
 	ChannelID             int             `                                                         json:"channel,omitempty"`
 	Code                  int             `gorm:"index"                                             json:"code,omitempty"`
 	Mode                  int             `                                                         json:"mode,omitempty"`
 	RetryTimes            ZeroNullInt64   `                                                         json:"retry_times,omitempty"`
-}
-
-func (r *RetryLog) BeforeSave(_ *gorm.DB) (err error) {
-	if reqMax := config.GetLogDetailRequestBodyMaxSize(); reqMax > 0 &&
-		int64(len(r.RequestBody)) > reqMax {
-		r.RequestBody = common.TruncateByRune(r.RequestBody, int(reqMax)) + "..."
-		r.RequestBodyTruncated = true
-	}
-
-	if respMax := config.GetLogDetailResponseBodyMaxSize(); respMax > 0 &&
-		int64(len(r.ResponseBody)) > respMax {
-		r.ResponseBody = common.TruncateByRune(r.ResponseBody, int(respMax)) + "..."
-		r.ResponseBodyTruncated = true
-	}
-
-	return err
 }
 
 func (r *RetryLog) MarshalJSON() ([]byte, error) {

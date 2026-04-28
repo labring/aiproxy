@@ -64,17 +64,17 @@ func VideoHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK &&
 		resp.StatusCode != http.StatusCreated {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -82,7 +82,7 @@ func VideoHandler(
 
 	idNode, err := sonic.GetWithOptions(responseBody, ast.SearchOptions{}, "id")
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -90,18 +90,18 @@ func VideoHandler(
 
 	id, err := idNode.String()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
 	}
 
 	err = store.SaveStore(adaptor.StoreCache{
-		ID:        id,
+		ID:        model.VideoJobStoreID(id),
 		GroupID:   meta.Group.ID,
 		TokenID:   meta.Token.ID,
 		ChannelID: meta.Channel.ID,
-		Model:     meta.ActualModel,
+		Model:     meta.OriginModel,
 		ExpiresAt: time.Now().Add(time.Hour * 24),
 	})
 	if err != nil {
@@ -113,7 +113,10 @@ func VideoHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, _ = c.Writer.Write(responseBody)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{
+		UpstreamID: id,
+		AsyncUsage: true,
+	}, nil
 }
 
 func VideoGetJobsHandler(
@@ -121,16 +124,16 @@ func VideoGetJobsHandler(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -138,7 +141,7 @@ func VideoGetJobsHandler(
 
 	node, err := sonic.Get(responseBody)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -146,7 +149,7 @@ func VideoGetJobsHandler(
 
 	expiresAt, err := node.Get("expires_at").Int64()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -166,11 +169,11 @@ func VideoGetJobsHandler(
 		}
 
 		err = store.SaveStore(adaptor.StoreCache{
-			ID:        id,
+			ID:        model.VideoGenerationStoreID(id),
 			GroupID:   meta.Group.ID,
 			TokenID:   meta.Token.ID,
 			ChannelID: meta.Channel.ID,
-			Model:     meta.ActualModel,
+			Model:     meta.OriginModel,
 			ExpiresAt: time.Unix(expiresAt, 0),
 		})
 		if err != nil {
@@ -185,7 +188,7 @@ func VideoGetJobsHandler(
 	}
 
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIVideoError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIVideoError(
 			err,
 			http.StatusInternalServerError,
 		)
@@ -195,7 +198,7 @@ func VideoGetJobsHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, _ = c.Writer.Write(responseBody)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }
 
 func VideoGetJobsContentHandler(
@@ -203,9 +206,9 @@ func VideoGetJobsContentHandler(
 	_ adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, VideoErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, VideoErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -214,5 +217,5 @@ func VideoGetJobsContentHandler(
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	_, _ = io.Copy(c.Writer, resp.Body)
 
-	return model.Usage{}, nil
+	return adaptor.DoResponseResult{}, nil
 }

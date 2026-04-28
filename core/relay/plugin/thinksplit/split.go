@@ -7,7 +7,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
@@ -22,6 +21,7 @@ var _ plugin.Plugin = (*ThinkPlugin)(nil)
 // ThinkPlugin implements the think content splitting functionality
 type ThinkPlugin struct {
 	noop.Noop
+	configCache utils.PluginConfigCache[Config]
 }
 
 // NewThinkPlugin creates a new think plugin instance
@@ -31,12 +31,12 @@ func NewThinkPlugin() plugin.Plugin {
 
 // getConfig retrieves the plugin configuration
 func (p *ThinkPlugin) getConfig(meta *meta.Meta) (*Config, error) {
-	pluginConfig := &Config{}
-	if err := meta.ModelConfig.LoadPluginConfig("think-split", pluginConfig); err != nil {
+	pluginConfig, err := p.configCache.Load(meta, "think-split", Config{})
+	if err != nil {
 		return nil, err
 	}
 
-	return pluginConfig, nil
+	return &pluginConfig, nil
 }
 
 // DoResponse handles the response processing to split think content
@@ -46,7 +46,7 @@ func (p *ThinkPlugin) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Only process chat completions
 	if meta.Mode != mode.ChatCompletions {
 		return do.DoResponse(meta, store, c, resp)
@@ -68,7 +68,7 @@ func (p *ThinkPlugin) handleResponse(
 	c *gin.Context,
 	resp *http.Response,
 	do adaptor.DoResponse,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	// Create a custom response writer
 	rw := &thinkResponseWriter{
 		ResponseWriter: c.Writer,
@@ -100,20 +100,29 @@ func (rw *thinkResponseWriter) getThinkSplitter() *splitter.Splitter {
 // ignore WriteHeaderNow
 func (rw *thinkResponseWriter) WriteHeaderNow() {}
 
+func (rw *thinkResponseWriter) writeWithOriginalLength(original, out []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(out)
+	if err != nil {
+		return n, err
+	}
+
+	return len(original), nil
+}
+
 func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 	if rw.done {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 	// For streaming responses, process each chunk
 	node, err := sonic.Get(b)
 	if err != nil || !node.Valid() {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	// Process the chunk
 	respMap, err := node.Map()
 	if err != nil {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	// Check if this is a streaming response chunk
@@ -124,10 +133,10 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 
 		jsonData, err := sonic.Marshal(respMap)
 		if err != nil {
-			return rw.ResponseWriter.Write(b)
+			return rw.writeWithOriginalLength(b, b)
 		}
 
-		return rw.ResponseWriter.Write(jsonData)
+		return rw.writeWithOriginalLength(b, jsonData)
 	}
 
 	rw.done = true
@@ -135,21 +144,21 @@ func (rw *thinkResponseWriter) Write(b []byte) (int, error) {
 
 	jsonData, err := sonic.Marshal(respMap)
 	if err != nil {
-		return rw.ResponseWriter.Write(b)
+		return rw.writeWithOriginalLength(b, b)
 	}
 
 	if rw.ResponseWriter.Header().Get("Content-Length") != "" {
 		rw.ResponseWriter.Header().Set("Content-Length", strconv.Itoa(len(jsonData)))
 	}
 
-	return rw.ResponseWriter.Write(jsonData)
+	return rw.writeWithOriginalLength(b, jsonData)
 }
 
 func (rw *thinkResponseWriter) WriteString(s string) (int, error) {
 	return rw.Write(conv.StringToBytes(s))
 }
 
-// renderCallback maybe reuse data, so don't modify data
+// StreamSplitThink renderCallback maybe reuse data, so don't modify data
 func StreamSplitThink(data map[string]any, thinkSplitter *splitter.Splitter) (done bool) {
 	choices, ok := data["choices"].([]any)
 	// only support one choice

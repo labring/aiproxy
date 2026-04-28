@@ -21,9 +21,11 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 			if err != nil {
 				return err
 			}
+
 			if u.Scheme != "http" && u.Scheme != "https" {
 				return fmt.Errorf("invalid scheme: %s", u.Scheme)
 			}
+
 			return nil
 		},
 	},

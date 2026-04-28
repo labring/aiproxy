@@ -11,16 +11,16 @@ import (
 
 var (
 	disableServe                 atomic.Bool
-	logStorageHours              int64 // default 0 means no limit
-	retryLogStorageHours         int64 // default 0 means no limit
+	logStorageHours              atomic.Int64 // default 0 means no limit
+	retryLogStorageHours         atomic.Int64 // default 0 means no limit
 	saveAllLogDetail             atomic.Bool
-	logDetailRequestBodyMaxSize  int64 = 128 * 1024 // 128KB
-	logDetailResponseBodyMaxSize int64 = 128 * 1024 // 128KB
-	logDetailStorageHours        int64 = 3 * 24     // 3 days
-	cleanLogBatchSize            int64 = 5000
+	logDetailRequestBodyMaxSize  int64 = 8 * 1024 // 8KB
+	logDetailResponseBodyMaxSize int64 = 8 * 1024 // 8KB
+	logDetailStorageHours        int64 = 3 * 24   // 3 days
+	cleanLogBatchSize            int64 = 10000
 	notifyNote                   atomic.Value
-	ipGroupsThreshold            int64
-	ipGroupsBanThreshold         int64
+	ipGroupsThreshold            atomic.Int64
+	ipGroupsBanThreshold         atomic.Int64
 	retryTimes                   atomic.Int64
 	defaultChannelModels         atomic.Value
 	defaultChannelModelMapping   atomic.Value
@@ -64,21 +64,21 @@ func SetRetryTimes(times int64) {
 }
 
 func GetLogStorageHours() int64 {
-	return atomic.LoadInt64(&logStorageHours)
+	return logStorageHours.Load()
 }
 
 func SetLogStorageHours(hours int64) {
 	hours = env.Int64("LOG_STORAGE_HOURS", hours)
-	atomic.StoreInt64(&logStorageHours, hours)
+	logStorageHours.Store(hours)
 }
 
 func GetRetryLogStorageHours() int64 {
-	return atomic.LoadInt64(&retryLogStorageHours)
+	return retryLogStorageHours.Load()
 }
 
 func SetRetryLogStorageHours(hours int64) {
 	hours = env.Int64("RETRY_LOG_STORAGE_HOURS", hours)
-	atomic.StoreInt64(&retryLogStorageHours, hours)
+	retryLogStorageHours.Store(hours)
 }
 
 func GetLogDetailStorageHours() int64 {
@@ -100,21 +100,21 @@ func SetCleanLogBatchSize(size int64) {
 }
 
 func GetIPGroupsThreshold() int64 {
-	return atomic.LoadInt64(&ipGroupsThreshold)
+	return ipGroupsThreshold.Load()
 }
 
 func SetIPGroupsThreshold(threshold int64) {
 	threshold = env.Int64("IP_GROUPS_THRESHOLD", threshold)
-	atomic.StoreInt64(&ipGroupsThreshold, threshold)
+	ipGroupsThreshold.Store(threshold)
 }
 
 func GetIPGroupsBanThreshold() int64 {
-	return atomic.LoadInt64(&ipGroupsBanThreshold)
+	return ipGroupsBanThreshold.Load()
 }
 
 func SetIPGroupsBanThreshold(threshold int64) {
 	threshold = env.Int64("IP_GROUPS_BAN_THRESHOLD", threshold)
-	atomic.StoreInt64(&ipGroupsBanThreshold, threshold)
+	ipGroupsBanThreshold.Store(threshold)
 }
 
 func GetSaveAllLogDetail() bool {

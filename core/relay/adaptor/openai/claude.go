@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"net/http"
@@ -23,10 +22,21 @@ import (
 func ConvertClaudeRequest(
 	meta *meta.Meta,
 	req *http.Request,
+	hooks ...OpenAIRequestHook,
 ) (adaptor.ConvertResult, error) {
 	openAIRequest, err := ConvertClaudeRequestModel(meta, req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	for _, hook := range hooks {
+		if hook == nil {
+			continue
+		}
+
+		if err := hook(openAIRequest); err != nil {
+			return adaptor.ConvertResult{}, err
+		}
 	}
 
 	// Marshal the converted request
@@ -71,7 +81,7 @@ func ConvertClaudeRequestModel(
 
 	// Convert tools
 	if len(claudeRequest.Tools) > 0 {
-		openAIRequest.Tools = convertClaudeToolsToOpenAI(claudeRequest.Tools)
+		openAIRequest.Tools = ConvertClaudeToolsToOpenAI(claudeRequest.Tools)
 		openAIRequest.ToolChoice = convertClaudeToolChoice(claudeRequest.ToolChoice)
 	}
 
@@ -86,6 +96,11 @@ func ConvertClaudeRequestModel(
 			IncludeUsage: true,
 		}
 	}
+
+	utils.ApplyReasoningToOpenAIRequest(
+		&openAIRequest,
+		utils.ParseClaudeReasoning(claudeRequest.Thinking, claudeRequest.OutputConfig),
+	)
 
 	return &openAIRequest, nil
 }
@@ -104,14 +119,14 @@ func convertClaudeMessagesToOpenAI(
 				systemContent.WriteString("\n")
 			}
 
-			if content.Type == "text" {
+			if content.Type == relaymodel.ClaudeContentTypeText {
 				systemContent.WriteString(content.Text)
 			}
 		}
 
 		if systemContent.Len() > 0 {
 			messages = append(messages, relaymodel.Message{
-				Role:    "system",
+				Role:    relaymodel.RoleSystem,
 				Content: systemContent.String(),
 			})
 		}
@@ -119,136 +134,143 @@ func convertClaudeMessagesToOpenAI(
 
 	// Convert regular messages
 	for _, msg := range claudeRequest.Messages {
-		// Check if this is a user message with tool results - handle specially
-		if msg.Role == "user" {
-			content, ok := msg.Content.([]any)
-
-			hasToolResults := false
-			if ok {
-				rawBytes, _ := sonic.Marshal(content)
-
-				var contentArray []relaymodel.ClaudeContent
-
-				_ = sonic.Unmarshal(rawBytes, &contentArray)
-
-				// First check if there are any tool_result blocks
-				var regularContent []relaymodel.MessageContent
-				for _, content := range contentArray {
-					switch content.Type {
-					case "tool_result":
-						hasToolResults = true
-						// Create a separate tool message for each tool_result
-						toolMsg := relaymodel.Message{
-							Role:       "tool",
-							Content:    content.Content,
-							ToolCallID: content.ToolUseID,
-						}
-						messages = append(messages, toolMsg)
-					case "text":
-						// Collect non-tool_result content
-						regularContent = append(regularContent, relaymodel.MessageContent{
-							Type: relaymodel.ContentTypeText,
-							Text: content.Text,
-						})
-					}
-				}
-
-				// If there were tool results and also regular content, add the regular content as a user message
-				if hasToolResults {
-					if len(regularContent) > 0 {
-						messages = append(messages, relaymodel.Message{
-							Role:    "user",
-							Content: regularContent,
-						})
-					}
-
-					continue // Skip the normal message processing
-				}
-			}
-		}
-
-		// Regular message processing
 		openAIMsg := relaymodel.Message{
 			Role: msg.Role,
 		}
 
-		switch content := msg.Content.(type) {
-		case string:
-			openAIMsg.Content = content
-		case []any:
-			rawBytes, _ := sonic.Marshal(content)
+		result := convertClaudeContent(msg.Content)
+		messages = append(messages, result.Messages...)
+		openAIMsg.ToolCalls = result.ToolCalls
 
-			var contentArray []relaymodel.ClaudeContent
-
-			_ = sonic.Unmarshal(rawBytes, &contentArray)
-
-			var parts []relaymodel.MessageContent
-			for _, content := range contentArray {
-				switch content.Type {
-				case "text":
-					parts = append(parts, relaymodel.MessageContent{
-						Type: relaymodel.ContentTypeText,
-						Text: content.Text,
-					})
-				case "thinking":
-					parts = append(parts, relaymodel.MessageContent{
-						Type: relaymodel.ContentTypeText,
-						Text: content.Thinking,
-					})
-				case "image":
-					if content.Source != nil {
-						imageURL := relaymodel.ImageURL{}
-						switch content.Source.Type {
-						case "url":
-							imageURL.URL = content.Source.URL
-						case "base64":
-							imageURL.URL = fmt.Sprintf("data:%s;base64,%s",
-								content.Source.MediaType, content.Source.Data)
-						}
-
-						parts = append(parts, relaymodel.MessageContent{
-							Type:     relaymodel.ContentTypeImageURL,
-							ImageURL: &imageURL,
-						})
-					}
-				case "tool_use":
-					// Handle tool calls
-					if openAIMsg.ToolCalls == nil {
-						openAIMsg.ToolCalls = []relaymodel.ToolCall{}
-					}
-
-					args, _ := sonic.MarshalString(content.Input)
-					openAIMsg.ToolCalls = append(openAIMsg.ToolCalls, relaymodel.ToolCall{
-						ID:   content.ID,
-						Type: "function",
-						Function: relaymodel.Function{
-							Name:      content.Name,
-							Arguments: args,
-						},
-					})
-				default:
-					continue
-				}
-			}
-
-			if len(parts) > 0 {
-				openAIMsg.Content = parts
-			}
+		openAIMsg.Content = result.Content
+		// Include the message if it has content OR tool calls
+		// This is important for function calling flow where assistant may only have tool calls
+		if openAIMsg.Content != nil || len(openAIMsg.ToolCalls) > 0 {
+			messages = append(messages, openAIMsg)
 		}
-
-		messages = append(messages, openAIMsg)
 	}
 
 	return messages
 }
 
-// convertClaudeToolsToOpenAI converts Claude tools to OpenAI format
-func convertClaudeToolsToOpenAI(claudeTools []relaymodel.ClaudeTool) []relaymodel.Tool {
+type convertClaudeContentResult struct {
+	Content   any
+	ToolCalls []relaymodel.ToolCall
+	Messages  []relaymodel.Message
+}
+
+func convertClaudeContent(content any) convertClaudeContentResult {
+	result := convertClaudeContentResult{}
+	switch content := content.(type) {
+	case string:
+		result.Content = content
+	case []any:
+		rawBytes, _ := sonic.Marshal(content)
+
+		var contentArray []relaymodel.ClaudeContent
+
+		_ = sonic.Unmarshal(rawBytes, &contentArray)
+
+		var parts []relaymodel.MessageContent
+		for _, content := range contentArray {
+			switch content.Type {
+			case relaymodel.ClaudeContentTypeText:
+				text := strings.TrimSpace(content.Text)
+				if text == "" {
+					continue
+				}
+
+				parts = append(parts, relaymodel.MessageContent{
+					Type: relaymodel.ContentTypeText,
+					Text: text,
+				})
+			case "thinking":
+				text := strings.TrimSpace(content.Thinking)
+				if text == "" {
+					continue
+				}
+
+				parts = append(parts, relaymodel.MessageContent{
+					Type: relaymodel.ContentTypeText,
+					Text: text,
+				})
+			case relaymodel.ClaudeContentTypeImage:
+				if content.Source != nil {
+					imageURL := relaymodel.ImageURL{}
+					switch content.Source.Type {
+					case relaymodel.ClaudeImageSourceTypeURL:
+						imageURL.URL = content.Source.URL
+					case relaymodel.ClaudeImageSourceTypeBase64:
+						imageURL.URL = fmt.Sprintf("data:%s;base64,%s",
+							content.Source.MediaType, content.Source.Data)
+					}
+
+					parts = append(parts, relaymodel.MessageContent{
+						Type:     relaymodel.ContentTypeImageURL,
+						ImageURL: &imageURL,
+					})
+				}
+			case "tool_use":
+				// Handle tool calls
+				args, _ := sonic.MarshalString(content.Input)
+				toolCall := relaymodel.ToolCall{
+					ID:   content.ID,
+					Type: relaymodel.ToolChoiceTypeFunction,
+					Function: relaymodel.Function{
+						Name:      content.Name,
+						Arguments: args,
+					},
+				}
+				// Preserve Gemini thought signature if present (OpenAI format)
+				if content.Signature != "" {
+					toolCall.ExtraContent = &relaymodel.ExtraContent{
+						Google: &relaymodel.GoogleExtraContent{
+							ThoughtSignature: content.Signature,
+						},
+					}
+				}
+
+				result.ToolCalls = append(result.ToolCalls, toolCall)
+			case "tool_result":
+				// Create a separate tool message for each tool_result
+				var newContent any
+				switch v := content.Content.(type) {
+				case string:
+					newContent = v
+				case []any:
+					result := convertClaudeContent(v)
+					newContent = result.Content
+				}
+
+				toolMsg := relaymodel.Message{
+					Role:       relaymodel.RoleTool,
+					Content:    newContent,
+					ToolCallID: content.ToolUseID,
+				}
+
+				result.Messages = append(result.Messages, toolMsg)
+
+				continue
+			default:
+				continue
+			}
+		}
+
+		if len(parts) > 0 {
+			result.Content = parts
+		}
+	}
+
+	return result
+}
+
+// ConvertClaudeToolsToOpenAI converts Claude tools to OpenAI format
+func ConvertClaudeToolsToOpenAI(claudeTools []relaymodel.ClaudeTool) []relaymodel.Tool {
 	openAITools := make([]relaymodel.Tool, 0, len(claudeTools))
 
 	for _, tool := range claudeTools {
 		openAITool := relaymodel.Tool{
-			Type: "function",
+			Type: relaymodel.ToolChoiceTypeFunction,
 			Function: relaymodel.Function{
 				Name:        tool.Name,
 				Description: tool.Description,
@@ -257,11 +279,23 @@ func convertClaudeToolsToOpenAI(claudeTools []relaymodel.ClaudeTool) []relaymode
 
 		// Convert input schema
 		if tool.InputSchema != nil {
-			openAITool.Function.Parameters = map[string]any{
+			params := map[string]any{
 				"type":       tool.InputSchema.Type,
 				"properties": tool.InputSchema.Properties,
-				"required":   tool.InputSchema.Required,
 			}
+
+			// Only add required field if it's non-empty
+			// Some OpenAI-compatible APIs reject null or empty required arrays
+			if tool.InputSchema.Required != nil {
+				// Check if required is a non-empty array
+				if reqArray, ok := tool.InputSchema.Required.([]string); ok && len(reqArray) > 0 {
+					params["required"] = tool.InputSchema.Required
+				} else if reqAnyArray, ok := tool.InputSchema.Required.([]any); ok && len(reqAnyArray) > 0 {
+					params["required"] = tool.InputSchema.Required
+				}
+			}
+
+			openAITool.Function.Parameters = params
 		}
 
 		openAITools = append(openAITools, openAITool)
@@ -273,36 +307,36 @@ func convertClaudeToolsToOpenAI(claudeTools []relaymodel.ClaudeTool) []relaymode
 // convertClaudeToolChoice converts Claude tool choice to OpenAI format
 func convertClaudeToolChoice(toolChoice any) any {
 	if toolChoice == nil {
-		return "auto"
+		return relaymodel.ToolChoiceAuto
 	}
 
 	switch v := toolChoice.(type) {
 	case string:
-		if v == "any" {
-			return "required"
+		if v == relaymodel.ToolChoiceAny {
+			return relaymodel.ToolChoiceRequired
 		}
 		return v
 	case map[string]any:
 		if toolType, ok := v["type"].(string); ok {
 			switch toolType {
-			case "tool":
+			case relaymodel.RoleTool:
 				if name, ok := v["name"].(string); ok {
 					return map[string]any{
-						"type": "function",
+						"type": relaymodel.ToolChoiceTypeFunction,
 						"function": map[string]any{
 							"name": name,
 						},
 					}
 				}
-			case "any":
-				return "required"
-			case "auto":
-				return "auto"
+			case relaymodel.ToolChoiceAny:
+				return relaymodel.ToolChoiceRequired
+			case relaymodel.ToolChoiceAuto:
+				return relaymodel.ToolChoiceAuto
 			}
 		}
 	}
 
-	return "auto"
+	return relaymodel.ToolChoiceAuto
 }
 
 // ClaudeStreamHandler handles OpenAI streaming responses and converts them to Claude format
@@ -310,21 +344,17 @@ func ClaudeStreamHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ClaudeErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ClaudeErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
 
 	log := common.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-
-	buf := utils.GetScannerBuffer()
-	defer utils.PutScannerBuffer(buf)
-
-	scanner.Buffer(*buf, cap(*buf))
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
 
 	// Initialize Claude response tracking
 	var (
@@ -343,7 +373,7 @@ func ClaudeStreamHandler(
 	closeCurrentBlock := func() {
 		if currentContentIndex >= 0 {
 			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-				Type:  "content_block_stop",
+				Type:  relaymodel.ClaudeStreamTypeContentBlockStop,
 				Index: currentContentIndex,
 			})
 		}
@@ -380,11 +410,11 @@ func ClaudeStreamHandler(
 
 			// Include initial usage if available
 			messageStartResp := relaymodel.ClaudeStreamResponse{
-				Type: "message_start",
+				Type: relaymodel.ClaudeStreamTypeMessageStart,
 				Message: &relaymodel.ClaudeResponse{
 					ID:      messageID,
-					Type:    "message",
-					Role:    "assistant",
+					Type:    relaymodel.ClaudeTypeMessage,
+					Role:    relaymodel.RoleAssistant,
 					Model:   meta.ActualModel,
 					Content: []relaymodel.ClaudeContent{},
 				},
@@ -399,7 +429,10 @@ func ClaudeStreamHandler(
 			_ = render.ClaudeObjectData(c, messageStartResp)
 
 			// Send ping event
-			_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{Type: "ping"})
+			_ = render.ClaudeObjectData(
+				c,
+				relaymodel.ClaudeStreamResponse{Type: relaymodel.ClaudeStreamTypePing},
+			)
 		}
 
 		// Process each choice
@@ -407,17 +440,17 @@ func ClaudeStreamHandler(
 			// Handle reasoning/thinking content
 			if choice.Delta.ReasoningContent != "" {
 				// If we're not in a thinking block, start one
-				if currentContentType != "thinking" {
+				if currentContentType != relaymodel.ClaudeContentTypeThinking {
 					closeCurrentBlock()
 
 					currentContentIndex++
-					currentContentType = "thinking"
+					currentContentType = relaymodel.ClaudeContentTypeThinking
 
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_start",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 						Index: currentContentIndex,
 						ContentBlock: &relaymodel.ClaudeContent{
-							Type:     "thinking",
+							Type:     relaymodel.ClaudeContentTypeThinking,
 							Thinking: "",
 						},
 					})
@@ -426,10 +459,10 @@ func ClaudeStreamHandler(
 				thinkingText.WriteString(choice.Delta.ReasoningContent)
 
 				_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-					Type:  "content_block_delta",
+					Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 					Index: currentContentIndex,
 					Delta: &relaymodel.ClaudeDelta{
-						Type:     "thinking_delta",
+						Type:     relaymodel.ClaudeDeltaTypeThinkingDelta,
 						Thinking: choice.Delta.ReasoningContent,
 					},
 				})
@@ -438,17 +471,17 @@ func ClaudeStreamHandler(
 			// Handle text content
 			if content, ok := choice.Delta.Content.(string); ok && content != "" {
 				// If we're not in a text block, start one
-				if currentContentType != "text" {
+				if currentContentType != relaymodel.ClaudeContentTypeText {
 					closeCurrentBlock()
 
 					currentContentIndex++
-					currentContentType = "text"
+					currentContentType = relaymodel.ClaudeContentTypeText
 
 					_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-						Type:  "content_block_start",
+						Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
 						Index: currentContentIndex,
 						ContentBlock: &relaymodel.ClaudeContent{
-							Type: "text",
+							Type: relaymodel.ClaudeContentTypeText,
 							Text: "",
 						},
 					})
@@ -457,10 +490,10 @@ func ClaudeStreamHandler(
 				contentText.WriteString(content)
 
 				_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-					Type:  "content_block_delta",
+					Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 					Index: currentContentIndex,
 					Delta: &relaymodel.ClaudeDelta{
-						Type: "text_delta",
+						Type: relaymodel.ClaudeDeltaTypeTextDelta,
 						Text: content,
 					},
 				})
@@ -477,10 +510,10 @@ func ClaudeStreamHandler(
 						closeCurrentBlock()
 
 						currentContentIndex++
-						currentContentType = "tool_use"
+						currentContentType = relaymodel.ClaudeContentTypeToolUse
 
 						toolCallsBuffer[idx] = &relaymodel.ClaudeContent{
-							Type:  "tool_use",
+							Type:  relaymodel.ClaudeContentTypeToolUse,
 							ID:    toolCall.ID,
 							Name:  toolCall.Function.Name,
 							Input: make(map[string]any),
@@ -488,7 +521,7 @@ func ClaudeStreamHandler(
 
 						// Send content_block_start for tool use
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:         "content_block_start",
+							Type:         relaymodel.ClaudeStreamTypeContentBlockStart,
 							Index:        currentContentIndex,
 							ContentBlock: toolCallsBuffer[idx],
 						})
@@ -497,10 +530,10 @@ func ClaudeStreamHandler(
 					// Send tool arguments delta
 					if toolCall.Function.Arguments != "" {
 						_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-							Type:  "content_block_delta",
+							Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
 							Index: currentContentIndex,
 							Delta: &relaymodel.ClaudeDelta{
-								Type:        "input_json_delta",
+								Type:        relaymodel.ClaudeDeltaTypeInputJSONDelta,
 								PartialJSON: toolCall.Function.Arguments,
 							},
 						})
@@ -539,12 +572,12 @@ func ClaudeStreamHandler(
 	claudeUsage := usage.ToClaudeUsage()
 
 	if stopReason == "" {
-		stopReason = claudeStopReasonEndTurn
+		stopReason = relaymodel.ClaudeStopReasonEndTurn
 	}
 
 	// Send message_delta with final usage
 	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-		Type: "message_delta",
+		Type: relaymodel.ClaudeStreamTypeMessageDelta,
 		Delta: &relaymodel.ClaudeDelta{
 			StopReason: &stopReason,
 		},
@@ -553,10 +586,10 @@ func ClaudeStreamHandler(
 
 	// Send message_stop
 	_ = render.ClaudeObjectData(c, relaymodel.ClaudeStreamResponse{
-		Type: "message_stop",
+		Type: relaymodel.ClaudeStreamTypeMessageStop,
 	})
 
-	return usage.ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 // ClaudeHandler handles OpenAI non-streaming responses and converts them to Claude format
@@ -564,9 +597,9 @@ func ClaudeHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ClaudeErrorHandler(resp)
+		return adaptor.DoResponseResult{}, ClaudeErrorHandler(resp)
 	}
 
 	defer resp.Body.Close()
@@ -574,7 +607,7 @@ func ClaudeHandler(
 	// Read OpenAI response
 	body, err := common.GetResponseBody(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
@@ -586,7 +619,7 @@ func ClaudeHandler(
 
 	err = sonic.Unmarshal(body, &openAIResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -596,8 +629,8 @@ func ClaudeHandler(
 	// Convert to Claude response
 	claudeResponse := relaymodel.ClaudeResponse{
 		ID:           "msg_" + common.ShortUUID(),
-		Type:         "message",
-		Role:         "assistant",
+		Type:         relaymodel.ClaudeTypeMessage,
+		Role:         relaymodel.RoleAssistant,
 		Model:        meta.ActualModel,
 		Content:      []relaymodel.ClaudeContent{},
 		StopReason:   "",
@@ -609,7 +642,7 @@ func ClaudeHandler(
 		// Handle text content
 		if content, ok := choice.Message.Content.(string); ok {
 			claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-				Type: "text",
+				Type: relaymodel.ClaudeContentTypeText,
 				Text: content,
 			})
 		}
@@ -617,7 +650,7 @@ func ClaudeHandler(
 		// Handle reasoning content (for o1 models)
 		if choice.Message.ReasoningContent != "" {
 			claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-				Type:     "thinking",
+				Type:     relaymodel.ClaudeContentTypeThinking,
 				Thinking: choice.Message.ReasoningContent,
 			})
 		}
@@ -630,7 +663,7 @@ func ClaudeHandler(
 			}
 
 			claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-				Type:  "tool_use",
+				Type:  relaymodel.ClaudeContentTypeToolUse,
 				ID:    toolCall.ID,
 				Name:  toolCall.Function.Name,
 				Input: input,
@@ -644,22 +677,13 @@ func ClaudeHandler(
 	// If no content was added, ensure at least an empty text block
 	if len(claudeResponse.Content) == 0 {
 		claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
-			Type: "text",
+			Type: relaymodel.ClaudeContentTypeText,
 			Text: "",
 		})
 	}
 
 	// Convert usage
-	claudeResponse.Usage = relaymodel.ClaudeUsage{
-		InputTokens:  openAIResponse.Usage.PromptTokens,
-		OutputTokens: openAIResponse.Usage.CompletionTokens,
-	}
-
-	// Add cache information if available
-	if openAIResponse.Usage.PromptTokensDetails != nil {
-		claudeResponse.Usage.CacheReadInputTokens = openAIResponse.Usage.PromptTokensDetails.CachedTokens
-		claudeResponse.Usage.CacheCreationInputTokens = openAIResponse.Usage.PromptTokensDetails.CacheCreationTokens
-	}
+	claudeResponse.Usage = openAIResponse.Usage.ToClaudeUsage()
 
 	// Add web search usage if available
 	if openAIResponse.Usage.WebSearchCount > 0 {
@@ -671,7 +695,7 @@ func ClaudeHandler(
 	// Marshal Claude response
 	claudeResponseData, err := sonic.Marshal(claudeResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -683,33 +707,26 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(claudeResponseData)))
 	_, _ = c.Writer.Write(claudeResponseData)
 
-	return claudeResponse.Usage.ToOpenAIUsage().ToModelUsage(), nil
+	return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()}, nil
 }
-
-const (
-	claudeStopReasonEndTurn      = "end_turn"
-	claudeStopReasonMaxTokens    = "max_tokens"
-	claudeStopReasonToolUse      = "tool_use"
-	claudeStopReasonStopSequence = "stop_sequence"
-)
 
 // convertFinishReasonToClaude converts OpenAI finish reason to Claude stop reason
 func convertFinishReasonToClaude(finishReason string) *string {
 	switch finishReason {
 	case relaymodel.FinishReasonStop:
-		v := claudeStopReasonEndTurn
+		v := relaymodel.ClaudeStopReasonEndTurn
 		return &v
 	case relaymodel.FinishReasonLength:
-		v := claudeStopReasonMaxTokens
+		v := relaymodel.ClaudeStopReasonMaxTokens
 		return &v
 	case relaymodel.FinishReasonToolCalls:
-		v := claudeStopReasonToolUse
+		v := relaymodel.ClaudeStopReasonToolUse
 		return &v
 	case relaymodel.FinishReasonContentFilter:
-		v := claudeStopReasonStopSequence
+		v := relaymodel.ClaudeStopReasonStopSequence
 		return &v
 	case "":
-		v := claudeStopReasonEndTurn
+		v := relaymodel.ClaudeStopReasonEndTurn
 		return &v
 	default:
 		return &finishReason
@@ -763,4 +780,469 @@ func convertOpenAIErrorTypeToClaude(openAIType string) string {
 	default:
 		return openAIType
 	}
+}
+
+// ConvertClaudeToResponsesRequest converts a Claude request to Responses API format
+func ConvertClaudeToResponsesRequest(
+	meta *meta.Meta,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	// First convert Claude to OpenAI format
+	openAIRequest, err := ConvertClaudeRequestModel(meta, req)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	// Create Responses API request
+	responsesReq := relaymodel.CreateResponseRequest{
+		Model:  meta.ActualModel,
+		Input:  ConvertMessagesToInputItems(openAIRequest.Messages),
+		Stream: openAIRequest.Stream,
+	}
+
+	// Map fields from OpenAI request
+	if openAIRequest.Temperature != nil {
+		responsesReq.Temperature = openAIRequest.Temperature
+	}
+
+	if openAIRequest.TopP != nil {
+		responsesReq.TopP = openAIRequest.TopP
+	}
+
+	if openAIRequest.MaxTokens > 0 {
+		responsesReq.MaxOutputTokens = &openAIRequest.MaxTokens
+	} else if openAIRequest.MaxCompletionTokens > 0 {
+		responsesReq.MaxOutputTokens = &openAIRequest.MaxCompletionTokens
+	}
+
+	// Map tools
+	if len(openAIRequest.Tools) > 0 {
+		responsesReq.Tools = ConvertToolsToResponseTools(openAIRequest.Tools)
+	}
+
+	if openAIRequest.ToolChoice != nil {
+		responsesReq.ToolChoice = openAIRequest.ToolChoice
+	}
+
+	utils.ApplyReasoningToResponsesRequest(
+		&responsesReq,
+		utils.ParseOpenAIReasoning(openAIRequest),
+	)
+
+	// Force non-store mode
+	storeValue := false
+	responsesReq.Store = &storeValue
+
+	// Marshal to JSON
+	jsonData, err := sonic.Marshal(responsesReq)
+	if err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return adaptor.ConvertResult{
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(jsonData))},
+		},
+		Body: bytes.NewReader(jsonData),
+	}, nil
+}
+
+// ConvertResponsesToClaudeResponse converts Responses API response to Claude format
+func ConvertResponsesToClaudeResponse(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
+	}
+
+	defer resp.Body.Close()
+
+	responseBody, err := common.GetResponseBody(resp)
+	if err != nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	var responsesResp relaymodel.Response
+
+	err = sonic.Unmarshal(responseBody, &responsesResp)
+	if err != nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	// Convert to Claude format
+	claudeResp := relaymodel.ClaudeResponse{
+		ID:      responsesResp.ID,
+		Type:    relaymodel.ClaudeTypeMessage,
+		Role:    relaymodel.RoleAssistant,
+		Model:   responsesResp.Model,
+		Content: []relaymodel.ClaudeContent{},
+	}
+
+	// Convert output items to Claude content
+	for _, outputItem := range responsesResp.Output {
+		// Handle different output types
+		switch outputItem.Type {
+		case "reasoning":
+			// Convert reasoning to thinking content
+			for _, content := range outputItem.Content {
+				if (content.Type == relaymodel.ClaudeContentTypeText || content.Type == "output_text") &&
+					content.Text != "" {
+					claudeResp.Content = append(claudeResp.Content, relaymodel.ClaudeContent{
+						Type:     relaymodel.ClaudeContentTypeThinking,
+						Thinking: content.Text,
+					})
+				}
+			}
+		default:
+			// Handle regular message content
+			for _, content := range outputItem.Content {
+				if (content.Type == relaymodel.ClaudeContentTypeText || content.Type == "output_text") &&
+					content.Text != "" {
+					claudeResp.Content = append(claudeResp.Content, relaymodel.ClaudeContent{
+						Type: relaymodel.ClaudeContentTypeText,
+						Text: content.Text,
+					})
+				}
+			}
+		}
+	}
+
+	// Set stop reason based on status
+	switch responsesResp.Status {
+	case relaymodel.ResponseStatusCompleted:
+		claudeResp.StopReason = relaymodel.ClaudeStopReasonEndTurn
+	case relaymodel.ResponseStatusIncomplete:
+		claudeResp.StopReason = relaymodel.ClaudeStopReasonMaxTokens
+	default:
+		claudeResp.StopReason = relaymodel.ClaudeStopReasonEndTurn
+	}
+
+	// Convert usage
+	if responsesResp.Usage != nil {
+		claudeResp.Usage = responsesResp.Usage.ToClaudeUsage()
+	}
+
+	// Marshal and return
+	claudeRespData, err := sonic.Marshal(claudeResp)
+	if err != nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_response_body_failed",
+			http.StatusInternalServerError,
+		)
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(claudeRespData)))
+	_, _ = c.Writer.Write(claudeRespData)
+
+	return adaptor.DoResponseResult{
+		Usage:      responsesResp.ToModelUsage(),
+		UpstreamID: responsesResp.ID,
+		AsyncUsage: responseNeedsAsyncUsage(&responsesResp),
+	}, nil
+}
+
+// ConvertResponsesToClaudeStreamResponse converts Responses API stream to Claude stream
+func ConvertResponsesToClaudeStreamResponse(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
+	}
+
+	defer resp.Body.Close()
+
+	log := common.GetLogger(c)
+
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
+
+	var (
+		usage        model.Usage
+		responseID   string
+		lastResponse *relaymodel.Response
+	)
+
+	state := &claudeStreamState{
+		meta: meta,
+		c:    c,
+	}
+
+	for scanner.Scan() {
+		data := scanner.Bytes()
+		if !render.IsValidSSEData(data) {
+			continue
+		}
+
+		data = render.ExtractSSEData(data)
+		if render.IsSSEDone(data) {
+			break
+		}
+
+		// Parse the stream event
+		var event relaymodel.ResponseStreamEvent
+
+		err := sonic.Unmarshal(data, &event)
+		if err != nil {
+			log.Error("error unmarshalling response stream: " + err.Error())
+			continue
+		}
+
+		if event.Response != nil {
+			if responseID == "" {
+				responseID = event.Response.ID
+			}
+
+			lastResponse = event.Response
+			usage = event.Response.ToModelUsage()
+		}
+
+		// Handle events
+		switch event.Type {
+		case relaymodel.EventResponseCreated:
+			state.handleResponseCreated(&event)
+		case relaymodel.EventOutputItemAdded:
+			state.handleOutputItemAdded(&event)
+		case relaymodel.EventContentPartAdded:
+			state.handleContentPartAdded(&event)
+		case relaymodel.EventReasoningTextDelta:
+			state.handleReasoningTextDelta(&event)
+		case relaymodel.EventOutputTextDelta:
+			state.handleOutputTextDelta(&event)
+		case relaymodel.EventFunctionCallArgumentsDelta:
+			state.handleFunctionCallArgumentsDelta(&event)
+		case relaymodel.EventOutputItemDone:
+			state.handleOutputItemDone(&event)
+		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
+			state.handleResponseCompleted(&event)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("error reading response stream: " + err.Error())
+	}
+
+	return adaptor.DoResponseResult{
+		Usage:      usage,
+		UpstreamID: responseID,
+		AsyncUsage: responseNeedsAsyncUsage(lastResponse),
+	}, nil
+}
+
+// claudeStreamState manages state for Claude stream conversion
+type claudeStreamState struct {
+	messageID            string
+	sentMessageStart     bool
+	contentIndex         int
+	currentContentType   string
+	currentToolUseID     string
+	currentToolUseName   string
+	currentToolUseCallID string
+	toolUseInput         string
+	meta                 *meta.Meta
+	c                    *gin.Context
+}
+
+// handleResponseCreated handles response.created event for Claude
+func (s *claudeStreamState) handleResponseCreated(event *relaymodel.ResponseStreamEvent) {
+	if event.Response == nil {
+		return
+	}
+
+	s.messageID = event.Response.ID
+	s.sentMessageStart = true
+
+	// Send message_start
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type: relaymodel.ClaudeStreamTypeMessageStart,
+		Message: &relaymodel.ClaudeResponse{
+			ID:      s.messageID,
+			Type:    relaymodel.ClaudeTypeMessage,
+			Role:    relaymodel.RoleAssistant,
+			Model:   event.Response.Model,
+			Content: []relaymodel.ClaudeContent{},
+		},
+	})
+}
+
+// handleOutputItemAdded handles response.output_item.added event for Claude
+func (s *claudeStreamState) handleOutputItemAdded(event *relaymodel.ResponseStreamEvent) {
+	if event.Item == nil || !s.sentMessageStart {
+		return
+	}
+
+	// Track if this is a reasoning item
+	switch event.Item.Type {
+	case "reasoning":
+		s.currentContentType = relaymodel.ClaudeContentTypeThinking
+		// Send content_block_start for thinking
+		_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+			Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
+			Index: s.contentIndex,
+			ContentBlock: &relaymodel.ClaudeContent{
+				Type:     relaymodel.ClaudeContentTypeThinking,
+				Thinking: "",
+			},
+		})
+	case relaymodel.InputItemTypeFunctionCall:
+		s.currentContentType = relaymodel.ClaudeContentTypeToolUse
+		s.currentToolUseID = event.Item.ID
+		s.currentToolUseName = event.Item.Name
+		s.currentToolUseCallID = event.Item.CallID
+		s.toolUseInput = ""
+		// Send content_block_start for tool_use
+		_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+			Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
+			Index: s.contentIndex,
+			ContentBlock: &relaymodel.ClaudeContent{
+				Type:  relaymodel.ClaudeContentTypeToolUse,
+				ID:    event.Item.CallID,
+				Name:  event.Item.Name,
+				Input: map[string]any{},
+			},
+		})
+	}
+}
+
+// handleFunctionCallArgumentsDelta handles response.function_call_arguments.delta event for Claude
+func (s *claudeStreamState) handleFunctionCallArgumentsDelta(
+	event *relaymodel.ResponseStreamEvent,
+) {
+	if event.Delta == "" || !s.sentMessageStart ||
+		s.currentContentType != relaymodel.ClaudeContentTypeToolUse {
+		return
+	}
+
+	// Accumulate input
+	s.toolUseInput += event.Delta
+
+	// Send input_json_delta
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
+		Index: s.contentIndex,
+		Delta: &relaymodel.ClaudeDelta{
+			Type:        relaymodel.ClaudeDeltaTypeInputJSONDelta,
+			PartialJSON: event.Delta,
+		},
+	})
+}
+
+// handleContentPartAdded handles response.content_part.added event for Claude
+func (s *claudeStreamState) handleContentPartAdded(event *relaymodel.ResponseStreamEvent) {
+	if event.Part == nil || !s.sentMessageStart {
+		return
+	}
+
+	if event.Part.Type == "output_text" &&
+		s.currentContentType != relaymodel.ClaudeContentTypeThinking {
+		s.currentContentType = relaymodel.ClaudeContentTypeText
+		// Send content_block_start for new text content
+		_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+			Type:  relaymodel.ClaudeStreamTypeContentBlockStart,
+			Index: s.contentIndex,
+			ContentBlock: &relaymodel.ClaudeContent{
+				Type: relaymodel.ClaudeContentTypeText,
+				Text: "",
+			},
+		})
+	}
+}
+
+// handleReasoningTextDelta handles response.reasoning_text.delta event for Claude
+func (s *claudeStreamState) handleReasoningTextDelta(event *relaymodel.ResponseStreamEvent) {
+	if event.Delta == "" || !s.sentMessageStart {
+		return
+	}
+
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
+		Index: s.contentIndex,
+		Delta: &relaymodel.ClaudeDelta{
+			Type:     relaymodel.ClaudeDeltaTypeThinkingDelta,
+			Thinking: event.Delta,
+		},
+	})
+}
+
+// handleOutputTextDelta handles response.output_text.delta event for Claude
+func (s *claudeStreamState) handleOutputTextDelta(event *relaymodel.ResponseStreamEvent) {
+	if event.Delta == "" || !s.sentMessageStart {
+		return
+	}
+
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type:  relaymodel.ClaudeStreamTypeContentBlockDelta,
+		Index: s.contentIndex,
+		Delta: &relaymodel.ClaudeDelta{
+			Type: relaymodel.ClaudeDeltaTypeTextDelta,
+			Text: event.Delta,
+		},
+	})
+}
+
+// handleOutputItemDone handles response.output_item.done event for Claude
+func (s *claudeStreamState) handleOutputItemDone(event *relaymodel.ResponseStreamEvent) {
+	if event.Item == nil || !s.sentMessageStart {
+		return
+	}
+
+	// For tool_use blocks, parse and finalize input
+	if event.Item.Type == relaymodel.InputItemTypeFunctionCall &&
+		s.currentContentType == relaymodel.ClaudeContentTypeToolUse {
+		if s.toolUseInput != "" {
+			var input map[string]any
+
+			_ = sonic.Unmarshal([]byte(s.toolUseInput), &input)
+		}
+		// Reset tool use state
+		s.currentToolUseID = ""
+		s.currentToolUseName = ""
+		s.currentToolUseCallID = ""
+		s.toolUseInput = ""
+	}
+
+	// Send content_block_stop for any type
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type:  relaymodel.ClaudeStreamTypeContentBlockStop,
+		Index: s.contentIndex,
+	})
+	s.contentIndex++
+	s.currentContentType = ""
+}
+
+// handleResponseCompleted handles response.completed/done event for Claude
+func (s *claudeStreamState) handleResponseCompleted(event *relaymodel.ResponseStreamEvent) {
+	if event.Response == nil || event.Response.Usage == nil {
+		return
+	}
+
+	// Send message_delta with stop reason
+	stopReason := relaymodel.ClaudeStopReasonEndTurn
+	claudeUsage := event.Response.Usage.ToClaudeUsage()
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type: relaymodel.ClaudeStreamTypeMessageDelta,
+		Delta: &relaymodel.ClaudeDelta{
+			StopReason: &stopReason,
+		},
+		Usage: &claudeUsage,
+	})
+
+	// Send message_stop
+	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
+		Type: relaymodel.ClaudeStreamTypeMessageStop,
+	})
 }

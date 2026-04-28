@@ -52,12 +52,15 @@ const (
 	ChannelTypeSangforAICP             ChannelType = 50
 	ChannelTypeStreamlake              ChannelType = 51
 	ChannelTypeZhipuCoding             ChannelType = 52
+	ChannelTypeFake                    ChannelType = 53
+	ChannelTypeAntLing                 ChannelType = 54
+	ChannelTypeFakeError               ChannelType = 55
 )
 
 var channelTypeNames = map[ChannelType]string{
 	ChannelTypeOpenAI:                  "openai",
-	ChannelTypeAzure:                   "azure",
-	ChannelTypeAzure2:                  "azure (model name support contain '.')",
+	ChannelTypeAzure:                   "azure (deprecated)",
+	ChannelTypeAzure2:                  "azure",
 	ChannelTypeGoogleGeminiOpenAI:      "google gemini (openai)",
 	ChannelTypeBaiduV2:                 "baidu v2",
 	ChannelTypeAnthropic:               "anthropic",
@@ -95,13 +98,7 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeSangforAICP:             "Sangfor AICP",
 	ChannelTypeStreamlake:              "Streamlake",
 	ChannelTypeZhipuCoding:             "zhipu coding",
-}
-
-func AllChannelTypes() []ChannelType {
-	types := make([]ChannelType, 0, len(channelTypeNames))
-	for t := range channelTypeNames {
-		types = append(types, t)
-	}
-
-	return types
+	ChannelTypeFake:                    "fake",
+	ChannelTypeAntLing:                 "antling",
+	ChannelTypeFakeError:               "fake-error",
 }

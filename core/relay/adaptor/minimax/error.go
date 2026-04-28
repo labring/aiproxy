@@ -22,9 +22,9 @@ type ErrorResponse struct {
 }
 
 func TryErrorHanlder(resp *http.Response) adaptor.Error {
-	defer resp.Body.Close()
-
 	respBody, err := common.GetResponseBody(resp)
+
+	_ = resp.Body.Close()
 	if err != nil {
 		return relaymodel.NewOpenAIError(resp.StatusCode, relaymodel.OpenAIError{
 			Message: err.Error(),
@@ -49,13 +49,13 @@ func TryErrorHanlder(resp *http.Response) adaptor.Error {
 			statusCode = http.StatusPaymentRequired
 		case 1001:
 			statusCode = http.StatusRequestTimeout
-		case 1004:
+		case 1004, 2049:
 			statusCode = http.StatusForbidden
-		case 1026, 1027, 2013:
+		case 1026, 1027, 2013, 1042:
 			statusCode = http.StatusBadRequest
-		case 1002, 1039:
+		case 1002, 1039, 1041, 2056:
 			statusCode = http.StatusTooManyRequests
-		case 1000, 1013:
+		case 1000, 1013, 1024, 1033:
 			statusCode = http.StatusInternalServerError
 		}
 

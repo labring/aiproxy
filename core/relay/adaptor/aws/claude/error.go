@@ -31,5 +31,9 @@ func UnwrapInvokeError(err error) (int, string) {
 		code = http.StatusForbidden
 	}
 
+	if code == 0 {
+		code = http.StatusInternalServerError
+	}
+
 	return code, message
 }

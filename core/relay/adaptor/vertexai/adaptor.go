@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -18,12 +19,18 @@ import (
 
 type Adaptor struct{}
 
+func init() {
+	registry.Register(model.ChannelTypeVertexAI, &Adaptor{})
+}
+
 func (a *Adaptor) DefaultBaseURL() string {
 	return ""
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
-	return m == mode.ChatCompletions || m == mode.Anthropic
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
+	return m == mode.ChatCompletions || m == mode.Anthropic || m == mode.Gemini
 }
 
 type Config struct {
@@ -33,12 +40,31 @@ type Config struct {
 	ADCJSON   string
 }
 
+func resolveFeatureModel(meta *meta.Meta) string {
+	if meta == nil {
+		return ""
+	}
+
+	if modelName := utils.FirstMatchingModelName(
+		meta.OriginModel,
+		meta.ActualModel,
+		func(modelName string) bool {
+			modelName = strings.ToLower(modelName)
+			return strings.Contains(modelName, "gemini") || strings.Contains(modelName, "claude")
+		},
+	); modelName != "" {
+		return modelName
+	}
+
+	return utils.PreferredModelName(meta.OriginModel, meta.ActualModel)
+}
+
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
 	store adaptor.Store,
 	request *http.Request,
 ) (adaptor.ConvertResult, error) {
-	aa := GetAdaptor(meta.ActualModel)
+	aa := GetAdaptor(resolveFeatureModel(meta))
 	if aa == nil {
 		return adaptor.ConvertResult{}, errors.New("adaptor not found")
 	}
@@ -51,39 +77,53 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (usage model.Usage, err adaptor.Error) {
-	adaptor := GetAdaptor(meta.ActualModel)
-	if adaptor == nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+) (adaptor.DoResponseResult, adaptor.Error) {
+	innerAdaptor := GetAdaptor(resolveFeatureModel(meta))
+	if innerAdaptor == nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			meta.ActualModel+" adaptor not found",
 			"adaptor_not_found",
 			http.StatusInternalServerError,
 		)
 	}
 
-	return adaptor.DoResponse(meta, store, c, resp)
+	return innerAdaptor.DoResponse(meta, store, c, resp)
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Claude support native Endpoint: /v1/messages",
-		},
+		Readme:  "Google Vertex AI unified adaptor\nRoutes Gemini and Claude models to Vertex AI publisher endpoints\nSupports OpenAI-compatible chat plus Anthropic-compatible and Gemini-compatible request conversion\nKey format: `region|adcJSON`, `region|apikey`, or `region|project_id|apikey`",
 		KeyHelp: "region|adcJSON or region|apikey or region|project_id|apikey",
 		Models:  modelList,
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	c *gin.Context,
+) (adaptor.RequestURL, error) {
 	var suffix string
-	if strings.HasPrefix(meta.ActualModel, "gemini") {
-		if meta.GetBool("stream") {
+
+	// For Gemini mode, get stream flag from URL
+	var isStream bool
+	if meta.Mode == mode.Gemini && c != nil {
+		// Original URL path contains the action like :streamGenerateContent or :generateContent
+		originalPath := c.Request.URL.Path
+		isStream = strings.Contains(originalPath, ":stream")
+	} else {
+		isStream = meta.GetBool("stream")
+	}
+
+	featureModel := resolveFeatureModel(meta)
+	if strings.HasPrefix(strings.ToLower(featureModel), "gemini") {
+		if isStream {
 			suffix = "streamGenerateContent?alt=sse"
 		} else {
 			suffix = "generateContent"
 		}
 	} else {
-		if meta.GetBool("stream") {
+		if isStream {
 			suffix = "streamRawPredict?alt=sse"
 		} else {
 			suffix = "rawPredict"
@@ -95,13 +135,19 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		return adaptor.RequestURL{}, err
 	}
 
+	publishers := "google"
+	if strings.Contains(strings.ToLower(featureModel), "claude") {
+		publishers = "anthropic"
+	}
+
 	if meta.Channel.BaseURL != "" {
 		if config.ProjectID == "" || config.Region == "" {
 			return adaptor.RequestURL{
 				Method: http.MethodPost,
 				URL: fmt.Sprintf(
-					"%s/v1/publishers/google/models/%s:%s",
+					"%s/v1/publishers/%s/models/%s:%s",
 					meta.Channel.BaseURL,
+					publishers,
 					meta.ActualModel,
 					suffix,
 				),
@@ -111,10 +157,11 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
-				"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+				"%s/v1/projects/%s/locations/%s/publishers/%s/models/%s:%s",
 				meta.Channel.BaseURL,
 				config.ProjectID,
 				config.Region,
+				publishers,
 				meta.ActualModel,
 				suffix,
 			),
@@ -122,7 +169,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 	}
 
 	var requestDoamin string
-	if config.Region == "" {
+	if config.Region == "" || config.Region == "global" {
 		requestDoamin = "aiplatform.googleapis.com"
 	} else {
 		requestDoamin = config.Region + "-aiplatform.googleapis.com"
@@ -132,8 +179,9 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 		return adaptor.RequestURL{
 			Method: http.MethodPost,
 			URL: fmt.Sprintf(
-				"https://%s/v1/publishers/google/models/%s:%s",
+				"https://%s/v1/publishers/%s/models/%s:%s",
 				requestDoamin,
+				publishers,
 				meta.ActualModel,
 				suffix,
 			),
@@ -143,10 +191,11 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
 		URL: fmt.Sprintf(
-			"https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+			"https://%s/v1/projects/%s/locations/%s/publishers/%s/models/%s:%s",
 			requestDoamin,
 			config.ProjectID,
 			config.Region,
+			publishers,
 			meta.ActualModel,
 			suffix,
 		),
@@ -155,10 +204,24 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.Reque
 
 func (a *Adaptor) SetupRequestHeader(
 	meta *meta.Meta,
-	_ adaptor.Store,
-	_ *gin.Context,
+	store adaptor.Store,
+	c *gin.Context,
 	req *http.Request,
 ) error {
+	adaptor := GetAdaptor(resolveFeatureModel(meta))
+	if adaptor == nil {
+		return relaymodel.WrapperOpenAIErrorWithMessage(
+			meta.ActualModel+" adaptor not found",
+			"adaptor_not_found",
+			http.StatusInternalServerError,
+		)
+	}
+
+	err := adaptor.SetupRequestHeader(meta, store, c, req)
+	if err != nil {
+		return err
+	}
+
 	config, err := getConfigFromKey(meta.Channel.Key)
 	if err != nil {
 		return err
@@ -185,5 +248,5 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }

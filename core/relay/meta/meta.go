@@ -9,21 +9,27 @@ import (
 )
 
 type ChannelMeta struct {
-	Name         string
-	BaseURL      string
-	Key          string
-	ID           int
-	Type         model.ChannelType
-	ModelMapping map[string]string
+	Name                    string
+	BaseURL                 string
+	ProxyURL                string
+	Key                     string
+	ID                      int
+	Type                    model.ChannelType
+	ModelMapping            map[string]string
+	EnabledAutoBalanceCheck bool
+	SkipTLSVerify           bool
+	EnabledNoPermissionBan  bool
+	WarnErrorRate           float64
+	MaxErrorRate            float64
 }
 
 type Meta struct {
-	values        map[string]any
-	Channel       ChannelMeta
-	ChannelConfig model.ChannelConfig
-	Group         model.GroupCache
-	Token         model.TokenCache
-	ModelConfig   model.ModelConfig
+	values         map[string]any
+	Channel        ChannelMeta
+	ChannelConfigs model.ChannelConfigs
+	Group          model.GroupCache
+	Token          model.TokenCache
+	ModelConfig    model.ModelConfig
 
 	Endpoint    string
 	RequestAt   time.Time
@@ -35,7 +41,10 @@ type Meta struct {
 
 	RequestTimeout time.Duration
 
-	RequestUsage model.Usage
+	RequestUsage       model.Usage
+	RequestServiceTier string
+	PromptCacheKey     string
+	User               string
 
 	JobID        string
 	GenerationID string
@@ -86,6 +95,12 @@ func WithRequestUsage(requestUsage model.Usage) Option {
 	}
 }
 
+func WithRequestServiceTier(requestServiceTier string) Option {
+	return func(meta *Meta) {
+		meta.RequestServiceTier = requestServiceTier
+	}
+}
+
 func WithJobID(jobID string) Option {
 	return func(meta *Meta) {
 		meta.JobID = jobID
@@ -101,6 +116,18 @@ func WithGenerationID(generationID string) Option {
 func WithResponseID(responseID string) Option {
 	return func(meta *Meta) {
 		meta.ResponseID = responseID
+	}
+}
+
+func WithPromptCacheKey(promptCacheKey string) Option {
+	return func(meta *Meta) {
+		meta.PromptCacheKey = promptCacheKey
+	}
+}
+
+func WithUser(user string) Option {
+	return func(meta *Meta) {
+		meta.User = user
 	}
 }
 
@@ -137,21 +164,25 @@ func NewMeta(
 func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.Name = channel.Name
 	m.Channel.BaseURL = channel.BaseURL
+	m.Channel.ProxyURL = channel.ProxyURL
 	m.Channel.Key = channel.Key
 	m.Channel.ID = channel.ID
 	m.Channel.Type = channel.Type
+	m.Channel.EnabledAutoBalanceCheck = channel.EnabledAutoBalanceCheck
+	m.Channel.SkipTLSVerify = channel.SkipTLSVerify
+	m.Channel.EnabledNoPermissionBan = channel.EnabledNoPermissionBan
+	m.Channel.WarnErrorRate = channel.WarnErrorRate
+	m.Channel.MaxErrorRate = channel.MaxErrorRate
 
 	m.Channel.ModelMapping = channel.ModelMapping
-	if channel.Config != nil {
-		m.ChannelConfig = *channel.Config
-	}
+	m.ChannelConfigs = channel.Configs
 
 	m.ActualModel, _ = GetMappedModelName(m.OriginModel, channel.ModelMapping)
 }
 
 func (m *Meta) CopyChannelFromMeta(meta *Meta) {
 	m.Channel = meta.Channel
-	m.ChannelConfig = meta.ChannelConfig
+	m.ChannelConfigs = meta.ChannelConfigs
 	m.ActualModel, _ = GetMappedModelName(meta.OriginModel, meta.Channel.ModelMapping)
 }
 

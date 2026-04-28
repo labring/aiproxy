@@ -6,11 +6,16 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 )
 
 type Adaptor struct {
 	openai.Adaptor
+}
+
+func init() {
+	registry.Register(model.ChannelTypeXunfei, &Adaptor{})
 }
 
 func (a *Adaptor) DefaultBaseURL() string {
@@ -41,6 +46,7 @@ func (a *Adaptor) GetBalance(_ *model.Channel) (float64, error) {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
+		Readme:  "iFlytek Spark API\nOpenAI-compatible endpoint\nKey format uses `app_id|app_token`\nSupports Gemini-compatible request conversion",
 		KeyHelp: "app_id|app_token",
 		Models:  ModelList,
 	}

@@ -2,7 +2,7 @@
 ---
 kind: App
 metadata:
-  name: aiproxy
+  name: aiproxy-admin
   namespace: ns-admin
 spec:
   data:
@@ -11,9 +11,9 @@ spec:
   displayType: normal
   i18n:
     zh:
-      name: AI Proxy
+      name: AI Proxy 管理中心
     zh-Hans:
-      name: AI Proxy
+      name: AI Proxy 管理中心
   icon: https://aiproxy.{{.Values.cloudDomain}}/logo.svg
   name: Sealos AI Proxy Admin
   type: iframe

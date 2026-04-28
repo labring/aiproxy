@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -19,12 +21,60 @@ type Adaptor struct {
 	openai.Adaptor
 }
 
+func init() {
+	registry.Register(model.ChannelTypeAzure, &Adaptor{})
+}
+
 func (a *Adaptor) DefaultBaseURL() string {
 	return "https://{resource_name}.openai.azure.com"
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	return GetRequestURL(meta, true)
+}
+
+func (a *Adaptor) ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+) (adaptor.ConvertResult, error) {
+	return ConvertRequest(meta, store, req, true)
+}
+
+func ConvertRequest(
+	meta *meta.Meta,
+	store adaptor.Store,
+	req *http.Request,
+	replaceDot bool,
+) (adaptor.ConvertResult, error) {
+	model := meta.ActualModel
+
+	newmodel := model
+	if replaceDot {
+		newmodel = strings.ReplaceAll(model, ".", "")
+	}
+
+	meta.ActualModel = newmodel
+	defer func() {
+		meta.ActualModel = model
+	}()
+
+	switch meta.Mode {
+	case mode.ImagesGenerations:
+		return openai.ConvertImagesRequest(
+			meta,
+			req,
+			openai.ImagesRequestRemoveModel,
+		)
+	case mode.ImagesEdits:
+		return openai.ConvertImagesEditsRequest(meta, req, false)
+	}
+
+	return openai.ConvertRequest(meta, store, req)
 }
 
 //nolint:gocyclo
@@ -104,7 +154,24 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 			Method: http.MethodPost,
 			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
 		}, nil
-	case mode.ChatCompletions, mode.Anthropic:
+	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
+		// Check if model requires Responses API
+		if openai.IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+			// Azure Responses API format
+			url, err := url.JoinPath(
+				meta.Channel.BaseURL,
+				"/openai/v1/responses",
+			)
+			if err != nil {
+				return adaptor.RequestURL{}, err
+			}
+
+			return adaptor.RequestURL{
+				Method: http.MethodPost,
+				URL:    fmt.Sprintf("%s?api-version=%s", url, "preview"),
+			}, nil
+		}
+
 		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
 		url, err := url.JoinPath(
 			meta.Channel.BaseURL,
@@ -298,11 +365,10 @@ func (a *Adaptor) SetupRequestHeader(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"Model names do not contain '.' character, dots will be removed",
-			"For example: gpt-3.5-turbo becomes gpt-35-turbo",
-			fmt.Sprintf("API version is optional, default is '%s'", DefaultAPIVersion),
-		},
+		Readme: fmt.Sprintf(
+			"Azure OpenAI endpoint\nModel names do not contain '.' character, dots will be removed\nFor example: gpt-3.5-turbo becomes gpt-35-turbo\nAPI version is optional, default is '%s'\nSupports Gemini-compatible request conversion",
+			DefaultAPIVersion,
+		),
 		KeyHelp: "key or key|api-version",
 		Models:  openai.ModelList,
 	}

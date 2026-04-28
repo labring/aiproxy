@@ -26,6 +26,7 @@ export function AnimatedRoute({
             <AnimatePresence mode="wait">
                 <motion.div
                     key={location.pathname}
+                    className="h-full"
                     {...pageFadeTransition}
                 >
                     {children}
@@ -53,6 +54,7 @@ export function AnimatedRoute({
         <AnimatePresence mode="wait">
             <motion.div
                 key={location.pathname}
+                className="h-full"
                 {...getTransitionProps()}
             >
                 {children}

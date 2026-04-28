@@ -2,10 +2,12 @@ package trylock
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -66,13 +68,18 @@ func Lock(key string, expiration time.Duration) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	result, err := common.RDB.SetNX(ctx, common.RedisKey(key), true, expiration).Result()
+	_, err := common.RDB.SetArgs(ctx, common.RedisKey(key), true, redis.SetArgs{Mode: "NX", TTL: expiration}).
+		Result()
+	if errors.Is(err, redis.Nil) {
+		return false
+	}
+
 	if err != nil {
-		if MemLock("lockerror", time.Second*3) {
+		if MemLock("lockerror", 5*time.Second) {
 			log.Errorf("try notify error: %v", err)
 		}
 		return MemLock(key, expiration)
 	}
 
-	return result
+	return true
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/openai"
+	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -19,6 +20,10 @@ import (
 // https://github.com/huggingface/text-embeddings-inference
 type Adaptor struct{}
 
+func init() {
+	registry.Register(model.ChannelTypeTextEmbeddingsInference, &Adaptor{})
+}
+
 // base url for text-embeddings-inference, fake
 const baseURL = "https://api.text-embeddings.net"
 
@@ -26,21 +31,24 @@ func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
 }
 
-func (a *Adaptor) SupportMode(m mode.Mode) bool {
+func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
+	m := adaptor.ModeFromMeta(mt)
+
 	return m == mode.Rerank || m == mode.Embeddings
 }
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Features: []string{
-			"https://github.com/huggingface/text-embeddings-inference",
-			"Embeddings、Rerank Support",
-		},
+		Readme: "https://github.com/huggingface/text-embeddings-inference\nHugging Face Text Embeddings Inference endpoint\nSupports embeddings and rerank",
 		Models: ModelList,
 	}
 }
 
-func (a *Adaptor) GetRequestURL(meta *meta.Meta, _ adaptor.Store) (adaptor.RequestURL, error) {
+func (a *Adaptor) GetRequestURL(
+	meta *meta.Meta,
+	_ adaptor.Store,
+	_ *gin.Context,
+) (adaptor.RequestURL, error) {
 	switch meta.Mode {
 	case mode.Rerank:
 		url, err := url.JoinPath(meta.Channel.BaseURL, "/rerank")
@@ -101,7 +109,7 @@ func (a *Adaptor) DoRequest(
 	_ *gin.Context,
 	req *http.Request,
 ) (*http.Response, error) {
-	return utils.DoRequest(req, meta.RequestTimeout)
+	return utils.DoRequestWithMeta(req, meta)
 }
 
 func (a *Adaptor) DoResponse(
@@ -109,14 +117,14 @@ func (a *Adaptor) DoResponse(
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	switch meta.Mode {
 	case mode.Rerank:
 		return RerankHandler(meta, c, resp)
 	case mode.Embeddings:
 		return EmbeddingsHandler(meta, store, c, resp)
 	default:
-		return model.Usage{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			fmt.Sprintf("unsupported mode: %s", meta.Mode),
 			"unsupported_mode",
 			http.StatusBadRequest,

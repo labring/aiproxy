@@ -21,6 +21,10 @@ on:
       - "**/*.md"
       - "**/*.yaml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   semgrep:
     name: Scan
@@ -30,7 +34,7 @@ jobs:
     continue-on-error: true
     if: (github.actor != 'dependabot[bot]')
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: |
           semgrep ci \
             --config p/ci \

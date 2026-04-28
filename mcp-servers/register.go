@@ -136,7 +136,11 @@ func GetMCPServer(id string, config, reusingConfig map[string]string) (Server, e
 		return loadCacheServer(embedServer, nil)
 	}
 
-	if err := ValidateConfigTemplatesConfig(embedServer.ConfigTemplates, config, reusingConfig); err != nil {
+	if err := ValidateConfigTemplatesConfig(
+		embedServer.ConfigTemplates,
+		config,
+		reusingConfig,
+	); err != nil {
 		return nil, fmt.Errorf("mcp %s config is invalid: %w", id, err)
 	}
 

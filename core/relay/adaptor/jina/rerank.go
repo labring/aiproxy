@@ -8,7 +8,6 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -18,9 +17,9 @@ func RerankHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -29,7 +28,7 @@ func RerankHandler(
 
 	node, err := common.UnmarshalResponse2Node(resp)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -42,7 +41,7 @@ func RerankHandler(
 
 	usageStr, err := usageNode.Raw()
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_usage_failed",
 			http.StatusInternalServerError,
@@ -51,7 +50,7 @@ func RerankHandler(
 
 	err = sonic.UnmarshalString(usageStr, &usage)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_usage_failed",
 			http.StatusInternalServerError,
@@ -71,7 +70,7 @@ func RerankHandler(
 		"tokens": modelUsage,
 	})
 	if err != nil {
-		return modelUsage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: modelUsage}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_usage_failed",
 			http.StatusInternalServerError,
@@ -80,7 +79,7 @@ func RerankHandler(
 
 	_, err = node.Unset("usage")
 	if err != nil {
-		return modelUsage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: modelUsage}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_usage_failed",
 			http.StatusInternalServerError,
@@ -89,7 +88,7 @@ func RerankHandler(
 
 	_, err = node.Set("model", ast.NewString(meta.OriginModel))
 	if err != nil {
-		return modelUsage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: modelUsage}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_usage_failed",
 			http.StatusInternalServerError,
@@ -98,7 +97,7 @@ func RerankHandler(
 
 	respData, err := node.MarshalJSON()
 	if err != nil {
-		return modelUsage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: modelUsage}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_failed",
 			http.StatusInternalServerError,
@@ -113,5 +112,5 @@ func RerankHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return modelUsage, nil
+	return adaptor.DoResponseResult{Usage: modelUsage}, nil
 }

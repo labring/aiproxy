@@ -2,10 +2,9 @@ package monitor
 
 import (
 	"context"
+	"math/rand/v2"
 	"sync"
 	"time"
-
-	"github.com/labring/aiproxy/core/common/config"
 )
 
 var memModelMonitor *MemModelMonitor
@@ -18,9 +17,18 @@ const (
 	timeWindow      = 10 * time.Second
 	maxSliceCount   = 12
 	banDuration     = 5 * time.Minute
-	minRequestCount = 20
+	minRequestCount = 10
 	cleanupInterval = time.Minute
 )
+
+func getBanDuration() time.Duration {
+	jitter := banDuration / 10
+	if jitter <= 0 {
+		return banDuration
+	}
+
+	return banDuration + time.Duration(rand.Int64N(int64(jitter)*2+1)) - jitter
+}
 
 type MemModelMonitor struct {
 	mu     sync.RWMutex
@@ -37,9 +45,19 @@ type ChannelStats struct {
 	bannedUntil time.Time
 }
 
+type ModelChannelStatsSnapshot struct {
+	Requests int64 `json:"requests"`
+	Errors   int64 `json:"errors"`
+	Banned   bool  `json:"banned"`
+}
+
 type TimeWindowStats struct {
-	slices []*timeSlice
-	mu     sync.Mutex
+	slices               []*timeSlice
+	mu                   sync.Mutex
+	totalRequests        int
+	totalErrors          int
+	lastCleanedWindowEnd time.Time
+	cacheInitialized     bool
 }
 
 type timeSlice struct {
@@ -98,14 +116,8 @@ func (m *MemModelMonitor) AddRequest(
 	model string,
 	channelID int64,
 	isError, tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool) {
-	// Set default warning threshold if not specified
-	if warnErrorRate <= 0 {
-		warnErrorRate = config.GetDefaultWarnNotifyErrorRate()
-	}
-
+) (errorRate float64, banExecution bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -135,52 +147,39 @@ func (m *MemModelMonitor) AddRequest(
 	modelData.totalStats.AddRequest(now, isError)
 	channel.timeWindows.AddRequest(now, isError)
 
-	return m.checkAndBan(now, channel, tryBan, warnErrorRate, maxErrorRate)
+	return m.checkAndBan(now, channel, tryBan, maxErrorRate)
 }
 
 func (m *MemModelMonitor) checkAndBan(
 	now time.Time,
 	channel *ChannelStats,
 	tryBan bool,
-	warnErrorRate,
 	maxErrorRate float64,
-) (beyondThreshold, banExecution bool) {
-	canBan := maxErrorRate > 0
+) (errorRate float64, banExecution bool) {
+	errorRate = getErrorRateFromStats(channel.timeWindows)
 
-	if tryBan && canBan {
+	if tryBan {
 		if channel.bannedUntil.After(now) {
-			return false, false
+			return errorRate, false
 		}
 
-		channel.bannedUntil = now.Add(banDuration)
+		channel.bannedUntil = now.Add(getBanDuration())
 
-		return false, true
+		return errorRate, true
 	}
 
-	req, err := channel.timeWindows.GetStats()
-	if req < minRequestCount {
-		return false, false
-	}
-
-	errorRate := float64(err) / float64(req)
-
-	// Check if error rate exceeds warning threshold
-	exceedsWarning := errorRate >= warnErrorRate
-
-	// Check if we should ban (only if maxErrorRate is set and exceeded)
-	if canBan && errorRate >= maxErrorRate {
+	// Check if we should ban (maxErrorRate <= 0 disables banning)
+	if maxErrorRate > 0 && errorRate >= maxErrorRate {
 		if channel.bannedUntil.After(now) {
-			return true, false // Already banned
+			return errorRate, false
 		}
 
-		channel.bannedUntil = now.Add(banDuration)
+		channel.bannedUntil = now.Add(getBanDuration())
 
-		return false, true // Ban executed
-	} else if exceedsWarning {
-		return true, false // Beyond warning threshold but not banning
+		return errorRate, true
 	}
 
-	return false, false
+	return errorRate, false
 }
 
 func getErrorRateFromStats(stats *TimeWindowStats) float64 {
@@ -221,6 +220,27 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(
 	return result, nil
 }
 
+func (m *MemModelMonitor) GetChannelModelErrorRate(
+	_ context.Context,
+	model string,
+	channelID int64,
+) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	data, exists := m.models[model]
+	if !exists {
+		return 0, nil
+	}
+
+	channel, exists := data.channels[channelID]
+	if !exists {
+		return 0, nil
+	}
+
+	return getErrorRateFromStats(channel.timeWindows), nil
+}
+
 func (m *MemModelMonitor) GetChannelModelErrorRates(
 	_ context.Context,
 	channelID int64,
@@ -252,6 +272,33 @@ func (m *MemModelMonitor) GetAllChannelModelErrorRates(
 			}
 
 			result[channelID][model] = getErrorRateFromStats(channel.timeWindows)
+		}
+	}
+
+	return result, nil
+}
+
+func (m *MemModelMonitor) GetAllModelChannelStats(
+	_ context.Context,
+) (map[string]map[int64]ModelChannelStatsSnapshot, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]map[int64]ModelChannelStatsSnapshot)
+	now := time.Now()
+
+	for model, data := range m.models {
+		if _, exists := result[model]; !exists {
+			result[model] = make(map[int64]ModelChannelStatsSnapshot)
+		}
+
+		for channelID, channel := range data.channels {
+			req, err := channel.timeWindows.GetStats()
+			result[model][channelID] = ModelChannelStatsSnapshot{
+				Requests: int64(req),
+				Errors:   int64(err),
+				Banned:   channel.bannedUntil.After(now),
+			}
 		}
 	}
 
@@ -355,27 +402,61 @@ func (m *MemModelMonitor) ClearAllModelErrors(_ context.Context) error {
 	return nil
 }
 
-func (t *TimeWindowStats) cleanupLocked(callback func(slice *timeSlice)) {
-	cutoff := time.Now().Add(-timeWindow * time.Duration(maxSliceCount))
-
+func (t *TimeWindowStats) rebuildLocked(cutoff time.Time) {
 	validSlices := t.slices[:0]
+	totalReq := 0
+
+	totalErr := 0
 	for _, s := range t.slices {
-		if s.windowStart.After(cutoff) || s.windowStart.Equal(cutoff) {
-			validSlices = append(validSlices, s)
-			if callback != nil {
-				callback(s)
-			}
+		if s.windowStart.Before(cutoff) {
+			continue
 		}
+
+		validSlices = append(validSlices, s)
+		totalReq += s.requests
+		totalErr += s.errors
 	}
 
 	t.slices = validSlices
+	t.totalRequests = totalReq
+	t.totalErrors = totalErr
+	t.lastCleanedWindowEnd = cutoff
+	t.cacheInitialized = true
+}
+
+func (t *TimeWindowStats) cleanupLocked(now time.Time, callback func(slice *timeSlice)) {
+	cutoff := now.Truncate(timeWindow).Add(-timeWindow * time.Duration(maxSliceCount-1))
+
+	if !t.cacheInitialized {
+		t.rebuildLocked(cutoff)
+	} else if t.lastCleanedWindowEnd.Before(cutoff) {
+		validSlices := t.slices[:0]
+		for _, s := range t.slices {
+			if s.windowStart.Before(cutoff) {
+				t.totalRequests -= s.requests
+				t.totalErrors -= s.errors
+				continue
+			}
+
+			validSlices = append(validSlices, s)
+		}
+
+		t.slices = validSlices
+		t.lastCleanedWindowEnd = cutoff
+	}
+
+	if callback != nil {
+		for _, s := range t.slices {
+			callback(s)
+		}
+	}
 }
 
 func (t *TimeWindowStats) AddRequest(now time.Time, isError bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(nil)
+	t.cleanupLocked(now, nil)
 
 	currentWindow := now.Truncate(timeWindow)
 
@@ -393,8 +474,11 @@ func (t *TimeWindowStats) AddRequest(now time.Time, isError bool) {
 	}
 
 	slice.requests++
+
+	t.totalRequests++
 	if isError {
 		slice.errors++
+		t.totalErrors++
 	}
 }
 
@@ -402,19 +486,16 @@ func (t *TimeWindowStats) GetStats() (totalReq, totalErr int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(func(slice *timeSlice) {
-		totalReq += slice.requests
-		totalErr += slice.errors
-	})
+	t.cleanupLocked(time.Now(), nil)
 
-	return totalReq, totalErr
+	return t.totalRequests, t.totalErrors
 }
 
 func (t *TimeWindowStats) HasValidSlices() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.cleanupLocked(nil)
+	t.cleanupLocked(time.Now(), nil)
 
 	return len(t.slices) > 0
 }

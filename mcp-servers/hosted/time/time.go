@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/bytedance/sonic"
 	mcpservers "github.com/labring/aiproxy/mcp-servers"
@@ -127,7 +128,10 @@ func convertTime(sourceTimezone, timeStr, targetTimezone string) (*ConversionRes
 	if hoursDifference == float64(int(hoursDifference)) {
 		timeDiffStr = fmt.Sprintf("%+.1fh", hoursDifference)
 	} else {
-		timeDiffStr = strings.TrimRight(strings.TrimRight(fmt.Sprintf("%+.2f", hoursDifference), "0"), ".") + "h"
+		timeDiffStr = strings.TrimRight(
+			strings.TrimRight(fmt.Sprintf("%+.2f", hoursDifference), "0"),
+			".",
+		) + "h"
 	}
 
 	// Check DST for source

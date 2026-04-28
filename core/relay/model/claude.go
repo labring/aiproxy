@@ -1,17 +1,22 @@
 package model
 
+import (
+	"github.com/labring/aiproxy/core/model"
+)
+
 type ClaudeOpenAIRequest struct {
-	ToolChoice  any                    `json:"tool_choice,omitempty"`
-	Stop        any                    `json:"stop,omitempty"`
-	Temperature *float64               `json:"temperature,omitempty"`
-	TopP        *float64               `json:"top_p,omitempty"`
-	Model       string                 `json:"model,omitempty"`
-	Messages    []*ClaudeOpenaiMessage `json:"messages,omitempty"`
-	Tools       []*ClaudeOpenaiTool    `json:"tools,omitempty"`
-	Seed        float64                `json:"seed,omitempty"`
-	MaxTokens   int                    `json:"max_tokens,omitempty"`
-	TopK        int                    `json:"top_k,omitempty"`
-	Stream      bool                   `json:"stream,omitempty"`
+	ToolChoice      any                    `json:"tool_choice,omitempty"`
+	Stop            any                    `json:"stop,omitempty"`
+	Temperature     *float64               `json:"temperature,omitempty"`
+	TopP            *float64               `json:"top_p,omitempty"`
+	ReasoningEffort *string                `json:"reasoning_effort,omitempty"`
+	Model           string                 `json:"model,omitempty"`
+	Messages        []*ClaudeOpenaiMessage `json:"messages,omitempty"`
+	Tools           []*ClaudeOpenaiTool    `json:"tools,omitempty"`
+	Seed            float64                `json:"seed,omitempty"`
+	MaxTokens       int                    `json:"max_tokens,omitempty"`
+	TopK            int                    `json:"top_k,omitempty"`
+	Stream          bool                   `json:"stream,omitempty"`
 }
 
 type ClaudeOpenaiMessage struct {
@@ -58,6 +63,7 @@ type ClaudeContent struct {
 	Content      any                 `json:"content,omitempty"`
 	ToolUseID    string              `json:"tool_use_id,omitempty"`
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
+	Signature    string              `json:"signature,omitempty"`
 }
 
 type ClaudeAnyContentMessage struct {
@@ -121,6 +127,7 @@ type ClaudeThinkingType = string
 
 const (
 	ClaudeThinkingTypeEnabled  ClaudeThinkingType = "enabled"
+	ClaudeThinkingTypeAdaptive ClaudeThinkingType = "adaptive"
 	ClaudeThinkingTypeDisabled ClaudeThinkingType = "disabled"
 )
 
@@ -130,19 +137,24 @@ type ClaudeThinking struct {
 	BudgetTokens int `json:"budget_tokens,omitempty"`
 }
 
+type ClaudeOutputConfig struct {
+	Effort *string `json:"effort,omitempty"`
+}
+
 type ClaudeRequest struct {
-	ToolChoice    any             `json:"tool_choice,omitempty"`
-	Temperature   *float64        `json:"temperature,omitempty"`
-	TopP          *float64        `json:"top_p,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	System        []ClaudeContent `json:"system,omitempty"`
-	Messages      []ClaudeMessage `json:"messages"`
-	StopSequences []string        `json:"stop_sequences,omitempty"`
-	Tools         []ClaudeTool    `json:"tools,omitempty"`
-	MaxTokens     int             `json:"max_tokens,omitempty"`
-	TopK          int             `json:"top_k,omitempty"`
-	Stream        bool            `json:"stream,omitempty"`
-	Thinking      *ClaudeThinking `json:"thinking,omitempty"`
+	ToolChoice    any                 `json:"tool_choice,omitempty"`
+	Temperature   *float64            `json:"temperature,omitempty"`
+	TopP          *float64            `json:"top_p,omitempty"`
+	Model         string              `json:"model,omitempty"`
+	System        []ClaudeContent     `json:"system,omitempty"`
+	Messages      []ClaudeMessage     `json:"messages"`
+	StopSequences []string            `json:"stop_sequences,omitempty"`
+	Tools         []ClaudeTool        `json:"tools,omitempty"`
+	MaxTokens     int                 `json:"max_tokens,omitempty"`
+	TopK          int                 `json:"top_k,omitempty"`
+	Stream        bool                `json:"stream,omitempty"`
+	Thinking      *ClaudeThinking     `json:"thinking,omitempty"`
+	OutputConfig  *ClaudeOutputConfig `json:"output_config,omitempty"`
 }
 
 type ClaudeAnyContentRequest struct {
@@ -159,6 +171,7 @@ type ClaudeAnyContentRequest struct {
 	TopK                int                       `json:"top_k,omitempty"`
 	Stream              bool                      `json:"stream,omitempty"`
 	Thinking            *ClaudeThinking           `json:"thinking,omitempty"`
+	OutputConfig        *ClaudeOutputConfig       `json:"output_config,omitempty"`
 }
 
 type ClaudeUsage struct {
@@ -196,6 +209,58 @@ func (u *ClaudeUsage) ToOpenAIUsage() ChatUsage {
 	return usage
 }
 
+// ToResponseUsage converts ClaudeUsage to ResponseUsage (OpenAI Responses API format)
+func (u *ClaudeUsage) ToResponseUsage() ResponseUsage {
+	usage := ResponseUsage{
+		InputTokens:  u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+		OutputTokens: u.OutputTokens,
+	}
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+
+	if u.CacheReadInputTokens > 0 {
+		usage.InputTokensDetails = &ResponseUsageDetails{
+			CachedTokens: u.CacheReadInputTokens,
+		}
+	}
+
+	return usage
+}
+
+// ToGeminiUsage converts ClaudeUsage to GeminiUsageMetadata (Google Gemini format)
+func (u *ClaudeUsage) ToGeminiUsage() GeminiUsageMetadata {
+	totalInput := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+	usage := GeminiUsageMetadata{
+		PromptTokenCount:     totalInput,
+		CandidatesTokenCount: u.OutputTokens,
+		TotalTokenCount:      totalInput + u.OutputTokens,
+	}
+
+	if u.CacheReadInputTokens > 0 {
+		usage.CachedContentTokenCount = u.CacheReadInputTokens
+	}
+
+	return usage
+}
+
+func (u *ClaudeUsage) FromModelUsage(usage model.Usage) {
+	u.InputTokens = int64(usage.InputTokens)
+	u.OutputTokens = int64(usage.OutputTokens)
+	u.CacheCreationInputTokens = int64(usage.CacheCreationTokens)
+
+	u.CacheReadInputTokens = int64(usage.CachedTokens)
+	if usage.WebSearchCount > 0 {
+		u.ServerToolUse = &ClaudeServerToolUse{
+			WebSearchRequests: int64(usage.WebSearchCount),
+		}
+	}
+}
+
+func ClaudeFromModelUsage(usage model.Usage) ClaudeUsage {
+	u := ClaudeUsage{}
+	u.FromModelUsage(usage)
+	return u
+}
+
 // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration-beta
 type ClaudeCacheCreation struct {
 	Ephemeral5mInputTokens int64 `json:"ephemeral_5m_input_tokens,omitempty"`
@@ -218,6 +283,7 @@ type ClaudeDelta struct {
 	StopSequence *string `json:"stop_sequence,omitempty"`
 	Type         string  `json:"type,omitempty"`
 	Thinking     string  `json:"thinking,omitempty"`
+	Signature    string  `json:"signature,omitempty"`
 	Text         string  `json:"text,omitempty"`
 	PartialJSON  string  `json:"partial_json,omitempty"`
 }
@@ -230,3 +296,49 @@ type ClaudeStreamResponse struct {
 	Type         string          `json:"type"`
 	Index        int             `json:"index"`
 }
+
+// Claude StopReason constants
+const (
+	ClaudeStopReasonEndTurn      = "end_turn"
+	ClaudeStopReasonMaxTokens    = "max_tokens"
+	ClaudeStopReasonToolUse      = "tool_use"
+	ClaudeStopReasonStopSequence = "stop_sequence"
+)
+
+// Claude Type constants
+const (
+	ClaudeTypeMessage = "message"
+)
+
+// Claude Content Type constants
+const (
+	ClaudeContentTypeText       = "text"
+	ClaudeContentTypeThinking   = "thinking"
+	ClaudeContentTypeToolUse    = "tool_use"
+	ClaudeContentTypeToolResult = "tool_result"
+	ClaudeContentTypeImage      = "image"
+)
+
+// Claude Stream Event Type constants
+const (
+	ClaudeStreamTypeMessageStart      = "message_start"
+	ClaudeStreamTypeMessageDelta      = "message_delta"
+	ClaudeStreamTypeMessageStop       = "message_stop"
+	ClaudeStreamTypeContentBlockStart = "content_block_start"
+	ClaudeStreamTypeContentBlockDelta = "content_block_delta"
+	ClaudeStreamTypeContentBlockStop  = "content_block_stop"
+	ClaudeStreamTypePing              = "ping"
+)
+
+// Claude Delta Type constants
+const (
+	ClaudeDeltaTypeTextDelta      = "text_delta"
+	ClaudeDeltaTypeThinkingDelta  = "thinking_delta"
+	ClaudeDeltaTypeInputJSONDelta = "input_json_delta"
+)
+
+// Claude Image Source Type constants
+const (
+	ClaudeImageSourceTypeBase64 = "base64"
+	ClaudeImageSourceTypeURL    = "url"
+)

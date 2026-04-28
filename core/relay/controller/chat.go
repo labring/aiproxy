@@ -17,6 +17,7 @@ func GetChatRequestUsage(c *gin.Context, _ model.ModelConfig) (model.Usage, erro
 		InputTokens: model.ZeroNullInt64(openai.CountTokenMessages(
 			textRequest.Messages,
 			textRequest.Model,
+			false,
 		)),
 	}, nil
 }

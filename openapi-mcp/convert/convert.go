@@ -454,7 +454,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 		response := responseRef.Value
 
 		var desc strings.Builder
-		desc.WriteString(fmt.Sprintf("- status: %s, description: %s", code, *response.Description))
+		fmt.Fprintf(&desc, "- status: %s, description: %s", code, *response.Description)
 
 		rawSchema, ok := response.Extensions["schema"].(map[string]any)
 		if ok && len(rawSchema) > 0 {
@@ -477,7 +477,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 				continue
 			}
 
-			desc.WriteString(fmt.Sprintf(", schema: %s", str))
+			fmt.Fprintf(&desc, ", schema: %s", str)
 		}
 
 		if len(response.Content) > 0 {
@@ -493,9 +493,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 						continue
 					}
 
-					desc.WriteString(
-						fmt.Sprintf(", content type: %s, schema: %s", contentType, str),
-					)
+					fmt.Fprintf(&desc, ", content type: %s, schema: %s", contentType, str)
 				}
 			}
 		}
@@ -998,7 +996,10 @@ func (c *Converter) addObjectProperties(
 	if schema.AdditionalProperties.Has != nil {
 		property["additionalProperties"] = *schema.AdditionalProperties.Has
 	} else if schema.AdditionalProperties.Schema != nil && schema.AdditionalProperties.Schema.Value != nil {
-		property["additionalProperties"] = c.processSchemaProperty(schema.AdditionalProperties.Schema.Value, visited)
+		property["additionalProperties"] = c.processSchemaProperty(
+			schema.AdditionalProperties.Schema.Value,
+			visited,
+		)
 	}
 
 	// Handle discriminator

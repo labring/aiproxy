@@ -55,6 +55,11 @@ func (t *Token) BeforeCreate(_ *gorm.DB) error {
 	if t.Key == "" || len(t.Key) != 48 {
 		t.Key = generateKey()
 	}
+	// Initialize period start time to current time if period quota is set
+	if t.PeriodQuota > 0 && t.PeriodLastUpdateTime.IsZero() {
+		t.PeriodLastUpdateTime = time.Now()
+	}
+
 	return nil
 }
 
@@ -689,6 +694,12 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		return nil, errors.New("id is empty")
 	}
 
+	// First, get the current token to check if period_last_update_time is already initialized
+	currentToken, err := GetTokenByID(id)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &Token{
 		ID:     id,
 		Status: update.Status,
@@ -719,6 +730,15 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.PeriodQuota = *update.PeriodQuota
 
 		selects = append(selects, "period_quota")
+
+		// Only initialize period_last_update_time if it's not already set in the database
+		// and the request doesn't explicitly set it
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 &&
+			currentToken.PeriodLastUpdateTime.IsZero() {
+			token.PeriodLastUpdateTime = time.Now()
+
+			selects = append(selects, "period_last_update_time")
+		}
 	}
 
 	if update.PeriodType != nil {
@@ -776,6 +796,12 @@ func UpdateGroupToken(
 		return nil, errors.New("id or group is empty")
 	}
 
+	// First, get the current token to check if period_last_update_time is already initialized
+	currentToken, err := GetGroupTokenByID(group, id)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &Token{
 		ID:      id,
 		GroupID: group,
@@ -807,6 +833,15 @@ func UpdateGroupToken(
 		token.PeriodQuota = *update.PeriodQuota
 
 		selects = append(selects, "period_quota")
+
+		// Only initialize period_last_update_time if it's not already set in the database
+		// and the request doesn't explicitly set it
+		if update.PeriodLastUpdateTime == nil && *update.PeriodQuota > 0 &&
+			currentToken.PeriodLastUpdateTime.IsZero() {
+			token.PeriodLastUpdateTime = time.Now()
+
+			selects = append(selects, "period_last_update_time")
+		}
 	}
 
 	if update.PeriodType != nil {
@@ -859,7 +894,10 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	token := &Token{}
 	defer func() {
 		if amount > 0 && err == nil && (token.Quota > 0 || token.PeriodQuota > 0) {
-			if err := CacheUpdateTokenUsedAmountOnlyIncrease(token.Key, token.UsedAmount); err != nil {
+			if err := CacheUpdateTokenUsedAmountOnlyIncrease(
+				token.Key,
+				token.UsedAmount,
+			); err != nil {
 				log.Error("update token used amount in cache failed: " + err.Error())
 			}
 		}
@@ -1020,7 +1058,11 @@ func ResetTokenPeriodUsage(id int) error {
 
 	// Update cache only if database update succeeded
 	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
-		if cacheErr := CacheResetTokenPeriodUsage(token.Key, newPeriodStartTime, token.UsedAmount); cacheErr != nil {
+		if cacheErr := CacheResetTokenPeriodUsage(
+			token.Key,
+			newPeriodStartTime,
+			token.UsedAmount,
+		); cacheErr != nil {
 			log.Error("reset token period usage in cache failed: " + cacheErr.Error())
 		}
 	}

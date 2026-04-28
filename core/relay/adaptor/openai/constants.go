@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"strings"
+
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
@@ -214,4 +216,79 @@ var ModelList = []model.ModelConfig{
 		Type:  mode.AudioSpeech,
 		Owner: model.ModelOwnerOpenAI,
 	},
+	{
+		Model: "gpt-5-codex",
+		Type:  mode.Responses,
+		Owner: model.ModelOwnerOpenAI,
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(200000),
+			model.WithModelConfigToolChoice(true),
+		),
+	},
+	{
+		Model: "gpt-5-pro",
+		Type:  mode.Responses,
+		Owner: model.ModelOwnerOpenAI,
+		Config: model.NewModelConfig(
+			model.WithModelConfigMaxContextTokens(200000),
+			model.WithModelConfigToolChoice(true),
+		),
+	},
+}
+
+// no dot
+var responsesOnlyModels = map[string]struct{}{
+	"gpt-54-pro":        {},
+	"gpt-53-codex":      {},
+	"gpt-52-codex":      {},
+	"gpt-51-codex":      {},
+	"gpt-51-codex-max":  {},
+	"gpt-51-codex-mini": {},
+	"gpt-5-codex":       {},
+	"gpt-5-pro":         {},
+}
+
+// IsResponsesOnlyModel checks if a model only supports the Responses API
+// First parameter is the model config, used to check Type field if model name check fails
+// Second parameter is the model name, checked first for quick lookup
+func IsResponsesOnlyModel(modelConfig *model.ModelConfig, modelName string) bool {
+	// First, check model name for quick lookup
+	if _, ok := responsesOnlyModels[modelName]; ok {
+		return true
+	}
+
+	noDotModelName := strings.ReplaceAll(modelName, ".", "")
+	if _, ok := responsesOnlyModels[noDotModelName]; ok {
+		return true
+	}
+
+	// If model config is provided, check if Type is any Responses-related mode
+	if modelConfig != nil {
+		switch modelConfig.Type {
+		case mode.Responses,
+			mode.ResponsesGet,
+			mode.ResponsesDelete,
+			mode.ResponsesCancel,
+			mode.ResponsesInputItems:
+			return true
+		}
+	}
+
+	return false
+}
+
+func IsResponsesOnlyModelAny(
+	modelConfig *model.ModelConfig,
+	originModel string,
+	actualModel string,
+) bool {
+	if IsResponsesOnlyModel(modelConfig, originModel) {
+		return true
+	}
+
+	if actualModel != "" && actualModel != originModel {
+		return IsResponsesOnlyModel(modelConfig, actualModel)
+	}
+
+	return false
 }

@@ -17,11 +17,14 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/render"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 func ConvertImagesRequest(
 	meta *meta.Meta,
 	req *http.Request,
+	callbacks ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
 	node, err := common.UnmarshalRequest2NodeReusable(req)
 	if err != nil {
@@ -38,6 +41,17 @@ func ConvertImagesRequest(
 	_, err = node.Set("model", ast.NewString(meta.ActualModel))
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	for _, callback := range callbacks {
+		if callback == nil {
+			continue
+		}
+
+		err = callback(&node)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
 	}
 
 	jsonData, err := node.MarshalJSON()
@@ -57,6 +71,7 @@ func ConvertImagesRequest(
 func ConvertImagesEditsRequest(
 	meta *meta.Meta,
 	request *http.Request,
+	includeModel bool,
 ) (adaptor.ConvertResult, error) {
 	err := request.ParseMultipartForm(1024 * 1024 * 4)
 	if err != nil {
@@ -74,9 +89,11 @@ func ConvertImagesEditsRequest(
 		value := values[0]
 
 		if key == "model" {
-			err = multipartWriter.WriteField(key, meta.ActualModel)
-			if err != nil {
-				return adaptor.ConvertResult{}, err
+			if includeModel {
+				err = multipartWriter.WriteField(key, meta.ActualModel)
+				if err != nil {
+					return adaptor.ConvertResult{}, err
+				}
 			}
 
 			continue
@@ -84,7 +101,6 @@ func ConvertImagesEditsRequest(
 
 		if key == "response_format" {
 			meta.Set(MetaResponseFormat, value)
-			continue
 		}
 
 		err = multipartWriter.WriteField(key, value)
@@ -131,13 +147,22 @@ func ConvertImagesEditsRequest(
 	}, nil
 }
 
+func ImagesRequestRemoveModel(node *ast.Node) error {
+	_, err := node.Unset("model")
+	if err != nil && !errors.Is(err, ast.ErrNotExist) {
+		return err
+	}
+
+	return nil
+}
+
 func ImagesHandler(
 	meta *meta.Meta,
 	c *gin.Context,
 	resp *http.Response,
-) (model.Usage, adaptor.Error) {
+) (adaptor.DoResponseResult, adaptor.Error) {
 	if resp.StatusCode != http.StatusOK {
-		return model.Usage{}, ErrorHanlder(resp)
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	defer resp.Body.Close()
@@ -148,7 +173,7 @@ func ImagesHandler(
 
 	err := common.UnmarshalResponse(resp, &imageResponse)
 	if err != nil {
-		return model.Usage{}, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -173,7 +198,7 @@ func ImagesHandler(
 
 			_, data.B64Json, err = image.GetImageFromURL(c.Request.Context(), data.URL)
 			if err != nil {
-				return usage, relaymodel.WrapperOpenAIError(
+				return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 					err,
 					"get_image_from_url_failed",
 					http.StatusInternalServerError,
@@ -184,7 +209,7 @@ func ImagesHandler(
 
 	data, err := sonic.Marshal(imageResponse)
 	if err != nil {
-		return usage, relaymodel.WrapperOpenAIError(
+		return adaptor.DoResponseResult{Usage: usage}, relaymodel.WrapperOpenAIError(
 			err,
 			"marshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -199,5 +224,77 @@ func ImagesHandler(
 		log.Warnf("write response body failed: %v", err)
 	}
 
-	return usage, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
+}
+
+func ImagesStreamHandler(
+	meta *meta.Meta,
+	c *gin.Context,
+	resp *http.Response,
+) (adaptor.DoResponseResult, adaptor.Error) {
+	if resp.StatusCode != http.StatusOK {
+		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
+	}
+
+	defer resp.Body.Close()
+
+	log := common.GetLogger(c)
+
+	scanner, cleanup := utils.NewStreamScanner(resp.Body, meta.ActualModel)
+	defer cleanup()
+
+	usage := model.Usage{
+		InputTokens:  meta.RequestUsage.InputTokens,
+		OutputTokens: meta.RequestUsage.OutputTokens,
+		TotalTokens:  meta.RequestUsage.InputTokens + meta.RequestUsage.OutputTokens,
+	}
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if !render.IsValidSSEData(line) {
+			continue
+		}
+
+		data := render.ExtractSSEData(line)
+
+		node, err := sonic.Get(data)
+		if err != nil {
+			log.Error("error unmarshalling image stream response: " + err.Error())
+			render.OpenaiBytesData(c, data)
+			continue
+		}
+
+		if streamUsage, err := getImageStreamUsage(&node); err != nil {
+			log.Error("error unmarshalling image stream usage: " + err.Error())
+		} else if streamUsage != nil {
+			usage = streamUsage.ToModelUsage()
+		}
+
+		render.OpenaiBytesData(c, data)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("error reading image stream: " + err.Error())
+	}
+
+	return adaptor.DoResponseResult{Usage: usage}, nil
+}
+
+func getImageStreamUsage(node *ast.Node) (*relaymodel.ImageUsage, error) {
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		return nil, nil
+	}
+
+	usageRaw, err := usageNode.Raw()
+	if err != nil {
+		return nil, err
+	}
+
+	var usage relaymodel.ImageUsage
+	if err := sonic.UnmarshalString(usageRaw, &usage); err != nil {
+		return nil, err
+	}
+
+	return &usage, nil
 }
