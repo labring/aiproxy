@@ -195,6 +195,17 @@
 - Claude -> OpenAI
 - 其他请求先归一化后，再输出成 OpenAI 兼容格式
 
+effort 映射：
+
+| 统一 effort | OpenAI Chat / Completions 字段 |
+| --- | --- |
+| `none` | `reasoning_effort: "none"` |
+| `minimal` | `reasoning_effort: "minimal"` |
+| `low` | `reasoning_effort: "low"` |
+| `medium` | `reasoning_effort: "medium"` |
+| `high` | `reasoning_effort: "high"` |
+| `xhigh` | `reasoning_effort: "xhigh"` |
+
 ### 4.2 写成 OpenAI Responses
 
 输出字段：
@@ -212,6 +223,17 @@
 - Chat -> Responses
 - Claude -> Responses
 - Gemini -> Responses
+
+effort 映射：
+
+| 统一 effort | OpenAI Responses 字段 |
+| --- | --- |
+| `none` | `reasoning.effort: "none"` |
+| `minimal` | `reasoning.effort: "minimal"` |
+| `low` | `reasoning.effort: "low"` |
+| `medium` | `reasoning.effort: "medium"` |
+| `high` | `reasoning.effort: "high"` |
+| `xhigh` | `reasoning.effort: "xhigh"` |
 
 ### 4.3 写成 Gemini
 
@@ -256,6 +278,17 @@
 - 这类模型通常不使用 `thinkingBudget=0` 来关闭
 - 如果请求显式 `none`，会退化为该模型允许的最小 level，而不是强行写非法关闭参数
 
+精确 level 映射：
+
+| 统一 effort | Gemini 3+ Pro `thinkingLevel` | Gemini 3+ 非 Pro `thinkingLevel` |
+| --- | --- | --- |
+| `none` | `low` | `minimal` |
+| `minimal` | `low` | `minimal` |
+| `low` | `low` | `low` |
+| `medium` | `low` | `medium` |
+| `high` | `high` | `high` |
+| `xhigh` | `high` | `high` |
+
 #### B. Gemini 2.5 系列：使用 `thinkingBudget`
 
 模型限制：
@@ -282,6 +315,19 @@
 
 - **不会**因为 `max_tokens` / `maxOutputTokens` 较小，就把 Gemini thinking budget 再向下夹到 `max tokens` 内
 - 这是有意设计，避免把合法的 Gemini thinking 配置错误改写成更小值
+
+经过 Gemini 模型区间 clamp 后的精确 budget 映射：
+
+| 统一 effort | `gemini-2.5-pro` | `gemini-2.5-flash` | `gemini-2.5-flash-lite` |
+| --- | ---: | ---: | ---: |
+| `none` | `128` | `0` | `0` |
+| `minimal` | `1024` | `1024` | `1024` |
+| `low` | `2048` | `2048` | `2048` |
+| `medium` | `8192` | `8192` | `8192` |
+| `high` | `16384` | `16384` | `16384` |
+| `xhigh` | `32768` | `24576` | `24576` |
+
+开启态行的 `includeThoughts` 为 `true`，`none` 行为 `false`。
 
 ### 4.4 写成 Claude / Anthropic
 
@@ -318,6 +364,17 @@
 - `medium` -> `medium`
 - `low` / `minimal` / `none` 的 adaptive 输出强度会落到 `low`
 
+精确输出映射：
+
+| 统一 effort | 旧式 / budget Claude 输出 | adaptive Claude 输出 |
+| --- | --- | --- |
+| `none` | `thinking.type=disabled` | `thinking.type=disabled`；对 adaptive-only / Mythos 模型可能被移除 |
+| `minimal` | `thinking.type=enabled`, `budget_tokens=1024` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `low` | `thinking.type=enabled`, `budget_tokens=2048` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `medium` | `thinking.type=enabled`, `budget_tokens=8192` | `thinking.type=adaptive`, `output_config.effort=medium` |
+| `high` | `thinking.type=enabled`, `budget_tokens=16384` | `thinking.type=adaptive`, `output_config.effort=high` |
+| `xhigh` | `thinking.type=enabled`, `budget_tokens=32768` | `thinking.type=adaptive`, `output_config.effort=max` |
+
 budget 模式下的约束：
 
 - 最小 `budget_tokens=1024`
@@ -349,6 +406,17 @@ adaptive 能力判断：
 - `none` -> `enable_thinking=false`，并移除 `thinking_budget`
 - 开启推理 -> `enable_thinking=true`
 - 若模型支持 budget，再写 `thinking_budget`
+
+精确映射：
+
+| 统一 effort | 支持 `thinking_budget` 的 Ali 模型输出 | 不支持 budget 的 Ali 模型输出 |
+| --- | --- | --- |
+| `none` | `enable_thinking=false`；无 `thinking_budget` | `enable_thinking=false`；无 `thinking_budget` |
+| `minimal` | `enable_thinking=true`, `thinking_budget=1024` | `enable_thinking=true`；无 `thinking_budget` |
+| `low` | `enable_thinking=true`, `thinking_budget=2048` | `enable_thinking=true`；无 `thinking_budget` |
+| `medium` | `enable_thinking=true`, `thinking_budget=8192` | `enable_thinking=true`；无 `thinking_budget` |
+| `high` | `enable_thinking=true`, `thinking_budget=16384` | `enable_thinking=true`；无 `thinking_budget` |
+| `xhigh` | `enable_thinking=true`, `thinking_budget=32768` | `enable_thinking=true`；无 `thinking_budget` |
 
 当前认为支持 `thinking_budget` 的模型包括：
 
@@ -386,159 +454,329 @@ Ali 特殊规则：
 - `minimal` / `low` / `medium` / `high` / `xhigh`
 - 最终都会降级成同一个“enabled”状态
 
+精确映射：
+
+| 统一 effort | Zhipu / DeepSeek / Doubao 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+### 4.7 写成 Moonshot / Kimi
+
+Moonshot / Kimi 只会对支持 thinking 开关的上游模型写 Kimi `thinking` 对象：
+
+```json
+{
+  "thinking": {
+    "type": "enabled|disabled"
+  }
+}
+```
+
+支持开关的 Kimi 模型精确映射：
+
+| 统一 effort | Kimi 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+对于不支持开关的 Kimi 模型，adaptor 会移除 `reasoning_effort`，并且不发送
+`thinking`。Kimi 输出当前只保留开关语义，不保留 budget / 细粒度 effort。
+
 ---
 
 ## 5. 厂商 / 适配器支持矩阵
 
 下面只列出当前已经接入 thinking / reasoning 兼容层的主要适配器。
+表格描述的是：请求先被解析成统一 reasoning 结构后，各个 adaptor 会写成什么上游字段。
 
 ## 5.1 OpenAI / Azure / OpenAI 兼容上游
 
-### 原生支持
+原生字段：
 
-- Chat / Completions: `reasoning_effort`
-- Responses: `reasoning.effort`
+| 模式 | 原生输入字段 | 写给上游的字段 | effort 精确映射 |
+| --- | --- | --- | --- |
+| Chat Completions | `reasoning_effort` | `reasoning_effort` | 统一 effort 原样写出 |
+| Completions | `reasoning_effort` | `reasoning_effort` | 统一 effort 原样写出 |
+| Responses | `reasoning.effort` | `reasoning.effort` | 统一 effort 原样写出 |
 
-### 转换支持
+跨协议转换：
 
-- Gemini 请求 -> OpenAI `reasoning_effort`
-- Claude 请求 -> OpenAI `reasoning_effort`
-- Chat / Claude / Gemini -> Responses `reasoning.effort`
+| 输入请求模式 | 目标 OpenAI 模式 | 转换方式 |
+| --- | --- | --- |
+| Gemini -> Chat / Completions | OpenAI-compatible chat payload | `generationConfig.thinkingConfig` -> 统一 effort -> `reasoning_effort` |
+| Claude / Anthropic -> Chat / Completions | OpenAI-compatible chat payload | `thinking` / `output_config` -> 统一 effort -> `reasoning_effort` |
+| OpenAI Chat -> Responses | OpenAI Responses payload | `reasoning_effort` -> 统一 effort -> `reasoning.effort` |
+| Gemini -> Responses | OpenAI Responses payload | `thinkingConfig` -> 统一 effort -> `reasoning.effort` |
+| Claude / Anthropic -> Responses | OpenAI Responses payload | `thinking` / `output_config` -> OpenAI chat request -> `reasoning.effort` |
 
-### 说明
+说明：
 
-- OpenAI Chat / Completions 模式当前只解析 `reasoning_effort`
-- 不解析 Gemini / Claude 风格 thinking 参数
+- OpenAI Chat / Completions 模式只解析 `reasoning_effort`。
+- OpenAI Chat / Completions 不解析 Gemini 风格 `thinkingConfig`、Claude 风格 `thinking`、Ali `enable_thinking` 或 Ali `thinking_budget`。
 
 ## 5.2 Google Gemini
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> Gemini thinkingConfig
-- Claude -> Gemini thinkingConfig
-- Gemini native -> 原样使用 native 字段
+| 输入请求模式 | Gemini adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `generationConfig.thinkingConfig` |
+| Claude / Anthropic | 通过 Claude converter 解析 `thinking` / `output_config` | `generationConfig.thinkingConfig` |
+| Gemini native | 使用原生 `generationConfig.thinkingConfig` | `generationConfig.thinkingConfig` |
+| OpenAI Responses | 不是 Gemini adaptor 的输入模式 | N/A |
+| OpenAI Completions | 不是 Gemini adaptor 的输入模式 | N/A |
 
-### 输出字段
+具体输出取决于目标 Gemini 模型系列：
 
-- `generationConfig.thinkingConfig`
+| 统一 effort | Gemini 3+ Pro | Gemini 3+ 非 Pro | `gemini-2.5-pro` | `gemini-2.5-flash` | `gemini-2.5-flash-lite` |
+| --- | --- | --- | --- | --- | --- |
+| `none` | `thinkingLevel=low` | `thinkingLevel=minimal` | `thinkingBudget=128`, `includeThoughts=false` | `thinkingBudget=0`, `includeThoughts=false` | `thinkingBudget=0`, `includeThoughts=false` |
+| `minimal` | `thinkingLevel=low` | `thinkingLevel=minimal` | `thinkingBudget=1024`, `includeThoughts=true` | `thinkingBudget=1024`, `includeThoughts=true` | `thinkingBudget=1024`, `includeThoughts=true` |
+| `low` | `thinkingLevel=low` | `thinkingLevel=low` | `thinkingBudget=2048`, `includeThoughts=true` | `thinkingBudget=2048`, `includeThoughts=true` | `thinkingBudget=2048`, `includeThoughts=true` |
+| `medium` | `thinkingLevel=low` | `thinkingLevel=medium` | `thinkingBudget=8192`, `includeThoughts=true` | `thinkingBudget=8192`, `includeThoughts=true` | `thinkingBudget=8192`, `includeThoughts=true` |
+| `high` | `thinkingLevel=high` | `thinkingLevel=high` | `thinkingBudget=16384`, `includeThoughts=true` | `thinkingBudget=16384`, `includeThoughts=true` | `thinkingBudget=16384`, `includeThoughts=true` |
+| `xhigh` | `thinkingLevel=high` | `thinkingLevel=high` | `thinkingBudget=32768`, `includeThoughts=true` | `thinkingBudget=24576`, `includeThoughts=true` | `thinkingBudget=24576`, `includeThoughts=true` |
 
-### 限制
+说明：
 
-- 2.5 系列按 budget 处理，并做范围约束
-- 3 / 4 / 5 系列按 `thinkingLevel` 处理
-- 某些模型不能真正关闭 thinking，`none` 会退化为最小允许等级
+- 这个精确映射表适用于 adaptor 从 OpenAI Chat 或 Claude / Anthropic 转成 Gemini 的场景。
+- Gemini native 请求会保留自己的 `generationConfig.thinkingConfig`；adaptor 不会把一种 Gemini thinking 方言再改写成另一种 Gemini thinking 方言。
+- Gemini 2.5 系列按 budget 输出，并做模型范围约束。
+- Gemini 3 / 4 / 5 系列按 `thinkingLevel` 输出。
+- 某些模型不能真正关闭 thinking，`none` 会退化为最小允许 level 或 budget。
 
 ## 5.3 Anthropic 官方
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> 保持 native thinking 字段
+| 输入请求模式 | Anthropic adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `thinking`，必要时带 `output_config` |
+| Gemini native | 解析 `generationConfig.thinkingConfig` | `thinking`，必要时带 `output_config` |
+| Anthropic native | 保留 Anthropic 原生字段 | 按输入保留 `thinking` / `output_config`，并做原生清理 |
+| OpenAI Responses | 不是 Anthropic adaptor 的输入模式 | N/A |
+| OpenAI Completions | 不是 Anthropic adaptor 的输入模式 | N/A |
 
-### 输出字段
+按 Claude 能力分支的精确输出：
 
-- `thinking`
-- `output_config`
+| 统一 effort | 旧式 / budget Claude 输出 | adaptive Claude 输出 |
+| --- | --- | --- |
+| `none` | `thinking.type=disabled` | `thinking.type=disabled`；在 adaptive-only / Mythos 模型上可能会被移除 |
+| `minimal` | `thinking.type=enabled`, `budget_tokens=1024` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `low` | `thinking.type=enabled`, `budget_tokens=2048` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `medium` | `thinking.type=enabled`, `budget_tokens=8192` | `thinking.type=adaptive`, `output_config.effort=medium` |
+| `high` | `thinking.type=enabled`, `budget_tokens=16384` | `thinking.type=adaptive`, `output_config.effort=high` |
+| `xhigh` | `thinking.type=enabled`, `budget_tokens=32768` | `thinking.type=adaptive`, `output_config.effort=max` |
 
-### 限制
+说明：
 
-- budget 模式下会自动保证 `budget_tokens < max_tokens`
-- 旧模型使用 `enabled + budget_tokens`
-- 支持 adaptive 的模型使用 `adaptive + output_config.effort`
+- 这个精确映射表适用于 adaptor 从 OpenAI Chat 或 Gemini 转成 Claude 的场景。
+- Anthropic native 请求会保留原生 `thinking` / `output_config` 字段，只做 adaptor 需要的原生清理。
+- budget 模式会保证 `budget_tokens < max_tokens`。
+- 旧模型使用 `enabled + budget_tokens`。
+- 支持 adaptive 的模型使用 `adaptive + output_config.effort`。
 
 ## 5.4 AWS Bedrock Claude
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> 保持 native thinking 字段
+| 输入请求模式 | Bedrock Claude 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | Bedrock 包装后的 Claude `thinking` |
+| Gemini native | 解析 `generationConfig.thinkingConfig` | Bedrock 包装后的 Claude `thinking` |
+| Anthropic native | 保留 Anthropic 原生字段 | Bedrock 包装后的 Claude `thinking` |
+| OpenAI Responses | 不是 Bedrock Claude 的输入模式 | N/A |
+| OpenAI Completions | 不是 Bedrock Claude 的输入模式 | N/A |
 
-### 限制
-
-- 继承 Claude 系列的能力判断与 budget 约束
-- native Anthropic 请求不会被自动迁移成另一种 thinking 方言
+effort 映射与 Anthropic 官方一致：旧模型使用 `enabled + budget_tokens`，支持 adaptive 的模型使用 `adaptive + output_config.effort`。
+之后再包装成 Bedrock runtime 请求。
 
 ## 5.5 Vertex AI Claude
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> 保持 native thinking 字段
+| 输入请求模式 | Vertex Claude 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | Vertex 包装后的 Claude `thinking` |
+| Gemini native | 解析 `generationConfig.thinkingConfig` | Vertex 包装后的 Claude `thinking` |
+| Anthropic native | 保留 Anthropic 原生字段 | Vertex 包装后的 Claude `thinking` |
+| OpenAI Responses | 不是 Vertex Claude 的输入模式 | N/A |
+| OpenAI Completions | 不是 Vertex Claude 的输入模式 | N/A |
 
-### 限制
-
-- 继承 Claude 系列的能力判断与 budget 约束
+effort 映射与 Anthropic 官方一致：旧模型使用 `enabled + budget_tokens`，支持 adaptive 的模型使用 `adaptive + output_config.effort`。
+之后再包装成 Vertex AI 请求。
 
 ## 5.6 Ali DashScope
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> `enable_thinking` / `thinking_budget`
-- OpenAI Completions -> `enable_thinking` / `thinking_budget`
-- Gemini -> `enable_thinking` / `thinking_budget`
-- Anthropic native -> 走 Ali 的 Claude Code Proxy 原生请求格式，不做 thinking 方言迁移
+| 输入请求模式 | Ali adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `enable_thinking`；可选 `thinking_budget` |
+| OpenAI Completions | 解析 `reasoning_effort` | `enable_thinking`；可选 `thinking_budget` |
+| Gemini native | 先通过 OpenAI-compatible 转换解析 `generationConfig.thinkingConfig` | `enable_thinking`；可选 `thinking_budget` |
+| Anthropic native | 走 Ali Claude Code Proxy 原生请求格式 | 不做 thinking 方言迁移 |
+| OpenAI Responses | 走 OpenAI-compatible Responses 转换 | 没有 Ali 专用 reasoning hook |
 
-### 限制
+Ali 各档 effort 的精确映射：
 
-- 预算只在部分模型上写出
-- `qwen3-*` 非流式请求强制关闭思考
-- `qwq-*` 强制流式
+| 统一 effort | 支持 budget 的 Ali 模型输出 | 不支持 budget 的 Ali 模型输出 |
+| --- | --- | --- |
+| `none` | `enable_thinking=false`；移除 `thinking_budget` | `enable_thinking=false`；移除 `thinking_budget` |
+| `minimal` | `enable_thinking=true`；`thinking_budget=1024` | `enable_thinking=true`；无 `thinking_budget` |
+| `low` | `enable_thinking=true`；`thinking_budget=2048` | `enable_thinking=true`；无 `thinking_budget` |
+| `medium` | `enable_thinking=true`；`thinking_budget=8192` | `enable_thinking=true`；无 `thinking_budget` |
+| `high` | `enable_thinking=true`；`thinking_budget=16384` | `enable_thinking=true`；无 `thinking_budget` |
+| `xhigh` | `enable_thinking=true`；`thinking_budget=32768` | `enable_thinking=true`；无 `thinking_budget` |
+
+Ali 支持 `thinking_budget` 的模型判断：
+
+| 模型规则 | 是否写 `thinking_budget` |
+| --- | --- |
+| 模型名以 `qwen3-` 开头 | 是 |
+| 模型名以 `qwq-` 开头 | 是 |
+| 模型名包含 `glm` | 是 |
+| 模型名包含 `kimi` | 是 |
+| 其他 Ali-compatible 模型 | 否，只写 `enable_thinking` |
+
+Ali 特殊规则：
+
+- `thinking_budget` 不会按 `max_tokens` 夹紧。
+- `qwen3-*` 非流式 Chat / Completions 请求会在 reasoning hook 后强制 `enable_thinking=false`。
+- `qwen3-*` 非流式 Gemini-mode 请求会强制 `enable_thinking=false`，并移除 `thinking_budget`。
+- `qwq-*` 请求会强制 `stream=true`。
 
 ## 5.7 Doubao
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic -> `thinking.type`
+| 输入请求模式 | Doubao adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `thinking.type` |
+| Gemini native | 先通过 OpenAI-compatible 转换解析 `generationConfig.thinkingConfig` | `thinking.type` |
+| Anthropic native | 先通过 OpenAI-compatible 转换解析 `thinking` / `output_config` | `thinking.type` |
+| OpenAI Responses | 走 OpenAI-compatible Responses 原生转换 | 没有 Doubao 专用 reasoning hook |
+| OpenAI Completions | Doubao adaptor 不支持 | N/A |
 
-### 输出字段
+精确 effort 映射：
 
-- `thinking.type=enabled|disabled`
+| 统一 effort | Doubao 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
 
-### 限制
+说明：
 
-- 只保留开关语义，不保留 budget / effort 细节
-- `deepseek-reasoner` 额外注入系统提示，模型匹配同样遵循 origin-first, actual-fallback
+- 只保留开关语义，不保留 budget / 细粒度 effort。
+- `deepseek-reasoner` 额外注入系统提示，模型匹配同样遵循 origin-first, actual-fallback。
 
 ## 5.8 DeepSeek
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic native -> 走 DeepSeek `/anthropic/v1/messages`，不做 thinking 方言迁移
+| 输入请求模式 | DeepSeek adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `thinking.type` |
+| Gemini native | 先通过 OpenAI-compatible 转换解析 `generationConfig.thinkingConfig` | `thinking.type` |
+| Anthropic native | 走 DeepSeek `/anthropic/v1/messages` | 不做 thinking 方言迁移 |
+| OpenAI Responses | DeepSeek adaptor 不支持 | N/A |
+| OpenAI Completions | OpenAI-compatible 透传 | 没有 DeepSeek 专用 reasoning hook |
 
-### 限制
+Chat / Gemini 两条 hook 路径的精确 effort 映射：
 
-- 当前只保留 enabled / disabled 两态
-- Completions 当前不做 reasoning 兼容转换
+| 统一 effort | DeepSeek 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+DeepSeek 当前在 hooked 的 OpenAI Chat 与 Gemini 路径只保留 enabled / disabled。
 
 ## 5.9 Zhipu
 
-### 输入模式
+支持 reasoning 转换的模式：
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic -> `thinking.type`
+| 输入请求模式 | Zhipu adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | `thinking.type` |
+| Gemini native | 先通过 OpenAI-compatible 转换解析 `generationConfig.thinkingConfig` | `thinking.type` |
+| Anthropic native | 先通过 OpenAI-compatible 转换解析 `thinking` / `output_config` | `thinking.type` |
+| OpenAI Responses | 当前 adaptor 不支持 | N/A |
+| OpenAI Completions | OpenAI-compatible 透传 | 没有 Zhipu 专用 reasoning hook |
 
-### 输出字段
+Chat / Gemini / Anthropic 三条 hook 路径的精确 effort 映射：
 
-- `thinking.type=enabled|disabled`
+| 统一 effort | Zhipu 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
 
-### 限制
+Zhipu 当前在 hooked 路径只保留 enabled / disabled。
 
-- 只保留开关语义，不保留 budget / effort 细节
-- Completions 当前不做 reasoning 兼容转换
+## 5.10 Moonshot / Kimi
+
+支持 reasoning 转换的模式：
+
+| 输入请求模式 | Moonshot adaptor 行为 | 写给上游的字段 |
+| --- | --- | --- |
+| OpenAI Chat | 解析 `reasoning_effort` | 对支持开关的模型写 Kimi `thinking.type` |
+| Gemini native | 先通过 OpenAI-compatible 转换解析 `generationConfig.thinkingConfig` | 对支持开关的模型写 Kimi `thinking.type` |
+| Anthropic native | 先通过 OpenAI-compatible 转换解析 `thinking` / `output_config` | 对支持开关的模型写 Kimi `thinking.type` |
+| OpenAI Completions | OpenAI-compatible payload 透传 | 没有 Moonshot 专用 reasoning hook |
+| OpenAI Responses | Moonshot adaptor 不支持 | N/A |
+
+Moonshot adaptor 当前把以下 actual upstream model name 视为支持 thinking 开关：
+
+| actual upstream model 规则 | 是否支持写 Kimi `thinking.type` |
+| --- | --- |
+| `kimi-k2.5*` | 是 |
+| `kimi-k2.6*` | 是 |
+| 其他 Kimi 模型名 | 否；移除 `reasoning_effort`，并省略 `thinking` |
+
+支持开关的 Kimi 模型精确映射：
+
+| 统一 effort | Kimi 输出 |
+| --- | --- |
+| `none` | `thinking.type=disabled`；移除 `reasoning_effort` |
+| `minimal` | `thinking.type=enabled`；移除 `reasoning_effort` |
+| `low` | `thinking.type=enabled`；移除 `reasoning_effort` |
+| `medium` | `thinking.type=enabled`；移除 `reasoning_effort` |
+| `high` | `thinking.type=enabled`；移除 `reasoning_effort` |
+| `xhigh` | `thinking.type=enabled`；移除 `reasoning_effort` |
+
+对于不支持切换的 Kimi 模型，例如专用 thinking 模型，adaptor 会移除 `reasoning_effort` 并省略 `thinking`。
+它不会向不能关闭 thinking 的模型发送 `thinking.type=disabled`。
+
+说明：
+
+- 只保留开关语义，不保留 budget / 细粒度 effort。
+- 模型能力判断使用 `ActualModel`，因为渠道映射后的最终 Kimi 上游模型名决定 `thinking` 字段是否合法。
 
 ---
 
 ## 6. 模型名匹配策略
 
-所有“按模型能力分支”的逻辑，都遵循统一策略：
+大多数“按模型能力分支”的逻辑，都遵循统一策略：
 
 1. 先使用 `OriginModel`
 2. 如果 `OriginModel` 没命中规则，再使用 `ActualModel`
@@ -556,6 +794,11 @@ Ali 特殊规则：
 - Ali budget 能力判断
 - Doubao bot / vision / deepseek-reasoner 特殊逻辑
 - 其他基于模型名的 thinking 能力分支
+
+例外：
+
+- Moonshot / Kimi thinking 开关能力判断优先使用 `ActualModel`，因为
+  `thinking` 字段是否合法取决于渠道映射后的最终 Kimi 上游模型。
 
 ---
 
@@ -974,7 +1217,60 @@ Ali 特殊规则：
 - 这不是 effort 到 effort 的字段转换
 - 但它是当前 Doubao adaptor 中与 reasoning 相关的特殊兼容逻辑
 
-### 7.1.17 OpenAI Completions -> Ali
+### 7.1.17 OpenAI Chat -> Moonshot / Kimi K2.6
+
+输入：
+
+```json
+{
+  "model": "kimi-k2.6",
+  "reasoning_effort": "none",
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+输出：
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  }
+}
+```
+
+说明：
+
+- 转换后移除 `reasoning_effort`
+- 开启态 effort 会写成 `thinking.type=enabled`
+- 不保留 budget / 细粒度 effort 语义
+
+### 7.1.18 OpenAI Chat -> Moonshot / Kimi 不支持开关的模型
+
+输入：
+
+```json
+{
+  "model": "kimi-k2-thinking",
+  "reasoning_effort": "none",
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+输出：
+
+```json
+{
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+说明：
+
+- 转换后移除 `reasoning_effort`
+- 因为该模型族不支持通过请求参数切换 thinking，所以省略 `thinking`
+
+### 7.1.19 OpenAI Completions -> Ali
 
 输入：
 
@@ -1185,6 +1481,37 @@ Ali 特殊规则：
 - budget 细节不会保留
 - 会降级成纯开关语义
 
+### 7.2.9 Gemini -> Moonshot / Kimi K2.6
+
+输入：
+
+```json
+{
+  "generationConfig": {
+    "thinkingConfig": {
+      "thinkingBudget": 2048,
+      "includeThoughts": true
+    }
+  }
+}
+```
+
+输出：
+
+```json
+{
+  "thinking": {
+    "type": "enabled"
+  }
+}
+```
+
+说明：
+
+- Gemini `thinkingConfig` 会先通过 OpenAI-compatible `reasoning_effort`
+  路径归一化，然后由 Moonshot hook 写成 Kimi `thinking`
+- budget 细节不会保留
+
 ## 7.3 以 Claude / Anthropic Request 作为输入格式
 
 ### 7.3.1 Claude -> OpenAI Chat / Completions
@@ -1358,6 +1685,35 @@ Ali 特殊规则：
 }
 ```
 
+### 7.3.7 Claude -> Moonshot / Kimi K2.6
+
+输入：
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  },
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+输出：
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  }
+}
+```
+
+说明：
+
+- Claude `thinking` 会先通过 OpenAI-compatible `reasoning_effort` 路径归一化，
+  然后由 Moonshot hook 写成 Kimi `thinking`
+- Kimi 目标不保留 budget / adaptive effort 细节
+
 ---
 
 ## 8. 当前不做的事情
@@ -1382,7 +1738,8 @@ Ali 特殊规则：
 2. 归一化为统一的 `NormalizedReasoning`
 3. 按上游实际支持的字段写回
 4. 只在“转换后的请求体”做约束与合法化
-5. 所有模型能力分支都使用 origin-first, actual-fallback
+5. 为模型能力判断明确记录模型名匹配顺序；默认使用 origin-first /
+   actual-fallback，但当最终上游模型名决定参数合法性时，使用 `ActualModel`
 6. 为以下情况补测试：
    - 显式关闭
    - 老模型 / 新模型差异

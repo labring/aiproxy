@@ -91,13 +91,21 @@ func (a *Adaptor) ConvertRequest(
 			},
 		)
 	case mode.Anthropic:
-		return openai.ConvertClaudeRequest(meta, req, func(openAIReq *relaymodel.GeneralOpenAIRequest) error {
-			return patchReasoningRequest(meta, openAIReq)
-		})
+		return openai.ConvertClaudeRequest(
+			meta,
+			req,
+			func(openAIReq *relaymodel.GeneralOpenAIRequest) error {
+				return patchReasoningRequest(meta, openAIReq)
+			},
+		)
 	case mode.Gemini:
-		return openai.ConvertGeminiRequest(meta, req, func(openAIReq *relaymodel.GeneralOpenAIRequest) error {
-			return patchReasoningRequest(meta, openAIReq)
-		})
+		return openai.ConvertGeminiRequest(
+			meta,
+			req,
+			func(openAIReq *relaymodel.GeneralOpenAIRequest) error {
+				return patchReasoningRequest(meta, openAIReq)
+			},
+		)
 	default:
 		return a.Adaptor.ConvertRequest(meta, store, req)
 	}
@@ -135,7 +143,8 @@ func applyReasoningToMoonshotNode(
 	}
 
 	thinkingType := relaymodel.ClaudeThinkingTypeEnabled
-	if reasoning.Disabled || utils.ReasoningToOpenAIEffort(reasoning) == relaymodel.ReasoningEffortNone {
+	if reasoning.Disabled ||
+		utils.ReasoningToOpenAIEffort(reasoning) == relaymodel.ReasoningEffortNone {
 		thinkingType = relaymodel.ClaudeThinkingTypeDisabled
 	}
 
@@ -161,7 +170,8 @@ func applyReasoningToMoonshotRequest(
 	}
 
 	thinkingType := relaymodel.ClaudeThinkingTypeEnabled
-	if reasoning.Disabled || utils.ReasoningToOpenAIEffort(reasoning) == relaymodel.ReasoningEffortNone {
+	if reasoning.Disabled ||
+		utils.ReasoningToOpenAIEffort(reasoning) == relaymodel.ReasoningEffortNone {
 		thinkingType = relaymodel.ClaudeThinkingTypeDisabled
 	}
 

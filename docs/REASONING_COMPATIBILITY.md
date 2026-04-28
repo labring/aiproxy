@@ -195,6 +195,17 @@ Typical use cases:
 - Claude -> OpenAI
 - any other request normalized first, then emitted as OpenAI-compatible reasoning
 
+Effort mapping:
+
+| normalized effort | OpenAI Chat / Completions field |
+| --- | --- |
+| `none` | `reasoning_effort: "none"` |
+| `minimal` | `reasoning_effort: "minimal"` |
+| `low` | `reasoning_effort: "low"` |
+| `medium` | `reasoning_effort: "medium"` |
+| `high` | `reasoning_effort: "high"` |
+| `xhigh` | `reasoning_effort: "xhigh"` |
+
 ### 4.2 OpenAI Responses output
 
 Output field:
@@ -212,6 +223,17 @@ Typical use cases:
 - Chat -> Responses
 - Claude -> Responses
 - Gemini -> Responses
+
+Effort mapping:
+
+| normalized effort | OpenAI Responses field |
+| --- | --- |
+| `none` | `reasoning.effort: "none"` |
+| `minimal` | `reasoning.effort: "minimal"` |
+| `low` | `reasoning.effort: "low"` |
+| `medium` | `reasoning.effort: "medium"` |
+| `high` | `reasoning.effort: "high"` |
+| `xhigh` | `reasoning.effort: "xhigh"` |
 
 ### 4.3 Gemini output
 
@@ -256,6 +278,17 @@ Disable behavior:
 - these models generally do not use `thinkingBudget=0` as the disable path
 - when the caller explicitly sends `none`, the proxy degrades to the minimum valid level for that model instead of forcing an invalid disable payload
 
+Exact level mapping:
+
+| normalized effort | Gemini 3+ Pro `thinkingLevel` | Gemini 3+ non-Pro `thinkingLevel` |
+| --- | --- | --- |
+| `none` | `low` | `minimal` |
+| `minimal` | `low` | `minimal` |
+| `low` | `low` | `low` |
+| `medium` | `low` | `medium` |
+| `high` | `high` | `high` |
+| `xhigh` | `high` | `high` |
+
 #### B. Gemini 2.5 family: use `thinkingBudget`
 
 Model limits:
@@ -282,6 +315,19 @@ Important note:
 
 - Gemini thinking budgets are **not** additionally clamped by `max_tokens` / `maxOutputTokens`
 - this is intentional, to avoid incorrectly shrinking an otherwise valid Gemini reasoning configuration
+
+Exact budget mapping after Gemini model-range clamping:
+
+| normalized effort | `gemini-2.5-pro` | `gemini-2.5-flash` | `gemini-2.5-flash-lite` |
+| --- | ---: | ---: | ---: |
+| `none` | `128` | `0` | `0` |
+| `minimal` | `1024` | `1024` | `1024` |
+| `low` | `2048` | `2048` | `2048` |
+| `medium` | `8192` | `8192` | `8192` |
+| `high` | `16384` | `16384` | `16384` |
+| `xhigh` | `32768` | `24576` | `24576` |
+
+`includeThoughts` is `true` for enabled rows and `false` for the `none` row.
 
 ### 4.4 Claude / Anthropic output
 
@@ -318,6 +364,17 @@ Mapping details:
 - `medium` -> `medium`
 - `low`, `minimal`, and `none` map to `low` when adaptive output is used
 
+Exact output mapping:
+
+| normalized effort | legacy / budget Claude output | adaptive Claude output |
+| --- | --- | --- |
+| `none` | `thinking.type=disabled` | `thinking.type=disabled`; may be removed for adaptive-only / Mythos models |
+| `minimal` | `thinking.type=enabled`, `budget_tokens=1024` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `low` | `thinking.type=enabled`, `budget_tokens=2048` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `medium` | `thinking.type=enabled`, `budget_tokens=8192` | `thinking.type=adaptive`, `output_config.effort=medium` |
+| `high` | `thinking.type=enabled`, `budget_tokens=16384` | `thinking.type=adaptive`, `output_config.effort=high` |
+| `xhigh` | `thinking.type=enabled`, `budget_tokens=32768` | `thinking.type=adaptive`, `output_config.effort=max` |
+
 Budget-mode constraints:
 
 - minimum `budget_tokens=1024`
@@ -349,6 +406,17 @@ Rules:
 - `none` -> `enable_thinking=false`, and `thinking_budget` is removed
 - enabled reasoning -> `enable_thinking=true`
 - if the model supports budgets, `thinking_budget` is written
+
+Exact mapping:
+
+| normalized effort | Ali output for models supporting `thinking_budget` | Ali output for models without budget support |
+| --- | --- | --- |
+| `none` | `enable_thinking=false`; no `thinking_budget` | `enable_thinking=false`; no `thinking_budget` |
+| `minimal` | `enable_thinking=true`, `thinking_budget=1024` | `enable_thinking=true`; no `thinking_budget` |
+| `low` | `enable_thinking=true`, `thinking_budget=2048` | `enable_thinking=true`; no `thinking_budget` |
+| `medium` | `enable_thinking=true`, `thinking_budget=8192` | `enable_thinking=true`; no `thinking_budget` |
+| `high` | `enable_thinking=true`, `thinking_budget=16384` | `enable_thinking=true`; no `thinking_budget` |
+| `xhigh` | `enable_thinking=true`, `thinking_budget=32768` | `enable_thinking=true`; no `thinking_budget` |
 
 Models currently considered to support `thinking_budget` include:
 
@@ -386,159 +454,331 @@ That means:
 - `minimal`, `low`, `medium`, `high`, and `xhigh`
 - all collapse into the same upstream `enabled` state
 
+Exact mapping:
+
+| normalized effort | Zhipu / DeepSeek / Doubao output |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+### 4.7 Moonshot / Kimi output
+
+Moonshot / Kimi uses Kimi's `thinking` object only for upstream models that
+support thinking toggling:
+
+```json
+{
+  "thinking": {
+    "type": "enabled|disabled"
+  }
+}
+```
+
+Exact mapping for toggle-capable Kimi models:
+
+| normalized effort | Kimi output |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+For non-toggle Kimi models, the adaptor removes `reasoning_effort` and does not
+send `thinking`. Kimi output currently preserves only on/off semantics, not
+budget or fine-grained effort.
+
 ---
 
 ## 5. Vendor / adaptor support matrix
 
 This section focuses on the major adaptors that currently participate in the reasoning compatibility layer.
+The tables describe what happens after the source request has been parsed into the normalized reasoning model.
 
 ## 5.1 OpenAI / Azure / OpenAI-compatible upstreams
 
-### Native support
+Native fields:
 
-- Chat / Completions: `reasoning_effort`
-- Responses: `reasoning.effort`
+| mode | native source field | emitted upstream field | exact effort mapping |
+| --- | --- | --- | --- |
+| Chat Completions | `reasoning_effort` | `reasoning_effort` | unchanged normalized effort |
+| Completions | `reasoning_effort` | `reasoning_effort` | unchanged normalized effort |
+| Responses | `reasoning.effort` | `reasoning.effort` | unchanged normalized effort |
 
-### Conversion support
+Cross-protocol conversions:
 
-- Gemini request -> OpenAI `reasoning_effort`
-- Claude request -> OpenAI `reasoning_effort`
-- Chat / Claude / Gemini -> Responses `reasoning.effort`
+| source request mode | target OpenAI mode | conversion |
+| --- | --- | --- |
+| Gemini -> Chat / Completions | OpenAI-compatible chat payload | `generationConfig.thinkingConfig` -> normalized effort -> `reasoning_effort` |
+| Claude / Anthropic -> Chat / Completions | OpenAI-compatible chat payload | `thinking` / `output_config` -> normalized effort -> `reasoning_effort` |
+| OpenAI Chat -> Responses | OpenAI Responses payload | `reasoning_effort` -> normalized effort -> `reasoning.effort` |
+| Gemini -> Responses | OpenAI Responses payload | `thinkingConfig` -> normalized effort -> `reasoning.effort` |
+| Claude / Anthropic -> Responses | OpenAI Responses payload | `thinking` / `output_config` -> OpenAI chat request -> `reasoning.effort` |
 
-### Notes
+Notes:
 
-- OpenAI Chat / Completions only parse `reasoning_effort`
-- they do not parse Gemini-style or Claude-style thinking fields in this mode
+- OpenAI Chat / Completions only parse `reasoning_effort`.
+- OpenAI Chat / Completions do not parse Gemini-style `thinkingConfig`, Claude-style `thinking`, Ali `enable_thinking`, or Ali `thinking_budget` in this mode.
 
 ## 5.2 Google Gemini
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> Gemini `thinkingConfig`
-- Claude -> Gemini `thinkingConfig`
-- Gemini native -> native fields are used as-is
+| source request mode | Gemini adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `generationConfig.thinkingConfig` |
+| Claude / Anthropic | parses `thinking` / `output_config` through the Claude converter | `generationConfig.thinkingConfig` |
+| Gemini native | uses `generationConfig.thinkingConfig` as the native request field | `generationConfig.thinkingConfig` |
+| OpenAI Responses | not a Gemini adaptor input mode | N/A |
+| OpenAI Completions | not a Gemini adaptor input mode | N/A |
 
-### Output fields
+Exact output depends on the target Gemini model family:
 
-- `generationConfig.thinkingConfig`
+| normalized effort | Gemini 3+ Pro | Gemini 3+ non-Pro | `gemini-2.5-pro` | `gemini-2.5-flash` | `gemini-2.5-flash-lite` |
+| --- | --- | --- | --- | --- | --- |
+| `none` | `thinkingLevel=low` | `thinkingLevel=minimal` | `thinkingBudget=128`, `includeThoughts=false` | `thinkingBudget=0`, `includeThoughts=false` | `thinkingBudget=0`, `includeThoughts=false` |
+| `minimal` | `thinkingLevel=low` | `thinkingLevel=minimal` | `thinkingBudget=1024`, `includeThoughts=true` | `thinkingBudget=1024`, `includeThoughts=true` | `thinkingBudget=1024`, `includeThoughts=true` |
+| `low` | `thinkingLevel=low` | `thinkingLevel=low` | `thinkingBudget=2048`, `includeThoughts=true` | `thinkingBudget=2048`, `includeThoughts=true` | `thinkingBudget=2048`, `includeThoughts=true` |
+| `medium` | `thinkingLevel=low` | `thinkingLevel=medium` | `thinkingBudget=8192`, `includeThoughts=true` | `thinkingBudget=8192`, `includeThoughts=true` | `thinkingBudget=8192`, `includeThoughts=true` |
+| `high` | `thinkingLevel=high` | `thinkingLevel=high` | `thinkingBudget=16384`, `includeThoughts=true` | `thinkingBudget=16384`, `includeThoughts=true` | `thinkingBudget=16384`, `includeThoughts=true` |
+| `xhigh` | `thinkingLevel=high` | `thinkingLevel=high` | `thinkingBudget=32768`, `includeThoughts=true` | `thinkingBudget=24576`, `includeThoughts=true` | `thinkingBudget=24576`, `includeThoughts=true` |
 
-### Limits
+Notes:
 
-- Gemini 2.5 uses budget-based output with range enforcement
-- Gemini 3 / 4 / 5 use `thinkingLevel`
-- some models cannot truly disable thinking, so `none` degrades to the minimum valid level
+- The exact mapping table applies when the adaptor is converting from OpenAI Chat or Claude / Anthropic into Gemini.
+- Native Gemini requests keep their own `generationConfig.thinkingConfig`; the adaptor does not rewrite a native Gemini thinking dialect into another Gemini thinking dialect.
+- Gemini 2.5 uses budget-based output with model-specific range enforcement.
+- Gemini 3 / 4 / 5 use `thinkingLevel`.
+- Some models cannot truly disable thinking, so `none` degrades to the minimum valid level or budget.
 
 ## 5.3 Anthropic official
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> native thinking fields are preserved
+| source request mode | Anthropic adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `thinking` and optionally `output_config` |
+| Gemini native | parses `generationConfig.thinkingConfig` | `thinking` and optionally `output_config` |
+| Anthropic native | preserves native Anthropic fields | `thinking` and `output_config` as provided, with native cleanup |
+| OpenAI Responses | not an Anthropic adaptor input mode | N/A |
+| OpenAI Completions | not an Anthropic adaptor input mode | N/A |
 
-### Output fields
+Exact output by Claude capability:
 
-- `thinking`
-- `output_config`
+| normalized effort | legacy / budget Claude output | adaptive Claude output |
+| --- | --- | --- |
+| `none` | `thinking.type=disabled` | `thinking.type=disabled`; may be removed for adaptive-only / Mythos models |
+| `minimal` | `thinking.type=enabled`, `budget_tokens=1024` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `low` | `thinking.type=enabled`, `budget_tokens=2048` | `thinking.type=adaptive`, `output_config.effort=low` |
+| `medium` | `thinking.type=enabled`, `budget_tokens=8192` | `thinking.type=adaptive`, `output_config.effort=medium` |
+| `high` | `thinking.type=enabled`, `budget_tokens=16384` | `thinking.type=adaptive`, `output_config.effort=high` |
+| `xhigh` | `thinking.type=enabled`, `budget_tokens=32768` | `thinking.type=adaptive`, `output_config.effort=max` |
 
-### Limits
+Notes:
 
-- budget mode enforces `budget_tokens < max_tokens`
-- older models use `enabled + budget_tokens`
-- adaptive-capable models use `adaptive + output_config.effort`
+- The exact mapping table applies when the adaptor is converting from OpenAI Chat or Gemini into Claude.
+- Native Anthropic requests keep native `thinking` / `output_config` fields, apart from native cleanup required by the adaptor.
+- Budget mode enforces `budget_tokens < max_tokens`.
+- Older models use `enabled + budget_tokens`.
+- Adaptive-capable models use `adaptive + output_config.effort`.
 
 ## 5.4 AWS Bedrock Claude
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> native thinking fields are preserved
+| source request mode | Bedrock Claude behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | Claude `thinking` after Bedrock wrapping |
+| Gemini native | parses `generationConfig.thinkingConfig` | Claude `thinking` after Bedrock wrapping |
+| Anthropic native | preserves native Anthropic fields | Claude `thinking` after Bedrock wrapping |
+| OpenAI Responses | not a Bedrock Claude input mode | N/A |
+| OpenAI Completions | not a Bedrock Claude input mode | N/A |
 
-### Limits
-
-- inherits the Claude family capability logic and budget constraints
-- native Anthropic requests are not migrated into another thinking dialect
+The effort mapping is the same as Anthropic official: legacy models use `enabled + budget_tokens`; adaptive-capable models use `adaptive + output_config.effort`.
+Bedrock then wraps the Claude request for the Bedrock runtime.
 
 ## 5.5 Vertex AI Claude
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> Claude thinking
-- Gemini -> Claude thinking
-- Anthropic native -> native thinking fields are preserved
+| source request mode | Vertex Claude behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | Claude `thinking` after Vertex wrapping |
+| Gemini native | parses `generationConfig.thinkingConfig` | Claude `thinking` after Vertex wrapping |
+| Anthropic native | preserves native Anthropic fields | Claude `thinking` after Vertex wrapping |
+| OpenAI Responses | not a Vertex Claude input mode | N/A |
+| OpenAI Completions | not a Vertex Claude input mode | N/A |
 
-### Limits
-
-- inherits the Claude family capability logic and budget constraints
+The effort mapping is the same as Anthropic official: legacy models use `enabled + budget_tokens`; adaptive-capable models use `adaptive + output_config.effort`.
+Vertex then wraps the Claude request for Vertex AI.
 
 ## 5.6 Ali DashScope
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> `enable_thinking` / `thinking_budget`
-- OpenAI Completions -> `enable_thinking` / `thinking_budget`
-- Gemini -> `enable_thinking` / `thinking_budget`
-- Anthropic native -> uses Ali's Claude Code Proxy native request format, without cross-dialect thinking migration
+| source request mode | Ali adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `enable_thinking`; optional `thinking_budget` |
+| OpenAI Completions | parses `reasoning_effort` | `enable_thinking`; optional `thinking_budget` |
+| Gemini native | parses `generationConfig.thinkingConfig` through OpenAI-compatible conversion | `enable_thinking`; optional `thinking_budget` |
+| Anthropic native | uses Ali Claude Code Proxy native request format | no cross-dialect reasoning migration |
+| OpenAI Responses | passed through OpenAI-compatible Responses conversion | no Ali-specific reasoning hook |
 
-### Limits
+Ali exact effort mapping:
 
-- budgets are only written for supported model families
-- `qwen3-*` forces thinking off on non-streaming requests
-- `qwq-*` forces streaming
+| normalized effort | output on budget-capable Ali models | output on non-budget Ali models |
+| --- | --- | --- |
+| `none` | `enable_thinking=false`; `thinking_budget` removed | `enable_thinking=false`; `thinking_budget` removed |
+| `minimal` | `enable_thinking=true`; `thinking_budget=1024` | `enable_thinking=true`; no `thinking_budget` |
+| `low` | `enable_thinking=true`; `thinking_budget=2048` | `enable_thinking=true`; no `thinking_budget` |
+| `medium` | `enable_thinking=true`; `thinking_budget=8192` | `enable_thinking=true`; no `thinking_budget` |
+| `high` | `enable_thinking=true`; `thinking_budget=16384` | `enable_thinking=true`; no `thinking_budget` |
+| `xhigh` | `enable_thinking=true`; `thinking_budget=32768` | `enable_thinking=true`; no `thinking_budget` |
+
+Ali budget-capable model detection:
+
+| model rule | writes `thinking_budget` |
+| --- | --- |
+| model starts with `qwen3-` | yes |
+| model starts with `qwq-` | yes |
+| model name contains `glm` | yes |
+| model name contains `kimi` | yes |
+| other Ali-compatible models | no; only `enable_thinking` is written |
+
+Ali-specific behavior:
+
+- `thinking_budget` is not clamped by `max_tokens`.
+- `qwen3-*` non-streaming Chat / Completions requests force `enable_thinking=false` after the reasoning hook.
+- `qwen3-*` non-streaming Gemini-mode requests force `enable_thinking=false` and remove `thinking_budget`.
+- `qwq-*` requests force `stream=true`.
 
 ## 5.7 Doubao
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic -> `thinking.type`
+| source request mode | Doubao adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `thinking.type` |
+| Gemini native | parses `generationConfig.thinkingConfig` through OpenAI-compatible conversion | `thinking.type` |
+| Anthropic native | parses `thinking` / `output_config` through OpenAI-compatible conversion | `thinking.type` |
+| OpenAI Responses | passed through native OpenAI-compatible Responses conversion | no Doubao-specific reasoning hook |
+| OpenAI Completions | not supported by Doubao adaptor | N/A |
 
-### Output field
+Exact effort mapping:
 
-- `thinking.type=enabled|disabled`
+| normalized effort | Doubao output |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
 
-### Limits
+Notes:
 
-- only on/off semantics are preserved; budget and fine-grained effort are dropped
-- `deepseek-reasoner` also injects a system prompt, using the same origin-first, actual-fallback model match strategy
+- Only on/off semantics are preserved; budget and fine-grained effort are dropped.
+- `deepseek-reasoner` also injects a system prompt, using the same origin-first, actual-fallback model match strategy.
 
 ## 5.8 DeepSeek
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic native -> uses DeepSeek `/anthropic/v1/messages` and does not migrate thinking into another dialect
+| source request mode | DeepSeek adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `thinking.type` |
+| Gemini native | parses `generationConfig.thinkingConfig` through OpenAI-compatible conversion | `thinking.type` |
+| Anthropic native | uses DeepSeek `/anthropic/v1/messages` | no cross-dialect reasoning migration |
+| OpenAI Responses | unsupported by the DeepSeek adaptor | N/A |
+| OpenAI Completions | OpenAI-compatible pass-through | no DeepSeek-specific reasoning hook |
 
-### Limits
+Exact effort mapping for the hooked Chat / Gemini paths:
 
-- only enabled / disabled is preserved today
-- Completions currently do not have reasoning compatibility conversion
+| normalized effort | DeepSeek output |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
+
+DeepSeek currently preserves only enabled / disabled for the hooked OpenAI Chat and Gemini paths.
 
 ## 5.9 Zhipu
 
-### Input modes
+Supported reasoning conversion modes:
 
-- OpenAI Chat -> `thinking.type`
-- Gemini -> `thinking.type`
-- Anthropic -> `thinking.type`
+| source request mode | Zhipu adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | `thinking.type` |
+| Gemini native | parses `generationConfig.thinkingConfig` through OpenAI-compatible conversion | `thinking.type` |
+| Anthropic native | parses `thinking` / `output_config` through OpenAI-compatible conversion | `thinking.type` |
+| OpenAI Responses | unsupported by this adaptor | N/A |
+| OpenAI Completions | OpenAI-compatible pass-through | no Zhipu-specific reasoning hook |
 
-### Output field
+Exact effort mapping for the hooked Chat / Gemini / Anthropic paths:
 
-- `thinking.type=enabled|disabled`
+| normalized effort | Zhipu output |
+| --- | --- |
+| `none` | `thinking.type=disabled` |
+| `minimal` | `thinking.type=enabled` |
+| `low` | `thinking.type=enabled` |
+| `medium` | `thinking.type=enabled` |
+| `high` | `thinking.type=enabled` |
+| `xhigh` | `thinking.type=enabled` |
 
-### Limits
+Zhipu currently preserves only enabled / disabled for the hooked paths.
 
-- only on/off semantics are preserved; budget and fine-grained effort are dropped
-- Completions currently do not have reasoning compatibility conversion
+## 5.10 Moonshot / Kimi
+
+Supported reasoning conversion modes:
+
+| source request mode | Moonshot adaptor behavior | emitted upstream field |
+| --- | --- | --- |
+| OpenAI Chat | parses `reasoning_effort` | Kimi `thinking.type` for toggle-capable models |
+| Gemini native | parses `generationConfig.thinkingConfig` through OpenAI-compatible conversion | Kimi `thinking.type` for toggle-capable models |
+| Anthropic native | parses `thinking` / `output_config` through OpenAI-compatible conversion | Kimi `thinking.type` for toggle-capable models |
+| OpenAI Completions | OpenAI-compatible payload is passed through | no Moonshot-specific reasoning hook |
+| OpenAI Responses | unsupported by the Moonshot adaptor | N/A |
+
+The Moonshot adaptor currently treats these actual upstream model names as thinking-toggle capable:
+
+| actual upstream model rule | supports emitted Kimi `thinking.type` |
+| --- | --- |
+| `kimi-k2.5*` | yes |
+| `kimi-k2.6*` | yes |
+| other Kimi model names | no; `reasoning_effort` is removed and `thinking` is omitted |
+
+Exact effort mapping for toggle-capable Kimi models:
+
+| normalized effort | Kimi output |
+| --- | --- |
+| `none` | `thinking.type=disabled`; `reasoning_effort` removed |
+| `minimal` | `thinking.type=enabled`; `reasoning_effort` removed |
+| `low` | `thinking.type=enabled`; `reasoning_effort` removed |
+| `medium` | `thinking.type=enabled`; `reasoning_effort` removed |
+| `high` | `thinking.type=enabled`; `reasoning_effort` removed |
+| `xhigh` | `thinking.type=enabled`; `reasoning_effort` removed |
+
+For non-toggle Kimi models, such as dedicated thinking models, the adaptor removes `reasoning_effort` and omits `thinking`.
+It does not send `thinking.type=disabled` to a model that cannot be disabled.
+
+Notes:
+
+- Only on/off semantics are preserved; budget and fine-grained effort are dropped.
+- Model support is checked against `ActualModel`, because the upstream Kimi model name after channel mapping determines whether `thinking` is valid.
 
 ---
 
 ## 6. Model matching strategy
 
-All model-capability branches follow the same rule:
+Most model-capability branches follow the same rule:
 
 1. use `OriginModel` first
 2. if `OriginModel` does not match, fall back to `ActualModel`
@@ -556,6 +796,12 @@ This strategy is already used in:
 - Ali budget support detection
 - Doubao bot / vision / deepseek-reasoner special routing
 - other model-name-based reasoning capability branches
+
+Exception:
+
+- Moonshot / Kimi thinking-toggle detection uses `ActualModel` first, because
+  `thinking` validity depends on the final upstream Kimi model after channel
+  mapping.
 
 ---
 
@@ -974,7 +1220,61 @@ Notes:
 - this is not an effort conversion example
 - it is still part of the implemented reasoning-related behavior in the Doubao adaptor
 
-### 7.1.17 OpenAI Completions -> Ali
+### 7.1.17 OpenAI Chat -> Moonshot / Kimi K2.6
+
+Input:
+
+```json
+{
+  "model": "kimi-k2.6",
+  "reasoning_effort": "none",
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+Output:
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  }
+}
+```
+
+Notes:
+
+- `reasoning_effort` is removed
+- enabled efforts become `thinking.type=enabled`
+- budget and fine-grained effort are not preserved
+
+### 7.1.18 OpenAI Chat -> Moonshot / Kimi non-toggle model
+
+Input:
+
+```json
+{
+  "model": "kimi-k2-thinking",
+  "reasoning_effort": "none",
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+Output:
+
+```json
+{
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+Notes:
+
+- `reasoning_effort` is removed
+- `thinking` is omitted because this model family does not support toggling via
+  request parameter
+
+### 7.1.19 OpenAI Completions -> Ali
 
 Input:
 
@@ -1185,6 +1485,37 @@ Notes:
 - budget details are not preserved
 - the payload degrades to pure on/off semantics
 
+### 7.2.9 Gemini -> Moonshot / Kimi K2.6
+
+Input:
+
+```json
+{
+  "generationConfig": {
+    "thinkingConfig": {
+      "thinkingBudget": 2048,
+      "includeThoughts": true
+    }
+  }
+}
+```
+
+Output:
+
+```json
+{
+  "thinking": {
+    "type": "enabled"
+  }
+}
+```
+
+Notes:
+
+- Gemini `thinkingConfig` is first normalized through the OpenAI-compatible
+  `reasoning_effort` path, then the Moonshot hook writes Kimi `thinking`
+- budget details are not preserved
+
 ## 7.3 Claude / Anthropic requests as the source format
 
 ### 7.3.1 Claude -> OpenAI Chat / Completions
@@ -1358,6 +1689,35 @@ Representative Vertex body:
 }
 ```
 
+### 7.3.7 Claude -> Moonshot / Kimi K2.6
+
+Input:
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  },
+  "messages": [{"role": "user", "content": "hello"}]
+}
+```
+
+Output:
+
+```json
+{
+  "thinking": {
+    "type": "disabled"
+  }
+}
+```
+
+Notes:
+
+- Claude `thinking` is first normalized through the OpenAI-compatible
+  `reasoning_effort` path, then the Moonshot hook writes Kimi `thinking`
+- budget and adaptive effort details are not preserved by the Kimi target
+
 ---
 
 ## 8. What this feature does not do
@@ -1382,7 +1742,9 @@ If a new vendor or request format needs thinking compatibility in the future, th
 2. normalize it into `NormalizedReasoning`
 3. write it back using the actual upstream-supported schema
 4. only apply constraints and validity fixes to the **converted request body**
-5. always use origin-first, actual-fallback for model-capability branches
+5. document the model-name matching order for capability checks; use
+   origin-first / actual-fallback by default, but use `ActualModel` when the
+   final upstream model name determines parameter validity
 6. add tests for at least:
    - explicit disable
    - old-model vs new-model behavior

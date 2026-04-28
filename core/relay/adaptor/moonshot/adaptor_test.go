@@ -175,7 +175,7 @@ func TestConvertChatCompletionsRequestDropsReasoningForNonToggleKimiModel(t *tes
 	}
 }
 
-func newJSONRequest(t *testing.T, path string, body string) *http.Request {
+func newJSONRequest(t *testing.T, path, body string) *http.Request {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(
