@@ -1,6 +1,7 @@
 package adaptor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -71,6 +72,7 @@ type DoRequest interface {
 type DoResponseResult struct {
 	Usage      model.Usage
 	UpstreamID string // ID from response body or x-request-id header
+	AsyncUsage bool   // usage will be fetched asynchronously by upstream ID
 }
 
 type DoResponse interface {
@@ -80,6 +82,14 @@ type DoResponse interface {
 		c *gin.Context,
 		resp *http.Response,
 	) (DoResponseResult, Error)
+}
+
+type AsyncUsageFetcher interface {
+	FetchAsyncUsage(
+		ctx context.Context,
+		channel *model.Channel,
+		info *model.AsyncUsageInfo,
+	) (usage model.Usage, completed bool, err error)
 }
 
 type Adaptor interface {

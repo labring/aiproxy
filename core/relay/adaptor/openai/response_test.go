@@ -240,6 +240,142 @@ func TestResponseHandlerStoreUsesOriginModel(t *testing.T) {
 	assert.Equal(t, "gpt-5", store.saved[0].Model)
 }
 
+func TestResponseHandlerAsyncUsageInProgress(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/responses", nil)
+
+	body := `{
+		"id":"resp_async_in_progress",
+		"object":"response",
+		"created_at":1,
+		"status":"in_progress",
+		"model":"gpt-5.4",
+		"output":[],
+		"parallel_tool_calls":true,
+		"store":true,
+		"usage":null
+	}`
+	resp := &http.Response{
+		StatusCode: http.StatusCreated,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseHandler(&meta.Meta{}, &responseTestStore{}, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_async_in_progress", result.UpstreamID)
+	assert.True(t, result.AsyncUsage)
+}
+
+func TestResponseHandlerFailedDoesNotMarkAsyncUsage(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/responses", nil)
+
+	body := `{
+		"id":"resp_async_failed",
+		"object":"response",
+		"created_at":1,
+		"status":"failed",
+		"model":"gpt-5.4",
+		"output":[],
+		"parallel_tool_calls":true,
+		"store":true,
+		"usage":null
+	}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseHandler(&meta.Meta{}, &responseTestStore{}, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_async_failed", result.UpstreamID)
+	assert.False(t, result.AsyncUsage)
+}
+
+func TestResponseStreamHandlerForegroundImageGenerationContinuesToCompleted(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+
+	body := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_generating_async\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"background\":false,\"model\":\"gpt-5.4\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"image_generation\",\"background\":\"auto\",\"model\":\"gpt-image-2\"}],\"usage\":null}}\n\n" +
+		"event: response.in_progress\n" +
+		"data: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_generating_async\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"background\":false,\"model\":\"gpt-5.4\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"image_generation\",\"background\":\"auto\",\"model\":\"gpt-image-2\"}],\"usage\":null}}\n\n" +
+		"event: response.output_item.added\n" +
+		"data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"ig_generating_async\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"},\"output_index\":0,\"sequence_number\":2}\n\n" +
+		"event: response.image_generation_call.generating\n" +
+		"data: {\"type\":\"response.image_generation_call.generating\",\"item_id\":\"ig_generating_async\",\"output_index\":0,\"sequence_number\":3}\n\n" +
+		"event: keepalive\n" +
+		"data: {\"type\":\"keepalive\",\"sequence_number\":4}\n\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_generating_async\",\"object\":\"response\",\"created_at\":2,\"status\":\"completed\",\"model\":\"gpt-5.4\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"usage\":{\"input_tokens\":1,\"output_tokens\":2,\"total_tokens\":3}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseStreamHandler(&meta.Meta{}, &responseTestStore{}, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_generating_async", result.UpstreamID)
+	assert.False(t, result.AsyncUsage)
+	assert.Equal(t, model.ZeroNullInt64(3), result.Usage.TotalTokens)
+	assert.Contains(t, recorder.Body.String(), "response.image_generation_call.generating")
+	assert.Contains(t, recorder.Body.String(), "keepalive")
+	assert.Contains(t, recorder.Body.String(), "response.completed")
+}
+
+func TestResponseStreamHandlerUsesLastResponseForAsyncUsage(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/responses",
+		nil,
+	)
+
+	body := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_stream_async\",\"object\":\"response\",\"created_at\":1,\"status\":\"in_progress\",\"background\":false,\"model\":\"gpt-5.4\",\"output\":[],\"parallel_tool_calls\":true,\"store\":false,\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"image_generation\",\"background\":\"auto\",\"model\":\"gpt-image-2\"}],\"usage\":null}}\n\n" +
+		"event: response.output_item.added\n" +
+		"data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"ig_stream_async\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"},\"output_index\":0,\"sequence_number\":2}\n\n" +
+		"event: response.image_generation_call.generating\n" +
+		"data: {\"type\":\"response.image_generation_call.generating\",\"item_id\":\"ig_stream_async\",\"output_index\":0,\"sequence_number\":3}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+		Header:     make(http.Header),
+	}
+
+	result, err := ResponseStreamHandler(&meta.Meta{}, &responseTestStore{}, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "resp_stream_async", result.UpstreamID)
+	assert.True(t, result.AsyncUsage)
+	assert.Equal(t, model.ZeroNullInt64(0), result.Usage.TotalTokens)
+	assert.Contains(t, recorder.Body.String(), "response.image_generation_call.generating")
+}
+
 func TestResponseStreamHandlerWebSearchCountFromToolUsage(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -314,4 +450,41 @@ func TestResponseStreamHandlerStoreUsesOriginModel(t *testing.T) {
 	assert.Equal(t, "resp_stream_store_origin", result.UpstreamID)
 	require.Len(t, store.saved, 1)
 	assert.Equal(t, "gpt-5", store.saved[0].Model)
+}
+
+func TestVideoHandlerMarksAsyncUsage(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/video/generations/jobs",
+		nil,
+	)
+
+	m := &meta.Meta{
+		OriginModel: "sora-2",
+		ActualModel: "sora-2",
+		Group:       model.GroupCache{ID: "group-1"},
+		Token:       model.TokenCache{ID: 7},
+		Channel:     meta.ChannelMeta{ID: 9},
+	}
+	resp := &http.Response{
+		StatusCode: http.StatusCreated,
+		Body: io.NopCloser(bytes.NewBufferString(`{
+			"id":"video_job_async",
+			"object":"video.generation.job",
+			"status":"queued",
+			"model":"sora-2"
+		}`)),
+		Header: make(http.Header),
+	}
+
+	result, err := VideoHandler(m, &responseTestStore{}, c, resp)
+	require.Nil(t, err)
+	assert.Equal(t, "video_job_async", result.UpstreamID)
+	assert.True(t, result.AsyncUsage)
 }

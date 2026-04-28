@@ -365,6 +365,7 @@ func BatchRecordLogs(
 	promptCacheKey string,
 	upstreamID string,
 	serviceTier string,
+	asyncUsageStatus AsyncUsageStatus,
 	summaryServiceTier string,
 	summaryClaudeLongContext bool,
 ) (err error) {
@@ -406,6 +407,7 @@ func BatchRecordLogs(
 				promptCacheKey,
 				upstreamID,
 				serviceTier,
+				asyncUsageStatus,
 			)
 		}
 	} else {
@@ -545,6 +547,77 @@ func BatchUpdateSummary(
 	}
 }
 
+func BatchUpdateSummaryOnlyUsage(
+	now time.Time,
+	requestAt time.Time,
+	group string,
+	channelID int,
+	modelName string,
+	tokenID int,
+	tokenName string,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	summaryAt := now
+	if !requestAt.IsZero() {
+		summaryAt = requestAt
+	}
+
+	amountDecimal := decimal.NewFromFloat(amount.UsedAmount)
+
+	batchData.Lock()
+	defer batchData.Unlock()
+
+	updateChannelAmountData(channelID, amount.UsedAmount, amountDecimal)
+	updateSummaryUsageData(
+		channelID,
+		modelName,
+		summaryAt,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+	updateSummaryUsageDataMinute(
+		channelID,
+		modelName,
+		summaryAt,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+
+	updateGroupAmountData(group, amount.UsedAmount, amountDecimal)
+	updateTokenAmountData(tokenID, amount.UsedAmount, amountDecimal)
+	updateGroupSummaryUsageData(
+		group,
+		tokenName,
+		modelName,
+		summaryAt,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+	updateGroupSummaryUsageDataMinute(
+		group,
+		tokenName,
+		modelName,
+		summaryAt,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
 func updateChannelData(
 	channelID int,
 	amount float64,
@@ -570,6 +643,19 @@ func updateChannelData(
 	}
 }
 
+func updateChannelAmountData(channelID int, amount float64, amountDecimal decimal.Decimal) {
+	if channelID <= 0 || amount <= 0 {
+		return
+	}
+
+	if _, ok := batchData.Channels[channelID]; !ok {
+		batchData.Channels[channelID] = &ChannelUpdate{}
+	}
+
+	batchData.Channels[channelID].Amount = amountDecimal.
+		Add(batchData.Channels[channelID].Amount)
+}
+
 func updateGroupData(group string, amount float64, amountDecimal decimal.Decimal) {
 	if group == "" {
 		return
@@ -587,6 +673,19 @@ func updateGroupData(group string, amount float64, amountDecimal decimal.Decimal
 	batchData.Groups[group].Count++
 }
 
+func updateGroupAmountData(group string, amount float64, amountDecimal decimal.Decimal) {
+	if group == "" || amount <= 0 {
+		return
+	}
+
+	if _, ok := batchData.Groups[group]; !ok {
+		batchData.Groups[group] = &GroupUpdate{}
+	}
+
+	batchData.Groups[group].Amount = amountDecimal.
+		Add(batchData.Groups[group].Amount)
+}
+
 func updateTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal) {
 	if tokenID <= 0 {
 		return
@@ -602,6 +701,19 @@ func updateTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal)
 	}
 
 	batchData.Tokens[tokenID].Count++
+}
+
+func updateTokenAmountData(tokenID int, amount float64, amountDecimal decimal.Decimal) {
+	if tokenID <= 0 || amount <= 0 {
+		return
+	}
+
+	if _, ok := batchData.Tokens[tokenID]; !ok {
+		batchData.Tokens[tokenID] = &TokenUpdate{}
+	}
+
+	batchData.Tokens[tokenID].Amount = amountDecimal.
+		Add(batchData.Tokens[tokenID].Amount)
 }
 
 func updateGroupSummaryData(
@@ -677,6 +789,211 @@ func updateGroupSummaryData(
 
 	if usage.CacheCreationTokens > 0 {
 		groupSummary.CacheCreationCount++
+	}
+}
+
+func updateSummaryUsageData(
+	channelID int,
+	modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if channelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	summaryUnique := SummaryUnique{
+		ChannelID:     channelID,
+		Model:         modelName,
+		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
+	}
+
+	summary, ok := batchData.Summaries[summaryUnique]
+	if !ok {
+		summary = &SummaryUpdate{
+			SummaryUnique: summaryUnique,
+		}
+		batchData.Summaries[summaryUnique] = summary
+	}
+
+	addSummaryUsageOnly(&summary.SummaryData, usage, amount, serviceTier, summaryClaudeLongContext)
+}
+
+func updateSummaryUsageDataMinute(
+	channelID int,
+	modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if channelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	summaryUnique := SummaryMinuteUnique{
+		ChannelID:       channelID,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
+	}
+
+	summary, ok := batchData.SummariesMinute[summaryUnique]
+	if !ok {
+		summary = &SummaryMinuteUpdate{
+			SummaryMinuteUnique: summaryUnique,
+		}
+		batchData.SummariesMinute[summaryUnique] = summary
+	}
+
+	addSummaryUsageOnly(&summary.SummaryData, usage, amount, serviceTier, summaryClaudeLongContext)
+}
+
+func updateGroupSummaryUsageData(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	groupUnique := GroupSummaryUnique{
+		GroupID:       group,
+		TokenName:     tokenName,
+		Model:         modelName,
+		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
+	}
+
+	groupSummary, ok := batchData.GroupSummaries[groupUnique]
+	if !ok {
+		groupSummary = &GroupSummaryUpdate{
+			GroupSummaryUnique: groupUnique,
+		}
+		batchData.GroupSummaries[groupUnique] = groupSummary
+	}
+
+	addSummaryUsageOnly(
+		&groupSummary.SummaryData,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func updateGroupSummaryUsageDataMinute(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	groupUnique := GroupSummaryMinuteUnique{
+		GroupID:         group,
+		TokenName:       tokenName,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
+	}
+
+	groupSummary, ok := batchData.GroupSummariesMinute[groupUnique]
+	if !ok {
+		groupSummary = &GroupSummaryMinuteUpdate{
+			GroupSummaryMinuteUnique: groupUnique,
+		}
+		batchData.GroupSummariesMinute[groupUnique] = groupSummary
+	}
+
+	addSummaryUsageOnly(
+		&groupSummary.SummaryData,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func addSummaryUsageOnly(
+	summary *SummaryData,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	summary.Usage.Add(usage)
+	summary.Amount.Add(amount)
+
+	if usage.CachedTokens > 0 {
+		summary.CacheHitCount++
+	}
+
+	if usage.CacheCreationTokens > 0 {
+		summary.CacheCreationCount++
+	}
+
+	switch normalizeSummaryServiceTier(serviceTier) {
+	case "flex":
+		summary.ServiceTierFlex.Usage.Add(usage)
+		summary.ServiceTierFlex.Amount.Add(amount)
+
+		if usage.CachedTokens > 0 {
+			summary.ServiceTierFlex.CacheHitCount++
+		}
+
+		if usage.CacheCreationTokens > 0 {
+			summary.ServiceTierFlex.CacheCreationCount++
+		}
+	case "priority":
+		summary.ServiceTierPriority.Usage.Add(usage)
+		summary.ServiceTierPriority.Amount.Add(amount)
+
+		if usage.CachedTokens > 0 {
+			summary.ServiceTierPriority.CacheHitCount++
+		}
+
+		if usage.CacheCreationTokens > 0 {
+			summary.ServiceTierPriority.CacheCreationCount++
+		}
+	}
+
+	if summaryClaudeLongContext {
+		summary.ClaudeLongContext.Usage.Add(usage)
+		summary.ClaudeLongContext.Amount.Add(amount)
+
+		if usage.CachedTokens > 0 {
+			summary.ClaudeLongContext.CacheHitCount++
+		}
+
+		if usage.CacheCreationTokens > 0 {
+			summary.ClaudeLongContext.CacheCreationCount++
+		}
 	}
 }
 

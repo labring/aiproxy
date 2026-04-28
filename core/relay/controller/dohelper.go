@@ -16,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/conv"
-	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -143,7 +142,7 @@ func DoHelper(
 	}
 
 	log := common.GetLogger(c)
-	updateUsageMetrics(result.Usage, log)
+	updateUsageMetrics(result, log)
 
 	if result.UpstreamID != "" {
 		log.Data["upstream_id"] = result.UpstreamID
@@ -410,7 +409,8 @@ func responseBodyCaptureLimit(opt BodyDetailOption) int {
 	return int(opt.MaxResponseBodySize + 1)
 }
 
-func updateUsageMetrics(usage model.Usage, log *log.Entry) {
+func updateUsageMetrics(result adaptor.DoResponseResult, log *log.Entry) {
+	usage := result.Usage
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 	}
@@ -453,5 +453,9 @@ func updateUsageMetrics(usage model.Usage, log *log.Entry) {
 
 	if usage.WebSearchCount > 0 {
 		log.Data["t_websearch"] = usage.WebSearchCount
+	}
+
+	if result.AsyncUsage {
+		log.Data["async_usage"] = true
 	}
 }

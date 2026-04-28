@@ -107,6 +107,7 @@ func TestRecordConsumeLogPersistsWebSearchCount(t *testing.T) {
 		"",
 		"resp_test_websearch",
 		"default",
+		model.AsyncUsageStatusNone,
 	)
 	if err != nil {
 		t.Fatalf("record consume log: %v", err)
@@ -158,5 +159,187 @@ func TestRecordConsumeLogLoadsNullWebSearchCountAsZero(t *testing.T) {
 
 	if got.Usage.WebSearchCount != 0 {
 		t.Fatalf("expected web_search_count=0 for null column, got %d", got.Usage.WebSearchCount)
+	}
+}
+
+func TestCleanupFinishedAsyncUsagesKeepsPending(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.AsyncUsageInfo{}); err != nil {
+		t.Fatalf("migrate async usage info: %v", err)
+	}
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+	recentTime := time.Now()
+
+	rows := []model.AsyncUsageInfo{
+		{RequestID: "pending_old", Status: model.AsyncUsageStatusPending, UpdatedAt: oldTime},
+		{RequestID: "completed_old", Status: model.AsyncUsageStatusCompleted, UpdatedAt: oldTime},
+		{RequestID: "failed_old", Status: model.AsyncUsageStatusFailed, UpdatedAt: oldTime},
+		{
+			RequestID: "completed_recent",
+			Status:    model.AsyncUsageStatusCompleted,
+			UpdatedAt: recentTime,
+		},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed async usage info: %v", err)
+	}
+
+	if err := model.CleanupFinishedAsyncUsages(time.Hour, 100); err != nil {
+		t.Fatalf("cleanup finished async usages: %v", err)
+	}
+
+	var ids []string
+	if err := db.Model(&model.AsyncUsageInfo{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list async usage info: %v", err)
+	}
+
+	want := []string{"completed_recent", "pending_old"}
+	if len(ids) != len(want) {
+		t.Fatalf("expected remaining ids %v, got %v", want, ids)
+	}
+
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("expected remaining ids %v, got %v", want, ids)
+		}
+	}
+}
+
+func TestGetPendingAsyncUsagesOrdersByUpdatedAt(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.AsyncUsageInfo{}); err != nil {
+		t.Fatalf("migrate async usage info: %v", err)
+	}
+
+	baseTime := time.Now().Add(-time.Hour)
+
+	rows := []model.AsyncUsageInfo{
+		{
+			RequestID: "oldest",
+			Status:    model.AsyncUsageStatusPending,
+			CreatedAt: baseTime,
+			UpdatedAt: baseTime,
+		},
+		{
+			RequestID: "next",
+			Status:    model.AsyncUsageStatusPending,
+			CreatedAt: baseTime.Add(time.Second),
+			UpdatedAt: baseTime.Add(time.Second),
+		},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed async usage info: %v", err)
+	}
+
+	firstBatch, err := model.GetPendingAsyncUsages(1)
+	if err != nil {
+		t.Fatalf("get first pending async usage: %v", err)
+	}
+
+	if len(firstBatch) != 1 || firstBatch[0].RequestID != "oldest" {
+		t.Fatalf("expected oldest first, got %+v", firstBatch)
+	}
+
+	firstBatch[0].UpdatedAt = time.Now()
+	if err := model.UpdateAsyncUsageInfo(firstBatch[0]); err != nil {
+		t.Fatalf("touch first pending async usage: %v", err)
+	}
+
+	secondBatch, err := model.GetPendingAsyncUsages(1)
+	if err != nil {
+		t.Fatalf("get second pending async usage: %v", err)
+	}
+
+	if len(secondBatch) != 1 || secondBatch[0].RequestID != "next" {
+		t.Fatalf("expected next pending row after touch, got %+v", secondBatch)
+	}
+}
+
+func TestGetPendingAsyncUsagesSkipsFutureNextPollAt(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.AsyncUsageInfo{}); err != nil {
+		t.Fatalf("migrate async usage info: %v", err)
+	}
+
+	now := time.Now()
+
+	rows := []model.AsyncUsageInfo{
+		{
+			RequestID:  "due",
+			Status:     model.AsyncUsageStatusPending,
+			NextPollAt: now.Add(-time.Second),
+		},
+		{
+			RequestID:  "future",
+			Status:     model.AsyncUsageStatusPending,
+			NextPollAt: now.Add(time.Minute),
+		},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed async usage info: %v", err)
+	}
+
+	got, err := model.GetPendingAsyncUsagesDue(10, now)
+	if err != nil {
+		t.Fatalf("get pending async usages: %v", err)
+	}
+
+	if len(got) != 1 || got[0].RequestID != "due" {
+		t.Fatalf("expected only due row, got %+v", got)
+	}
+}
+
+func TestAsyncUsageBackoffDelay(t *testing.T) {
+	tests := []struct {
+		retry int
+		want  time.Duration
+	}{
+		{retry: 0, want: 10 * time.Second},
+		{retry: 1, want: 10 * time.Second},
+		{retry: 2, want: 20 * time.Second},
+		{retry: 3, want: 40 * time.Second},
+		{retry: 5, want: 160 * time.Second},
+		{retry: 6, want: 3 * time.Minute},
+		{retry: 10, want: 3 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		got := model.AsyncUsageBackoffDelay(tt.retry)
+		if got != tt.want {
+			t.Fatalf("retry %d: expected %s, got %s", tt.retry, tt.want, got)
+		}
 	}
 }

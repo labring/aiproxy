@@ -113,7 +113,10 @@ func VideoHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(responseBody)))
 	_, _ = c.Writer.Write(responseBody)
 
-	return adaptor.DoResponseResult{}, nil
+	return adaptor.DoResponseResult{
+		UpstreamID: id,
+		AsyncUsage: true,
+	}, nil
 }
 
 func VideoGetJobsHandler(

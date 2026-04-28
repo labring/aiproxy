@@ -84,6 +84,10 @@ func main() {
 
 	go task.UsageAlertTask(ctx)
 
+	log.Info("async usage poll task started")
+
+	go task.AsyncUsagePollTask(ctx)
+
 	if common.RedisEnabled {
 		log.Info("redis health check task started")
 
