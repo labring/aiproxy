@@ -222,7 +222,8 @@ func TestAdaptorConvertRequestResponsesCancelUnsupported(t *testing.T) {
 		coremodel.ModelConfig{},
 	)
 
-	_, err := adaptor.ConvertRequest(m, nil, httptest.NewRequest(
+	_, err := adaptor.ConvertRequest(m, nil, httptest.NewRequestWithContext(
+		context.Background(),
 		http.MethodPost,
 		"/v1/responses/resp_123/cancel",
 		nil,
