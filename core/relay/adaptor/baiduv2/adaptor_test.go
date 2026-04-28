@@ -18,11 +18,11 @@ import (
 func TestAdaptorSupportModeGemini(t *testing.T) {
 	adaptor := &Adaptor{}
 
-	if !adaptor.SupportMode(mode.Anthropic) {
+	if !adaptor.SupportMode(&meta.Meta{Mode: mode.Anthropic}) {
 		t.Fatal("expected Anthropic mode to be supported")
 	}
 
-	if !adaptor.SupportMode(mode.Gemini) {
+	if !adaptor.SupportMode(&meta.Meta{Mode: mode.Gemini}) {
 		t.Fatal("expected Gemini mode to be supported")
 	}
 }

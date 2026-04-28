@@ -20,7 +20,7 @@ func TestResponsesDeleteNoContentSupportedAdaptors(t *testing.T) {
 			continue
 		}
 
-		if !adaptor.SupportMode(mode.ResponsesDelete) {
+		if !adaptor.SupportMode(&meta.Meta{Mode: mode.ResponsesDelete}) {
 			continue
 		}
 

@@ -13,7 +13,9 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
+	relaymeta "github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/plugin/cachefollow"
 )
@@ -31,6 +33,30 @@ const (
 	// medium/high-error channels are penalized much more strongly.
 	errorRatePenalty = 2.0
 )
+
+func supportModeMeta(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	m mode.Mode,
+) *relaymeta.Meta {
+	modelConfig := model.ModelConfig{}
+	if mc != nil && mc.ModelConfig != nil {
+		modelConfig, _ = mc.ModelConfig.GetModelConfig(modelName)
+	}
+
+	return relaymeta.NewMeta(channel, m, modelName, modelConfig)
+}
+
+func adaptorSupportsMode(
+	a adaptor.Adaptor,
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	m mode.Mode,
+) bool {
+	return a.SupportMode(supportModeMeta(mc, channel, modelName, m))
+}
 
 func GetChannelFromHeader(
 	header string,
@@ -54,7 +80,7 @@ func GetChannelFromHeader(
 						return nil, fmt.Errorf("adaptor not found for channel %d", channel.ID)
 					}
 
-					if !a.SupportMode(m) {
+					if !adaptorSupportsMode(a, mc, channel, model, m) {
 						return nil, fmt.Errorf("channel %d not supported by adaptor", channel.ID)
 					}
 
@@ -72,7 +98,7 @@ func GetChannelFromHeader(
 						return nil, fmt.Errorf("adaptor not found for channel %d", channel.ID)
 					}
 
-					if !a.SupportMode(m) {
+					if !adaptorSupportsMode(a, mc, channel, model, m) {
 						return nil, fmt.Errorf("channel %d not supported by adaptor", channel.ID)
 					}
 
@@ -127,7 +153,7 @@ func GetChannelFromRequest(
 						)
 					}
 
-					if !a.SupportMode(m) {
+					if !adaptorSupportsMode(a, mc, channel, modelName, m) {
 						return nil, fmt.Errorf(
 							"pinned channel %d not supported by adaptor",
 							channel.ID,
@@ -164,7 +190,7 @@ func getAvailableChannels(
 					continue
 				}
 
-				if !a.SupportMode(mode) {
+				if !adaptorSupportsMode(a, mc, channel, modelName, mode) {
 					continue
 				}
 
@@ -179,7 +205,7 @@ func getAvailableChannels(
 					continue
 				}
 
-				if !a.SupportMode(mode) {
+				if !adaptorSupportsMode(a, mc, channel, modelName, mode) {
 					continue
 				}
 

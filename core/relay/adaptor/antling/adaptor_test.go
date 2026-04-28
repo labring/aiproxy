@@ -33,12 +33,12 @@ func TestAntLingAdaptorMetadata(t *testing.T) {
 func TestAntLingAdaptorSupportMode(t *testing.T) {
 	a := &antling.Adaptor{}
 
-	assert.True(t, a.SupportMode(mode.ChatCompletions))
-	assert.True(t, a.SupportMode(mode.Anthropic))
-	assert.True(t, a.SupportMode(mode.Gemini))
-	assert.False(t, a.SupportMode(mode.Completions))
-	assert.False(t, a.SupportMode(mode.Embeddings))
-	assert.False(t, a.SupportMode(mode.Responses))
+	assert.True(t, a.SupportMode(&meta.Meta{Mode: mode.ChatCompletions}))
+	assert.True(t, a.SupportMode(&meta.Meta{Mode: mode.Anthropic}))
+	assert.True(t, a.SupportMode(&meta.Meta{Mode: mode.Gemini}))
+	assert.False(t, a.SupportMode(&meta.Meta{Mode: mode.Completions}))
+	assert.False(t, a.SupportMode(&meta.Meta{Mode: mode.Embeddings}))
+	assert.False(t, a.SupportMode(&meta.Meta{Mode: mode.Responses}))
 }
 
 func TestAntLingGetRequestURLAnthropic(t *testing.T) {

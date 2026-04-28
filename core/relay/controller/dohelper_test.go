@@ -43,7 +43,7 @@ func (a testAdaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{}
 }
 
-func (a testAdaptor) SupportMode(mode.Mode) bool {
+func (a testAdaptor) SupportMode(_ *meta.Meta) bool {
 	return true
 }
 

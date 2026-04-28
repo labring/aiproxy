@@ -121,7 +121,7 @@ func ResponseStreamHandler(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if resp.StatusCode != http.StatusOK {
+	if !adaptor.IsSuccessfulResponseStatus(mode.Responses, resp.StatusCode) {
 		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 

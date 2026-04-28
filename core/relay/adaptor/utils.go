@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/bytedance/sonic"
+	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 )
 
@@ -41,4 +42,12 @@ func IsSuccessfulResponseStatus(m mode.Mode, statusCode int) bool {
 	default:
 		return statusCode == http.StatusOK
 	}
+}
+
+func ModeFromMeta(meta *meta.Meta) mode.Mode {
+	if meta == nil {
+		return mode.Unknown
+	}
+
+	return meta.Mode
 }

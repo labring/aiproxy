@@ -33,7 +33,7 @@ func TestAdaptorSupportMode(t *testing.T) {
 		mode.ResponsesInputItems,
 	}
 	for _, m := range supportedModes {
-		if !adaptor.SupportMode(m) {
+		if !adaptor.SupportMode(&meta.Meta{Mode: m}) {
 			t.Fatalf("expected mode %s to be supported", m)
 		}
 	}
@@ -43,7 +43,7 @@ func TestAdaptorSupportMode(t *testing.T) {
 		mode.ImagesGenerations,
 	}
 	for _, m := range unsupportedModes {
-		if adaptor.SupportMode(m) {
+		if adaptor.SupportMode(&meta.Meta{Mode: m}) {
 			t.Fatalf("expected mode %s to be unsupported", m)
 		}
 	}

@@ -28,7 +28,7 @@ func TestAdaptorSupportModeResponses(t *testing.T) {
 		mode.ResponsesInputItems,
 	}
 	for _, m := range supportedModes {
-		if !adaptor.SupportMode(m) {
+		if !adaptor.SupportMode(&meta.Meta{Mode: m}) {
 			t.Fatalf("expected mode %s to be supported", m)
 		}
 	}

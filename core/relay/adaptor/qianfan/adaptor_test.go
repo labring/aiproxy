@@ -23,7 +23,7 @@ import (
 func TestAdaptorSupportModeGemini(t *testing.T) {
 	adaptor := &Adaptor{}
 
-	if !adaptor.SupportMode(mode.Gemini) {
+	if !adaptor.SupportMode(&meta.Meta{Mode: mode.Gemini}) {
 		t.Fatal("expected Gemini mode to be supported")
 	}
 }
@@ -38,13 +38,52 @@ func TestAdaptorSupportModeResponses(t *testing.T) {
 		mode.ResponsesInputItems,
 	}
 	for _, m := range supportedModes {
-		if !adaptor.SupportMode(m) {
+		if !adaptor.SupportMode(&meta.Meta{
+			Mode:        m,
+			OriginModel: "deepseek-v3.2",
+			ActualModel: "mapped-model",
+		}) {
 			t.Fatalf("expected mode %s to be supported", m)
 		}
 	}
 
-	if adaptor.SupportMode(mode.ResponsesCancel) {
+	if adaptor.SupportMode(&meta.Meta{Mode: mode.ResponsesCancel}) {
 		t.Fatal("expected ResponsesCancel to be unsupported")
+	}
+}
+
+func TestAdaptorSupportModeResponsesModelWhitelist(t *testing.T) {
+	adaptor := &Adaptor{}
+
+	if !adaptor.SupportMode(&meta.Meta{
+		Mode:        mode.Responses,
+		OriginModel: "unsupported-alias",
+		ActualModel: "deepseek-v3.1-250821",
+	}) {
+		t.Fatal("expected Responses to be supported when actual model is whitelisted")
+	}
+
+	if adaptor.SupportMode(&meta.Meta{
+		Mode:        mode.Responses,
+		OriginModel: "ernie-4.5-turbo-128k",
+		ActualModel: "ernie-4.5-turbo-128k",
+	}) {
+		t.Fatal("expected Responses to be unsupported for non-whitelisted model")
+	}
+}
+
+func TestAdaptorSupportModeResponsesModelConfig(t *testing.T) {
+	adaptor := &Adaptor{}
+
+	if !adaptor.SupportMode(&meta.Meta{
+		Mode:        mode.Responses,
+		OriginModel: "custom-responses-model",
+		ActualModel: "upstream-custom-model",
+		ChannelConfigs: coremodel.ChannelConfigs{
+			"response_models": []string{"custom-responses-model"},
+		},
+	}) {
+		t.Fatal("expected Responses to be supported by channel response_models config")
 	}
 }
 
@@ -256,6 +295,10 @@ func TestAdaptorMetadataConfigSchema(t *testing.T) {
 	field, ok := properties["appid"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "string", field["type"])
+
+	field, ok = properties["response_models"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "array", field["type"])
 }
 
 func TestAdaptorConvertRequestGemini(t *testing.T) {
