@@ -3,6 +3,7 @@ package trylock
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -24,7 +25,11 @@ func cleanMemLock() {
 	for now := range ticker.C {
 		memRecord.Range(func(key, value any) bool {
 			exp, ok := value.(time.Time)
-			if !ok || now.After(exp) {
+			if !ok {
+				panic(fmt.Sprintf("mem lock type mismatch: %T", value))
+			}
+
+			if now.After(exp) {
 				memRecord.CompareAndDelete(key, value)
 			}
 
@@ -45,8 +50,7 @@ func MemLock(key string, expiration time.Duration) bool {
 
 		oldExpiration, ok := actual.(time.Time)
 		if !ok {
-			memRecord.CompareAndDelete(key, actual)
-			continue
+			panic(fmt.Sprintf("mem lock type mismatch: %T", actual))
 		}
 
 		if now.After(oldExpiration) {

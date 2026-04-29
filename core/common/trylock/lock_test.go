@@ -26,3 +26,18 @@ func TestMemLock(t *testing.T) {
 		t.Error("Expected true, Got false")
 	}
 }
+
+func TestMemLockPanicsOnTypeMismatch(t *testing.T) {
+	trylock.InjectMemLockValueForTest("panic-key", "bad")
+	t.Cleanup(func() {
+		trylock.ResetMemLockValueForTest("panic-key")
+	})
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on mem lock type mismatch")
+		}
+	}()
+
+	trylock.MemLock("panic-key", time.Second)
+}
