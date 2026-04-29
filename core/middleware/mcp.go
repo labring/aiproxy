@@ -3,7 +3,6 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -20,23 +19,18 @@ func MCPAuth(c *gin.Context) {
 		key, _ = c.GetQuery("key")
 	}
 
-	key = strings.TrimPrefix(
-		strings.TrimPrefix(key, "Bearer "),
-		"sk-",
-	)
-
 	var (
 		token            model.TokenCache
 		useInternalToken bool
 	)
 
-	if config.AdminKey != "" && config.AdminKey == key ||
-		config.InternalToken != "" && config.InternalToken == key {
+	if config.MatchEffectiveAdminKey(key) || config.MatchInternalToken(key) {
 		token = model.TokenCache{
-			Key: key,
+			Key: normalizeTokenKey(key),
 		}
 		useInternalToken = true
 	} else {
+		key = normalizeTokenKey(key)
 		tokenCache, err := model.GetAndValidateToken(key)
 		if err != nil {
 			AbortLogWithMessage(c, http.StatusUnauthorized, err.Error())

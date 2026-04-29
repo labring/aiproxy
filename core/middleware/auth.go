@@ -5,7 +5,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
@@ -39,7 +38,7 @@ func ErrorResponse(c *gin.Context, code int, message string) {
 }
 
 func AdminAuth(c *gin.Context) {
-	if config.AdminKey == "" {
+	if config.GetEffectiveAdminKey() == "" {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, admin key is not set")
 		c.Abort()
 		return
@@ -50,17 +49,14 @@ func AdminAuth(c *gin.Context) {
 		accessToken = c.Query("key")
 	}
 
-	accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-	accessToken = strings.TrimPrefix(accessToken, "sk-")
-
-	if accessToken != config.AdminKey {
+	if !config.MatchEffectiveAdminKey(accessToken) {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, no access token provided")
 		c.Abort()
 		return
 	}
 
 	c.Set(Token, &model.TokenCache{
-		Key: config.AdminKey,
+		Key: config.GetEffectiveAdminKey(),
 	})
 
 	group := c.Param("group")
@@ -75,32 +71,20 @@ func AdminAuth(c *gin.Context) {
 func TokenAuth(c *gin.Context) {
 	log := common.GetLogger(c)
 
-	key := c.Request.Header.Get("Authorization")
-	if key == "" {
-		key = c.Request.Header.Get("X-Api-Key")
-	}
-
-	if key == "" {
-		key = c.Request.Header.Get("X-Goog-Api-Key")
-	}
-
-	key = strings.TrimPrefix(
-		strings.TrimPrefix(key, "Bearer "),
-		"sk-",
-	)
+	key := requestToken(c.Request.Header)
 
 	var (
 		token            model.TokenCache
 		useInternalToken bool
 	)
 
-	if config.AdminKey != "" && config.AdminKey == key ||
-		config.InternalToken != "" && config.InternalToken == key {
+	if config.MatchEffectiveAdminKey(key) || config.MatchInternalToken(key) {
 		token = model.TokenCache{
-			Key: key,
+			Key: normalizeTokenKey(key),
 		}
 		useInternalToken = true
 	} else {
+		key = normalizeTokenKey(key)
 		tokenCache, err := model.GetAndValidateToken(key)
 		if err != nil {
 			oncall.AlertDBError("TokenAuth", err)
@@ -306,4 +290,24 @@ func maskTokenKey(key string) string {
 		return "*****"
 	}
 	return key[:4] + "*****" + key[len(key)-4:]
+}
+
+func requestToken(headers http.Header) string {
+	if key := headers.Get("Authorization"); key != "" {
+		return key
+	}
+	if key := headers.Get("X-Api-Key"); key != "" {
+		return key
+	}
+	return headers.Get("X-Goog-Api-Key")
+}
+
+func normalizeTokenKey(key string) string {
+	if len(key) >= 7 && key[:7] == "Bearer " {
+		key = key[7:]
+	}
+	if len(key) >= 3 && key[:3] == "sk-" {
+		key = key[3:]
+	}
+	return key
 }
