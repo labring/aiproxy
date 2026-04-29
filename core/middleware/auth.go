@@ -38,7 +38,7 @@ func ErrorResponse(c *gin.Context, code int, message string) {
 }
 
 func AdminAuth(c *gin.Context) {
-	if config.GetAdminKey() == "" {
+	if config.GetEffectiveAdminKey() == "" {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, admin key is not set")
 		c.Abort()
 		return
@@ -49,14 +49,14 @@ func AdminAuth(c *gin.Context) {
 		accessToken = c.Query("key")
 	}
 
-	if !config.MatchAdminKey(accessToken) {
+	if !config.MatchEffectiveAdminKey(accessToken) {
 		ErrorResponse(c, http.StatusUnauthorized, "unauthorized, no access token provided")
 		c.Abort()
 		return
 	}
 
 	c.Set(Token, &model.TokenCache{
-		Key: config.GetAdminKey(),
+		Key: config.GetEffectiveAdminKey(),
 	})
 
 	group := c.Param("group")
@@ -78,7 +78,7 @@ func TokenAuth(c *gin.Context) {
 		useInternalToken bool
 	)
 
-	if config.MatchAdminKey(key) || config.MatchInternalToken(key) {
+	if config.MatchEffectiveAdminKey(key) || config.MatchInternalToken(key) {
 		token = model.TokenCache{
 			Key: key,
 		}

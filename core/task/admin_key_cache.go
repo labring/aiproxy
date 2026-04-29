@@ -2,9 +2,6 @@ package task
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"os"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
@@ -14,14 +11,14 @@ import (
 )
 
 const (
-	adminKeyCachePrefix   = "admin:key"
-	adminKeySyncInterval  = 500 * time.Millisecond
-	adminKeyCacheInitWait = 5 * time.Second
-	adminKeyCacheOpWait   = 2 * time.Second
+	dynamicRemoteAdminKeyRedisKey = "dynamic-remote-admin-key"
+	adminKeySyncInterval          = 500 * time.Millisecond
+	adminKeyCacheInitWait         = 5 * time.Second
+	adminKeyCacheOpWait           = 2 * time.Second
 )
 
 func AdminKeyCacheEnabled() bool {
-	return common.RedisEnabled && common.RDB != nil && adminKeyCacheScope() != ""
+	return common.RedisEnabled && common.RDB != nil
 }
 
 func InitAdminKeyCache(ctx context.Context) error {
@@ -64,10 +61,10 @@ func syncAdminKeyCacheOnce(ctx context.Context) error {
 		return err
 	}
 
-	localAdminKey := config.GetAdminKey()
+	localAdminKey := config.GetEffectiveAdminKey()
 	if cachedAdminKey != "" {
 		if cachedAdminKey != localAdminKey {
-			config.SetAdminKey(cachedAdminKey)
+			config.SetDynamicRemoteAdminKey(cachedAdminKey)
 			log.Info("admin key loaded from redis")
 		}
 
@@ -92,7 +89,7 @@ func syncAdminKeyCacheOnce(ctx context.Context) error {
 		return err
 	}
 	if cachedAdminKey != "" && cachedAdminKey != localAdminKey {
-		config.SetAdminKey(cachedAdminKey)
+		config.SetDynamicRemoteAdminKey(cachedAdminKey)
 		log.Info("admin key loaded from redis")
 	}
 
@@ -112,19 +109,5 @@ func loadCachedAdminKey(ctx context.Context) (string, error) {
 }
 
 func getAdminKeyCacheKey() string {
-	scopeHash := sha256.Sum256([]byte(adminKeyCacheScope()))
-	return common.RedisKeyf("%s:%s", adminKeyCachePrefix, hex.EncodeToString(scopeHash[:]))
-}
-
-func adminKeyCacheScope() string {
-	switch {
-	case config.GetInternalToken() != "":
-		return "internal-token:" + config.GetInternalToken()
-	case os.Getenv("SEALOS_JWT_KEY") != "":
-		return "sealos-jwt:" + os.Getenv("SEALOS_JWT_KEY")
-	case config.RedisKeyPrefix != "":
-		return "redis-prefix:" + config.RedisKeyPrefix
-	default:
-		return ""
-	}
+	return common.RedisKey(dynamicRemoteAdminKeyRedisKey)
 }

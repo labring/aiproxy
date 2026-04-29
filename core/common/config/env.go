@@ -16,27 +16,29 @@ type tokenVariants struct {
 }
 
 var (
-	DebugEnabled         bool
-	DebugSQLEnabled      bool
-	DisableAutoMigrateDB bool
-	AdminKey             string
-	WebPath              string
-	DisableWeb           bool
-	DisableWebRoot       bool
-	FfmpegEnabled        bool
-	InternalToken        string
-	DisableModelConfig   bool
-	Redis                string
-	RedisKeyPrefix       string
-	ConfigFilePath       string
+	DebugEnabled          bool
+	DebugSQLEnabled       bool
+	DisableAutoMigrateDB  bool
+	AdminKey              string
+	DynamicRemoteAdminKey string
+	WebPath               string
+	DisableWeb            bool
+	DisableWebRoot        bool
+	FfmpegEnabled         bool
+	InternalToken         string
+	DisableModelConfig    bool
+	Redis                 string
+	RedisKeyPrefix        string
+	ConfigFilePath        string
 
 	// OnCall Lark configuration for urgent alerts
 	OnCallLarkAppID     string
 	OnCallLarkAppSecret string
 	OnCallLarkOpenIDs   []string // comma-separated open IDs
 
-	adminKeyState      atomic.Value
-	internalTokenState atomic.Value
+	adminKeyState              atomic.Value
+	dynamicRemoteAdminKeyState atomic.Value
+	internalTokenState         atomic.Value
 )
 
 func buildTokenVariants(token string) tokenVariants {
@@ -59,6 +61,12 @@ func SetAdminKey(key string) {
 	adminKeyState.Store(v)
 }
 
+func SetDynamicRemoteAdminKey(key string) {
+	v := buildTokenVariants(key)
+	DynamicRemoteAdminKey = v.raw
+	dynamicRemoteAdminKeyState.Store(v)
+}
+
 func SetInternalToken(token string) {
 	v := buildTokenVariants(token)
 	InternalToken = v.raw
@@ -70,13 +78,38 @@ func GetAdminKey() string {
 	return v.raw
 }
 
+func GetDynamicRemoteAdminKey() string {
+	v, _ := dynamicRemoteAdminKeyState.Load().(tokenVariants)
+	return v.raw
+}
+
+func GetEffectiveAdminKey() string {
+	if key := GetDynamicRemoteAdminKey(); key != "" {
+		return key
+	}
+
+	return GetAdminKey()
+}
+
 func GetInternalToken() string {
 	v, _ := internalTokenState.Load().(tokenVariants)
 	return v.raw
 }
 
 func MatchAdminKey(raw string) bool {
-	v, _ := adminKeyState.Load().(tokenVariants)
+	return matchTokenVariants(raw, adminKeyState)
+}
+
+func MatchEffectiveAdminKey(raw string) bool {
+	if GetDynamicRemoteAdminKey() != "" {
+		return matchTokenVariants(raw, dynamicRemoteAdminKeyState)
+	}
+
+	return matchTokenVariants(raw, adminKeyState)
+}
+
+func matchTokenVariants(raw string, state atomic.Value) bool {
+	v, _ := state.Load().(tokenVariants)
 	return raw != "" && (raw == v.raw ||
 		raw == v.bearer ||
 		raw == v.sk ||
@@ -84,11 +117,7 @@ func MatchAdminKey(raw string) bool {
 }
 
 func MatchInternalToken(raw string) bool {
-	v, _ := internalTokenState.Load().(tokenVariants)
-	return raw != "" && (raw == v.raw ||
-		raw == v.bearer ||
-		raw == v.sk ||
-		raw == v.bearerSK)
+	return matchTokenVariants(raw, internalTokenState)
 }
 
 func ReloadEnv() {
@@ -96,6 +125,7 @@ func ReloadEnv() {
 	DebugSQLEnabled = env.Bool("DEBUG_SQL", false)
 	DisableAutoMigrateDB = env.Bool("DISABLE_AUTO_MIGRATE_DB", false)
 	SetAdminKey(os.Getenv("ADMIN_KEY"))
+	SetDynamicRemoteAdminKey("")
 	WebPath = os.Getenv("WEB_PATH")
 	DisableWeb = env.Bool("DISABLE_WEB", false)
 	DisableWebRoot = env.Bool("DISABLE_WEB_ROOT", false)

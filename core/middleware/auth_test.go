@@ -3,6 +3,8 @@ package middleware
 import (
 	"net/http"
 	"testing"
+
+	"github.com/labring/aiproxy/core/common/config"
 )
 
 func TestRequestToken(t *testing.T) {
@@ -88,5 +90,33 @@ func TestNormalizeTokenKey(t *testing.T) {
 				t.Fatalf("normalizeTokenKey() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestEffectiveAdminKeyUsesDynamicRemoteKey(t *testing.T) {
+	oldAdminKey := config.GetAdminKey()
+	oldDynamicRemoteAdminKey := config.GetDynamicRemoteAdminKey()
+	t.Cleanup(func() {
+		config.SetAdminKey(oldAdminKey)
+		config.SetDynamicRemoteAdminKey(oldDynamicRemoteAdminKey)
+	})
+
+	config.SetAdminKey("static-admin")
+	config.SetDynamicRemoteAdminKey("dynamic-admin")
+
+	if config.GetAdminKey() != "static-admin" {
+		t.Fatalf("GetAdminKey() = %q, want static-admin", config.GetAdminKey())
+	}
+	if config.GetEffectiveAdminKey() != "dynamic-admin" {
+		t.Fatalf("GetEffectiveAdminKey() = %q, want dynamic-admin", config.GetEffectiveAdminKey())
+	}
+	if !config.MatchEffectiveAdminKey("dynamic-admin") {
+		t.Fatal("dynamic admin key should match effective admin key")
+	}
+	if config.MatchEffectiveAdminKey("static-admin") {
+		t.Fatal("static admin key should not match while dynamic admin key is active")
+	}
+	if config.MatchAdminKey("dynamic-admin") {
+		t.Fatal("dynamic admin key should not mutate static admin key matching")
 	}
 }
