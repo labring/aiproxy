@@ -91,7 +91,7 @@ func TestAntLingSetupRequestHeaderAnthropic(t *testing.T) {
 		nil,
 	)
 	ctx.Request.Header.Set("Anthropic-Version", "2023-06-01")
-	ctx.Request.Header.Set("Anthropic-Beta", "test-beta")
+	ctx.Request.Header.Set("Anthropic-Beta", "computer-use-2025-01-24")
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -111,5 +111,5 @@ func TestAntLingSetupRequestHeaderAnthropic(t *testing.T) {
 	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
 	assert.Equal(t, "test-key", req.Header.Get("X-Api-Key"))
 	assert.Equal(t, "2023-06-01", req.Header.Get("Anthropic-Version"))
-	assert.Equal(t, "test-beta", req.Header.Get("Anthropic-Beta"))
+	assert.Equal(t, "computer-use-2025-01-24", req.Header.Get("Anthropic-Beta"))
 }
