@@ -42,10 +42,6 @@ func main() {
 
 	config.ReloadEnv()
 
-	if err := ensureAdminKey(); err != nil {
-		log.Warn("failed to ensure AdminKey: " + err.Error())
-	}
-
 	common.InitLog(log.StandardLogger(), config.DebugEnabled)
 
 	printLoadedEnvFiles()
@@ -92,6 +88,12 @@ func main() {
 		log.Info("redis health check task started")
 
 		go task.RedisHealthCheckTask(ctx)
+	}
+
+	if task.AdminKeyCacheEnabled() {
+		log.Info("admin key cache task started")
+
+		go task.AdminKeyCacheTask(ctx)
 	}
 
 	log.Info("update channels balance task started")

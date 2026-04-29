@@ -24,6 +24,7 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/router"
+	"github.com/labring/aiproxy/core/task"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,6 +33,10 @@ func initializeServices(pprofPort int) error {
 	initializeNotifier()
 
 	if err := common.InitRedisClient(); err != nil {
+		return err
+	}
+
+	if err := initializeAdminKey(); err != nil {
 		return err
 	}
 
@@ -51,6 +56,18 @@ func initializeServices(pprofPort int) error {
 	}
 
 	return model.InitLogDB(int(config.GetCleanLogBatchSize()))
+}
+
+func initializeAdminKey() error {
+	if err := task.InitAdminKeyCache(context.Background()); err != nil {
+		return err
+	}
+
+	if err := ensureAdminKey(); err != nil {
+		log.Warn("failed to ensure AdminKey: " + err.Error())
+	}
+
+	return task.InitAdminKeyCache(context.Background())
 }
 
 func initializePprof(pprofPort int) {
@@ -219,7 +236,7 @@ func writeToEnvFile(envFile, key, value string) error {
 }
 
 func ensureAdminKey() error {
-	if config.AdminKey != "" {
+	if config.GetAdminKey() != "" {
 		log.Info("AdminKey is already set")
 		return nil
 	}
@@ -235,7 +252,7 @@ func ensureAdminKey() error {
 		envFile = absEnvFile
 	}
 
-	if err := writeToEnvFile(envFile, "ADMIN_KEY", config.AdminKey); err != nil {
+	if err := writeToEnvFile(envFile, "ADMIN_KEY", config.GetAdminKey()); err != nil {
 		return fmt.Errorf("failed to write AdminKey to %s: %w", envFile, err)
 	}
 
