@@ -26,7 +26,7 @@ func MCPAuth(c *gin.Context) {
 
 	if config.MatchEffectiveAdminKey(key) || config.MatchInternalToken(key) {
 		token = model.TokenCache{
-			Key: key,
+			Key: normalizeTokenKey(key),
 		}
 		useInternalToken = true
 	} else {

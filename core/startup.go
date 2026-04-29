@@ -60,14 +60,18 @@ func initializeServices(pprofPort int) error {
 
 func initializeAdminKey() error {
 	if err := task.InitAdminKeyCache(context.Background()); err != nil {
-		return err
+		log.Warn("failed to initialize AdminKey cache: " + err.Error())
 	}
 
 	if err := ensureAdminKey(); err != nil {
 		log.Warn("failed to ensure AdminKey: " + err.Error())
 	}
 
-	return task.InitAdminKeyCache(context.Background())
+	if err := task.InitAdminKeyCache(context.Background()); err != nil {
+		log.Warn("failed to refresh AdminKey cache: " + err.Error())
+	}
+
+	return nil
 }
 
 func initializePprof(pprofPort int) {
