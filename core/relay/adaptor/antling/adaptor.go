@@ -107,13 +107,7 @@ func (a *Adaptor) SetupRequestHeader(
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 
 	if rawBetas := c.Request.Header.Get(anthropic.AnthropicBeta); rawBetas != "" {
-		req.Header.Set(
-			anthropic.AnthropicBeta,
-			anthropic.FixBetasStringWithModel(
-				anthropic.ResolveModelName(meta.OriginModel, meta.ActualModel),
-				rawBetas,
-			),
-		)
+		req.Header.Set(anthropic.AnthropicBeta, rawBetas)
 	}
 
 	return nil

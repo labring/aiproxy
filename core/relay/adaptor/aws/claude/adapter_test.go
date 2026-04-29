@@ -111,3 +111,49 @@ func TestHandleAnthropicRequest_PreservesLegacyThinkingForOldModels(t *testing.T
 	require.True(t, hasOutputConfig)
 	assert.Equal(t, "low", outputConfig["effort"])
 }
+
+func TestHandleAnthropicRequest_ContextManagementUsesResolvedModel(t *testing.T) {
+	m := meta.NewMeta(nil, mode.Anthropic, "claude-sonnet-4-6", coremodel.ModelConfig{})
+	m.ActualModel = "claude-opus-4-7"
+
+	reqBody := map[string]any{
+		"model":      "claude-sonnet-4-6",
+		"max_tokens": 4096,
+		"messages": []map[string]any{
+			{"role": "user", "content": "hello"},
+		},
+		"context_management": map[string]any{
+			"edits": []map[string]any{
+				{"type": "clear_tool_uses_20250919"},
+				{"type": "unsupported"},
+			},
+		},
+	}
+
+	data, err := sonic.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/messages",
+		bytes.NewBuffer(data),
+	)
+	require.NoError(t, err)
+
+	adaptor := &awsa.Adaptor{}
+	_, err = adaptor.ConvertRequest(m, nil, req)
+	require.NoError(t, err)
+
+	converted, ok := m.Get(awsa.ConvertedRequest)
+	require.True(t, ok)
+
+	body, ok := converted.([]byte)
+	require.True(t, ok)
+
+	var awsReq map[string]any
+	require.NoError(t, sonic.Unmarshal(body, &awsReq))
+
+	_, ok = awsReq["context_management"]
+	assert.False(t, ok)
+}
