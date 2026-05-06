@@ -22,7 +22,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/labring/aiproxy/mcp-servers v0.0.0-20260420071417-32c766cc0b84
 	github.com/labring/aiproxy/openapi-mcp v0.0.0-20260420071417-32c766cc0b84
-	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
+	github.com/larksuite/oapi-sdk-go/v3 v3.6.1
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/maruel/natural v1.3.0
 	github.com/mattn/go-isatty v0.0.21
