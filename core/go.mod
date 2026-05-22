@@ -40,7 +40,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/tiktoken-go/tokenizer v0.7.0
-	golang.org/x/image v0.40.0
+	golang.org/x/image v0.41.0
 	golang.org/x/net v0.54.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
