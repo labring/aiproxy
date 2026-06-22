@@ -31,7 +31,7 @@ jobs:
     name: Release Web
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Use Node.js 22
         uses: actions/setup-node@v6
@@ -76,7 +76,7 @@ jobs:
             EXT: .exe
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
@@ -183,7 +183,7 @@ jobs:
           password: ${{ secrets.ALIYUN_PASSWORD }}
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -298,7 +298,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' && github.actor != 'dependabot[bot]' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: install cache images tools
         run: |
           sudo bash ./.github/scripts/install.sh
