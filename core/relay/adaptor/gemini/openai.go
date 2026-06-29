@@ -154,6 +154,22 @@ func autoImageURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
 	return cfg.DisableAutoImageURLToBase64
 }
 
+func autoAudioURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
+	if meta != nil && meta.Channel.Type == model.ChannelTypeVertexAI {
+		return false
+	}
+
+	return cfg.DisableAutoAudioURLToBase64
+}
+
+func autoVideoURLToBase64Disabled(meta *meta.Meta, cfg Config) bool {
+	if meta != nil && meta.Channel.Type == model.ChannelTypeVertexAI {
+		return false
+	}
+
+	return cfg.DisableAutoVideoURLToBase64
+}
+
 type CountTokensResponse struct {
 	Error       *relaymodel.GeminiError `json:"error,omitempty"`
 	TotalTokens int                     `json:"totalTokens"`
@@ -445,6 +461,11 @@ func buildMessageParts(
 func buildGeminiMediaPart(data, uri, format, mediaType string) *relaymodel.GeminiPart {
 	part := &relaymodel.GeminiPart{}
 
+	if uri == "" && isHTTPURL(data) {
+		uri = data
+		data = ""
+	}
+
 	if data != "" {
 		if mimeType, base64Data, ok := parseMediaDataURL(data, mediaType); ok {
 			part.InlineData = &relaymodel.GeminiInlineData{
@@ -564,6 +585,10 @@ func firstNonEmpty(values ...string) string {
 	}
 
 	return ""
+}
+
+func isHTTPURL(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://")
 }
 
 func parseToolCallArguments(arguments string) map[string]any {
@@ -1045,12 +1070,14 @@ func convertRequest(
 	meta.Set("stream", textRequest.Stream)
 
 	disableAutoImageURLToBase64 := autoImageURLToBase64Disabled(meta, adaptorConfig)
+	disableAutoAudioURLToBase64 := autoAudioURLToBase64Disabled(meta, adaptorConfig)
+	disableAutoVideoURLToBase64 := autoVideoURLToBase64Disabled(meta, adaptorConfig)
 
 	systemContent, contents, imageTasks, audioTasks, videoTasks := buildContents(
 		textRequest,
 		!disableAutoImageURLToBase64,
-		!adaptorConfig.DisableAutoAudioURLToBase64,
-		!adaptorConfig.DisableAutoVideoURLToBase64,
+		!disableAutoAudioURLToBase64,
+		!disableAutoVideoURLToBase64,
 	)
 
 	// Process image tasks concurrently

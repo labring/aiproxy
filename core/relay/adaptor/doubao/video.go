@@ -126,6 +126,10 @@ func (audio *doubaoOpenAIInputAudio) DoubaoURL() *doubaoVideoURLContent {
 		return &doubaoVideoURLContent{URL: data}
 	}
 
+	if strings.HasPrefix(data, "http://") || strings.HasPrefix(data, "https://") {
+		return &doubaoVideoURLContent{URL: data}
+	}
+
 	format := strings.TrimSpace(strings.ToLower(audio.Format))
 	if format == "" {
 		format = "wav"

@@ -3,4 +3,4 @@ core
 core.exe
 /public/dist/*
 !*.gitkeep
-.env.local
+**/*.local

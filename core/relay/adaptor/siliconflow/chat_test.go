@@ -30,6 +30,7 @@ func TestConvertRequestChatPatchesInputAudioToAudioURL(t *testing.T) {
 					{"type":"text","text":"Transcribe this audio."},
 					{"type":"input_audio","input_audio":{"data":"QUJD","format":"wav"}},
 					{"type":"input_audio","input_audio":{"url":"https://example.com/audio.mp3"}},
+					{"type":"input_audio","input_audio":{"data":"https://example.com/audio.wav","format":"wav"}},
 					{
 						"type":"video_url",
 						"video_url":{
@@ -66,14 +67,15 @@ func TestConvertRequestChatPatchesInputAudioToAudioURL(t *testing.T) {
 	}
 
 	content, ok := message["content"].([]any)
-	if !ok || len(content) != 4 {
-		t.Fatalf("expected four content items, got %#v", message["content"])
+	if !ok || len(content) != 5 {
+		t.Fatalf("expected five content items, got %#v", message["content"])
 	}
 
 	assertSiliconFlowTextContent(t, content[0], "Transcribe this audio.")
 	assertSiliconFlowAudioURL(t, content[1], "data:audio/wav;base64,QUJD")
 	assertSiliconFlowAudioURL(t, content[2], "https://example.com/audio.mp3")
-	assertSiliconFlowVideoURL(t, content[3])
+	assertSiliconFlowAudioURL(t, content[3], "https://example.com/audio.wav")
+	assertSiliconFlowVideoURL(t, content[4])
 
 	streamOptions, ok := got["stream_options"].(map[string]any)
 	if !ok || streamOptions["include_usage"] != true {

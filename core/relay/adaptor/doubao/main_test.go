@@ -823,7 +823,7 @@ func TestAdaptorConvertRequestVideoGenerationMapsOpenAIFields(t *testing.T) {
 			"n_seconds": 5,
 			"input_reference": "https://example.com/reference.png",
 			"video_url": "https://example.com/reference.mp4",
-			"input_audio": {"data": "AAAA", "format": "wav"},
+			"input_audio": {"data": "https://example.com/audio.wav", "format": "wav"},
 			"generate_audio": true,
 			"watermark": false
 		}`),
@@ -867,7 +867,7 @@ func TestAdaptorConvertRequestVideoGenerationMapsOpenAIFields(t *testing.T) {
 	assertDoubaoVideoContent(t, content[0], "text", "", "Animate a calm ocean")
 	assertDoubaoVideoContent(t, content[1], "image_url", "https://example.com/reference.png", "")
 	assertDoubaoVideoContent(t, content[2], "video_url", "https://example.com/reference.mp4", "")
-	assertDoubaoVideoContent(t, content[3], "audio_url", "data:audio/wav;base64,AAAA", "")
+	assertDoubaoVideoContent(t, content[3], "audio_url", "https://example.com/audio.wav", "")
 
 	usageContext := doubaoVideoRequestUsageContext(m)
 	if usageContext.InputVideo == nil || !*usageContext.InputVideo ||

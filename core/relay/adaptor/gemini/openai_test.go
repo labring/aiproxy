@@ -1011,6 +1011,79 @@ func TestConvertRequestAutoConvertsAudioAndVideoURLs(t *testing.T) {
 	assert.Nil(t, geminiReq.Contents[0].Parts[1].FileData)
 }
 
+func TestConvertRequestAutoConvertsAudioHTTPDataURL(t *testing.T) {
+	t.Parallel()
+
+	audioData := []byte("audio bytes")
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/audio.wav", r.URL.Path)
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = w.Write(audioData)
+	}))
+	defer ts.Close()
+
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+
+	openAIReq := map[string]any{
+		"model": "gemini-2.5-flash",
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "input_audio",
+						"input_audio": map[string]any{
+							"data":   ts.URL + "/audio.wav",
+							"format": "wav",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := sonic.Marshal(openAIReq)
+	assert.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+	assert.NoError(t, err)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, err := io.ReadAll(result.Body)
+	assert.NoError(t, err)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.Len(t, geminiReq.Contents, 1)
+	assert.Len(t, geminiReq.Contents[0].Parts, 1)
+	assert.NotNil(t, geminiReq.Contents[0].Parts[0].InlineData)
+	assert.Equal(t, "audio/wav", geminiReq.Contents[0].Parts[0].InlineData.MimeType)
+	assert.Equal(
+		t,
+		base64.StdEncoding.EncodeToString(audioData),
+		geminiReq.Contents[0].Parts[0].InlineData.Data,
+	)
+	assert.Nil(t, geminiReq.Contents[0].Parts[0].FileData)
+}
+
 func TestConvertRequestCanDisableAudioAndVideoURLAutoBase64(t *testing.T) {
 	t.Parallel()
 
@@ -1090,6 +1163,105 @@ func TestConvertRequestCanDisableAudioAndVideoURLAutoBase64(t *testing.T) {
 		"https://example.com/video.mp4",
 		geminiReq.Contents[0].Parts[1].FileData.FileURI,
 	)
+}
+
+func TestConvertRequestVertexAIAlwaysConvertsAudioAndVideoURLs(t *testing.T) {
+	t.Parallel()
+
+	audioData := []byte("audio bytes")
+	videoData := []byte("video bytes")
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/audio.wav":
+			w.Header().Set("Content-Type", "audio/wav")
+			_, _ = w.Write(audioData)
+		case "/video.mp4":
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = w.Write(videoData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+		Configs: model.ChannelConfigs{
+			"disable_auto_audio_url_to_base64": true,
+			"disable_auto_video_url_to_base64": true,
+		},
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+
+	openAIReq := map[string]any{
+		"model": "gemini-2.5-flash",
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "input_audio",
+						"input_audio": map[string]any{
+							"data":   ts.URL + "/audio.wav",
+							"format": "wav",
+						},
+					},
+					{
+						"type": "video_url",
+						"video_url": map[string]any{
+							"url": ts.URL + "/video.mp4",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := sonic.Marshal(openAIReq)
+	assert.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+	assert.NoError(t, err)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, err := io.ReadAll(result.Body)
+	assert.NoError(t, err)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	err = json.Unmarshal(bodyBytes, &geminiReq)
+	assert.NoError(t, err)
+	assert.Len(t, geminiReq.Contents, 1)
+	assert.Len(t, geminiReq.Contents[0].Parts, 2)
+	assert.NotNil(t, geminiReq.Contents[0].Parts[0].InlineData)
+	assert.Equal(t, "audio/wav", geminiReq.Contents[0].Parts[0].InlineData.MimeType)
+	assert.Equal(
+		t,
+		base64.StdEncoding.EncodeToString(audioData),
+		geminiReq.Contents[0].Parts[0].InlineData.Data,
+	)
+	assert.Nil(t, geminiReq.Contents[0].Parts[0].FileData)
+	assert.NotNil(t, geminiReq.Contents[0].Parts[1].InlineData)
+	assert.Equal(t, "video/mp4", geminiReq.Contents[0].Parts[1].InlineData.MimeType)
+	assert.Equal(
+		t,
+		base64.StdEncoding.EncodeToString(videoData),
+		geminiReq.Contents[0].Parts[1].InlineData.Data,
+	)
+	assert.Nil(t, geminiReq.Contents[0].Parts[1].FileData)
 }
 
 func TestProcessMediaTasksKeepsFileDataWhenConversionFails(t *testing.T) {

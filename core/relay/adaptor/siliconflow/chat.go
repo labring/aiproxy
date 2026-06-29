@@ -168,7 +168,7 @@ func openAIInputAudioURL(item *ast.Node) (string, bool, error) {
 		return "", false, nil
 	}
 
-	if strings.HasPrefix(data, "data:audio/") {
+	if isOpenAIInputAudioURL(data) || strings.HasPrefix(data, "data:audio/") {
 		return data, true, nil
 	}
 
@@ -208,12 +208,20 @@ func openAIInputAudioDataURL(inputAudio *relaymodel.InputAudio) string {
 		return data
 	}
 
+	if isOpenAIInputAudioURL(data) {
+		return data
+	}
+
 	format := strings.TrimPrefix(strings.TrimSpace(strings.ToLower(inputAudio.Format)), ".")
 	if format == "" {
 		format = "wav"
 	}
 
 	return "data:audio/" + format + ";base64," + data
+}
+
+func isOpenAIInputAudioURL(value string) bool {
+	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
 func newSiliconFlowAudioURLContent(audioURL string) ast.Node {
