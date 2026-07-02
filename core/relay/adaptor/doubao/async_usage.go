@@ -148,7 +148,12 @@ func doubaoVideoAsyncMetadataFromStore(
 	}
 
 	for _, storeID := range storeIDs {
-		cache, err := store.GetStore(info.GroupID, info.TokenID, storeID)
+		cache, err := store.GetStoreByScope(
+			info.GroupID,
+			info.TokenID,
+			storeID,
+			coremodel.ChannelScopeGlobal,
+		)
 		if err != nil || cache.Metadata == "" {
 			continue
 		}

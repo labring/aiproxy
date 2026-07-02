@@ -21,9 +21,16 @@ type recordingStore struct {
 	stores          map[string]adaptor.StoreCache
 	saved           []adaptor.StoreCache
 	savedIfNotExist []adaptor.StoreCache
+	saveScope       model.ChannelScope
+	saveIfScope     model.ChannelScope
 }
 
-func (s *recordingStore) GetStore(_ string, _ int, id string) (adaptor.StoreCache, error) {
+func (s *recordingStore) GetStoreByScope(
+	_ string,
+	_ int,
+	id string,
+	_ model.ChannelScope,
+) (adaptor.StoreCache, error) {
 	if s.stores == nil {
 		return adaptor.StoreCache{}, model.NotFoundError(model.ErrStoreNotFound)
 	}
@@ -36,7 +43,12 @@ func (s *recordingStore) GetStore(_ string, _ int, id string) (adaptor.StoreCach
 	return store, nil
 }
 
-func (s *recordingStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *recordingStore) SaveStore(
+	cache adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	s.saveScope = scope
+
 	if s.stores == nil {
 		s.stores = make(map[string]adaptor.StoreCache)
 	}
@@ -49,6 +61,7 @@ func (s *recordingStore) SaveStore(cache adaptor.StoreCache) error {
 
 func (s *recordingStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	scope model.ChannelScope,
 	opt adaptor.SaveStoreOption,
 ) error {
 	if existing, ok := s.stores[cache.ID]; ok &&
@@ -58,10 +71,15 @@ func (s *recordingStore) SaveStoreWithOption(
 		return nil
 	}
 
-	return s.SaveStore(cache)
+	return s.SaveStore(cache, scope)
 }
 
-func (s *recordingStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *recordingStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	s.saveIfScope = scope
+
 	if s.stores == nil {
 		s.stores = make(map[string]adaptor.StoreCache)
 	}

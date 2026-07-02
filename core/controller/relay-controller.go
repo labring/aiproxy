@@ -47,6 +47,38 @@ type (
 	ValidateRequest func(*gin.Context, model.ModelConfig) error
 )
 
+var (
+	errRelayModeMismatch   = errors.New("relay mode mismatch")
+	errModelConfigNotFound = errors.New("model config not found")
+)
+
+type relayModeMismatchError struct {
+	modelName string
+}
+
+func (e relayModeMismatchError) Error() string {
+	return fmt.Sprintf("The model `%s` does not exist on this endpoint.", e.modelName)
+}
+
+func (e relayModeMismatchError) Is(target error) bool {
+	return target == errRelayModeMismatch
+}
+
+type modelConfigNotFoundError struct {
+	modelName string
+}
+
+func (e modelConfigNotFoundError) Error() string {
+	return fmt.Sprintf(
+		"The model `%s` does not exist or you do not have access to it.",
+		e.modelName,
+	)
+}
+
+func (e modelConfigNotFoundError) Is(target error) bool {
+	return target == errModelConfigNotFound
+}
+
 type RelayController struct {
 	GetRequestUsage GetRequestUsage
 	GetRequestPrice GetRequestPrice
@@ -58,8 +90,13 @@ var AdaptorStore adaptor.Store = &storeImpl{}
 
 type storeImpl struct{}
 
-func (s *storeImpl) GetStore(group string, tokenID int, id string) (adaptor.StoreCache, error) {
-	store, err := model.CacheGetStore(group, tokenID, id)
+func (s *storeImpl) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	scope model.ChannelScope,
+) (adaptor.StoreCache, error) {
+	store, err := model.CacheGetStoreByScope(group, tokenID, id, scope)
 	if err != nil {
 		return adaptor.StoreCache{}, err
 	}
@@ -77,15 +114,16 @@ func (s *storeImpl) GetStore(group string, tokenID int, id string) (adaptor.Stor
 	}, nil
 }
 
-func (s *storeImpl) SaveStore(store adaptor.StoreCache) error {
-	return s.SaveStoreWithOption(store, adaptor.SaveStoreOption{})
+func (s *storeImpl) SaveStore(store adaptor.StoreCache, scope model.ChannelScope) error {
+	return s.SaveStoreWithOption(store, scope, adaptor.SaveStoreOption{})
 }
 
 func (s *storeImpl) SaveStoreWithOption(
 	store adaptor.StoreCache,
+	scope model.ChannelScope,
 	opt adaptor.SaveStoreOption,
 ) error {
-	_, err := model.SaveStoreWithOption(&model.StoreV2{
+	_, err := model.SaveStoreWithOptionByScope(&model.StoreV2{
 		ID:        store.ID,
 		GroupID:   store.GroupID,
 		TokenID:   store.TokenID,
@@ -95,15 +133,18 @@ func (s *storeImpl) SaveStoreWithOption(
 		CreatedAt: store.CreatedAt,
 		UpdatedAt: store.UpdatedAt,
 		ExpiresAt: store.ExpiresAt,
-	}, model.SaveStoreOption{
+	}, scope, model.SaveStoreOption{
 		MinUpdateInterval: opt.MinUpdateInterval,
 	})
 
 	return err
 }
 
-func (s *storeImpl) SaveIfNotExistStore(store adaptor.StoreCache) error {
-	_, err := model.SaveIfNotExistStore(&model.StoreV2{
+func (s *storeImpl) SaveIfNotExistStore(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	_, err := model.SaveIfNotExistStoreByScope(&model.StoreV2{
 		ID:        store.ID,
 		GroupID:   store.GroupID,
 		TokenID:   store.TokenID,
@@ -113,9 +154,85 @@ func (s *storeImpl) SaveIfNotExistStore(store adaptor.StoreCache) error {
 		CreatedAt: store.CreatedAt,
 		UpdatedAt: store.UpdatedAt,
 		ExpiresAt: store.ExpiresAt,
-	})
+	}, scope)
 
 	return err
+}
+
+type scopedAdaptorStore struct {
+	adaptor.Store
+	meta *meta.Meta
+}
+
+func newScopedAdaptorStore(base adaptor.Store, meta *meta.Meta) adaptor.Store {
+	return &scopedAdaptorStore{Store: base, meta: meta}
+}
+
+func (s *scopedAdaptorStore) storeWithMetaDefaults(store adaptor.StoreCache) adaptor.StoreCache {
+	if s.meta != nil {
+		if store.GroupID == "" {
+			store.GroupID = s.meta.Group.ID
+		}
+
+		if store.TokenID == 0 {
+			store.TokenID = s.meta.Token.ID
+		}
+
+		if store.ChannelID == 0 {
+			store.ChannelID = s.meta.Channel.ID
+		}
+
+		if store.Model == "" {
+			store.Model = s.meta.OriginModel
+		}
+	}
+
+	return store
+}
+
+func (s *scopedAdaptorStore) effectiveScope(scope model.ChannelScope) model.ChannelScope {
+	scope = model.NormalizeChannelScope(scope)
+
+	if s.meta != nil && s.meta.Channel.Scope == model.ChannelScopeGroup {
+		return model.ChannelScopeGroup
+	}
+
+	return scope
+}
+
+func (s *scopedAdaptorStore) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	scope model.ChannelScope,
+) (adaptor.StoreCache, error) {
+	scope = s.effectiveScope(scope)
+	return s.Store.GetStoreByScope(group, tokenID, id, scope)
+}
+
+func (s *scopedAdaptorStore) SaveStore(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	scope = s.effectiveScope(scope)
+	return s.Store.SaveStore(s.storeWithMetaDefaults(store), scope)
+}
+
+func (s *scopedAdaptorStore) SaveStoreWithOption(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+	opt adaptor.SaveStoreOption,
+) error {
+	scope = s.effectiveScope(scope)
+	return s.Store.SaveStoreWithOption(s.storeWithMetaDefaults(store), scope, opt)
+}
+
+func (s *scopedAdaptorStore) SaveIfNotExistStore(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	scope = s.effectiveScope(scope)
+	return s.Store.SaveIfNotExistStore(s.storeWithMetaDefaults(store), scope)
 }
 
 func wrapPlugin(ctx context.Context, mc *model.ModelCaches, a adaptor.Adaptor) adaptor.Adaptor {
@@ -151,7 +268,13 @@ func relayHandler(c *gin.Context, meta *meta.Meta, mc *model.ModelCaches) *contr
 
 	adaptor = wrapPlugin(c.Request.Context(), mc, adaptor)
 
-	return controller.Handle(adaptor, c, meta, AdaptorStore, buildBodyDetailOption(meta))
+	return controller.Handle(
+		adaptor,
+		c,
+		meta,
+		newScopedAdaptorStore(AdaptorStore, meta),
+		buildBodyDetailOption(meta),
+	)
 }
 
 func defaultPriceFunc(_ *gin.Context, mc model.ModelConfig) (model.Price, error) {
@@ -213,7 +336,7 @@ func relayController(m mode.Mode) RelayController {
 		c.ValidateRequest = controller.ValidateDoubaoVideoRequest
 		c.GetRequestPrice = controller.GetDoubaoVideoRequestPrice
 		c.GetRequestUsage = controller.GetDoubaoVideoRequestUsage
-	case mode.Responses, mode.ResponsesCompact:
+	case mode.Responses:
 		c.GetRequestUsage = controller.GetResponsesRequestUsage
 	}
 
@@ -249,26 +372,167 @@ func NewMetaByContext(
 	return middleware.NewMetaByContext(c, channel, mode, opts...)
 }
 
-func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
-	requestModel := middleware.GetRequestModel(c)
-	mc := middleware.GetModelConfig(c)
+func NewMetaByScopedChannel(
+	c *gin.Context,
+	channel *scopedChannel,
+	mode mode.Mode,
+	opts ...meta.Option,
+) *meta.Meta {
+	if channel == nil {
+		return middleware.NewMetaByContext(c, nil, mode, opts...)
+	}
 
-	if relayController.ValidateRequest != nil {
-		if err := relayController.ValidateRequest(c, mc); err != nil {
-			statusCode := http.StatusInternalServerError
+	opts = append(opts, meta.WithChannelScope(channel.scope, channel.groupID))
 
-			if requestParamErr, ok := errors.AsType[*controller.RequestParamError](err); ok {
-				statusCode = requestParamErr.StatusCode
-			}
+	return middleware.NewMetaByContext(c, channel.channel, mode, opts...)
+}
 
-			middleware.AbortLogWithMessageWithMode(mode, c,
-				statusCode,
-				err.Error(),
+func resolveScopedModelConfig(
+	group model.GroupCache,
+	modelCaches *model.ModelCaches,
+	channel *scopedChannel,
+	modelName string,
+) (model.ModelConfig, bool) {
+	if channel != nil && channel.isGroupChannel() {
+		modelConfig, ok := model.ResolveGroupScopeModelConfig(group.ID, modelName)
+		if !ok {
+			return model.ModelConfig{}, false
+		}
+
+		return middleware.GetGroupScopeAdjustedModelConfig(group, modelConfig), true
+	}
+
+	if modelCaches == nil || modelCaches.ModelConfig == nil {
+		return model.ModelConfig{}, false
+	}
+
+	modelConfig, ok := modelCaches.ModelConfig.GetModelConfig(modelName)
+	if !ok {
+		return model.ModelConfig{}, false
+	}
+
+	return middleware.GetGroupAdjustedModelConfig(group, modelConfig), true
+}
+
+type relayAttempt struct {
+	channel             *scopedChannel
+	modelConfig         model.ModelConfig
+	price               model.Price
+	requestUsage        model.Usage
+	requestUsageContext model.UsageContext
+	meta                *meta.Meta
+}
+
+func prepareRelayAttempt(
+	c *gin.Context,
+	m mode.Mode,
+	relayController RelayController,
+	channel *scopedChannel,
+	modelCaches *model.ModelCaches,
+	modelName string,
+	checkGroupModelLimit bool,
+) (*relayAttempt, error) {
+	group := middleware.GetGroup(c)
+
+	modelConfig, ok := resolveScopedModelConfig(group, modelCaches, channel, modelName)
+	if !ok {
+		return nil, modelConfigNotFoundError{modelName: modelName}
+	}
+
+	if err := checkRelayModeForAttempt(m, modelName, modelConfig); err != nil {
+		return nil, err
+	}
+
+	if err := validateRelayRequest(c, relayController, modelConfig); err != nil {
+		return nil, err
+	}
+
+	attemptMeta := NewMetaByScopedChannel(
+		c,
+		channel,
+		m,
+		meta.WithModelConfig(modelConfig),
+	)
+
+	token := middleware.GetToken(c)
+	if checkGroupModelLimit {
+		if err := middleware.CheckGroupModelRPMAndTPM(
+			c,
+			group,
+			modelConfig,
+			token.Name,
+			channel.scope,
+			channel.channel.ID,
+		); err != nil {
+			consume.Summary(
+				http.StatusTooManyRequests,
+				time.Time{},
+				attemptMeta,
+				model.Usage{},
+				model.UsageContext{ServiceTier: attemptMeta.RequestServiceTier},
+				model.Price{},
+				true,
 			)
 
-			return
+			return nil, err
 		}
 	}
+
+	price := model.Price{}
+
+	var err error
+	if relayController.GetRequestPrice != nil {
+		price, err = relayController.GetRequestPrice(c, modelConfig)
+		if err != nil {
+			return nil, fmt.Errorf("get request price failed: %w", err)
+		}
+	}
+
+	if relayController.GetRequestUsage != nil {
+		requestUsage, err := relayController.GetRequestUsage(c, modelConfig)
+		if err != nil {
+			return nil, fmt.Errorf("get request usage failed: %w", err)
+		}
+
+		attemptMeta.RequestUsage = requestUsage.Usage
+		attemptMeta.RequestUsageContext = requestUsage.Context
+	}
+
+	attemptMeta.RequestUsageContext.ServiceTier = attemptMeta.RequestServiceTier
+
+	return &relayAttempt{
+		channel:             channel,
+		modelConfig:         modelConfig,
+		price:               price,
+		requestUsage:        attemptMeta.RequestUsage,
+		requestUsageContext: attemptMeta.RequestUsageContext,
+		meta:                attemptMeta,
+	}, nil
+}
+
+func validateRelayRequest(
+	c *gin.Context,
+	relayController RelayController,
+	modelConfig model.ModelConfig,
+) error {
+	if relayController.ValidateRequest == nil {
+		return nil
+	}
+
+	return relayController.ValidateRequest(c, modelConfig)
+}
+
+func checkRelayModeForAttempt(m mode.Mode, modelName string, modelConfig model.ModelConfig) error {
+	if middleware.CheckRelayMode(m, modelConfig.Type) {
+		return nil
+	}
+
+	return relayModeMismatchError{modelName: modelName}
+}
+
+func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
+	requestModel := middleware.GetRequestModel(c)
+	modelCaches := middleware.GetModelCaches(c)
 
 	// Get initial channel
 	initialChannel, err := getInitialChannel(c, requestModel, mode)
@@ -281,53 +545,38 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 		return
 	}
 
-	price := model.Price{}
-	if relayController.GetRequestPrice != nil {
-		price, err = relayController.GetRequestPrice(c, mc)
-		if err != nil {
-			middleware.AbortLogWithMessageWithMode(mode, c,
-				http.StatusInternalServerError,
-				"get request price failed: "+err.Error(),
-			)
-
-			return
-		}
+	attempt, err := prepareRelayAttempt(
+		c,
+		mode,
+		relayController,
+		initialChannel.channel,
+		modelCaches,
+		requestModel,
+		true,
+	)
+	if err != nil {
+		abortRelayPreparationError(c, mode, err)
+		return
 	}
-
-	meta := NewMetaByContext(c, initialChannel.channel, mode)
-
-	if relayController.GetRequestUsage != nil {
-		requestUsage, err := relayController.GetRequestUsage(c, mc)
-		if err != nil {
-			middleware.AbortLogWithMessageWithMode(mode, c,
-				http.StatusInternalServerError,
-				"get request usage failed: "+err.Error(),
-			)
-
-			return
-		}
-
-		meta.RequestUsage = requestUsage.Usage
-		meta.RequestUsageContext = requestUsage.Context
-	}
-
-	meta.RequestUsageContext.ServiceTier = meta.RequestServiceTier
 
 	gbc := middleware.GetGroupBalanceConsumerFromContext(c)
 
 	requiredBalance := math.Max(
 		consume.CalculateAmountWithOptions(
 			http.StatusOK,
-			meta.RequestUsage,
-			meta.RequestUsageContext,
-			price,
+			attempt.meta.RequestUsage,
+			attempt.meta.RequestUsageContext,
+			attempt.price,
 			model.PriceSelectionOptions{
-				DisableResolutionFuzzyMatch: mc.DisableResolutionFuzzyMatch,
-				RequestAt:                   meta.RequestAt,
+				DisableResolutionFuzzyMatch: attempt.modelConfig.DisableResolutionFuzzyMatch,
 			},
 		),
 		middleware.GroupMinimumBalance,
 	)
+	if attempt.channel.isGroupChannel() {
+		requiredBalance = middleware.GroupMinimumBalance
+	}
+
 	if !gbc.CheckBalance(requiredBalance) {
 		middleware.AbortLogWithMessageWithMode(mode, c,
 			http.StatusForbidden,
@@ -339,20 +588,18 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	}
 
 	// First attempt
-	firstAttemptAt := time.Now()
-	retryTimes, retryDeadline := getRetryLimits(
-		mc,
-		config.GetRetryTimes(),
-		config.GetRetryBudget(),
-		firstAttemptAt,
-	)
-	result, retry := RelayHelper(c, meta, relayController.Handler)
+	result, retry := RelayHelper(c, attempt.meta, relayController.Handler)
 
-	if handleRelayResult(c, result.Error, retry, retryTimes, retryDeadline) {
+	retryTimes := int(config.GetRetryTimes())
+	if attempt.modelConfig.RetryTimes > 0 {
+		retryTimes = int(attempt.modelConfig.RetryTimes)
+	}
+
+	if handleRelayResult(c, result.Error, retry, retryTimes) {
 		recordResult(
 			c,
-			meta,
-			price,
+			attempt.meta,
+			attempt.price,
 			result,
 			0,
 			true,
@@ -366,15 +613,37 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 	retryState := initRetryState(
 		retryTimes,
 		initialChannel,
-		meta,
+		attempt.meta,
 		result,
-		price,
+		attempt.price,
 		time.Now(),
+		modelCaches,
+		requestModel,
+		relayController,
+		true,
 	)
-	retryState.retryDeadline = retryDeadline
 
 	// Retry loop
 	retryLoop(c, mode, retryState, relayController.Handler)
+}
+
+func abortRelayPreparationError(c *gin.Context, m mode.Mode, err error) {
+	statusCode := http.StatusInternalServerError
+
+	var requestParamErr *controller.RequestParamError
+	switch {
+	case errors.As(err, &requestParamErr):
+		statusCode = requestParamErr.StatusCode
+	case errors.Is(err, middleware.ErrRequestRateLimitExceeded),
+		errors.Is(err, middleware.ErrRequestTpmLimitExceeded):
+		statusCode = http.StatusTooManyRequests
+	case errors.Is(err, errRelayModeMismatch):
+		statusCode = http.StatusNotFound
+	case errors.Is(err, errModelConfigNotFound):
+		statusCode = http.StatusNotFound
+	}
+
+	middleware.AbortLogWithMessageWithMode(m, c, statusCode, err.Error())
 }
 
 // recordResult records the consumption for the final result
@@ -423,7 +692,6 @@ func recordResult(
 		price,
 		model.PriceSelectionOptions{
 			DisableResolutionFuzzyMatch: meta.ModelConfig.DisableResolutionFuzzyMatch,
-			RequestAt:                   meta.RequestAt,
 		},
 	)
 	if amount > 0 {
@@ -432,7 +700,7 @@ func recordResult(
 	}
 
 	asyncUsageStatus := model.AsyncUsageStatusNone
-	if downstreamResult && result.Error == nil && result.AsyncUsage {
+	if shouldRecordAsyncUsage(meta, result, downstreamResult) {
 		asyncUsageStatus = model.AsyncUsageStatusPending
 	}
 
@@ -459,11 +727,26 @@ func recordResult(
 	}
 }
 
+func shouldRecordAsyncUsage(
+	meta *meta.Meta,
+	result *controller.HandleResult,
+	downstreamResult bool,
+) bool {
+	return meta.Channel.Scope != model.ChannelScopeGroup &&
+		downstreamResult &&
+		result.Error == nil &&
+		result.AsyncUsage
+}
+
 func saveAsyncUsageInfo(
 	meta *meta.Meta,
 	price model.Price,
 	result *controller.HandleResult,
 ) {
+	if meta.Channel.Scope == model.ChannelScopeGroup {
+		return
+	}
+
 	if result.UpstreamID == "" {
 		log.Warnf("skip async usage without upstream id, request_id: %s", meta.RequestID)
 		return
@@ -549,22 +832,26 @@ func buildBodyDetailOption(meta *meta.Meta) controller.BodyDetailOption {
 }
 
 type retryState struct {
-	channelSelectionState
+	retryTimes                           int
+	lastMinErrorRateHasPermissionChannel *scopedChannel
+	preferChannelKeys                    []string
+	ignoreChannelIDs                     map[string]struct{}
+	exhausted                            bool
+	groupRetryOnly                       bool
+	failedChannelIDs                     map[string]struct{} // Track all failed channel monitor keys in this request
 
-	retryTimes        int
-	retryDeadline     time.Time
-	designatedChannel *model.Channel
-	preferChannelIDs  []int
-	ignoreChannelIDs  map[int64]struct{}
-	failedChannelIDs  map[int64]struct{} // Track failed channels in the current retry round
-
-	meta                *meta.Meta
-	price               model.Price
-	requestUsage        model.Usage
-	requestUsageContext model.UsageContext
-	result              *controller.HandleResult
-	migratedChannels    []*model.Channel
-	channelRetryInfo    map[int]channelRetryInfo
+	meta                   *meta.Meta
+	price                  model.Price
+	modelCaches            *model.ModelCaches
+	modelName              string
+	relayController        RelayController
+	groupModelLimitChecked bool
+	groupModelLimitKeys    map[string]struct{}
+	requestUsage           model.Usage
+	requestUsageContext    model.UsageContext
+	result                 *controller.HandleResult
+	migratedChannels       []*scopedChannel
+	channelRetryInfo       map[string]channelRetryInfo
 }
 
 type channelRetryInfo struct {
@@ -578,32 +865,11 @@ const (
 	relayRetryMaxJitter = time.Second
 )
 
-func getRetryLimits(
-	mc model.ModelConfig,
-	defaultRetryTimes, defaultRetryBudget int64,
-	startedAt time.Time,
-) (int, time.Time) {
-	retryTimes, budget := mc.RetryLimits(defaultRetryTimes, defaultRetryBudget)
-
-	var deadline time.Time
-	if budget > 0 {
-		deadline = startedAt.Add(budget)
-	}
-
-	return int(retryTimes), deadline
-}
-
-func (s *retryState) canRetry(attempts int, now time.Time) bool {
-	return (s.retryTimes < 0 || attempts < s.retryTimes) &&
-		(s.retryDeadline.IsZero() || now.Before(s.retryDeadline))
-}
-
 func handleRelayResult(
 	c *gin.Context,
 	bizErr adaptor.Error,
 	retry bool,
 	retryTimes int,
-	retryDeadline time.Time,
 ) (done bool) {
 	if bizErr == nil {
 		return true
@@ -611,7 +877,6 @@ func handleRelayResult(
 
 	if !retry ||
 		retryTimes == 0 ||
-		(!retryDeadline.IsZero() && !time.Now().Before(retryDeadline)) ||
 		c.Request.Context().Err() != nil {
 		ErrorWithRequestID(c, bizErr)
 		return true
@@ -627,46 +892,92 @@ func initRetryState(
 	result *controller.HandleResult,
 	price model.Price,
 	initialEndAt time.Time,
+	modelCaches *model.ModelCaches,
+	modelName string,
+	relayController RelayController,
+	groupModelLimitChecked bool,
 ) *retryState {
 	state := &retryState{
-		channelSelectionState: channel.channelSelectionState,
-		retryTimes:            retryTimes,
-		preferChannelIDs:      channel.preferChannelIDs,
-		ignoreChannelIDs:      channel.ignoreChannelIDs,
-		meta:                  meta,
-		result:                result,
-		price:                 price,
-		requestUsage:          meta.RequestUsage,
-		requestUsageContext:   meta.RequestUsageContext,
-		migratedChannels:      channel.migratedChannels,
-		failedChannelIDs:      make(map[int64]struct{}),
-		channelRetryInfo:      make(map[int]channelRetryInfo),
+		retryTimes:             retryTimes,
+		preferChannelKeys:      channel.preferChannelKeys,
+		ignoreChannelIDs:       channel.ignoreChannelIDs,
+		groupRetryOnly:         channel.groupRetryOnly,
+		meta:                   meta,
+		result:                 result,
+		price:                  price,
+		modelCaches:            modelCaches,
+		modelName:              modelName,
+		relayController:        relayController,
+		groupModelLimitChecked: groupModelLimitChecked,
+		requestUsage:           meta.RequestUsage,
+		requestUsageContext:    meta.RequestUsageContext,
+		migratedChannels:       channel.migratedChannels,
+		failedChannelIDs:       make(map[string]struct{}),
+		channelRetryInfo:       make(map[string]channelRetryInfo),
+		groupModelLimitKeys:    make(map[string]struct{}),
+	}
+
+	if groupModelLimitChecked {
+		state.markGroupModelLimitChecked(channel.channel)
 	}
 
 	// Record initial failed channel
-	state.failedChannelIDs[int64(meta.Channel.ID)] = struct{}{}
+	state.failedChannelIDs[meta.ChannelMonitorKey()] = struct{}{}
 	if shouldBackoffStatus(result.Error.StatusCode()) {
-		state.recordChannelFailure(meta.Channel.ID, initialEndAt)
+		state.recordChannelFailure(meta.ChannelMonitorKey(), initialEndAt)
 	}
 
 	if channel.designatedChannel {
-		state.designatedChannel = channel.channel
+		state.exhausted = true
 	}
 
 	if !monitorplugin.ChannelHasPermission(result.Error) {
 		if state.ignoreChannelIDs == nil {
-			state.ignoreChannelIDs = make(map[int64]struct{})
+			state.ignoreChannelIDs = make(map[string]struct{})
 		}
 
-		state.ignoreChannelIDs[int64(channel.channel.ID)] = struct{}{}
+		state.ignoreChannelIDs[channel.channel.monitorKey()] = struct{}{}
+	} else {
+		state.lastMinErrorRateHasPermissionChannel = channel.channel
 	}
 
 	return state
 }
 
-func (s *retryState) recordChannelFailure(channelID int, endAt time.Time) {
+func (s *retryState) markGroupModelLimitChecked(channel *scopedChannel) {
+	if channel == nil {
+		return
+	}
+
+	if channel.isGroupChannel() {
+		if s.groupModelLimitKeys == nil {
+			s.groupModelLimitKeys = make(map[string]struct{})
+		}
+
+		s.groupModelLimitKeys[channel.monitorKey()] = struct{}{}
+
+		return
+	}
+
+	s.groupModelLimitChecked = true
+}
+
+func (s *retryState) shouldCheckGroupModelLimit(channel *scopedChannel) bool {
+	if channel == nil {
+		return false
+	}
+
+	if channel.isGroupChannel() {
+		_, ok := s.groupModelLimitKeys[channel.monitorKey()]
+		return !ok
+	}
+
+	return !s.groupModelLimitChecked
+}
+
+func (s *retryState) recordChannelFailure(channelID string, endAt time.Time) {
 	if s.channelRetryInfo == nil {
-		s.channelRetryInfo = make(map[int]channelRetryInfo)
+		s.channelRetryInfo = make(map[string]channelRetryInfo)
 	}
 
 	info := s.channelRetryInfo[channelID]
@@ -697,7 +1008,7 @@ func calculateRelayBackoffDelay(failures int, jitter time.Duration) time.Duratio
 }
 
 func (s *retryState) remainingRelayDelay(
-	channelID int,
+	channelID string,
 	now time.Time,
 	jitter time.Duration,
 ) time.Duration {
@@ -719,36 +1030,32 @@ func (s *retryState) remainingRelayDelay(
 func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayController RelayHandler) {
 	log := common.GetLogger(c)
 
-	// The budget limits scheduling and backoff, while in-flight requests keep their own timeout.
-	ctx := c.Request.Context()
-	if !state.retryDeadline.IsZero() {
-		var cancel context.CancelFunc
-
-		ctx, cancel = context.WithDeadline(ctx, state.retryDeadline)
-		defer cancel()
-	}
-
+	// do not use for i := range state.retryTimes, because the retryTimes is constant
 	i := 0
 
-	for state.canRetry(i, time.Now()) && ctx.Err() == nil {
-		newChannel, err := getRetryChannel(ctx, state)
+	for {
+		newChannel, err := getRetryChannel(c.Request.Context(), state)
 		if err == nil {
 			err = prepareRetry(c)
 		}
 
-		if err == nil {
-			err = relayDelay(ctx, state, newChannel.ID)
-		}
-
 		if err != nil {
-			if !errors.Is(err, ErrChannelsExhausted) && ctx.Err() == nil {
+			if !errors.Is(err, ErrChannelsExhausted) {
 				log.Errorf("prepare retry failed: %+v", err)
 			}
+			// when the last request has not recorded the result, record the result
+			if state.meta != nil && state.result != nil {
+				recordResult(
+					c,
+					state.meta,
+					state.price,
+					state.result,
+					i,
+					true,
+					middleware.GetRequestMetadata(c),
+				)
+			}
 
-			break
-		}
-
-		if !state.canRetry(i, time.Now()) || ctx.Err() != nil {
 			break
 		}
 		// when the last request has not recorded the result, record the result
@@ -762,58 +1069,77 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 				false,
 				middleware.GetRequestMetadata(c),
 			)
+			state.meta = nil
+			state.result = nil
 		}
 
 		log.Data["retry"] = strconv.Itoa(i + 1)
 
-		log.Warnf("using channel %s (type: %d, id: %d) to retry (attempt %d)",
-			newChannel.Name,
-			newChannel.Type,
-			newChannel.ID,
-			i+1,
+		log.Warnf("using channel %s (type: %d, id: %d) to retry (remain times %d)",
+			newChannel.channel.Name,
+			newChannel.channel.Type,
+			newChannel.channel.ID,
+			state.retryTimes-i,
 		)
 
-		state.meta = NewMetaByContext(
+		relayDelay(state, newChannel.monitorKey())
+
+		attempt, err := prepareRelayAttempt(
 			c,
-			newChannel,
 			mode,
-			meta.WithRequestUsage(state.requestUsage),
-			meta.WithRequestUsageContext(state.requestUsageContext),
-			meta.WithRetryAt(time.Now()),
+			state.relayController,
+			newChannel,
+			state.modelCaches,
+			state.modelName,
+			state.shouldCheckGroupModelLimit(newChannel),
 		)
+		if err != nil {
+			abortRelayPreparationError(c, mode, err)
+
+			state.result = nil
+			return
+		}
+
+		state.markGroupModelLimitChecked(newChannel)
+
+		state.meta = attempt.meta
+		state.meta.RetryAt = time.Now()
+		state.price = attempt.price
+		state.requestUsage = attempt.requestUsage
+		state.requestUsageContext = attempt.requestUsageContext
 
 		var retry bool
 
 		state.result, retry = RelayHelper(c, state.meta, relayController)
-		i++
-
 		if state.result.Error != nil && shouldBackoffStatus(state.result.Error.StatusCode()) {
-			state.recordChannelFailure(newChannel.ID, time.Now())
+			state.recordChannelFailure(newChannel.monitorKey(), time.Now())
 		}
 
 		done := handleRetryResult(c, retry, newChannel, state)
 
 		// Record failed channel if retry is needed
 		if !done && state.result.Error != nil {
-			state.failedChannelIDs[int64(newChannel.ID)] = struct{}{}
+			state.failedChannelIDs[newChannel.monitorKey()] = struct{}{}
 		}
 
-		if done {
+		if done || i == state.retryTimes-1 {
+			recordResult(
+				c,
+				state.meta,
+				state.price,
+				state.result,
+				i+1,
+				true,
+				middleware.GetRequestMetadata(c),
+			)
+
 			break
 		}
+
+		i++
 	}
 
-	recordResult(
-		c,
-		state.meta,
-		state.price,
-		state.result,
-		i,
-		true,
-		middleware.GetRequestMetadata(c),
-	)
-
-	if state.result.Error != nil {
+	if state.result != nil && state.result.Error != nil {
 		ErrorWithRequestID(c, state.result.Error)
 	}
 }
@@ -832,7 +1158,7 @@ func prepareRetry(c *gin.Context) error {
 func handleRetryResult(
 	ctx *gin.Context,
 	retry bool,
-	newChannel *model.Channel,
+	newChannel *scopedChannel,
 	state *retryState,
 ) (done bool) {
 	if ctx.Request.Context().Err() != nil {
@@ -845,16 +1171,51 @@ func handleRetryResult(
 
 	hasPermission := monitorplugin.ChannelHasPermission(state.result.Error)
 
-	if state.designatedChannel != nil {
-		return !hasPermission
-	}
-
-	if !hasPermission {
-		if state.ignoreChannelIDs == nil {
-			state.ignoreChannelIDs = make(map[int64]struct{})
+	if state.exhausted {
+		if !hasPermission {
+			return true
 		}
+	} else {
+		if !hasPermission {
+			if state.ignoreChannelIDs == nil {
+				state.ignoreChannelIDs = make(map[string]struct{})
+			}
 
-		state.ignoreChannelIDs[int64(newChannel.ID)] = struct{}{}
+			state.ignoreChannelIDs[newChannel.monitorKey()] = struct{}{}
+			state.retryTimes++
+		} else {
+			if state.lastMinErrorRateHasPermissionChannel == nil {
+				state.lastMinErrorRateHasPermissionChannel = newChannel
+				return false
+			}
+
+			currentErrorRate, err := getScopedChannelModelErrorRateByKey(
+				ctx.Request.Context(),
+				state.lastMinErrorRateHasPermissionChannel.scope,
+				state.meta.OriginModel,
+				state.lastMinErrorRateHasPermissionChannel.monitorKey(),
+			)
+			if err != nil {
+				return false
+			}
+
+			newErrorRate, err := getScopedChannelModelErrorRateByKey(
+				ctx.Request.Context(),
+				newChannel.scope,
+				state.meta.OriginModel,
+				newChannel.monitorKey(),
+			)
+			if err != nil {
+				return false
+			}
+
+			state.lastMinErrorRateHasPermissionChannel = pickMinErrorRateHasPermissionChannel(
+				state.lastMinErrorRateHasPermissionChannel,
+				currentErrorRate,
+				newChannel,
+				newErrorRate,
+			)
+		}
 	}
 
 	return false
@@ -865,23 +1226,15 @@ func shouldBackoffStatus(statusCode int) bool {
 		statusCode == http.StatusServiceUnavailable
 }
 
-func relayDelay(ctx context.Context, state *retryState, channelID int) error {
+func relayDelay(state *retryState, channelID string) {
 	jitter := time.Duration(rand.Int64N(int64(relayRetryMaxJitter)))
 
 	delay := state.remainingRelayDelay(channelID, time.Now(), jitter)
 	if delay <= 0 {
-		return ctx.Err()
+		return
 	}
 
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return ctx.Err()
-	}
+	time.Sleep(delay)
 }
 
 func RelayNotImplemented(c *gin.Context) {

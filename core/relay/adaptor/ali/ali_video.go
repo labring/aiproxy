@@ -295,7 +295,7 @@ func saveAliNativeVideoStore(
 		Model:     meta.OriginModel,
 		Metadata:  aliVideoStoreMetadataString(meta, taskID),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func aliVideoTaskExpiresAt(response *relaymodel.AliVideoTaskResponse) time.Time {

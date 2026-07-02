@@ -329,19 +329,28 @@ func (r *httptestRecorder) Write(b []byte) (int, error) { return r.body.Write(b)
 
 type discardStore struct{}
 
-func (discardStore) GetStore(string, int, string) (adaptor.StoreCache, error) {
+func (discardStore) GetStoreByScope(
+	string,
+	int,
+	string,
+	model.ChannelScope,
+) (adaptor.StoreCache, error) {
 	return adaptor.StoreCache{}, nil
 }
 
-func (discardStore) SaveStore(adaptor.StoreCache) error {
+func (discardStore) SaveStore(adaptor.StoreCache, model.ChannelScope) error {
 	return nil
 }
 
-func (discardStore) SaveStoreWithOption(adaptor.StoreCache, adaptor.SaveStoreOption) error {
+func (discardStore) SaveStoreWithOption(
+	adaptor.StoreCache,
+	model.ChannelScope,
+	adaptor.SaveStoreOption,
+) error {
 	return nil
 }
 
-func (discardStore) SaveIfNotExistStore(adaptor.StoreCache) error {
+func (discardStore) SaveIfNotExistStore(adaptor.StoreCache, model.ChannelScope) error {
 	return nil
 }
 

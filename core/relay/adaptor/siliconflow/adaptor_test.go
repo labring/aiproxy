@@ -22,10 +22,11 @@ type siliconflowTestStore struct {
 	saved []adaptor.StoreCache
 }
 
-func (s *siliconflowTestStore) GetStore(
+func (s *siliconflowTestStore) GetStoreByScope(
 	group string,
 	tokenID int,
 	id string,
+	_ coremodel.ChannelScope,
 ) (adaptor.StoreCache, error) {
 	for _, cache := range s.saved {
 		if cache.GroupID == group && cache.TokenID == tokenID && cache.ID == id {
@@ -36,20 +37,27 @@ func (s *siliconflowTestStore) GetStore(
 	return adaptor.StoreCache{}, nil
 }
 
-func (s *siliconflowTestStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *siliconflowTestStore) SaveStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *siliconflowTestStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
 	_ adaptor.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *siliconflowTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *siliconflowTestStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

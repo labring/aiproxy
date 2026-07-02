@@ -1,11 +1,13 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/monitor"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -22,18 +24,20 @@ const (
 )
 
 type Group struct {
-	CreatedAt              time.Time               `json:"created_at"`
-	ID                     string                  `json:"id"                       gorm:"size:64;primaryKey"`
-	Tokens                 []Token                 `json:"-"                        gorm:"foreignKey:GroupID"`
-	GroupModelConfigs      []GroupModelConfig      `json:"-"                        gorm:"foreignKey:GroupID"`
-	PublicMCPReusingParams []PublicMCPReusingParam `json:"-"                        gorm:"foreignKey:GroupID"`
-	GroupMCPs              []GroupMCP              `json:"-"                        gorm:"foreignKey:GroupID"`
-	Status                 int                     `json:"status"                   gorm:"default:1;index"`
-	RPMRatio               float64                 `json:"rpm_ratio,omitempty"      gorm:"index"`
-	TPMRatio               float64                 `json:"tpm_ratio,omitempty"      gorm:"index"`
-	UsedAmount             float64                 `json:"used_amount"              gorm:"index"`
-	RequestCount           int                     `json:"request_count"            gorm:"index"`
-	AvailableSets          []string                `json:"available_sets,omitempty" gorm:"serializer:fastjson;type:text"`
+	CreatedAt                time.Time               `json:"created_at"`
+	ID                       string                  `json:"id"                          gorm:"size:64;primaryKey"`
+	Tokens                   []Token                 `json:"-"                           gorm:"foreignKey:GroupID"`
+	GroupModelConfigs        []GroupModelConfig      `json:"-"                           gorm:"foreignKey:GroupID"`
+	PublicMCPReusingParams   []PublicMCPReusingParam `json:"-"                           gorm:"foreignKey:GroupID"`
+	GroupMCPs                []GroupMCP              `json:"-"                           gorm:"foreignKey:GroupID"`
+	Status                   int                     `json:"status"                      gorm:"default:1;index"`
+	RPMRatio                 float64                 `json:"rpm_ratio,omitempty"         gorm:"index"`
+	TPMRatio                 float64                 `json:"tpm_ratio,omitempty"         gorm:"index"`
+	UsedAmount               float64                 `json:"used_amount"                 gorm:"index"`
+	RequestCount             int                     `json:"request_count"               gorm:"index"`
+	GroupChannelUsedAmount   float64                 `json:"group_channel_used_amount"   gorm:"index"`
+	GroupChannelRequestCount int                     `json:"group_channel_request_count" gorm:"index"`
+	AvailableSets            []string                `json:"available_sets,omitempty"    gorm:"serializer:fastjson;type:text"`
 
 	BalanceAlertEnabled   bool    `gorm:"default:false" json:"balance_alert_enabled"`
 	BalanceAlertThreshold float64 `gorm:"default:0"     json:"balance_alert_threshold"`
@@ -47,28 +51,117 @@ func (g *Group) BeforeSave(_ *gorm.DB) error {
 }
 
 func (g *Group) BeforeDelete(tx *gorm.DB) (err error) {
-	err = tx.Model(&Token{}).Where("group_id = ?", g.ID).Delete(&Token{}).Error
+	if g.ID == "" {
+		return nil
+	}
+	return deleteGroupsOwnedState(tx, []string{g.ID})
+}
+
+func deleteGroupsOwnedState(tx *gorm.DB, groupIDs []string) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	err := tx.Model(&Token{}).Where("group_id IN ?", groupIDs).Delete(&Token{}).Error
 	if err != nil {
 		return err
 	}
 
 	err = tx.Model(&PublicMCPReusingParam{}).
-		Where("group_id = ?", g.ID).
+		Where("group_id IN ?", groupIDs).
 		Delete(&PublicMCPReusingParam{}).
 		Error
 	if err != nil {
 		return err
 	}
 
-	err = tx.Model(&GroupMCP{}).Where("group_id = ?", g.ID).Delete(&GroupMCP{}).Error
+	err = tx.Model(&GroupMCP{}).Where("group_id IN ?", groupIDs).Delete(&GroupMCP{}).Error
 	if err != nil {
 		return err
 	}
 
-	return tx.Model(&GroupModelConfig{}).
-		Where("group_id = ?", g.ID).
+	err = tx.Model(&GroupModelConfig{}).
+		Where("group_id IN ?", groupIDs).
 		Delete(&GroupModelConfig{}).
 		Error
+	if err != nil {
+		return err
+	}
+
+	err = tx.Model(&GroupChannelTest{}).
+		Where("group_id IN ?", groupIDs).
+		Delete(&GroupChannelTest{}).
+		Error
+	if err != nil {
+		return err
+	}
+
+	err = tx.Session(&gorm.Session{SkipHooks: true}).
+		Unscoped().
+		Where("group_id IN ?", groupIDs).
+		Delete(&GroupChannel{}).
+		Error
+	if err != nil {
+		return err
+	}
+
+	return tx.Model(&GroupScopeModelConfig{}).
+		Where("group_id IN ?", groupIDs).
+		Delete(&GroupScopeModelConfig{}).
+		Error
+}
+
+type groupChannelIDRow struct {
+	GroupID string
+	ID      int
+}
+
+func getGroupChannelIDsByGroups(tx *gorm.DB, groupIDs []string) ([]int, error) {
+	rows, err := getGroupChannelIDRows(tx, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	channelIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		channelIDs = append(channelIDs, row.ID)
+	}
+
+	return channelIDs, nil
+}
+
+func getGroupChannelIDsByGroupMap(
+	tx *gorm.DB,
+	groupIDs []string,
+) (map[string][]int, error) {
+	rows, err := getGroupChannelIDRows(tx, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]int, len(groupIDs))
+	for _, row := range rows {
+		result[row.GroupID] = append(result[row.GroupID], row.ID)
+	}
+
+	return result, nil
+}
+
+func getGroupChannelIDRows(tx *gorm.DB, groupIDs []string) ([]groupChannelIDRow, error) {
+	if len(groupIDs) == 0 {
+		return nil, nil
+	}
+
+	var rows []groupChannelIDRow
+
+	err := tx.
+		Model(&GroupChannel{}).
+		Select("group_id", "id").
+		Where("group_id IN ?", groupIDs).
+		Find(&rows).
+		Error
+
+	return rows, err
 }
 
 func getGroupOrder(order string) string {
@@ -137,21 +230,64 @@ func DeleteGroupByID(id string) (err error) {
 	if id == "" {
 		return errors.New("group id is empty")
 	}
+
+	var channelIDs []int
 	defer func() {
 		if err == nil {
 			if err := CacheDeleteGroup(id); err != nil {
 				log.Error("cache delete group failed: " + err.Error())
 			}
 
+			if err := CacheDeleteGroupChannels(id); err != nil {
+				log.Error("cache delete group channels failed: " + err.Error())
+			}
+
+			if err := CacheDeleteGroupScopeModelConfig(id); err != nil {
+				log.Error("cache delete group scope model config failed: " + err.Error())
+			}
+
+			for _, channelID := range channelIDs {
+				_ = monitor.ClearGroupChannelAllModelErrorsByKey(
+					context.Background(),
+					GroupChannelMonitorKey(id, channelID),
+				)
+			}
+
 			if _, err := DeleteGroupLogs(id); err != nil {
 				log.Error("delete group logs failed: " + err.Error())
+			}
+
+			if _, err := DeleteGroupChannelLogs(id); err != nil {
+				log.Error("delete group channel logs failed: " + err.Error())
 			}
 		}
 	}()
 
-	result := DB.Delete(&Group{ID: id})
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&Group{}).
+			Select("id").
+			Where("id = ?", id).
+			First(&Group{}).
+			Error; err != nil {
+			return HandleNotFound(err, ErrGroupNotFound)
+		}
 
-	return HandleUpdateResult(result, ErrGroupNotFound)
+		var err error
+
+		channelIDs, err = getGroupChannelIDsByGroups(tx, []string{id})
+		if err != nil {
+			return err
+		}
+
+		if err := deleteGroupsOwnedState(tx, []string{id}); err != nil {
+			return err
+		}
+
+		result := tx.Session(&gorm.Session{SkipHooks: true}).Delete(&Group{ID: id})
+
+		return HandleUpdateResult(result, ErrGroupNotFound)
+	})
 }
 
 func DeleteGroupsByIDs(ids []string) (err error) {
@@ -159,30 +295,77 @@ func DeleteGroupsByIDs(ids []string) (err error) {
 		return nil
 	}
 
-	groups := make([]Group, len(ids))
+	var (
+		groupIDs          []string
+		channelIDsByGroup map[string][]int
+	)
 	defer func() {
 		if err == nil {
-			for _, group := range groups {
-				if err := CacheDeleteGroup(group.ID); err != nil {
+			for _, groupID := range groupIDs {
+				if err := CacheDeleteGroup(groupID); err != nil {
 					log.Error("cache delete group failed: " + err.Error())
 				}
 
-				if _, err := DeleteGroupLogs(group.ID); err != nil {
+				if err := CacheDeleteGroupChannels(groupID); err != nil {
+					log.Error("cache delete group channels failed: " + err.Error())
+				}
+
+				if err := CacheDeleteGroupScopeModelConfig(groupID); err != nil {
+					log.Error("cache delete group scope model config failed: " + err.Error())
+				}
+
+				for _, channelID := range channelIDsByGroup[groupID] {
+					_ = monitor.ClearGroupChannelAllModelErrorsByKey(
+						context.Background(),
+						GroupChannelMonitorKey(groupID, channelID),
+					)
+				}
+
+				if _, err := DeleteGroupLogs(groupID); err != nil {
 					log.Error("delete group logs failed: " + err.Error())
+				}
+
+				if _, err := DeleteGroupChannelLogs(groupID); err != nil {
+					log.Error("delete group channel logs failed: " + err.Error())
 				}
 			}
 		}
 	}()
 
 	return DB.Transaction(func(tx *gorm.DB) error {
-		return tx.
-			Clauses(clause.Returning{
-				Columns: []clause.Column{
-					{Name: "id"},
-				},
-			}).
-			Where("id IN (?)", ids).
-			Delete(&groups).
+		var groups []Group
+		if err := tx.
+			Model(&Group{}).
+			Select("id").
+			Where("id IN ?", ids).
+			Find(&groups).
+			Error; err != nil {
+			return err
+		}
+
+		if len(groups) == 0 {
+			return nil
+		}
+
+		groupIDs = make([]string, 0, len(groups))
+		for _, group := range groups {
+			groupIDs = append(groupIDs, group.ID)
+		}
+
+		var err error
+
+		channelIDsByGroup, err = getGroupChannelIDsByGroupMap(tx, groupIDs)
+		if err != nil {
+			return err
+		}
+
+		if err := deleteGroupsOwnedState(tx, groupIDs); err != nil {
+			return err
+		}
+
+		return tx.Session(&gorm.Session{SkipHooks: true}).
+			Where("id IN ?", groupIDs).
+			Delete(&Group{}).
 			Error
 	})
 }
@@ -282,6 +465,22 @@ func UpdateGroupUsedAmountAndRequestCount(id string, amount float64, count int) 
 		Updates(map[string]any{
 			"used_amount":   gorm.Expr("used_amount + ?", amount),
 			"request_count": gorm.Expr("request_count + ?", count),
+		})
+
+	return HandleUpdateResult(result, ErrGroupNotFound)
+}
+
+func UpdateGroupChannelGroupUsedAmountAndRequestCount(
+	id string,
+	amount float64,
+	count int,
+) error {
+	result := DB.
+		Model(&Group{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"group_channel_used_amount":   gorm.Expr("group_channel_used_amount + ?", amount),
+			"group_channel_request_count": gorm.Expr("group_channel_request_count + ?", count),
 		})
 
 	return HandleUpdateResult(result, ErrGroupNotFound)

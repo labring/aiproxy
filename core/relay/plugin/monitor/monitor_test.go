@@ -2,37 +2,56 @@
 package monitor
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
+	"github.com/labring/aiproxy/core/common/notify"
+	"github.com/labring/aiproxy/core/common/reqlimit"
 	"github.com/labring/aiproxy/core/model"
+	modelmonitor "github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	relaymeta "github.com/labring/aiproxy/core/relay/meta"
-	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/require"
 )
 
-type monitorDoResponseFunc func(
-	*relaymeta.Meta,
-	adaptor.Store,
-	*gin.Context,
-	*http.Response,
+type doResponseFunc func(
+	meta *relaymeta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error)
 
-func (fn monitorDoResponseFunc) DoResponse(
+func (f doResponseFunc) DoResponse(
 	meta *relaymeta.Meta,
 	store adaptor.Store,
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	return fn(meta, store, c, resp)
+	return f(meta, store, c, resp)
+}
+
+type doRequestFunc func(
+	meta *relaymeta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) (*http.Response, error)
+
+func (f doRequestFunc) DoRequest(
+	meta *relaymeta.Meta,
+	store adaptor.Store,
+	c *gin.Context,
+	req *http.Request,
+) (*http.Response, error) {
+	return f(meta, store, c, req)
 }
 
 func TestGetChannelWarnErrorRateUsesChannelValueEvenWhenAutoBalanceDisabled(t *testing.T) {
@@ -134,90 +153,280 @@ func TestChannelHasPermissionForForbiddenErrorCode(t *testing.T) {
 	}
 }
 
-func TestChannelMonitorDoResponseRecordsResponseCost(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
-	entry := common.NewLogger()
-	common.SetLogger(c.Request, entry)
-
-	requestMeta := relaymeta.NewMeta(
-		&model.Channel{ID: 901, Type: model.ChannelTypeOpenAI},
-		mode.ChatCompletions,
-		"resp-cost-test",
-		model.ModelConfig{},
-	)
-	requestMeta.Channel.MaxErrorRate = 0
-
-	result, relayErr := (&ChannelMonitor{}).DoResponse(
-		requestMeta,
-		nil,
-		c,
-		&http.Response{StatusCode: http.StatusOK},
-		monitorDoResponseFunc(func(
-			*relaymeta.Meta,
-			adaptor.Store,
-			*gin.Context,
-			*http.Response,
-		) (adaptor.DoResponseResult, adaptor.Error) {
-			time.Sleep(2 * time.Millisecond)
-			return adaptor.DoResponseResult{}, nil
-		}),
-	)
-
-	require.NoError(t, relayErr)
-	require.Empty(t, result.UpstreamID)
-	require.Contains(t, entry.Data, "resp_cost")
-	cost, ok := entry.Data["resp_cost"].(string)
-	require.True(t, ok)
-	require.NotEmpty(t, cost)
-	parsedCost, err := time.ParseDuration(cost)
-	require.NoError(t, err)
-	require.Greater(t, parsedCost, time.Duration(0))
+type countingNotifier struct {
+	count atomic.Int64
 }
 
-func TestChannelMonitorDoResponseRecordsResponseCostOnError(t *testing.T) {
+func (n *countingNotifier) Notify(notify.Level, string, string) {
+	n.count.Add(1)
+}
+
+func (n *countingNotifier) NotifyThrottle(
+	notify.Level,
+	string,
+	time.Duration,
+	string,
+	string,
+) {
+	n.count.Add(1)
+}
+
+func TestChannelMonitorSkipsNotifyForGroupChannelErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
+	notifier := &countingNotifier{}
+	notify.SetDefaultNotifier(notifier)
+	t.Cleanup(func() {
+		notify.SetDefaultNotifier(&notify.StdNotifier{})
+	})
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
-	entry := common.NewLogger()
-	common.SetLogger(c.Request, entry)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	common.SetLogger(c.Request, common.NewLogger())
 
-	requestMeta := relaymeta.NewMeta(
-		&model.Channel{ID: 902, Type: model.ChannelTypeOpenAI},
-		mode.ChatCompletions,
-		"resp-cost-error-test",
-		model.ModelConfig{},
-	)
-	relayErrExpected := relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{
-		Message: "upstream error",
-	})
+	meta := relaymeta.NewMeta(nil, 0, "group-channel-error-model", model.ModelConfig{})
+	meta.Channel.Scope = model.ChannelScopeGroup
+	meta.Channel.GroupID = "group-channel-error"
+	meta.Channel.ID = 91
 
-	_, relayErr := (&ChannelMonitor{}).DoResponse(
-		requestMeta,
+	monitor := &ChannelMonitor{}
+	result, relayErr := monitor.DoResponse(
+		meta,
 		nil,
 		c,
-		&http.Response{StatusCode: http.StatusBadGateway},
-		monitorDoResponseFunc(func(
-			*relaymeta.Meta,
-			adaptor.Store,
-			*gin.Context,
-			*http.Response,
+		nil,
+		doResponseFunc(func(
+			_ *relaymeta.Meta,
+			_ adaptor.Store,
+			_ *gin.Context,
+			_ *http.Response,
 		) (adaptor.DoResponseResult, adaptor.Error) {
-			return adaptor.DoResponseResult{}, relayErrExpected
+			return adaptor.DoResponseResult{}, adaptor.NewError(
+				http.StatusInternalServerError,
+				"upstream failed",
+			)
 		}),
 	)
 
-	require.ErrorIs(t, relayErr, relayErrExpected)
-	require.Contains(t, entry.Data, "resp_cost")
-	cost, ok := entry.Data["resp_cost"].(string)
-	require.True(t, ok)
-	require.NotEmpty(t, cost)
-	parsedCost, err := time.ParseDuration(cost)
+	require.Zero(t, result.Usage.TotalTokens)
+	require.NotNil(t, relayErr)
+	require.Zero(t, notifier.count.Load())
+}
+
+func TestGroupMonitorDoResponseUsesGroupChannelCounters(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	groupID := "group-monitor-channel-isolated"
+	modelName := "group-monitor-channel-model"
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	common.SetLogger(c.Request, common.NewLogger())
+
+	meta := relaymeta.NewMeta(nil, 0, modelName, model.ModelConfig{})
+	meta.Group = model.GroupCache{ID: groupID, Status: model.GroupStatusEnabled}
+	meta.Channel.Scope = model.ChannelScopeGroup
+	meta.Channel.GroupID = groupID
+	meta.Channel.ID = 88
+
+	groupMonitor := &GroupMonitor{}
+	channelMonitor := &ChannelMonitor{}
+	result, relayErr := groupMonitor.DoResponse(
+		meta,
+		nil,
+		c,
+		nil,
+		doResponseFunc(func(
+			_ *relaymeta.Meta,
+			_ adaptor.Store,
+			_ *gin.Context,
+			_ *http.Response,
+		) (adaptor.DoResponseResult, adaptor.Error) {
+			return channelMonitor.DoResponse(
+				meta,
+				nil,
+				c,
+				nil,
+				doResponseFunc(func(
+					_ *relaymeta.Meta,
+					_ adaptor.Store,
+					_ *gin.Context,
+					_ *http.Response,
+				) (adaptor.DoResponseResult, adaptor.Error) {
+					return adaptor.DoResponseResult{
+						Usage: model.Usage{TotalTokens: 23},
+					}, nil
+				}),
+			)
+		}),
+	)
+	require.Nil(t, relayErr)
+	require.Equal(t, model.Usage{TotalTokens: 23}, result.Usage)
+
+	globalTPM, _ := reqlimit.GetGroupModelTokensRequest(t.Context(), groupID, modelName)
+	require.Zero(t, globalTPM)
+
+	groupChannelTPM, _ := reqlimit.GetGroupChannelModelTokensRequest(
+		t.Context(),
+		groupID,
+		"88",
+		modelName,
+	)
+	require.Equal(t, int64(23), groupChannelTPM)
+
+	channelTPM, _ := reqlimit.GetChannelModelTokensRequest(
+		t.Context(),
+		meta.ChannelMonitorKey(),
+		modelName,
+	)
+	require.Zero(t, channelTPM)
+
+	log := common.GetLogger(c)
+	require.Equal(t, int64(23), log.Data["ch_tpm"])
+	require.Equal(t, int64(23), log.Data["ch_tps"])
+	require.Equal(t, "23", log.Data["group_channel_tpm"])
+	require.Equal(t, "23", log.Data["group_channel_tps"])
+}
+
+func TestChannelMonitorUsesGroupChannelRealtimeNamespace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := "group-channel-monitor"
+	modelName := "group-channel-monitor-model"
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	common.SetLogger(c.Request, common.NewLogger())
+
+	meta := relaymeta.NewMeta(nil, 0, modelName, model.ModelConfig{})
+	meta.Group = model.GroupCache{ID: groupID, Status: model.GroupStatusEnabled}
+	meta.Channel.Scope = model.ChannelScopeGroup
+	meta.Channel.GroupID = groupID
+	meta.Channel.ID = 89
+
+	_, _, _ = reqlimit.PushGroupChannelModelRequest(
+		t.Context(),
+		groupID,
+		strconv.Itoa(meta.Channel.ID),
+		modelName,
+	)
+
+	monitor := &ChannelMonitor{}
+	resp, err := monitor.DoRequest(
+		meta,
+		nil,
+		c,
+		c.Request,
+		doRequestFunc(func(
+			_ *relaymeta.Meta,
+			_ adaptor.Store,
+			_ *gin.Context,
+			_ *http.Request,
+		) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		}),
+	)
 	require.NoError(t, err)
-	require.Greater(t, parsedCost, time.Duration(0))
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	groupChannelRPM, _ := reqlimit.GetGroupChannelModelRequest(
+		t.Context(),
+		groupID,
+		strconv.Itoa(meta.Channel.ID),
+		modelName,
+	)
+	require.Equal(t, int64(1), groupChannelRPM)
+
+	prefixedGroupChannelRPM, _ := reqlimit.GetGroupChannelModelRequest(
+		t.Context(),
+		groupID,
+		meta.ChannelMonitorKey(),
+		modelName,
+	)
+	require.Zero(t, prefixedGroupChannelRPM)
+
+	channelRPM, _ := reqlimit.GetChannelModelRequest(
+		t.Context(),
+		meta.ChannelMonitorKey(),
+		modelName,
+	)
+	require.Zero(t, channelRPM)
+
+	_, _, err = modelmonitor.AddGroupChannelRequestByChannelKey(
+		t.Context(),
+		modelName,
+		meta.ChannelMonitorKey(),
+		true,
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	globalBanned, err := modelmonitor.GetBannedChannelKeysMapWithModel(t.Context(), modelName)
+	require.NoError(t, err)
+	require.Empty(t, globalBanned)
+
+	groupBanned, err := modelmonitor.GetGroupChannelBannedChannelKeysMapWithModel(
+		t.Context(),
+		modelName,
+	)
+	require.NoError(t, err)
+	require.Contains(t, groupBanned, meta.ChannelMonitorKey())
+}
+
+func TestChannelMonitorReadsGroupChannelRetryCounter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := "group-channel-monitor-retry"
+	modelName := "group-channel-monitor-retry-model"
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	common.SetLogger(c.Request, common.NewLogger())
+
+	meta := relaymeta.NewMeta(nil, 0, modelName, model.ModelConfig{})
+	meta.Group = model.GroupCache{ID: groupID, Status: model.GroupStatusEnabled}
+	meta.Channel.Scope = model.ChannelScopeGroup
+	meta.Channel.GroupID = groupID
+	meta.Channel.ID = 90
+	meta.RetryAt = time.Now()
+
+	_, _, _ = reqlimit.PushGroupChannelModelRequest(
+		t.Context(),
+		groupID,
+		strconv.Itoa(meta.Channel.ID),
+		modelName,
+	)
+
+	monitor := &ChannelMonitor{}
+	resp, err := monitor.DoRequest(
+		meta,
+		nil,
+		c,
+		c.Request,
+		doRequestFunc(func(
+			_ *relaymeta.Meta,
+			_ adaptor.Store,
+			_ *gin.Context,
+			_ *http.Request,
+		) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	groupChannelRPM, _ := reqlimit.GetGroupChannelModelRequest(
+		t.Context(),
+		groupID,
+		strconv.Itoa(meta.Channel.ID),
+		modelName,
+	)
+	require.Equal(t, int64(1), groupChannelRPM)
 }

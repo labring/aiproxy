@@ -75,7 +75,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 //	@Security		ApiKeyAuth
 //	@Param			id	path		int	true	"Channel ID"
 //	@Success		200	{object}	middleware.APIResponse{data=float64}
-//	@Router			/api/channel/{id}/balance [get]
+//	@Router			/api/channel/{id}/update_balance [get]
 func UpdateChannelBalance(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -170,7 +170,7 @@ func updateAllChannelsBalance() error {
 //	@Produce		json
 //	@Security		ApiKeyAuth
 //	@Success		200	{object}	middleware.APIResponse
-//	@Router			/api/channels/balance [get]
+//	@Router			/api/channels/update_balance [get]
 func UpdateAllChannelsBalance(c *gin.Context) {
 	err := updateAllChannelsBalance()
 	if err != nil {

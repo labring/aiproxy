@@ -199,7 +199,7 @@ func VideoHandler(
 		ChannelID: meta.Channel.ID,
 		Model:     meta.OriginModel,
 		ExpiresAt: time.Now().Add(time.Hour * 24),
-	})
+	}, meta.Channel.Scope)
 	if err != nil {
 		log := common.GetLogger(c)
 		log.Errorf("save store failed: %v", err)
@@ -332,7 +332,7 @@ func saveOpenAIVideoStore(meta *meta.Meta, store adaptor.Store, videoID string) 
 		ChannelID: meta.Channel.ID,
 		Model:     meta.OriginModel,
 		ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
-	})
+	}, meta.Channel.Scope)
 }
 
 func VideoGetJobsHandler(
@@ -391,7 +391,7 @@ func VideoGetJobsHandler(
 			ChannelID: meta.Channel.ID,
 			Model:     meta.OriginModel,
 			ExpiresAt: time.Unix(expiresAt, 0),
-		})
+		}, meta.Channel.Scope)
 		if err != nil {
 			log := common.GetLogger(c)
 			log.Errorf("save store failed: %v", err)

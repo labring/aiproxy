@@ -31,18 +31,24 @@ const (
 )
 
 type Token struct {
-	CreatedAt time.Time       `json:"created_at"`
-	Group     *Group          `json:"-"          gorm:"foreignKey:GroupID"`
-	Key       string          `json:"key"        gorm:"type:char(48);uniqueIndex"`
-	Name      EmptyNullString `json:"name"       gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
-	GroupID   string          `json:"group"      gorm:"size:64;index;uniqueIndex:idx_group_name"`
-	Subnets   []string        `json:"subnets"    gorm:"serializer:fastjson;type:text"`
-	Models    []string        `json:"models"     gorm:"serializer:fastjson;type:text"`
-	Status    int             `json:"status"     gorm:"default:1;index"`
-	ID        int             `json:"id"         gorm:"primaryKey"`
+	CreatedAt          time.Time       `json:"created_at"`
+	Group              *Group          `json:"-"                    gorm:"foreignKey:GroupID"`
+	Key                string          `json:"key"                  gorm:"type:char(48);uniqueIndex"`
+	Name               EmptyNullString `json:"name"                 gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
+	GroupID            string          `json:"group"                gorm:"size:64;index;uniqueIndex:idx_group_name"`
+	Scope              ChannelScope    `json:"scope"                gorm:"size:16;index"`
+	Subnets            []string        `json:"subnets"              gorm:"serializer:fastjson;type:text"`
+	Models             []string        `json:"models"               gorm:"serializer:fastjson;type:text"`
+	Sets               []string        `json:"sets"                 gorm:"serializer:fastjson;type:text"`
+	GroupChannelModels []string        `json:"group_channel_models" gorm:"serializer:fastjson;type:text"`
+	GroupChannelSets   []string        `json:"group_channel_sets"   gorm:"serializer:fastjson;type:text"`
+	Status             int             `json:"status"               gorm:"default:1;index"`
+	ID                 int             `json:"id"                   gorm:"primaryKey"`
 
-	UsedAmount   float64 `json:"used_amount"   gorm:"index"`
-	RequestCount int     `json:"request_count" gorm:"index"`
+	UsedAmount               float64 `json:"used_amount"                 gorm:"index"`
+	RequestCount             int     `json:"request_count"               gorm:"index"`
+	GroupChannelUsedAmount   float64 `json:"group_channel_used_amount"   gorm:"index"`
+	GroupChannelRequestCount int     `json:"group_channel_request_count" gorm:"index"`
 
 	Quota                  float64         `json:"quota"`
 	PeriodQuota            float64         `json:"period_quota"`
@@ -67,6 +73,15 @@ func (t *Token) BeforeSave(_ *gorm.DB) error {
 	if len(t.Name) > 32 {
 		return errors.New("token name is too long")
 	}
+
+	if t.Scope != "" {
+		t.Scope = ParseChannelScope(string(t.Scope))
+	}
+
+	if !ValidTokenChannelScope(t.Scope) {
+		return errors.New("invalid token scope")
+	}
+
 	return nil
 }
 
@@ -435,9 +450,7 @@ func GetTokenByKey(key string) (*Token, error) {
 	return &token, HandleNotFound(err, ErrTokenNotFound)
 }
 
-// GetAndValidateToken validates a token and checks quota limits
-// This function is safe for concurrent use and handles period resets atomically
-func GetAndValidateToken(key string) (token *TokenCache, err error) {
+func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 	if key == "" {
 		return nil, errors.New("no token provided")
 	}
@@ -457,6 +470,14 @@ func GetAndValidateToken(key string) (token *TokenCache, err error) {
 		return nil, fmt.Errorf("token (%s[%d]) is disabled", token.Name, token.ID)
 	}
 
+	return token, nil
+}
+
+func ValidateTokenQuota(token *TokenCache) error {
+	if token == nil {
+		return errors.New("no token provided")
+	}
+
 	// Convert TokenCache to Token for quota checking
 	tokenModel := Token{
 		ID:                     token.ID,
@@ -470,15 +491,30 @@ func GetAndValidateToken(key string) (token *TokenCache, err error) {
 
 	totalExceeded, periodExceeded, err := tokenModel.GetEffectiveQuotaStatus()
 	if err != nil {
-		return nil, fmt.Errorf("token (%s[%d]) quota check failed: %w", token.Name, token.ID, err)
+		return fmt.Errorf("token (%s[%d]) quota check failed: %w", token.Name, token.ID, err)
 	}
 
 	if totalExceeded {
-		return nil, fmt.Errorf("token (%s[%d]) total quota is exhausted", token.Name, token.ID)
+		return fmt.Errorf("token (%s[%d]) total quota is exhausted", token.Name, token.ID)
 	}
 
 	if periodExceeded {
-		return nil, fmt.Errorf("token (%s[%d]) period quota is exhausted", token.Name, token.ID)
+		return fmt.Errorf("token (%s[%d]) period quota is exhausted", token.Name, token.ID)
+	}
+
+	return nil
+}
+
+// GetAndValidateToken validates a token and checks quota limits
+// This function is safe for concurrent use and handles period resets atomically
+func GetAndValidateToken(key string) (token *TokenCache, err error) {
+	token, err = GetTokenByKeyForAuth(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ValidateTokenQuota(token); err != nil {
+		return nil, err
 	}
 
 	return token, nil
@@ -682,10 +718,14 @@ func DeleteTokensByIDs(ids []int) (err error) {
 }
 
 type UpdateTokenRequest struct {
-	Name    *string   `json:"name"`
-	Subnets *[]string `json:"subnets"`
-	Models  *[]string `json:"models"`
-	Status  int       `json:"status"`
+	Name               *string   `json:"name"`
+	Subnets            *[]string `json:"subnets"`
+	Models             *[]string `json:"models"`
+	Sets               *[]string `json:"sets"`
+	GroupChannelModels *[]string `json:"group_channel_models"`
+	GroupChannelSets   *[]string `json:"group_channel_sets"`
+	Scope              *string   `json:"scope"`
+	Status             int       `json:"status"`
 	// Quota system
 	Quota                *float64 `json:"quota"`
 	PeriodQuota          *float64 `json:"period_quota"`
@@ -767,6 +807,35 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.Models = *update.Models
 
 		selects = append(selects, "models")
+	}
+
+	if update.Sets != nil {
+		token.Sets = *update.Sets
+
+		selects = append(selects, "sets")
+	}
+
+	if update.GroupChannelModels != nil {
+		token.GroupChannelModels = *update.GroupChannelModels
+
+		selects = append(selects, "group_channel_models")
+	}
+
+	if update.GroupChannelSets != nil {
+		token.GroupChannelSets = *update.GroupChannelSets
+
+		selects = append(selects, "group_channel_sets")
+	}
+
+	if update.Scope != nil {
+		scope := ParseChannelScope(*update.Scope)
+		if *update.Scope != "" && scope == "" {
+			return nil, errors.New("invalid token scope")
+		}
+
+		token.Scope = scope
+
+		selects = append(selects, "scope")
 	}
 
 	if update.Status != 0 {
@@ -872,6 +941,35 @@ func UpdateGroupToken(
 		selects = append(selects, "models")
 	}
 
+	if update.Sets != nil {
+		token.Sets = *update.Sets
+
+		selects = append(selects, "sets")
+	}
+
+	if update.GroupChannelModels != nil {
+		token.GroupChannelModels = *update.GroupChannelModels
+
+		selects = append(selects, "group_channel_models")
+	}
+
+	if update.GroupChannelSets != nil {
+		token.GroupChannelSets = *update.GroupChannelSets
+
+		selects = append(selects, "group_channel_sets")
+	}
+
+	if update.Scope != nil {
+		scope := ParseChannelScope(*update.Scope)
+		if *update.Scope != "" && scope == "" {
+			return nil, errors.New("invalid token scope")
+		}
+
+		token.Scope = scope
+
+		selects = append(selects, "scope")
+	}
+
 	if update.Status != 0 {
 		selects = append(selects, "status")
 	}
@@ -928,195 +1026,23 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
-// calculateNextPeriodStartTime finds the current period boundary. Daily quotas
-// align to UTC midnight; weekly and monthly quotas retain their original
-// cadence from lastUpdateTime.
-func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNullString) time.Time {
-	if lastUpdateTime.IsZero() {
-		// If never initialized, return current time
-		return time.Now()
-	}
-
-	now := time.Now()
-
-	// If we haven't passed the period yet, no reset needed
-	if !now.After(lastUpdateTime) {
-		return lastUpdateTime
-	}
-
-	switch periodType {
-	case "", PeriodTypeMonthly:
-		// Start from lastUpdateTime and keep adding months until we find the most recent period start
-		nextPeriod := lastUpdateTime
-		for {
-			// Calculate next month period
-			candidate := time.Date(
-				nextPeriod.Year(),
-				nextPeriod.Month()+1,
-				nextPeriod.Day(),
-				nextPeriod.Hour(),
-				nextPeriod.Minute(),
-				nextPeriod.Second(),
-				nextPeriod.Nanosecond(),
-				nextPeriod.Location(),
-			)
-
-			// If candidate is in the future, the current nextPeriod is the one we want
-			if candidate.After(now) {
-				return nextPeriod
-			}
-
-			nextPeriod = candidate
-		}
-
-	case PeriodTypeWeekly:
-		// Calculate how many complete weeks have passed since lastUpdateTime
-		daysSinceLastUpdate := now.Sub(lastUpdateTime).Hours() / 24
-		weeksPassed := int(daysSinceLastUpdate / 7)
-
-		if weeksPassed == 0 {
-			// Still in the same week period, no reset needed
-			return lastUpdateTime
-		}
-
-		// Return the start of the most recent week period
-		// This is lastUpdateTime + (weeksPassed * 7 days)
-		return lastUpdateTime.Add(time.Duration(weeksPassed*7*24) * time.Hour)
-
-	case PeriodTypeDaily:
-		currentDayStart := utcDayStart(now)
-		if !utcDayStart(lastUpdateTime).Before(currentDayStart) {
-			return lastUpdateTime
-		}
-
-		return currentDayStart
-
-	default:
-		// Fallback to current time for unknown period types
-		return now
-	}
-}
-
-// ResetTokenPeriodUsage resets the period usage for a token with concurrency safety
-// This updates PeriodLastUpdateTime and PeriodLastUpdateAmount to current values
-func ResetTokenPeriodUsage(id int) error {
-	token := &Token{}
-
-	var newPeriodStartTime time.Time
-
-	// Use database transaction with optimistic locking to prevent concurrent resets
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		// First, read the current state with FOR UPDATE lock
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id = ?", id).
-			First(token).Error; err != nil {
-			return err
-		}
-
-		// Check if period still needs reset (another concurrent request might have already reset it)
-		needsReset, err := token.NeedsPeriodReset()
-		if err != nil {
-			return err
-		}
-
-		// If period no longer needs reset, skip the update
-		if !needsReset {
-			return nil
-		}
-
-		// Calculate the correct next period start time based on period type
-		newPeriodStartTime = calculateNextPeriodStartTime(
-			token.PeriodLastUpdateTime,
-			token.PeriodType,
+func UpdateGroupChannelTokenUsedAmount(id int, amount float64, requestCount int) error {
+	result := DB.
+		Model(&Token{}).
+		Where("id = ?", id).
+		Updates(
+			map[string]any{
+				"group_channel_used_amount": gorm.Expr("group_channel_used_amount + ?", amount),
+				"group_channel_request_count": gorm.Expr(
+					"group_channel_request_count + ?",
+					requestCount,
+				),
+			},
 		)
 
-		if newPeriodStartTime.IsZero() {
-			return errors.New("next period start time is zero")
-		}
-
-		// Perform the reset with the lock held - update period last update time and amount
-		result := tx.
-			Model(token).
-			Clauses(clause.Returning{
-				Columns: []clause.Column{
-					{Name: "key"},
-				},
-			}).
-			Where("id = ?", id).
-			Updates(
-				map[string]any{
-					"period_last_update_time": newPeriodStartTime,
-					"period_last_update_amount": gorm.Expr(
-						"used_amount",
-					), // Set to current total usage
-				},
-			)
-
-		return HandleUpdateResult(result, ErrTokenNotFound)
-	})
-
-	// Update cache only if database update succeeded
-	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
-		if cacheErr := CacheResetTokenPeriodUsage(
-			token.Key,
-			newPeriodStartTime,
-			token.UsedAmount,
-		); cacheErr != nil {
-			log.Error("reset token period usage in cache failed: " + cacheErr.Error())
-		}
-	}
-
-	return err
-}
-
-func UpdateTokenName(id int, name string) (err error) {
-	token := &Token{ID: id}
-	defer func() {
-		if err == nil {
-			if err := CacheUpdateTokenName(token.Key, name); err != nil {
-				log.Error("update token name in cache failed: " + err.Error())
-			}
-		}
-	}()
-
-	result := DB.
-		Model(token).
-		Clauses(clause.Returning{
-			Columns: []clause.Column{
-				{Name: "key"},
-			},
-		}).
-		Where("id = ?", id).
-		Update("name", name)
-	if result.Error != nil && errors.Is(result.Error, gorm.ErrDuplicatedKey) {
-		return errors.New("token name already exists in this group")
-	}
-
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
-func UpdateGroupTokenName(group string, id int, name string) (err error) {
-	token := &Token{ID: id, GroupID: group}
-	defer func() {
-		if err == nil {
-			if err := CacheUpdateTokenName(token.Key, name); err != nil {
-				log.Error("update token name in cache failed: " + err.Error())
-			}
-		}
-	}()
-
-	result := DB.
-		Model(token).
-		Clauses(clause.Returning{
-			Columns: []clause.Column{
-				{Name: "key"},
-			},
-		}).
-		Where("id = ? and group_id = ?", id, group).
-		Update("name", name)
-	if result.Error != nil && errors.Is(result.Error, gorm.ErrDuplicatedKey) {
-		return errors.New("token name already exists in this group")
-	}
-
-	return HandleUpdateResult(result, ErrTokenNotFound)
-}
+// calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
+// This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
+// This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.

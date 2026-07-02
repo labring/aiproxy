@@ -435,7 +435,7 @@ func writeResponses(
 			ChannelID: meta.Channel.ID,
 			Model:     meta.OriginModel,
 			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
-		})
+		}, meta.Channel.Scope)
 	}
 
 	if reqCtx.Stream {

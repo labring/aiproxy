@@ -240,7 +240,12 @@ func geminiVideoAsyncUsageMetadata(
 			continue
 		}
 
-		cache, err := store.GetStore(info.GroupID, info.TokenID, storeID)
+		cache, err := store.GetStoreByScope(
+			info.GroupID,
+			info.TokenID,
+			storeID,
+			model.ChannelScopeGlobal,
+		)
 		if err != nil {
 			continue
 		}

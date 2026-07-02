@@ -38,10 +38,7 @@ type GroupCache struct {
 }
 
 func (g *GroupCache) GetAvailableSets() []string {
-	if len(g.AvailableSets) == 0 {
-		return []string{ChannelDefaultSet}
-	}
-	return g.AvailableSets
+	return NormalizeAvailableSets(g.AvailableSets)
 }
 
 func (g *Group) ToGroupCache() *GroupCache {

@@ -211,7 +211,7 @@ func TestRedisMonitorCleansExpiredSlicesWithCachedTotals(t *testing.T) {
 
 	monitor := newTestRedisModelMonitor(redisClient)
 
-	statsKey := buildStatsKey("model-expired", "404")
+	statsKey := buildStatsKey(modelKeyPrefix(), "model-expired", "404")
 	currentSlice := time.Now().UnixMilli() / 10000
 	expiredSlice := currentSlice - maxSliceCount - 1
 	validSlice := currentSlice
@@ -256,7 +256,10 @@ func TestRedisMonitorGetModelChannelErrorRateUsesLocalCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, rates, int64(505))
 
-	require.NoError(t, redisClient.Del(ctx, buildStatsKey("model-local-rate", "505")).Err())
+	require.NoError(
+		t,
+		redisClient.Del(ctx, buildStatsKey(modelKeyPrefix(), "model-local-rate", "505")).Err(),
+	)
 
 	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate")
 	require.NoError(t, err)
@@ -280,7 +283,11 @@ func TestRedisMonitorGetChannelModelErrorRateUsesLocalCache(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, 0.5, rate, 0.01)
 
-	require.NoError(t, redisClient.Del(ctx, buildStatsKey("model-single-local-rate", "515")).Err())
+	require.NoError(
+		t,
+		redisClient.Del(ctx, buildStatsKey(modelKeyPrefix(), "model-single-local-rate", "515")).
+			Err(),
+	)
 
 	rate, err = monitor.GetChannelModelErrorRate(ctx, "model-single-local-rate", 515)
 	require.NoError(t, err)
@@ -326,7 +333,8 @@ func TestRedisMonitorGetModelChannelErrorRateKeepsLocalCacheUntilTTL(t *testing.
 
 	require.NoError(
 		t,
-		redisClient.Del(ctx, buildStatsKey("model-local-rate-invalidate", "606")).Err(),
+		redisClient.Del(ctx, buildStatsKey(modelKeyPrefix(), "model-local-rate-invalidate", "606")).
+			Err(),
 	)
 
 	rates, err = monitor.GetModelChannelErrorRate(ctx, "model-local-rate-invalidate")
@@ -430,7 +438,7 @@ func TestRedisMonitorGetBannedChannelsMapWithModelKeepsLocalCacheUntilTTL(t *tes
 }
 
 func newTestRedisModelMonitor(client *redis.Client) *redisModelMonitor {
-	return newRedisModelMonitor(func() *redis.Client {
+	return newRedisModelMonitor(modelKeyPrefix, common.RedisKeyPrefix, func() *redis.Client {
 		return client
 	})
 }

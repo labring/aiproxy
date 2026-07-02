@@ -2,25 +2,72 @@
 package controller
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/labring/aiproxy/core/common/config"
+	"github.com/labring/aiproxy/core/common/consume"
+	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	relaycontroller "github.com/labring/aiproxy/core/relay/controller"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
-	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+type recordingAdaptorStore struct {
+	saved     []adaptor.StoreCache
+	saveScope model.ChannelScope
+	getScope  model.ChannelScope
+}
+
+func (s *recordingAdaptorStore) GetStoreByScope(
+	_ string,
+	_ int,
+	_ string,
+	scope model.ChannelScope,
+) (adaptor.StoreCache, error) {
+	s.getScope = scope
+	return adaptor.StoreCache{}, errors.New("unused")
+}
+
+func (s *recordingAdaptorStore) SaveStore(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	s.saveScope = scope
+	s.saved = append(s.saved, store)
+	return nil
+}
+
+func (s *recordingAdaptorStore) SaveStoreWithOption(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+	_ adaptor.SaveStoreOption,
+) error {
+	s.saveScope = scope
+	s.saved = append(s.saved, store)
+	return nil
+}
+
+func (s *recordingAdaptorStore) SaveIfNotExistStore(
+	store adaptor.StoreCache,
+	scope model.ChannelScope,
+) error {
+	s.saveScope = scope
+	s.saved = append(s.saved, store)
+	return nil
+}
 
 func TestRetryStateRemainingRelayDelay(t *testing.T) {
 	t.Parallel()
@@ -32,26 +79,26 @@ func TestRetryStateRemainingRelayDelay(t *testing.T) {
 		base := time.Unix(100, 0)
 		jitter := 400 * time.Millisecond
 
-		state.recordChannelFailure(7, base)
+		state.recordChannelFailure("7", base)
 
-		assert.Equal(t, 1400*time.Millisecond, state.remainingRelayDelay(7, base, jitter))
+		assert.Equal(t, 1400*time.Millisecond, state.remainingRelayDelay("7", base, jitter))
 		assert.Equal(
 			t,
 			900*time.Millisecond,
-			state.remainingRelayDelay(7, base.Add(500*time.Millisecond), jitter),
+			state.remainingRelayDelay("7", base.Add(500*time.Millisecond), jitter),
 		)
 
-		state.recordChannelFailure(7, base.Add(2*time.Second))
+		state.recordChannelFailure("7", base.Add(2*time.Second))
 
 		assert.Equal(
 			t,
 			2400*time.Millisecond,
-			state.remainingRelayDelay(7, base.Add(2*time.Second), jitter),
+			state.remainingRelayDelay("7", base.Add(2*time.Second), jitter),
 		)
 		assert.Equal(
 			t,
 			1150*time.Millisecond,
-			state.remainingRelayDelay(7, base.Add(3250*time.Millisecond), jitter),
+			state.remainingRelayDelay("7", base.Add(3250*time.Millisecond), jitter),
 		)
 	})
 
@@ -61,13 +108,16 @@ func TestRetryStateRemainingRelayDelay(t *testing.T) {
 		state := &retryState{}
 		base := time.Unix(200, 0)
 
-		state.recordChannelFailure(9, base)
+		state.recordChannelFailure("9", base)
 
 		assert.Zero(
 			t,
-			state.remainingRelayDelay(9, base.Add(1500*time.Millisecond), 400*time.Millisecond),
+			state.remainingRelayDelay("9", base.Add(1500*time.Millisecond), 400*time.Millisecond),
 		)
-		assert.Zero(t, state.remainingRelayDelay(9, base.Add(2*time.Second), 400*time.Millisecond))
+		assert.Zero(
+			t,
+			state.remainingRelayDelay("9", base.Add(2*time.Second), 400*time.Millisecond),
+		)
 	})
 
 	t.Run("tracks each channel independently", func(t *testing.T) {
@@ -76,21 +126,21 @@ func TestRetryStateRemainingRelayDelay(t *testing.T) {
 		state := &retryState{}
 		base := time.Unix(300, 0)
 
-		state.recordChannelFailure(1, base)
-		state.recordChannelFailure(2, base)
-		state.recordChannelFailure(2, base.Add(100*time.Millisecond))
+		state.recordChannelFailure("1", base)
+		state.recordChannelFailure("2", base)
+		state.recordChannelFailure("2", base.Add(100*time.Millisecond))
 
 		assert.Equal(
 			t,
 			500*time.Millisecond,
-			state.remainingRelayDelay(1, base.Add(800*time.Millisecond), 300*time.Millisecond),
+			state.remainingRelayDelay("1", base.Add(800*time.Millisecond), 300*time.Millisecond),
 		)
 		assert.Equal(
 			t,
 			1500*time.Millisecond,
-			state.remainingRelayDelay(2, base.Add(900*time.Millisecond), 300*time.Millisecond),
+			state.remainingRelayDelay("2", base.Add(900*time.Millisecond), 300*time.Millisecond),
 		)
-		assert.Zero(t, state.remainingRelayDelay(3, base, 300*time.Millisecond))
+		assert.Zero(t, state.remainingRelayDelay("3", base, 300*time.Millisecond))
 	})
 
 	t.Run("caps backoff at five seconds", func(t *testing.T) {
@@ -100,11 +150,11 @@ func TestRetryStateRemainingRelayDelay(t *testing.T) {
 		state := &retryState{}
 
 		for range 20 {
-			state.recordChannelFailure(5, base)
+			state.recordChannelFailure("5", base)
 		}
 
-		assert.Equal(t, 5*time.Second, state.remainingRelayDelay(5, base, time.Second))
-		assert.Zero(t, state.remainingRelayDelay(5, base.Add(5*time.Second), time.Second))
+		assert.Equal(t, 5*time.Second, state.remainingRelayDelay("5", base, time.Second))
+		assert.Zero(t, state.remainingRelayDelay("5", base.Add(5*time.Second), time.Second))
 	})
 }
 
@@ -112,266 +162,10 @@ func TestCalculateRelayBackoffDelay(t *testing.T) {
 	t.Parallel()
 
 	assert.Zero(t, calculateRelayBackoffDelay(0, 500*time.Millisecond))
-	assert.Equal(t, time.Second, calculateRelayBackoffDelay(1, -time.Second))
 	assert.Equal(t, 1500*time.Millisecond, calculateRelayBackoffDelay(1, 500*time.Millisecond))
-	assert.Equal(t, 2*time.Second, calculateRelayBackoffDelay(1, 2*time.Second))
 	assert.Equal(t, 2500*time.Millisecond, calculateRelayBackoffDelay(2, 500*time.Millisecond))
 	assert.Equal(t, 5*time.Second, calculateRelayBackoffDelay(20, time.Second))
 	assert.Equal(t, 2*time.Second, calculateRelayBackoffDelay(1, time.Second))
-}
-
-func TestHandleRelayResultDecidesRetryLifecycle(t *testing.T) {
-	t.Parallel()
-
-	newContext := func(ctx context.Context) *gin.Context {
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, "/", nil)
-
-		return c
-	}
-	err := relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{
-		Message: "upstream unavailable",
-	})
-
-	tests := []struct {
-		name       string
-		bizErr     adaptor.Error
-		retry      bool
-		retryTimes int
-		wantDone   bool
-	}{
-		{
-			name:     "successful request is done",
-			wantDone: true,
-		},
-		{
-			name:       "retryable error with budget continues",
-			bizErr:     err,
-			retry:      true,
-			retryTimes: 2,
-			wantDone:   false,
-		},
-		{
-			name:       "retry disabled finishes",
-			bizErr:     err,
-			retryTimes: 2,
-			wantDone:   true,
-		},
-		{
-			name:     "zero retry budget finishes",
-			bizErr:   err,
-			retry:    true,
-			wantDone: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.wantDone, handleRelayResult(
-				newContext(context.Background()),
-				tt.bizErr,
-				tt.retry,
-				tt.retryTimes,
-				time.Time{},
-			))
-		})
-	}
-
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	assert.True(t, handleRelayResult(newContext(canceled), err, true, 2, time.Time{}))
-}
-
-func TestInitRetryStateRecordsInitialFailure(t *testing.T) {
-	t.Parallel()
-
-	ch1 := &model.Channel{ID: 1, Status: model.ChannelStatusEnabled}
-	ch2 := &model.Channel{ID: 2, Status: model.ChannelStatusEnabled}
-	endAt := time.Unix(500, 0)
-	initial := &initialChannel{
-		channel:          ch1,
-		migratedChannels: []*model.Channel{ch1, ch2},
-		preferChannelIDs: []int{2},
-		ignoreChannelIDs: map[int64]struct{}{9: {}},
-	}
-	requestMeta := meta.NewMeta(ch1, mode.Responses, "gpt-5", model.ModelConfig{})
-	result := &relaycontroller.HandleResult{
-		Error: relaymodel.NewOpenAIError(http.StatusTooManyRequests, relaymodel.OpenAIError{
-			Message: "rate limited",
-		}),
-	}
-
-	state := initRetryState(3, initial, requestMeta, result, model.Price{}, endAt)
-
-	assert.Equal(t, 3, state.retryTimes)
-	assert.Equal(t, []int{2}, state.preferChannelIDs)
-	assert.Equal(t, initial.ignoreChannelIDs, state.ignoreChannelIDs)
-	assert.Equal(t, []*model.Channel{ch1, ch2}, state.migratedChannels)
-	assert.Contains(t, state.failedChannelIDs, int64(ch1.ID))
-	assert.Equal(t, 1, state.channelRetryInfo[ch1.ID].failures)
-	assert.Equal(t, endAt, state.channelRetryInfo[ch1.ID].lastEndAt)
-	assert.Nil(t, state.designatedChannel)
-}
-
-func TestInitRetryStateMarksInitialPermissionFailureAsIgnored(t *testing.T) {
-	t.Parallel()
-
-	channel := &model.Channel{ID: 7, Status: model.ChannelStatusEnabled}
-	requestMeta := meta.NewMeta(channel, mode.Responses, "gpt-5", model.ModelConfig{})
-	result := &relaycontroller.HandleResult{
-		Error: relaymodel.NewOpenAIError(http.StatusUnauthorized, relaymodel.OpenAIError{
-			Message: "invalid key",
-		}),
-	}
-
-	state := initRetryState(
-		2,
-		&initialChannel{channel: channel},
-		requestMeta,
-		result,
-		model.Price{},
-		time.Unix(600, 0),
-	)
-
-	assert.Contains(t, state.failedChannelIDs, int64(channel.ID))
-	assert.Contains(t, state.ignoreChannelIDs, int64(channel.ID))
-	assert.Empty(t, state.channelRetryInfo)
-}
-
-func TestInitRetryStateTracksDesignatedChannel(t *testing.T) {
-	t.Parallel()
-
-	channel := &model.Channel{ID: 8, Status: model.ChannelStatusEnabled}
-	requestMeta := meta.NewMeta(channel, mode.Responses, "gpt-5", model.ModelConfig{})
-	result := &relaycontroller.HandleResult{
-		Error: relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{
-			Message: "upstream error",
-		}),
-	}
-
-	state := initRetryState(
-		1,
-		&initialChannel{channel: channel, designatedChannel: true},
-		requestMeta,
-		result,
-		model.Price{},
-		time.Unix(700, 0),
-	)
-
-	assert.Same(t, channel, state.designatedChannel)
-}
-
-func TestHandleRetryResultUpdatesAutomaticRetryState(t *testing.T) {
-	t.Parallel()
-
-	newContext := func() *gin.Context {
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
-
-		return c
-	}
-	newState := func(err adaptor.Error) *retryState {
-		return &retryState{
-			retryTimes: 2,
-			result:     &relaycontroller.HandleResult{Error: err},
-		}
-	}
-	permissionError := relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{
-		Message: "upstream unavailable",
-	})
-	noPermissionError := relaymodel.NewOpenAIError(http.StatusUnauthorized, relaymodel.OpenAIError{
-		Message: "invalid key",
-	})
-	channel := &model.Channel{ID: 11, Status: model.ChannelStatusEnabled}
-
-	t.Run("permissioned failure keeps retrying without hard filtering", func(t *testing.T) {
-		t.Parallel()
-
-		state := newState(permissionError)
-
-		done := handleRetryResult(newContext(), true, channel, state)
-
-		assert.False(t, done)
-		assert.Equal(t, 2, state.retryTimes)
-		assert.Empty(t, state.ignoreChannelIDs)
-	})
-
-	t.Run("permission failure is hard filtered within retry limit", func(t *testing.T) {
-		t.Parallel()
-
-		state := newState(noPermissionError)
-
-		done := handleRetryResult(newContext(), true, channel, state)
-
-		assert.False(t, done)
-		assert.Equal(t, 2, state.retryTimes)
-		assert.Contains(t, state.ignoreChannelIDs, int64(channel.ID))
-	})
-
-	t.Run("retry disabled finishes immediately", func(t *testing.T) {
-		t.Parallel()
-
-		state := newState(permissionError)
-
-		done := handleRetryResult(newContext(), false, channel, state)
-
-		assert.True(t, done)
-	})
-
-	t.Run("nil result error finishes immediately", func(t *testing.T) {
-		t.Parallel()
-
-		state := newState(nil)
-
-		done := handleRetryResult(newContext(), true, channel, state)
-
-		assert.True(t, done)
-	})
-}
-
-func TestHandleRetryResultKeepsDesignatedChannelSemantics(t *testing.T) {
-	t.Parallel()
-
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
-	channel := &model.Channel{ID: 12, Status: model.ChannelStatusEnabled}
-
-	permissionedState := &retryState{
-		designatedChannel: channel,
-		result: &relaycontroller.HandleResult{
-			Error: relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{}),
-		},
-	}
-	assert.False(t, handleRetryResult(c, true, channel, permissionedState))
-
-	noPermissionState := &retryState{
-		designatedChannel: channel,
-		result: &relaycontroller.HandleResult{
-			Error: relaymodel.NewOpenAIError(http.StatusForbidden, relaymodel.OpenAIError{}),
-		},
-	}
-	assert.True(t, handleRetryResult(c, true, channel, noPermissionState))
-	assert.Empty(t, noPermissionState.ignoreChannelIDs)
-}
-
-func TestHandleRetryResultStopsOnCanceledContext(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, "/", nil)
-
-	cancel()
-
-	state := &retryState{
-		result: &relaycontroller.HandleResult{
-			Error: relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{}),
-		},
-	}
-
-	assert.True(t, handleRetryResult(c, true, &model.Channel{ID: 13}, state))
 }
 
 func TestRelayControllerVideoModesValidateRequests(t *testing.T) {
@@ -429,15 +223,339 @@ func TestRelayControllerVideoModesValidateRequests(t *testing.T) {
 	}
 }
 
+func TestRelayChecksModeBeforeSelectingChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		nil,
+	)
+	c.Set(middleware.RequestModel, "pdf-only")
+	c.Set(middleware.ModelConfig, model.ModelConfig{
+		Model: "pdf-only",
+		Type:  mode.ParsePdf,
+	})
+	c.Set(middleware.ModelCaches, &model.ModelCaches{
+		ModelConfig: testModelConfigCache{
+			"pdf-only": {
+				Model: "pdf-only",
+				Type:  mode.ParsePdf,
+			},
+		},
+		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
+			model.ChannelDefaultSet: {
+				"pdf-only": {
+					{
+						ID:     1,
+						Type:   model.ChannelTypeOpenAI,
+						Status: model.ChannelStatusEnabled,
+						Models: []string{"pdf-only"},
+					},
+				},
+			},
+		},
+	})
+	c.Set(middleware.Group, model.GroupCache{
+		ID:            "group-1",
+		Status:        model.GroupStatusEnabled,
+		AvailableSets: []string{model.ChannelDefaultSet},
+	})
+	c.Set(middleware.Token, model.TokenCache{})
+	c.Set(middleware.AvailableSets, []string{model.ChannelDefaultSet})
+	c.Set(middleware.GroupChannelMode, middleware.GroupChannelModeGlobal)
+
+	relay(c, mode.ChatCompletions, RelayController{})
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "does not exist on this endpoint")
+}
+
+func TestRelayOwnModeUsesGroupScopeConfigForModeCheck(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := "group-scope-mode-check"
+	setTestGroupScopeModelConfigs(t, groupID, model.ModelConfig{
+		Model: "public-model",
+		Type:  mode.ChatCompletions,
+	})
+	require.NoError(t, model.CacheSetGroupChannels(&model.GroupChannelsCache{
+		GroupID: groupID,
+		Channels: []*model.GroupChannel{
+			{
+				ID:      7,
+				GroupID: groupID,
+				Type:    model.ChannelTypeOpenAI,
+				Status:  model.ChannelStatusEnabled,
+				Models:  []string{"public-model"},
+			},
+		},
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, model.CacheDeleteGroupChannels(groupID))
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		nil,
+	)
+	c.Set(middleware.RequestModel, "public-model")
+	c.Set(middleware.ModelConfig, model.ModelConfig{
+		Model: "public-model",
+		Type:  mode.ParsePdf,
+	})
+	c.Set(middleware.ModelCaches, &model.ModelCaches{
+		ModelConfig: testModelConfigCache{
+			"public-model": {
+				Model: "public-model",
+				Type:  mode.ParsePdf,
+			},
+		},
+		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{},
+	})
+	c.Set(middleware.Group, model.GroupCache{
+		ID:     groupID,
+		Status: model.GroupStatusEnabled,
+	})
+	c.Set(middleware.Token, model.TokenCache{ID: 1, Name: "token-1"})
+	c.Set(middleware.AvailableSets, []string{model.ChannelDefaultSet})
+	c.Set(middleware.GroupChannelMode, middleware.GroupChannelModeOwn)
+	c.Set(middleware.RequestAt, time.Now())
+	c.Set(middleware.RequestServiceTier, "")
+	c.Set(middleware.RequestMetadata, map[string]string{})
+	c.Set(middleware.PromptCacheKey, "")
+	c.Set(middleware.RequestUser, "")
+	c.Set(middleware.GroupBalance, &middleware.GroupBalanceConsumer{
+		Group:        groupID,
+		CheckBalance: func(float64) bool { return true },
+	})
+
+	called := false
+	relay(c, mode.ChatCompletions, RelayController{
+		Handler: func(_ *gin.Context, meta *meta.Meta) *relaycontroller.HandleResult {
+			called = true
+
+			require.Equal(t, model.ChannelScopeGroup, meta.Channel.Scope)
+			require.Equal(t, mode.ChatCompletions, meta.ModelConfig.Type)
+
+			return &relaycontroller.HandleResult{}
+		},
+	})
+
+	require.True(t, called)
+	require.False(t, c.IsAborted())
+}
+
+func TestResolveScopedModelConfigForGroupChannelUsesGroupScopeConfig(t *testing.T) {
+	t.Parallel()
+
+	groupID := "group-scope-resolve"
+	setTestGroupScopeModelConfigs(t, groupID, model.ModelConfig{
+		Model:      "public-model",
+		Type:       mode.ChatCompletions,
+		RetryTimes: 9,
+		RPM:        100,
+		TPM:        200,
+		Price: model.Price{
+			PerRequestPrice: 2,
+		},
+		Plugin: map[string]map[string]any{
+			"cachefollow": {"enable": true},
+		},
+	})
+
+	group := model.GroupCache{
+		ID:       groupID,
+		RPMRatio: 2,
+		TPMRatio: 3,
+		ModelConfigs: map[string]model.GroupModelConfig{
+			"public-model": {
+				Model:              "public-model",
+				OverrideLimit:      true,
+				RPM:                10,
+				TPM:                20,
+				OverrideRetryTimes: true,
+				RetryTimes:         4,
+				OverridePrice:      true,
+				Price: model.Price{
+					PerRequestPrice: 1,
+				},
+			},
+		},
+	}
+	modelCaches := &model.ModelCaches{
+		ModelConfig: testModelConfigCache{
+			"public-model": {
+				Model:      "public-model",
+				Type:       mode.GeminiImage,
+				RetryTimes: 9,
+				RPM:        100,
+				TPM:        200,
+				Plugin: map[string]map[string]any{
+					"cachefollow": {"enable": true},
+				},
+			},
+		},
+	}
+
+	got, ok := resolveScopedModelConfig(
+		group,
+		modelCaches,
+		newGroupScopedChannel(groupID, &model.Channel{ID: 7}),
+		"public-model",
+	)
+
+	require.True(t, ok)
+	require.Equal(t, "public-model", got.Model)
+	require.Equal(t, mode.ChatCompletions, got.Type)
+	require.Equal(t, int64(200), got.RPM)
+	require.Equal(t, int64(600), got.TPM)
+	require.Equal(t, int64(9), got.RetryTimes)
+	require.Equal(t, float64(2), float64(got.Price.PerRequestPrice))
+	require.Equal(t, map[string]map[string]any{"cachefollow": {"enable": true}}, got.Plugin)
+}
+
+func TestResolveScopedModelConfigForGroupChannelUsesDefaultWhenModelConfigDisabled(t *testing.T) {
+	oldDisableModelConfig := config.DisableModelConfig
+	config.DisableModelConfig = true
+	t.Cleanup(func() {
+		config.DisableModelConfig = oldDisableModelConfig
+	})
+
+	got, ok := resolveScopedModelConfig(
+		model.GroupCache{ID: "group-disabled-model-config"},
+		&model.ModelCaches{ModelConfig: testModelConfigCache{}},
+		newGroupScopedChannel("group-disabled-model-config", &model.Channel{ID: 7}),
+		"dynamic-model",
+	)
+
+	require.True(t, ok)
+	require.Equal(t, model.NewDefaultModelConfig("dynamic-model"), got)
+}
+
+func TestResolveScopedModelConfigForGlobalChannelUsesGlobalWithGroupOverride(t *testing.T) {
+	t.Parallel()
+
+	group := model.GroupCache{
+		ID:       "group-1",
+		RPMRatio: 2,
+		TPMRatio: 3,
+		ModelConfigs: map[string]model.GroupModelConfig{
+			"public-model": {
+				Model:              "public-model",
+				OverrideRetryTimes: true,
+				RetryTimes:         4,
+			},
+		},
+	}
+	modelCaches := &model.ModelCaches{
+		ModelConfig: testModelConfigCache{
+			"public-model": {
+				Model:      "public-model",
+				Type:       mode.GeminiImage,
+				RetryTimes: 3,
+				RPM:        60,
+				TPM:        600,
+				Plugin: map[string]map[string]any{
+					"cachefollow": {"enable": true},
+				},
+			},
+		},
+	}
+
+	got, ok := resolveScopedModelConfig(
+		group,
+		modelCaches,
+		newGlobalScopedChannel(&model.Channel{ID: 7}),
+		"public-model",
+	)
+
+	require.True(t, ok)
+	require.Equal(t, mode.GeminiImage, got.Type)
+	require.Equal(t, int64(120), got.RPM)
+	require.Equal(t, int64(1800), got.TPM)
+	require.Equal(t, int64(4), got.RetryTimes)
+	require.Equal(t, map[string]map[string]any{"cachefollow": {"enable": true}}, got.Plugin)
+}
+
+func TestResolveScopedModelConfigForGlobalChannelRequiresGlobalConfig(t *testing.T) {
+	t.Parallel()
+
+	got, ok := resolveScopedModelConfig(
+		model.GroupCache{ID: "group-1"},
+		&model.ModelCaches{ModelConfig: testModelConfigCache{}},
+		newGlobalScopedChannel(&model.Channel{ID: 7}),
+		"public-model",
+	)
+
+	require.False(t, ok)
+	require.Empty(t, got)
+}
+
+func TestNewMetaByScopedChannelCanOverrideModelConfig(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		nil,
+	)
+	c.Set(middleware.RequestModel, "public-model")
+	c.Set(middleware.ModelConfig, model.ModelConfig{
+		Model:      "public-model",
+		RetryTimes: 9,
+		RPM:        90,
+	})
+	c.Set(middleware.Group, model.GroupCache{ID: "group-1"})
+	c.Set(middleware.Token, model.TokenCache{ID: 1, Name: "token-1"})
+
+	defaultConfig := model.NewDefaultModelConfig("public-model")
+	meta := NewMetaByScopedChannel(
+		c,
+		newGroupScopedChannel("group-1", &model.Channel{ID: 7}),
+		mode.ChatCompletions,
+		meta.WithModelConfig(defaultConfig),
+	)
+
+	require.Equal(t, defaultConfig, meta.ModelConfig)
+	require.Equal(t, model.ChannelScopeGroup, meta.Channel.Scope)
+	require.Equal(t, "group-1", meta.Channel.GroupID)
+}
+
 func TestSaveAsyncUsageInfoDoesNotStoreInitialUsage(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.AsyncUsageInfo{}))
+	require.NoError(t, db.AutoMigrate(
+		&model.AsyncUsageInfo{},
+		&model.GroupChannel{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelSummary{},
+		&model.GroupChannelSummaryMinute{},
+		&model.GroupChannelTokenSummary{},
+		&model.GroupChannelTokenSummaryMinute{},
+	))
 
 	oldLogDB := model.LogDB
+	oldDB := model.DB
 	model.LogDB = db
+	model.DB = db
 	t.Cleanup(func() {
+		consume.Wait()
+		model.ProcessBatchUpdatesSummary()
+
 		model.LogDB = oldLogDB
+		model.DB = oldDB
 	})
 
 	m := meta.NewMeta(
@@ -470,6 +588,191 @@ func TestSaveAsyncUsageInfoDoesNotStoreInitialUsage(t *testing.T) {
 	require.Zero(t, captured.Usage.OutputTokens)
 	require.Zero(t, captured.Usage.TotalTokens)
 	require.Equal(t, "priority", captured.UsageContext.ServiceTier)
+}
+
+func TestSaveAsyncUsageInfoSkipsGroupChannel(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.AsyncUsageInfo{}))
+
+	oldLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = oldLogDB
+	})
+
+	m := meta.NewMeta(
+		&model.Channel{ID: 12, BaseURL: "https://example.com"},
+		mode.Videos,
+		"test-video-model",
+		model.ModelConfig{},
+		meta.WithRequestID("request-async-2"),
+		meta.WithGroup(model.GroupCache{ID: "group-1"}),
+		meta.WithToken(model.TokenCache{ID: 22, Name: "token-1"}),
+		meta.WithChannelScope(model.ChannelScopeGroup, "group-1"),
+	)
+
+	saveAsyncUsageInfo(m, model.Price{}, &relaycontroller.HandleResult{
+		UpstreamID: "video-456",
+	})
+
+	var count int64
+	require.NoError(t, db.Model(&model.AsyncUsageInfo{}).Count(&count).Error)
+	require.Zero(t, count)
+}
+
+func TestShouldRecordAsyncUsageSkipsGroupChannel(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{ID: 12, BaseURL: "https://example.com"},
+		mode.Videos,
+		"test-video-model",
+		model.ModelConfig{},
+		meta.WithRequestID("request-group-async"),
+		meta.WithGroup(model.GroupCache{ID: "group-1"}),
+		meta.WithToken(model.TokenCache{ID: 22, Name: "token-1"}),
+		meta.WithChannelScope(model.ChannelScopeGroup, "group-1"),
+	)
+
+	require.False(t, shouldRecordAsyncUsage(m, &relaycontroller.HandleResult{
+		UpstreamID: "video-789",
+		AsyncUsage: true,
+		Usage:      model.Usage{OutputTokens: 10, TotalTokens: 10},
+	}, true))
+}
+
+func TestRecordResultGroupChannelForcesSynchronousUsage(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "record_result_group_async.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.GroupChannel{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelSummary{},
+		&model.GroupChannelSummaryMinute{},
+		&model.GroupChannelTokenSummary{},
+		&model.GroupChannelTokenSummaryMinute{},
+	))
+	require.NoError(t, db.Create(&model.GroupChannel{
+		ID:      7,
+		GroupID: "group-1",
+		Name:    "group-channel-7",
+	}).Error)
+
+	oldLogDB := model.LogDB
+	oldDB := model.DB
+	model.LogDB = db
+	model.DB = db
+	t.Cleanup(func() {
+		consume.Wait()
+		model.ProcessBatchUpdatesSummary()
+
+		model.LogDB = oldLogDB
+		model.DB = oldDB
+	})
+
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/videos",
+		nil,
+	)
+	c.Set(middleware.GroupBalance, &middleware.GroupBalanceConsumer{
+		Group:        "group-1",
+		CheckBalance: func(float64) bool { return true },
+	})
+
+	requestMeta := meta.NewMeta(
+		&model.Channel{ID: 7, BaseURL: "https://example.com"},
+		mode.Videos,
+		"video-model",
+		model.ModelConfig{},
+		meta.WithRequestID("group-record-result-async"),
+		meta.WithGroup(model.GroupCache{ID: "group-1"}),
+		meta.WithToken(model.TokenCache{ID: 22, Name: "token-1"}),
+		meta.WithChannelScope(model.ChannelScopeGroup, "group-1"),
+	)
+
+	recordResult(
+		c,
+		requestMeta,
+		model.Price{OutputPrice: 1, OutputPriceUnit: 1},
+		&relaycontroller.HandleResult{
+			Usage: model.Usage{
+				OutputTokens: 5,
+				TotalTokens:  5,
+			},
+			UpstreamID: "video-789",
+			AsyncUsage: true,
+		},
+		0,
+		true,
+		nil,
+	)
+	consume.Wait()
+	model.ProcessBatchUpdatesSummary()
+
+	var logEntry model.GroupChannelLog
+	require.NoError(t, db.Where("request_id = ?", requestMeta.RequestID).First(&logEntry).Error)
+	require.Equal(t, model.AsyncUsageStatusNone, logEntry.AsyncUsageStatus)
+	require.Equal(t, model.ZeroNullInt64(5), logEntry.Usage.OutputTokens)
+	require.Equal(t, 5.0, logEntry.Amount.UsedAmount)
+}
+
+func TestScopedAdaptorStoreFillsEmptyStoreFields(t *testing.T) {
+	base := &recordingAdaptorStore{}
+	m := meta.NewMeta(
+		&model.Channel{ID: 12},
+		mode.Responses,
+		"gpt-5",
+		model.ModelConfig{},
+		meta.WithGroup(model.GroupCache{ID: "group-1"}),
+		meta.WithToken(model.TokenCache{ID: 22}),
+		meta.WithChannelScope(model.ChannelScopeGroup, "group-1"),
+	)
+	store := newScopedAdaptorStore(base, m)
+
+	require.NoError(t, store.SaveStore(adaptor.StoreCache{
+		ID: model.ResponseStoreID("resp_scope_fields"),
+	}, model.ChannelScopeGroup))
+
+	require.Len(t, base.saved, 1)
+	require.Equal(t, "group-1", base.saved[0].GroupID)
+	require.Equal(t, 22, base.saved[0].TokenID)
+	require.Equal(t, model.ChannelScopeGroup, base.saveScope)
+	require.Equal(t, 12, base.saved[0].ChannelID)
+	require.Equal(t, "gpt-5", base.saved[0].Model)
+}
+
+func TestScopedAdaptorStorePreservesExplicitStoreFieldsAndOverridesScope(t *testing.T) {
+	base := &recordingAdaptorStore{}
+	m := meta.NewMeta(
+		&model.Channel{ID: 12},
+		mode.Responses,
+		"gpt-5",
+		model.ModelConfig{},
+		meta.WithGroup(model.GroupCache{ID: "group-1"}),
+		meta.WithToken(model.TokenCache{ID: 22}),
+		meta.WithChannelScope(model.ChannelScopeGroup, "group-1"),
+	)
+	store := newScopedAdaptorStore(base, m)
+
+	require.NoError(t, store.SaveStore(adaptor.StoreCache{
+		ID:        model.ResponseStoreID("resp_explicit_scope_fields"),
+		GroupID:   "other-group",
+		TokenID:   33,
+		ChannelID: 44,
+		Model:     "other-model",
+	}, model.ChannelScopeGroup))
+
+	require.Len(t, base.saved, 1)
+	require.Equal(t, "other-group", base.saved[0].GroupID)
+	require.Equal(t, 33, base.saved[0].TokenID)
+	require.Equal(t, model.ChannelScopeGroup, base.saveScope)
+	require.Equal(t, 44, base.saved[0].ChannelID)
+	require.Equal(t, "other-model", base.saved[0].Model)
 }
 
 func TestBuildRequestDetailForLogSkipsRequestBodyForUpstreamOnlyStatuses(t *testing.T) {

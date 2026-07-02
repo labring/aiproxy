@@ -74,8 +74,8 @@ func TestMemModelMonitorCleanupExpiredData(t *testing.T) {
 	monitor := &MemModelMonitor{
 		models: map[string]*ModelData{
 			"model-a": {
-				channels: map[int64]*ChannelStats{
-					1: {
+				channels: map[string]*ChannelStats{
+					"1": {
 						timeWindows: &TimeWindowStats{
 							slices: []*timeSlice{
 								{windowStart: time.Now().Add(-13 * timeWindow), requests: 1},
@@ -178,4 +178,102 @@ func TestMemModelMonitorGetChannelModelErrorRate(t *testing.T) {
 	rate, err = monitor.GetChannelModelErrorRate(context.Background(), "model-single-rate", 404)
 	require.NoError(t, err)
 	require.Zero(t, rate)
+}
+
+func TestMemModelMonitorGroupChannelKeyIsolation(t *testing.T) {
+	monitor := &MemModelMonitor{
+		models: make(map[string]*ModelData),
+	}
+
+	groupKey := "group_channel:group-1:42"
+	for range minRequestCount {
+		_, _ = monitor.AddRequestByChannelKey("model-group", groupKey, true, false, 0)
+	}
+
+	stringRates, err := monitor.GetModelChannelErrorRateByKey(context.Background(), "model-group")
+	require.NoError(t, err)
+	require.Contains(t, stringRates, groupKey)
+
+	intRates, err := monitor.GetModelChannelErrorRate(context.Background(), "model-group")
+	require.NoError(t, err)
+	require.Empty(t, intRates)
+
+	banned, err := monitor.GetBannedChannelsMapWithModelByKey(context.Background(), "model-group")
+	require.NoError(t, err)
+	require.Empty(t, banned)
+
+	_, _ = monitor.AddRequestByChannelKey("model-group", groupKey, true, true, 0)
+	banned, err = monitor.GetBannedChannelsMapWithModelByKey(context.Background(), "model-group")
+	require.NoError(t, err)
+	require.Contains(t, banned, groupKey)
+
+	require.NoError(t, monitor.ClearChannelAllModelErrorsByKey(context.Background(), groupKey))
+	rate, err := monitor.GetChannelModelErrorRateByKey(
+		context.Background(),
+		"model-group",
+		groupKey,
+	)
+	require.NoError(t, err)
+	require.Zero(t, rate)
+}
+
+func TestGroupChannelMonitorNamespaceIsolatedFromGlobalMonitor(t *testing.T) {
+	oldGlobalMonitor := memModelMonitor
+	oldGroupChannelMonitor := memGroupChannelModelMonitor
+	memModelMonitor = &MemModelMonitor{models: make(map[string]*ModelData)}
+	memGroupChannelModelMonitor = &MemModelMonitor{models: make(map[string]*ModelData)}
+	t.Cleanup(func() {
+		memModelMonitor = oldGlobalMonitor
+		memGroupChannelModelMonitor = oldGroupChannelMonitor
+	})
+
+	ctx := context.Background()
+
+	groupKey := "group_channel:group-1:42"
+	for range minRequestCount {
+		_, _, err := AddGroupChannelRequestByChannelKey(
+			ctx,
+			"model-group-scope",
+			groupKey,
+			true,
+			false,
+			0,
+		)
+		require.NoError(t, err)
+	}
+
+	globalModelRates, err := GetModelsErrorRate(ctx)
+	require.NoError(t, err)
+	require.Empty(t, globalModelRates)
+
+	globalStringRates, err := GetModelChannelErrorRateByKey(ctx, "model-group-scope")
+	require.NoError(t, err)
+	require.Empty(t, globalStringRates)
+
+	groupStringRates, err := GetGroupChannelModelErrorRateByKey(ctx, "model-group-scope")
+	require.NoError(t, err)
+	require.Contains(t, groupStringRates, groupKey)
+
+	_, _, err = AddGroupChannelRequestByChannelKey(
+		ctx,
+		"model-group-scope",
+		groupKey,
+		true,
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	globalBanned, err := GetBannedChannelKeysMapWithModel(ctx, "model-group-scope")
+	require.NoError(t, err)
+	require.Empty(t, globalBanned)
+
+	groupBanned, err := GetGroupChannelBannedChannelKeysMapWithModel(ctx, "model-group-scope")
+	require.NoError(t, err)
+	require.Contains(t, groupBanned, groupKey)
+
+	require.NoError(t, ClearGroupChannelAllModelErrorsByKey(ctx, groupKey))
+	groupRate, err := GetGroupChannelChannelModelErrorRateByKey(ctx, "model-group-scope", groupKey)
+	require.NoError(t, err)
+	require.Zero(t, groupRate)
 }

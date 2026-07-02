@@ -25,9 +25,7 @@ type vertexVideoTestStore struct {
 	items map[string]adaptorapi.StoreCache
 }
 
-func (s *vertexVideoTestStore) GetStore(
-	_ string,
-	_ int,
+func (s *vertexVideoTestStore) getStore(
 	id string,
 ) (adaptorapi.StoreCache, error) {
 	if item, ok := s.items[id]; ok {
@@ -37,18 +35,34 @@ func (s *vertexVideoTestStore) GetStore(
 	return adaptorapi.StoreCache{}, coremodel.NotFoundError(coremodel.ErrStoreNotFound)
 }
 
-func (s *vertexVideoTestStore) SaveStore(adaptorapi.StoreCache) error {
+func (s *vertexVideoTestStore) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	_ coremodel.ChannelScope,
+) (adaptorapi.StoreCache, error) {
+	return s.getStore(id)
+}
+
+func (s *vertexVideoTestStore) SaveStore(
+	adaptorapi.StoreCache,
+	coremodel.ChannelScope,
+) error {
 	return nil
 }
 
 func (s *vertexVideoTestStore) SaveStoreWithOption(
 	adaptorapi.StoreCache,
+	coremodel.ChannelScope,
 	adaptorapi.SaveStoreOption,
 ) error {
 	return nil
 }
 
-func (s *vertexVideoTestStore) SaveIfNotExistStore(adaptorapi.StoreCache) error {
+func (s *vertexVideoTestStore) SaveIfNotExistStore(
+	adaptorapi.StoreCache,
+	coremodel.ChannelScope,
+) error {
 	return nil
 }
 

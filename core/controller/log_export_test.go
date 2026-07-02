@@ -145,6 +145,58 @@ func TestBuildLogExportCSVIncludesChannelWhenRequested(t *testing.T) {
 	}
 }
 
+func TestBuildGroupChannelLogExportUsesGroupChannelColumn(t *testing.T) {
+	logItem := &model.GroupChannelLog{
+		ID:             1,
+		CreatedAt:      time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		RequestAt:      time.Date(2026, time.April, 14, 12, 0, 1, 0, time.UTC),
+		GroupID:        "demo",
+		TokenID:        2,
+		TokenName:      "token-a",
+		GroupChannelID: 9,
+		Model:          "gpt-test",
+		RequestID:      model.EmptyNullString("req-1"),
+	}
+
+	var buffer strings.Builder
+
+	writer := csv.NewWriter(&buffer)
+
+	header := buildLogExportHeader("group_channel", false)
+	if err := writer.Write(header); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+
+	if err := writer.Write(buildLogExportRow(
+		groupChannelLogToLogForExport(logItem),
+		time.UTC,
+		header,
+		false,
+	)); err != nil {
+		t.Fatalf("write row: %v", err)
+	}
+
+	writer.Flush()
+
+	if err := writer.Error(); err != nil {
+		t.Fatalf("flush csv: %v", err)
+	}
+
+	records, err := csv.NewReader(strings.NewReader(buffer.String())).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv: %v", err)
+	}
+
+	values := csvRecordMap(t, records)
+	if _, ok := values["channel"]; ok {
+		t.Fatalf("expected group-channel export to omit channel column, got %#v", values)
+	}
+
+	if values["group_channel"] != "9" {
+		t.Fatalf("expected group_channel value 9, got %q", values["group_channel"])
+	}
+}
+
 func TestBuildLogExportCSVExcludesTimezoneModeAndRetryAtByDefault(t *testing.T) {
 	content, err := buildLogExportCSV([]*model.Log{
 		{
