@@ -415,7 +415,7 @@ func processOneAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo) {
 		info.NextPollAt.Format(time.RFC3339),
 	)
 
-	channel, err := model.GetChannelByID(info.ChannelID)
+	channel, err := loadAsyncUsageChannel(info)
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Debugf(
@@ -529,6 +529,10 @@ func processOneAsyncUsage(ctx context.Context, info *model.AsyncUsageInfo) {
 	)
 }
 
+func loadAsyncUsageChannel(info *model.AsyncUsageInfo) (*model.Channel, error) {
+	return model.GetChannelByID(info.ChannelID)
+}
+
 func startAsyncUsageClaimRenewal(
 	ctx context.Context,
 	info *model.AsyncUsageInfo,
@@ -615,6 +619,15 @@ func completeAsyncUsage(
 	selectedPrice.ConditionalPrices = nil
 
 	if amount.UsedAmount > 0 && !info.BalanceConsumed {
+		claimed, err := model.ClaimedAsyncUsageInfoExists(info)
+		if err != nil {
+			return fmt.Errorf("check async usage claim before charge: %w", err)
+		}
+
+		if !claimed {
+			return errors.New("async usage claim lost")
+		}
+
 		charged, err := consumeAsyncUsageGroupBalance(ctx, info, amount.UsedAmount)
 		if err != nil {
 			notify.ErrorThrottle(
@@ -645,29 +658,40 @@ func completeAsyncUsage(
 		}
 	}
 
-	if err := model.UpdateLogUsageByRequestID(
-		info.RequestID,
-		usage,
-		usageContext,
-		selectedPrice,
-		amount,
-	); err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			notify.ErrorThrottle(
-				"asyncUsageUpdateLog",
-				time.Minute*5,
-				"update async usage log failed",
-				err.Error(),
-			)
-
-			return fmt.Errorf("update async usage log: %w", err)
-		}
+	saved, err := model.SaveClaimedAsyncUsageResult(info, usage, usageContext, amount)
+	if err != nil {
+		return fmt.Errorf("update async usage info: %w", err)
 	}
+
+	if !saved {
+		return errors.New("async usage claim lost")
+	}
+
+	info.Usage = usage
+	info.UsageContext = usageContext
+	info.Amount = amount
+	info.Error = ""
+
+	if err := updateAsyncUsageLog(info, usage, usageContext, selectedPrice, amount); err != nil {
+		return err
+	}
+
+	completed, err := model.CompleteClaimedAsyncUsageInfo(info)
+	if err != nil {
+		return fmt.Errorf("complete async usage info: %w", err)
+	}
+
+	if !completed {
+		return errors.New("async usage claim lost")
+	}
+
+	info.Status = model.AsyncUsageStatusCompleted
 
 	model.BatchUpdateSummaryOnlyUsage(
 		time.Now(),
 		info.RequestAt,
 		info.GroupID,
+		model.ChannelScopeGlobal,
 		info.ChannelID,
 		info.Model,
 		info.TokenID,
@@ -678,19 +702,35 @@ func completeAsyncUsage(
 		model.IsClaudeLongContextSummary(info.Model, usage),
 	)
 
-	info.Status = model.AsyncUsageStatusCompleted
-	info.Usage = usage
-	info.UsageContext = usageContext
-	info.Amount = amount
-	info.Error = ""
+	return nil
+}
 
-	completed, err := model.CompleteClaimedAsyncUsageInfo(info, usage, usageContext, amount)
-	if err != nil {
-		return fmt.Errorf("update async usage info: %w", err)
-	}
+func updateAsyncUsageLog(
+	info *model.AsyncUsageInfo,
+	usage model.Usage,
+	usageContext model.UsageContext,
+	selectedPrice model.Price,
+	amount model.Amount,
+) error {
+	if err := model.UpdateLogUsageByRequestID(
+		info.RequestID,
+		usage,
+		usageContext,
+		selectedPrice,
+		amount,
+	); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
 
-	if !completed {
-		return errors.New("async usage claim lost")
+		notify.ErrorThrottle(
+			"asyncUsageUpdateLog",
+			time.Minute*5,
+			"update async usage log failed",
+			err.Error(),
+		)
+
+		return fmt.Errorf("update async usage log: %w", err)
 	}
 
 	return nil

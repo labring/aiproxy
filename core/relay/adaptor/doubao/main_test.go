@@ -26,7 +26,7 @@ type doubaoTestStore struct {
 	saved []adaptor.StoreCache
 }
 
-func (s *doubaoTestStore) GetStore(_ string, _ int, id string) (adaptor.StoreCache, error) {
+func (s *doubaoTestStore) getStore(id string) (adaptor.StoreCache, error) {
 	for _, cache := range s.saved {
 		if cache.ID == id {
 			return cache, nil
@@ -36,20 +36,36 @@ func (s *doubaoTestStore) GetStore(_ string, _ int, id string) (adaptor.StoreCac
 	return adaptor.StoreCache{}, nil
 }
 
-func (s *doubaoTestStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *doubaoTestStore) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	_ coremodel.ChannelScope,
+) (adaptor.StoreCache, error) {
+	return s.getStore(id)
+}
+
+func (s *doubaoTestStore) SaveStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *doubaoTestStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
 	_ adaptor.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *doubaoTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *doubaoTestStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

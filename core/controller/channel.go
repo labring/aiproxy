@@ -27,6 +27,8 @@ import (
 //	@Security		ApiKeyAuth
 //	@Success		200	{object}	middleware.APIResponse{data=map[int]adaptors.AdaptorMeta}
 //	@Router			/api/channels/type_metas [get]
+//	@Router			/api/group/{group}/channels/type_metas [get]
+//	@Router			/api/group_channels/type_metas [get]
 func ChannelTypeMetas(c *gin.Context) {
 	middleware.SuccessResponse(c, adaptors.ChannelMetas)
 }
@@ -164,8 +166,8 @@ func AddChannels(c *gin.Context) {
 	}
 
 	_channels := make([]*model.Channel, 0, len(channels))
-	for _, channel := range channels {
-		channel, err := channel.ToChannel()
+	for _, req := range channels {
+		channel, err := req.ToChannel()
 		if err != nil {
 			middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 			return

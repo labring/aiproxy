@@ -3,17 +3,33 @@ package consume_test
 import (
 	"context"
 	"net/http"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/labring/aiproxy/core/common/balance"
 	"github.com/labring/aiproxy/core/common/consume"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
+
+type trackingPostGroupConsumer struct {
+	calls atomic.Int64
+}
+
+var _ balance.PostGroupConsumer = (*trackingPostGroupConsumer)(nil)
+
+func (c *trackingPostGroupConsumer) PostGroupConsume(
+	context.Context,
+	string,
+	float64,
+) (float64, error) {
+	c.calls.Add(1)
+	return 0, nil
+}
 
 func TestCalculateAmount(t *testing.T) {
 	tests := []struct {
@@ -613,14 +629,28 @@ func TestCalculateAmountWithConditionalPricing(t *testing.T) {
 }
 
 func TestConsumePendingAsyncUsageDoesNotRecordPriceUsageOrAmount(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "pending_async_usage.db"))
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	require.NoError(t, db.AutoMigrate(
+		&model.Log{},
+		&model.Group{},
+		&model.Token{},
+		&model.Channel{},
+		&model.Summary{},
+		&model.SummaryMinute{},
+		&model.GroupSummary{},
+		&model.GroupSummaryMinute{},
+	))
 
 	oldLogDB := model.LogDB
+	oldDB := model.DB
 	model.LogDB = db
+	model.DB = db
 	t.Cleanup(func() {
+		model.ProcessBatchUpdatesSummary()
+
 		model.LogDB = oldLogDB
+		model.DB = oldDB
 	})
 
 	requestMeta := &meta.Meta{
@@ -681,4 +711,311 @@ func TestConsumePendingAsyncUsageDoesNotRecordPriceUsageOrAmount(t *testing.T) {
 	require.Zero(t, logEntry.Amount.UsedAmount)
 	require.Zero(t, logEntry.Price.OutputPrice)
 	require.Empty(t, logEntry.Price.ConditionalPrices)
+}
+
+func TestConsumeGroupChannelRecordsAmountWithoutPostConsume(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "group_channel_consume.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.Group{},
+		&model.Token{},
+		&model.GroupChannel{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelSummary{},
+		&model.GroupChannelSummaryMinute{},
+		&model.GroupChannelTokenSummary{},
+		&model.GroupChannelTokenSummaryMinute{},
+	))
+
+	oldLogDB := model.LogDB
+	oldDB := model.DB
+	model.LogDB = db
+	model.DB = db
+	t.Cleanup(func() {
+		model.ProcessBatchUpdatesSummary()
+
+		model.LogDB = oldLogDB
+		model.DB = oldDB
+	})
+
+	require.NoError(t, db.Create(&model.Group{ID: "group"}).Error)
+	require.NoError(t, db.Create(&model.Token{ID: 1, Name: "token", GroupID: "group"}).Error)
+	require.NoError(t, db.Create(&model.GroupChannel{
+		ID:      2,
+		GroupID: "group",
+		Type:    model.ChannelTypeOpenAI,
+	}).Error)
+
+	requestMeta := &meta.Meta{
+		RequestID:   "group_channel_async_ignored",
+		RequestAt:   time.Now(),
+		Group:       model.GroupCache{ID: "group"},
+		Token:       model.TokenCache{ID: 1, Name: "token"},
+		Channel:     meta.ChannelMeta{ID: 2, Scope: model.ChannelScopeGroup, GroupID: "group"},
+		OriginModel: "video-model",
+		Mode:        mode.VideoGenerationsJobs,
+	}
+	consumer := &trackingPostGroupConsumer{}
+
+	consume.Consume(
+		context.Background(),
+		time.Now(),
+		consumer,
+		time.Now(),
+		http.StatusOK,
+		requestMeta,
+		model.Usage{OutputTokens: 5, TotalTokens: 5},
+		model.UsageContext{},
+		model.Price{OutputPrice: 1, OutputPriceUnit: 1},
+		"",
+		"127.0.0.1",
+		0,
+		nil,
+		true,
+		nil,
+		"upstream-id",
+		model.AsyncUsageStatusPending,
+	)
+	model.ProcessBatchUpdatesSummary()
+
+	var logEntry model.GroupChannelLog
+	require.NoError(t, db.Where("request_id = ?", requestMeta.RequestID).First(&logEntry).Error)
+	require.Equal(t, model.AsyncUsageStatusNone, logEntry.AsyncUsageStatus)
+	require.Equal(t, model.ZeroNullInt64(5), logEntry.Usage.OutputTokens)
+	require.Equal(t, 5.0, logEntry.Amount.UsedAmount)
+	require.Equal(t, float64(1), float64(logEntry.Price.OutputPrice))
+	require.Empty(t, logEntry.Price.ConditionalPrices)
+	require.Zero(t, consumer.calls.Load())
+}
+
+func TestSummaryGroupChannelRecordsScopedSummaryWithAmount(t *testing.T) {
+	model.ProcessBatchUpdatesSummary()
+
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "group_channel_summary.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.Group{},
+		&model.Token{},
+		&model.GroupChannel{},
+		&model.GroupSummary{},
+		&model.GroupSummaryMinute{},
+		&model.GroupChannelSummary{},
+		&model.GroupChannelSummaryMinute{},
+		&model.GroupChannelTokenSummary{},
+		&model.GroupChannelTokenSummaryMinute{},
+	))
+
+	oldLogDB := model.LogDB
+	oldDB := model.DB
+	model.LogDB = db
+	model.DB = db
+	t.Cleanup(func() {
+		model.ProcessBatchUpdatesSummary()
+
+		model.LogDB = oldLogDB
+		model.DB = oldDB
+	})
+
+	require.NoError(t, db.Create(&model.Group{ID: "group"}).Error)
+	require.NoError(t, db.Create(&model.Token{ID: 11, Name: "token", GroupID: "group"}).Error)
+	require.NoError(t, db.Create(&model.GroupChannel{
+		ID:      2,
+		GroupID: "group",
+		Type:    model.ChannelTypeOpenAI,
+	}).Error)
+
+	now := time.Now().Truncate(time.Minute)
+	requestMeta := &meta.Meta{
+		RequestID:   "group_channel_summary",
+		RequestAt:   now,
+		Group:       model.GroupCache{ID: "group"},
+		Token:       model.TokenCache{ID: 11, Name: "token"},
+		Channel:     meta.ChannelMeta{ID: 2, Scope: model.ChannelScopeGroup, GroupID: "group"},
+		OriginModel: "gpt-5",
+		Mode:        mode.ChatCompletions,
+		ModelConfig: model.ModelConfig{Model: "gpt-5"},
+	}
+
+	consume.Summary(
+		http.StatusOK,
+		now,
+		requestMeta,
+		model.Usage{InputTokens: 5, OutputTokens: 7, TotalTokens: 12},
+		model.UsageContext{},
+		model.Price{InputPrice: 1, InputPriceUnit: 1, OutputPrice: 1, OutputPriceUnit: 1},
+		true,
+	)
+	model.ProcessBatchUpdatesSummary()
+
+	var groupSummaryCount int64
+	require.NoError(t, db.Model(&model.GroupSummary{}).Count(&groupSummaryCount).Error)
+	require.Zero(t, groupSummaryCount)
+
+	var gotChannelSummary model.GroupChannelSummary
+	require.NoError(t, db.Where(
+		"group_id = ? AND group_channel_id = ? AND model = ?",
+		"group",
+		2,
+		"gpt-5",
+	).First(&gotChannelSummary).Error)
+	require.Equal(t, int64(1), gotChannelSummary.Data.RequestCount)
+	require.Equal(t, model.ZeroNullInt64(12), gotChannelSummary.Data.TotalTokens)
+	require.Equal(t, 12.0, gotChannelSummary.Data.UsedAmount)
+
+	var gotTokenSummary model.GroupChannelTokenSummary
+	require.NoError(t, db.Where(
+		"group_id = ? AND token_name = ? AND model = ?",
+		"group",
+		"token",
+		"gpt-5",
+	).First(&gotTokenSummary).Error)
+	require.Equal(t, int64(1), gotTokenSummary.Data.RequestCount)
+	require.Equal(t, model.ZeroNullInt64(12), gotTokenSummary.Data.TotalTokens)
+	require.Equal(t, 12.0, gotTokenSummary.Data.UsedAmount)
+
+	var gotTokenSummaryMinute model.GroupChannelTokenSummaryMinute
+	require.NoError(t, db.Where(
+		"group_id = ? AND token_name = ? AND model = ?",
+		"group",
+		"token",
+		"gpt-5",
+	).First(&gotTokenSummaryMinute).Error)
+	require.Equal(t, int64(1), gotTokenSummaryMinute.Data.RequestCount)
+	require.Equal(t, model.ZeroNullInt64(12), gotTokenSummaryMinute.Data.TotalTokens)
+	require.Equal(t, 12.0, gotTokenSummaryMinute.Data.UsedAmount)
+
+	var gotGroup model.Group
+	require.NoError(t, db.First(&gotGroup, "id = ?", "group").Error)
+	require.Zero(t, gotGroup.UsedAmount)
+	require.Zero(t, gotGroup.RequestCount)
+	require.Equal(t, 12.0, gotGroup.GroupChannelUsedAmount)
+	require.Equal(t, 1, gotGroup.GroupChannelRequestCount)
+
+	var gotToken model.Token
+	require.NoError(t, db.First(&gotToken, "id = ?", 11).Error)
+	require.Zero(t, gotToken.UsedAmount)
+	require.Zero(t, gotToken.RequestCount)
+	require.Equal(t, 12.0, gotToken.GroupChannelUsedAmount)
+	require.Equal(t, 1, gotToken.GroupChannelRequestCount)
+
+	var gotGroupChannel model.GroupChannel
+	require.NoError(t, db.First(&gotGroupChannel, "group_id = ? AND id = ?", "group", 2).Error)
+	require.Equal(t, 12.0, gotGroupChannel.UsedAmount)
+	require.Equal(t, 1, gotGroupChannel.RequestCount)
+}
+
+func TestConsumeAdminGroupChannelRecordsLogAndSummaryWithoutTokenSummary(t *testing.T) {
+	model.ProcessBatchUpdatesSummary()
+
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "group_channel_admin.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.Group{},
+		&model.Token{},
+		&model.GroupChannel{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelSummary{},
+		&model.GroupChannelSummaryMinute{},
+		&model.GroupChannelTokenSummary{},
+		&model.GroupChannelTokenSummaryMinute{},
+	))
+
+	oldLogDB := model.LogDB
+	oldDB := model.DB
+	model.LogDB = db
+	model.DB = db
+	t.Cleanup(func() {
+		model.ProcessBatchUpdatesSummary()
+
+		model.LogDB = oldLogDB
+		model.DB = oldDB
+	})
+
+	require.NoError(t, db.Create(&model.Group{ID: "group"}).Error)
+	require.NoError(t, db.Create(&model.Token{ID: 11, Name: "token", GroupID: "group"}).Error)
+	require.NoError(t, db.Create(&model.GroupChannel{
+		ID:      2,
+		GroupID: "group",
+		Type:    model.ChannelTypeOpenAI,
+	}).Error)
+
+	now := time.Now().Truncate(time.Minute)
+	requestMeta := &meta.Meta{
+		RequestID:   "admin_group_channel",
+		RequestAt:   now,
+		Group:       model.GroupCache{ID: "group"},
+		Token:       model.TokenCache{},
+		Channel:     meta.ChannelMeta{ID: 2, Scope: model.ChannelScopeGroup, GroupID: "group"},
+		OriginModel: "gpt-5",
+		Mode:        mode.ChatCompletions,
+		ModelConfig: model.ModelConfig{Model: "gpt-5"},
+	}
+
+	consume.Consume(
+		context.Background(),
+		now,
+		nil,
+		now,
+		http.StatusOK,
+		requestMeta,
+		model.Usage{InputTokens: 5, OutputTokens: 7, TotalTokens: 12},
+		model.UsageContext{},
+		model.Price{InputPrice: 1, InputPriceUnit: 1, OutputPrice: 1, OutputPriceUnit: 1},
+		"",
+		"127.0.0.1",
+		0,
+		nil,
+		true,
+		nil,
+		"upstream-id",
+		model.AsyncUsageStatusNone,
+	)
+	model.ProcessBatchUpdatesSummary()
+
+	var logEntry model.GroupChannelLog
+	require.NoError(t, db.Where("request_id = ?", requestMeta.RequestID).First(&logEntry).Error)
+	require.Zero(t, logEntry.TokenID)
+	require.Empty(t, logEntry.TokenName)
+	require.Equal(t, "group", logEntry.GroupID)
+	require.Equal(t, 2, logEntry.GroupChannelID)
+	require.Equal(t, 12.0, logEntry.Amount.UsedAmount)
+
+	var gotChannelSummary model.GroupChannelSummary
+	require.NoError(t, db.Where(
+		"group_id = ? AND group_channel_id = ? AND model = ?",
+		"group",
+		2,
+		"gpt-5",
+	).First(&gotChannelSummary).Error)
+	require.Equal(t, int64(1), gotChannelSummary.Data.RequestCount)
+	require.Equal(t, model.ZeroNullInt64(12), gotChannelSummary.Data.TotalTokens)
+	require.Equal(t, 12.0, gotChannelSummary.Data.UsedAmount)
+
+	var tokenSummaryCount int64
+	require.NoError(t, db.Model(&model.GroupChannelTokenSummary{}).Count(&tokenSummaryCount).Error)
+	require.Zero(t, tokenSummaryCount)
+
+	var tokenSummaryMinuteCount int64
+	require.NoError(t, db.Model(&model.GroupChannelTokenSummaryMinute{}).
+		Count(&tokenSummaryMinuteCount).Error)
+	require.Zero(t, tokenSummaryMinuteCount)
+
+	var gotGroup model.Group
+	require.NoError(t, db.First(&gotGroup, "id = ?", "group").Error)
+	require.Zero(t, gotGroup.UsedAmount)
+	require.Zero(t, gotGroup.RequestCount)
+	require.Zero(t, gotGroup.GroupChannelUsedAmount)
+	require.Zero(t, gotGroup.GroupChannelRequestCount)
+
+	var gotToken model.Token
+	require.NoError(t, db.First(&gotToken, "id = ?", 11).Error)
+	require.Zero(t, gotToken.UsedAmount)
+	require.Zero(t, gotToken.RequestCount)
+	require.Zero(t, gotToken.GroupChannelUsedAmount)
+	require.Zero(t, gotToken.GroupChannelRequestCount)
+
+	var gotGroupChannel model.GroupChannel
+	require.NoError(t, db.First(&gotGroupChannel, "group_id = ? AND id = ?", "group", 2).Error)
+	require.Equal(t, 12.0, gotGroupChannel.UsedAmount)
+	require.Equal(t, 1, gotGroupChannel.RequestCount)
 }

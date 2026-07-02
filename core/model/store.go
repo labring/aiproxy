@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,75 +55,139 @@ type StoreV2 struct {
 	Metadata  string `gorm:"type:text"`
 }
 
+type GroupChannelStoreV2 struct {
+	ID        string    `gorm:"size:128;primaryKey:3"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+	ExpiresAt time.Time `gorm:"index"`
+	GroupID   string    `gorm:"size:64;primaryKey:1"`
+	TokenID   int       `gorm:"primaryKey:2"`
+	ChannelID int
+	Model     string `gorm:"size:128"`
+	Metadata  string `gorm:"type:text"`
+}
+
 func (s *StoreV2) BeforeSave(_ *gorm.DB) error {
-	if s.GroupID != "" {
-		if s.TokenID == 0 {
+	return prepareStoreForSave(s, time.Now())
+}
+
+func (s *GroupChannelStoreV2) BeforeSave(_ *gorm.DB) error {
+	now := time.Now()
+
+	return prepareStoreBeforeSave(
+		&s.ID,
+		s.GroupID,
+		s.TokenID,
+		s.ChannelID,
+		&s.CreatedAt,
+		&s.UpdatedAt,
+		&s.ExpiresAt,
+		now,
+	)
+}
+
+func prepareStoreBeforeSave(
+	id *string,
+	groupID string,
+	tokenID int,
+	channelID int,
+	createdAt *time.Time,
+	updatedAt *time.Time,
+	expiresAt *time.Time,
+	now time.Time,
+) error {
+	if groupID != "" {
+		if tokenID == 0 {
 			return errors.New("token id is required")
 		}
 	}
 
-	if s.ChannelID == 0 {
+	if channelID == 0 {
 		return errors.New("channel id is required")
 	}
 
-	if s.ID == "" {
-		s.ID = common.ShortUUID()
+	if *id == "" {
+		*id = common.ShortUUID()
 	}
 
-	if s.CreatedAt.IsZero() {
-		s.CreatedAt = time.Now()
+	if createdAt.IsZero() {
+		*createdAt = now
 	}
 
-	if s.ExpiresAt.IsZero() {
-		s.ExpiresAt = s.CreatedAt.Add(time.Hour * 24 * 30)
+	if expiresAt.IsZero() {
+		*expiresAt = createdAt.Add(time.Hour * 24 * 30)
 	}
 
-	if s.UpdatedAt.IsZero() {
-		s.UpdatedAt = s.CreatedAt
+	if updatedAt.IsZero() {
+		*updatedAt = *createdAt
 	}
 
 	return nil
 }
 
 func SaveStore(s *StoreV2) (*StoreV2, error) {
-	return SaveStoreWithOption(s, SaveStoreOption{})
+	return SaveStoreWithOptionByScope(s, ChannelScopeGlobal, SaveStoreOption{})
 }
 
 func SaveStoreWithOption(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+	return SaveStoreWithOptionByScope(s, ChannelScopeGlobal, opt)
+}
+
+func SaveStoreByScope(s *StoreV2, scope ChannelScope) (*StoreV2, error) {
+	return SaveStoreWithOptionByScope(s, scope, SaveStoreOption{})
+}
+
+func SaveStoreWithOptionByScope(
+	s *StoreV2,
+	scope ChannelScope,
+	opt SaveStoreOption,
+) (*StoreV2, error) {
+	scope = normalizeChannelScope(scope)
+
 	if opt.MinUpdateInterval > 0 {
-		if existing, ok := getStoreFastPath(s, opt); ok {
+		if existing, ok := getStoreFastPath(s, scope, opt); ok {
 			return existing, nil
 		}
 	}
 
-	return upsertStore(s, opt)
+	return upsertStore(s, scope, opt)
 }
 
 func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
-	if existing, ok := getStoreFastPath(s, SaveStoreOption{}); ok {
+	return SaveIfNotExistStoreByScope(s, ChannelScopeGlobal)
+}
+
+func SaveIfNotExistStoreByScope(s *StoreV2, scope ChannelScope) (*StoreV2, error) {
+	scope = normalizeChannelScope(scope)
+
+	if existing, ok := getStoreFastPath(s, scope, SaveStoreOption{}); ok {
 		return existing, nil
 	}
 
-	tx := LogDB.Clauses(clause.OnConflict{DoNothing: true}).Create(s)
+	if err := prepareStoreForSave(s, time.Now()); err != nil {
+		return nil, err
+	}
+
+	tx := LogDB.Clauses(clause.OnConflict{DoNothing: true}).Create(storeDBModel(s, scope))
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 
 	if tx.RowsAffected > 0 {
-		if err := CacheSetStore(s.ToStoreCache()); err != nil {
+		if err := CacheSetStoreByScope(s.ToStoreCache(), scope); err != nil {
 			return nil, err
 		}
 
 		return s, nil
 	}
 
-	existing, err := getStore(s.GroupID, s.TokenID, s.ID, true)
+	existing, err := getStore(s.GroupID, s.TokenID, s.ID, scope, true)
 	if err != nil {
 		return nil, err
 	}
 
 	if existing.ExpiresAt.After(time.Now()) {
-		if err := CacheSetStore(existing.ToStoreCache()); err != nil {
+		if err := CacheSetStoreByScope(existing.ToStoreCache(), scope); err != nil {
 			return nil, err
 		}
 
@@ -130,7 +195,7 @@ func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
 	}
 
 	tx = LogDB.Session(&gorm.Session{SkipHooks: true}).
-		Model(&StoreV2{}).
+		Model(storeDBModelForScope(scope)).
 		Where(
 			"group_id = ? and token_id = ? and id = ? and expires_at <= ?",
 			s.GroupID,
@@ -150,27 +215,27 @@ func SaveIfNotExistStore(s *StoreV2) (*StoreV2, error) {
 	}
 
 	if tx.RowsAffected > 0 {
-		if err := CacheSetStore(s.ToStoreCache()); err != nil {
+		if err := CacheSetStoreByScope(s.ToStoreCache(), scope); err != nil {
 			return nil, err
 		}
 
 		return s, nil
 	}
 
-	existing, err = GetStore(s.GroupID, s.TokenID, s.ID)
+	existing, err = GetStoreByScope(s.GroupID, s.TokenID, s.ID, scope)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := CacheSetStore(existing.ToStoreCache()); err != nil {
+	if err := CacheSetStoreByScope(existing.ToStoreCache(), scope); err != nil {
 		return nil, err
 	}
 
 	return existing, nil
 }
 
-func getStoreFastPath(s *StoreV2, opt SaveStoreOption) (*StoreV2, bool) {
-	sc, ok := cachePeekStore(s.GroupID, s.TokenID, s.ID)
+func getStoreFastPath(s *StoreV2, scope ChannelScope, opt SaveStoreOption) (*StoreV2, bool) {
+	sc, ok := cachePeekStore(s.GroupID, s.TokenID, s.ID, scope)
 	if !ok {
 		return nil, false
 	}
@@ -181,12 +246,75 @@ func getStoreFastPath(s *StoreV2, opt SaveStoreOption) (*StoreV2, bool) {
 		}
 	}
 
-	return sc.ToStoreV2(), true
+	store := sc.ToStoreV2()
+	if store == nil || store.ID == "" {
+		return nil, false
+	}
+
+	return store, true
 }
 
-func saveStoreWithMinUpdateInterval(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+func normalizeChannelScope(scope ChannelScope) ChannelScope {
+	return NormalizeChannelScope(scope)
+}
+
+func storeDBModel(s *StoreV2, scope ChannelScope) any {
+	if normalizeChannelScope(scope) == ChannelScopeGroup {
+		return groupChannelStoreFromStore(s)
+	}
+
+	return s
+}
+
+func storeDBModelForScope(scope ChannelScope) any {
+	if normalizeChannelScope(scope) == ChannelScopeGroup {
+		return &GroupChannelStoreV2{}
+	}
+
+	return &StoreV2{}
+}
+
+func groupChannelStoreFromStore(s *StoreV2) *GroupChannelStoreV2 {
+	return &GroupChannelStoreV2{
+		ID:        s.ID,
+		CreatedAt: s.CreatedAt,
+		UpdatedAt: s.UpdatedAt,
+		ExpiresAt: s.ExpiresAt,
+		GroupID:   s.GroupID,
+		TokenID:   s.TokenID,
+		ChannelID: s.ChannelID,
+		Model:     s.Model,
+		Metadata:  s.Metadata,
+	}
+}
+
+func (s *GroupChannelStoreV2) ToStoreV2() *StoreV2 {
+	if s == nil {
+		return nil
+	}
+
+	return &StoreV2{
+		ID:        s.ID,
+		CreatedAt: s.CreatedAt,
+		UpdatedAt: s.UpdatedAt,
+		ExpiresAt: s.ExpiresAt,
+		GroupID:   s.GroupID,
+		TokenID:   s.TokenID,
+		ChannelID: s.ChannelID,
+		Model:     s.Model,
+		Metadata:  s.Metadata,
+	}
+}
+
+func saveStoreWithMinUpdateInterval(
+	s *StoreV2,
+	scope ChannelScope,
+	opt SaveStoreOption,
+) (*StoreV2, error) {
 	now := time.Now()
-	prepareStoreForSave(s, now)
+	if err := prepareStoreForSave(s, now); err != nil {
+		return nil, err
+	}
 
 	cutoff := now.Add(-opt.MinUpdateInterval)
 
@@ -204,21 +332,23 @@ func saveStoreWithMinUpdateInterval(s *StoreV2, opt SaveStoreOption) (*StoreV2, 
 			"metadata":   s.Metadata,
 		}),
 		Where: storeUpsertUpdateWhere(cutoff, now),
-	}).Create(s)
+	}).Create(storeDBModel(s, scope))
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 
-	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID)
+	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID, scope)
 }
 
-func upsertStore(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
+func upsertStore(s *StoreV2, scope ChannelScope, opt SaveStoreOption) (*StoreV2, error) {
 	if opt.MinUpdateInterval > 0 {
-		return saveStoreWithMinUpdateInterval(s, opt)
+		return saveStoreWithMinUpdateInterval(s, scope, opt)
 	}
 
 	now := time.Now()
-	prepareStoreForSave(s, now)
+	if err := prepareStoreForSave(s, now); err != nil {
+		return nil, err
+	}
 
 	tx := LogDB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
@@ -233,26 +363,41 @@ func upsertStore(s *StoreV2, opt SaveStoreOption) (*StoreV2, error) {
 			"model":      s.Model,
 			"metadata":   s.Metadata,
 		}),
-	}).Create(s)
+	}).Create(storeDBModel(s, scope))
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 
-	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID)
+	return loadAndCacheStore(s.GroupID, s.TokenID, s.ID, scope)
 }
 
-func prepareStoreForSave(s *StoreV2, now time.Time) {
-	if s.CreatedAt.IsZero() {
-		s.CreatedAt = now
+func prepareStoreForSave(s *StoreV2, now time.Time) error {
+	if s == nil {
+		return errors.New("store is required")
 	}
 
-	if s.UpdatedAt.IsZero() {
-		s.UpdatedAt = now
+	if s.GroupID != "" && s.TokenID == 0 {
+		return errors.New("token id is required")
 	}
 
-	if s.ExpiresAt.IsZero() {
-		s.ExpiresAt = s.CreatedAt.Add(time.Hour * 24 * 30)
+	if s.ChannelID == 0 {
+		return errors.New("channel id is required")
 	}
+
+	if s.ID == "" {
+		s.ID = common.ShortUUID()
+	}
+
+	return prepareStoreBeforeSave(
+		&s.ID,
+		s.GroupID,
+		s.TokenID,
+		s.ChannelID,
+		&s.CreatedAt,
+		&s.UpdatedAt,
+		&s.ExpiresAt,
+		now,
+	)
 }
 
 func storeUpsertUpdateWhere(cutoff, now time.Time) clause.Where {
@@ -272,13 +417,13 @@ func storeUpsertUpdateWhere(cutoff, now time.Time) clause.Where {
 	}
 }
 
-func loadAndCacheStore(group string, tokenID int, id string) (*StoreV2, error) {
-	current, err := getStore(group, tokenID, id, true)
+func loadAndCacheStore(group string, tokenID int, id string, scope ChannelScope) (*StoreV2, error) {
+	current, err := getStore(group, tokenID, id, scope, true)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := CacheSetStore(current.ToStoreCache()); err != nil {
+	if err := CacheSetStoreByScope(current.ToStoreCache(), scope); err != nil {
 		return nil, err
 	}
 
@@ -286,10 +431,34 @@ func loadAndCacheStore(group string, tokenID int, id string) (*StoreV2, error) {
 }
 
 func GetStore(group string, tokenID int, id string) (*StoreV2, error) {
-	return getStore(group, tokenID, id, false)
+	return GetStoreByScope(group, tokenID, id, ChannelScopeGlobal)
 }
 
-func getStore(group string, tokenID int, id string, includeExpired bool) (*StoreV2, error) {
+func GetStoreByScope(group string, tokenID int, id string, scope ChannelScope) (*StoreV2, error) {
+	return getStore(group, tokenID, id, scope, false)
+}
+
+func getStore(
+	group string,
+	tokenID int,
+	id string,
+	scope ChannelScope,
+	includeExpired bool,
+) (*StoreV2, error) {
+	scope = normalizeChannelScope(scope)
+	if scope == ChannelScopeGroup {
+		var s GroupChannelStoreV2
+
+		tx := LogDB.Where("group_id = ? and token_id = ? and id = ?", group, tokenID, id)
+		if !includeExpired {
+			tx = tx.Where("expires_at > ?", time.Now())
+		}
+
+		err := tx.First(&s).Error
+
+		return s.ToStoreV2(), HandleNotFound(err, ErrStoreNotFound)
+	}
+
 	var s StoreV2
 
 	tx := LogDB.Where("group_id = ? and token_id = ? and id = ?", group, tokenID, id)
@@ -351,4 +520,24 @@ func CacheFollowStoreID(modelName string, keyType CacheKeyType) string {
 
 func CacheFollowUserStoreID(modelName, user string, keyType CacheKeyType) string {
 	return HashedStoreID(StorePrefixCacheFollowUser, string(keyType), modelName, user)
+}
+
+func StoreChannelKey(store *StoreCache, scope ChannelScope) string {
+	if store == nil {
+		return ""
+	}
+
+	switch normalizeChannelScope(scope) {
+	case ChannelScopeGroup:
+		return GroupChannelMonitorKey(store.GroupID, store.ChannelID)
+	case ChannelScopeGlobal:
+	default:
+		return ""
+	}
+
+	if store.ChannelID == 0 {
+		return ""
+	}
+
+	return strconv.Itoa(store.ChannelID)
 }

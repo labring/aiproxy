@@ -42,9 +42,7 @@ func geminiVideoModelPriceForTest(t *testing.T, modelName string) coremodel.Pric
 	return coremodel.Price{}
 }
 
-func (s *geminiVideoTestStore) GetStore(
-	_ string,
-	_ int,
+func (s *geminiVideoTestStore) getStore(
 	id string,
 ) (adaptorapi.StoreCache, error) {
 	for _, cache := range s.saved {
@@ -56,20 +54,36 @@ func (s *geminiVideoTestStore) GetStore(
 	return adaptorapi.StoreCache{}, coremodel.NotFoundError(coremodel.ErrStoreNotFound)
 }
 
-func (s *geminiVideoTestStore) SaveStore(cache adaptorapi.StoreCache) error {
+func (s *geminiVideoTestStore) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	_ coremodel.ChannelScope,
+) (adaptorapi.StoreCache, error) {
+	return s.getStore(id)
+}
+
+func (s *geminiVideoTestStore) SaveStore(
+	cache adaptorapi.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *geminiVideoTestStore) SaveStoreWithOption(
 	cache adaptorapi.StoreCache,
+	_ coremodel.ChannelScope,
 	_ adaptorapi.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *geminiVideoTestStore) SaveIfNotExistStore(cache adaptorapi.StoreCache) error {
+func (s *geminiVideoTestStore) SaveIfNotExistStore(
+	cache adaptorapi.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

@@ -23,7 +23,7 @@ func TestCacheGetStoreWritesRedisNotFoundCache(t *testing.T) {
 
 		exists, err := client.Exists(
 			ctx,
-			getStoreCacheNotFoundKey("group-redis-miss", 1, storeID),
+			getStoreCacheNotFoundKey("group-redis-miss", 1, storeID, ChannelScopeGlobal),
 		).Result()
 		require.NoError(t, err)
 		require.EqualValues(t, 1, exists)
@@ -43,7 +43,7 @@ func withTestStoreCacheRedisEnv(t *testing.T, fn func(context.Context, *redis.Cl
 
 	db, err := OpenSQLite(filepath.Join(t.TempDir(), "store_cache_redis_test.db"))
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&StoreV2{}))
+	require.NoError(t, db.AutoMigrate(&StoreV2{}, &GroupChannelStoreV2{}))
 
 	req := testcontainers.ContainerRequest{
 		Image:        "redis:7-alpine",

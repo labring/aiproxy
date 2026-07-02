@@ -183,7 +183,7 @@ func openTestPostgreSQLWithRetry(dsn string, timeout time.Duration) (*gorm.DB, e
 	for time.Now().Before(deadline) {
 		db, err := OpenPostgreSQL(dsn)
 		if err == nil {
-			if migrateErr := db.AutoMigrate(&StoreV2{}); migrateErr == nil {
+			if migrateErr := db.AutoMigrate(&StoreV2{}, &GroupChannelStoreV2{}); migrateErr == nil {
 				return db, nil
 			} else {
 				lastErr = migrateErr

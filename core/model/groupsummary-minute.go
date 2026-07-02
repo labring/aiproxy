@@ -144,3 +144,44 @@ func GetGroupTokenLastRequestTimeMinute(group, token string) (time.Time, error) 
 
 	return time.Unix(summary.Unique.MinuteTimestamp, 0), err
 }
+
+type groupTokenLastRequestTimeRow struct {
+	TokenName     string
+	LastRequestAt int64
+}
+
+func GetGroupTokenLastRequestTimesMinute(
+	group string,
+	tokenNames []string,
+) (map[string]time.Time, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	if len(tokenNames) == 0 {
+		return map[string]time.Time{}, nil
+	}
+
+	rows := make([]groupTokenLastRequestTimeRow, 0, len(tokenNames))
+
+	err := LogDB.
+		Model(&GroupSummaryMinute{}).
+		Select("token_name, MAX(minute_timestamp) AS last_request_at").
+		Where("group_id = ? AND token_name IN ?", group, tokenNames).
+		Group("token_name").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]time.Time, len(rows))
+	for _, row := range rows {
+		if row.LastRequestAt == 0 {
+			continue
+		}
+
+		result[row.TokenName] = time.Unix(row.LastRequestAt, 0)
+	}
+
+	return result, nil
+}

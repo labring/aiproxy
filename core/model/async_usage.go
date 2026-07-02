@@ -183,6 +183,28 @@ func MarkAsyncUsageBalanceConsumed(info *AsyncUsageInfo) error {
 	})
 }
 
+func ClaimedAsyncUsageInfoExists(info *AsyncUsageInfo) (bool, error) {
+	if info == nil || info.ID == 0 || info.ProcessingToken == "" {
+		return false, nil
+	}
+
+	var count int64
+
+	err := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND status = ? AND processing_token = ?",
+			info.ID,
+			int(AsyncUsageStatusPending),
+			info.ProcessingToken,
+		).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func RetryClaimedAsyncUsageInfo(info *AsyncUsageInfo) error {
 	return updateClaimedAsyncUsageInfo(info, map[string]any{
 		"retry_count":      info.RetryCount,
@@ -217,7 +239,7 @@ func FailClaimedAsyncUsageInfo(info *AsyncUsageInfo) (bool, error) {
 	return tx.RowsAffected > 0, nil
 }
 
-func CompleteClaimedAsyncUsageInfo(
+func SaveClaimedAsyncUsageResult(
 	info *AsyncUsageInfo,
 	usage Usage,
 	usageContext UsageContext,
@@ -225,12 +247,43 @@ func CompleteClaimedAsyncUsageInfo(
 ) (bool, error) {
 	now := time.Now()
 	updatesModel := &AsyncUsageInfo{
-		Status:          AsyncUsageStatusCompleted,
 		Usage:           usage,
 		UsageContext:    usageContext,
 		Amount:          amount,
 		Error:           "",
 		BalanceConsumed: info.BalanceConsumed,
+		UpdatedAt:       now,
+	}
+
+	updates, err := asyncUsageUpdateValues(
+		updatesModel,
+		"Usage",
+		"UsageContext",
+		"Amount",
+		"Error",
+		"BalanceConsumed",
+		"UpdatedAt",
+	)
+	if err != nil {
+		return false, err
+	}
+
+	tx := LogDB.
+		Model(&AsyncUsageInfo{}).
+		Where("id = ? AND processing_token = ?", info.ID, info.ProcessingToken).
+		Updates(updates)
+	if tx.Error != nil {
+		return false, tx.Error
+	}
+
+	return tx.RowsAffected > 0, nil
+}
+
+func CompleteClaimedAsyncUsageInfo(info *AsyncUsageInfo) (bool, error) {
+	now := time.Now()
+	updatesModel := &AsyncUsageInfo{
+		Status:          AsyncUsageStatusCompleted,
+		Error:           "",
 		ProcessingToken: "",
 		UpdatedAt:       now,
 	}
@@ -238,11 +291,7 @@ func CompleteClaimedAsyncUsageInfo(
 	updates, err := asyncUsageUpdateValues(
 		updatesModel,
 		"Status",
-		"Usage",
-		"UsageContext",
-		"Amount",
 		"Error",
-		"BalanceConsumed",
 		"ProcessingToken",
 		"UpdatedAt",
 	)

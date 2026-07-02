@@ -61,8 +61,55 @@ definitions:
       warn_error_rate:
         type: number
     type: object
+  controller.AddGroupChannelRequest:
+    properties:
+      base_url:
+        type: string
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
+      enabled_no_permission_ban:
+        type: boolean
+      group_id:
+        type: string
+      key:
+        type: string
+      max_error_rate:
+        type: number
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      models:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      priority:
+        type: integer
+      proxy_url:
+        type: string
+      sets:
+        items:
+          type: string
+        type: array
+      skip_tls_verify:
+        type: boolean
+      status:
+        type: integer
+      type:
+        $ref: '#/definitions/model.ChannelType'
+    type: object
   controller.AddTokenRequest:
     properties:
+      group_channel_models:
+        items:
+          type: string
+        type: array
+      group_channel_sets:
+        items:
+          type: string
+        type: array
       models:
         items:
           type: string
@@ -77,6 +124,12 @@ definitions:
         type: string
       quota:
         type: number
+      scope:
+        type: string
+      sets:
+        items:
+          type: string
+        type: array
       subnets:
         items:
           type: string
@@ -106,11 +159,17 @@ definitions:
     type: object
   controller.BuiltinModelConfig:
     properties:
+      allowed_resolutions:
+        items:
+          type: string
+        type: array
       config:
         additionalProperties: {}
         type: object
       created_at:
         type: string
+      disable_resolution_fuzzy_match:
+        type: boolean
       exclude_from_tests:
         type: boolean
       force_save_detail:
@@ -232,6 +291,15 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  controller.GroupChannelTestResult:
+    properties:
+      data:
+        $ref: '#/definitions/model.GroupChannelTest'
+      message:
+        type: string
+      success:
+        type: boolean
     type: object
   controller.GroupMCPResponse:
     properties:
@@ -427,6 +495,10 @@ definitions:
         type: number
       created_at:
         type: string
+      group_channel_request_count:
+        type: integer
+      group_channel_used_amount:
+        type: number
       id:
         type: string
       request_count:
@@ -481,6 +553,8 @@ definitions:
   controller.ImportChannelFromOneAPIRequest:
     properties:
       dsn:
+        type: string
+      group_id:
         type: string
     type: object
   controller.MCPEndpoint:
@@ -754,13 +828,76 @@ definitions:
       tpm:
         type: integer
     type: object
-  controller.SaveModelConfigsRequest:
+  controller.SaveGroupScopeModelConfigsRequest:
     properties:
+      allowed_resolutions:
+        items:
+          type: string
+        type: array
       config:
         additionalProperties: {}
         type: object
       created_at:
         type: string
+      disable_resolution_fuzzy_match:
+        type: boolean
+      exclude_from_tests:
+        type: boolean
+      force_save_detail:
+        type: boolean
+      group_id:
+        type: string
+      max_image_generation_count:
+        type: integer
+      max_video_generation_count:
+        type: integer
+      max_video_generation_seconds:
+        type: integer
+      model:
+        type: string
+      owner:
+        $ref: '#/definitions/model.ModelOwner'
+      plugin:
+        additionalProperties:
+          additionalProperties: {}
+          type: object
+        type: object
+      price:
+        $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
+      retry_times:
+        type: integer
+      rpm:
+        type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
+      timeout_config:
+        $ref: '#/definitions/model.TimeoutConfig'
+      tpm:
+        type: integer
+      type:
+        $ref: '#/definitions/mode.Mode'
+      updated_at:
+        type: string
+    type: object
+  controller.SaveModelConfigsRequest:
+    properties:
+      allowed_resolutions:
+        items:
+          type: string
+        type: array
+      config:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      disable_resolution_fuzzy_match:
+        type: boolean
       exclude_from_tests:
         type: boolean
       force_save_detail:
@@ -837,6 +974,45 @@ definitions:
     - key
     - type
     type: object
+  controller.TestGroupChannelRequest:
+    properties:
+      base_url:
+        type: string
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
+      enabled_no_permission_ban:
+        type: boolean
+      group_id:
+        type: string
+      key:
+        type: string
+      max_error_rate:
+        type: number
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      models:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      priority:
+        type: integer
+      proxy_url:
+        type: string
+      sets:
+        items:
+          type: string
+        type: array
+      skip_tls_verify:
+        type: boolean
+      status:
+        type: integer
+      type:
+        $ref: '#/definitions/model.ChannelType'
+    type: object
   controller.TestResult:
     properties:
       data:
@@ -845,6 +1021,39 @@ definitions:
         type: string
       success:
         type: boolean
+    type: object
+  controller.TestSingleGroupChannelRequest:
+    properties:
+      base_url:
+        type: string
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
+      group_id:
+        type: string
+      key:
+        type: string
+      model:
+        type: string
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      proxy_url:
+        type: string
+      sets:
+        items:
+          type: string
+        type: array
+      skip_tls_verify:
+        type: boolean
+      type:
+        type: integer
+    required:
+    - key
+    - model
+    - type
     type: object
   controller.TestSingleModelRequest:
     properties:
@@ -882,6 +1091,18 @@ definitions:
         type: string
       group:
         type: string
+      group_channel_models:
+        items:
+          type: string
+        type: array
+      group_channel_request_count:
+        type: integer
+      group_channel_sets:
+        items:
+          type: string
+        type: array
+      group_channel_used_amount:
+        type: number
       id:
         type: integer
       key:
@@ -907,6 +1128,12 @@ definitions:
         type: number
       request_count:
         type: integer
+      scope:
+        $ref: '#/definitions/model.ChannelScope'
+      sets:
+        items:
+          type: string
+        type: array
       status:
         type: integer
       subnets:
@@ -1163,6 +1390,14 @@ definitions:
     - 28
     - 29
     - 30
+    - 31
+    - 32
+    - 33
+    - 34
+    - 35
+    - 36
+    - 37
+    - 38
     type: integer
     x-enum-varnames:
     - Unknown
@@ -1196,6 +1431,14 @@ definitions:
     - GeminiVideoOperations
     - GeminiTTS
     - GeminiImage
+    - GeminiFiles
+    - VideosEdits
+    - VideosExtensions
+    - AliVideo
+    - AliVideoTasks
+    - DoubaoVideo
+    - DoubaoVideoTasks
+    - DoubaoVideoTasksDelete
   model.Amount:
     properties:
       audio_input_amount:
@@ -1324,6 +1567,14 @@ definitions:
   model.ChannelConfigs:
     additionalProperties: {}
     type: object
+  model.ChannelScope:
+    enum:
+    - global
+    - group
+    type: string
+    x-enum-varnames:
+    - ChannelScopeGlobal
+    - ChannelScopeGroup
   model.ChannelTest:
     properties:
       actual_model:
@@ -1493,15 +1744,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
-        type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -1700,15 +1951,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -1863,10 +2114,18 @@ definitions:
           $ref: '#/definitions/model.Message'
         type: array
       metadata: {}
+      modalities:
+        items:
+          type: string
+        type: array
       model:
         type: string
+      "n":
+        type: integer
       num_ctx:
         type: integer
+      parallel_tool_calls:
+        type: boolean
       presence_penalty:
         type: number
       prompt: {}
@@ -1918,6 +2177,23 @@ definitions:
         type: integer
       type:
         $ref: '#/definitions/model.ClaudeThinkingType'
+    type: object
+  model.GetGroupChannelLogsResult:
+    properties:
+      logs:
+        items:
+          $ref: '#/definitions/model.GroupChannelLog'
+        type: array
+      models:
+        items:
+          type: string
+        type: array
+      token_names:
+        items:
+          type: string
+        type: array
+      total:
+        type: integer
     type: object
   model.GetGroupLogsResult:
     properties:
@@ -1974,6 +2250,10 @@ definitions:
         type: number
       created_at:
         type: string
+      group_channel_request_count:
+        type: integer
+      group_channel_used_amount:
+        type: number
       id:
         type: string
       request_count:
@@ -1985,6 +2265,173 @@ definitions:
       tpm_ratio:
         type: number
       used_amount:
+        type: number
+    type: object
+  model.GroupChannel:
+    properties:
+      base_url:
+        type: string
+      configs:
+        $ref: '#/definitions/model.ChannelConfigs'
+      created_at:
+        type: string
+      enabled_no_permission_ban:
+        type: boolean
+      group_channel_tests:
+        items:
+          $ref: '#/definitions/model.GroupChannelTest'
+        type: array
+      group_id:
+        type: string
+      id:
+        type: integer
+      key:
+        type: string
+      last_test_error_at:
+        type: string
+      max_error_rate:
+        type: number
+      model_mapping:
+        additionalProperties:
+          type: string
+        type: object
+      models:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      priority:
+        type: integer
+      proxy_url:
+        type: string
+      request_count:
+        type: integer
+      retry_count:
+        type: integer
+      sets:
+        items:
+          type: string
+        type: array
+      skip_tls_verify:
+        type: boolean
+      status:
+        type: integer
+      type:
+        $ref: '#/definitions/model.ChannelType'
+      used_amount:
+        type: number
+    type: object
+  model.GroupChannelBasicInfo:
+    properties:
+      group_id:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/model.ChannelType'
+    type: object
+  model.GroupChannelLog:
+    properties:
+      amount:
+        $ref: '#/definitions/model.Amount'
+      async_usage_status:
+        $ref: '#/definitions/model.AsyncUsageStatus'
+      code:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      endpoint:
+        type: string
+      group:
+        type: string
+      group_channel_id:
+        type: integer
+      id:
+        type: integer
+      ip:
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      mode:
+        type: integer
+      model:
+        type: string
+      price:
+        $ref: '#/definitions/model.Price'
+      prompt_cache_key:
+        type: string
+      request_at:
+        type: string
+      request_detail:
+        $ref: '#/definitions/model.GroupChannelRequestDetail'
+      request_id:
+        type: string
+      retry_at:
+        type: string
+      retry_times:
+        type: integer
+      token_id:
+        type: integer
+      token_name:
+        type: string
+      ttfb_milliseconds:
+        type: integer
+      upstream_id:
+        type: string
+      usage:
+        $ref: '#/definitions/model.Usage'
+      usage_context:
+        $ref: '#/definitions/model.UsageContext'
+      user:
+        type: string
+    type: object
+  model.GroupChannelRequestDetail:
+    properties:
+      id:
+        type: integer
+      log_id:
+        type: integer
+      request_body:
+        type: string
+      request_body_truncated:
+        type: boolean
+      response_body:
+        type: string
+      response_body_truncated:
+        type: boolean
+    type: object
+  model.GroupChannelTest:
+    properties:
+      actual_model:
+        type: string
+      channel_name:
+        type: string
+      channel_type:
+        $ref: '#/definitions/model.ChannelType'
+      code:
+        type: integer
+      group_channel_id:
+        type: integer
+      group_id:
+        type: string
+      mode:
+        $ref: '#/definitions/mode.Mode'
+      model:
+        type: string
+      response:
+        type: string
+      success:
+        type: boolean
+      test_at:
+        type: string
+      took:
         type: number
     type: object
   model.GroupDashboardResponse:
@@ -2061,13 +2508,13 @@ definitions:
         type: integer
       status_400_count:
         type: integer
-      status_4xx_count:
-        type: integer
-      status_5xx_count:
-        type: integer
       status_429_count:
         type: integer
+      status_4xx_count:
+        type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -2208,6 +2655,63 @@ definitions:
       tpm:
         type: integer
     type: object
+  model.GroupScopeModelConfig:
+    properties:
+      allowed_resolutions:
+        items:
+          type: string
+        type: array
+      config:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      disable_resolution_fuzzy_match:
+        type: boolean
+      exclude_from_tests:
+        type: boolean
+      force_save_detail:
+        type: boolean
+      group_id:
+        type: string
+      max_image_generation_count:
+        type: integer
+      max_video_generation_count:
+        type: integer
+      max_video_generation_seconds:
+        type: integer
+      model:
+        type: string
+      owner:
+        $ref: '#/definitions/model.ModelOwner'
+      plugin:
+        additionalProperties:
+          additionalProperties: {}
+          type: object
+        type: object
+      price:
+        $ref: '#/definitions/model.Price'
+      request_body_storage_max_size:
+        type: integer
+      response_body_storage_max_size:
+        type: integer
+      retry_times:
+        type: integer
+      rpm:
+        type: integer
+      summary_claude_long_context:
+        type: boolean
+      summary_service_tier:
+        type: boolean
+      timeout_config:
+        $ref: '#/definitions/model.TimeoutConfig'
+      tpm:
+        type: integer
+      type:
+        $ref: '#/definitions/mode.Mode'
+      updated_at:
+        type: string
+    type: object
   model.ImageData:
     properties:
       b64_json:
@@ -2319,8 +2823,15 @@ definitions:
       call_id:
         description: Fields for function_result type
         type: string
+      detail:
+        type: string
+      file_id:
+        type: string
       id:
         description: Fields for function_call type
+        type: string
+      image_url:
+        description: Fields for input_image type
         type: string
       name:
         type: string
@@ -2425,8 +2936,6 @@ definitions:
         type: string
       retry_times:
         type: integer
-      service_tier:
-        type: string
       token_id:
         type: integer
       token_name:
@@ -2499,11 +3008,17 @@ definitions:
     type: object
   model.ModelConfig:
     properties:
+      allowed_resolutions:
+        items:
+          type: string
+        type: array
       config:
         additionalProperties: {}
         type: object
       created_at:
         type: string
+      disable_resolution_fuzzy_match:
+        type: boolean
       exclude_from_tests:
         type: boolean
       force_save_detail:
@@ -2742,10 +3257,16 @@ definitions:
       end_time:
         description: Unix timestamp, 0 means no end limit
         type: integer
+      input_media:
+        type: boolean
       input_token_max:
         type: integer
       input_token_min:
         type: integer
+      input_video:
+        type: boolean
+      output_audio:
+        type: boolean
       output_token_max:
         type: integer
       output_token_min:
@@ -3080,6 +3601,15 @@ definitions:
     type: object
   model.ResponseTextFormat:
     properties:
+      description:
+        type: string
+      name:
+        type: string
+      schema:
+        additionalProperties: {}
+        type: object
+      strict:
+        type: boolean
       type:
         type: string
     type: object
@@ -3218,6 +3748,8 @@ definitions:
         type: integer
       status_2xx_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -3225,8 +3757,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -3274,6 +3804,8 @@ definitions:
       claude_long_context:
         $ref: '#/definitions/model.SummaryDataSet'
       exception_count:
+        type: integer
+      group_channel_id:
         type: integer
       group_id:
         type: string
@@ -3453,6 +3985,14 @@ definitions:
     type: object
   model.UpdateTokenRequest:
     properties:
+      group_channel_models:
+        items:
+          type: string
+        type: array
+      group_channel_sets:
+        items:
+          type: string
+        type: array
       models:
         items:
           type: string
@@ -3468,6 +4008,12 @@ definitions:
       quota:
         description: Quota system
         type: number
+      scope:
+        type: string
+      sets:
+        items:
+          type: string
+        type: array
       status:
         type: integer
       subnets:
@@ -3504,18 +4050,20 @@ definitions:
     type: object
   model.UsageContext:
     properties:
+      input_media:
+        type: boolean
+      input_video:
+        type: boolean
+      native_resolution:
+        type: string
+      output_audio:
+        type: boolean
       quality:
         type: string
       resolution:
         type: string
-      native_resolution:
-        type: string
       service_tier:
         type: string
-      input_video:
-        type: boolean
-      output_audio:
-        type: boolean
     type: object
   model.Video:
     properties:
@@ -3588,8 +4136,6 @@ definitions:
         type: string
       seconds:
         type: integer
-      size:
-        type: string
       width:
         type: integer
     type: object
@@ -3640,6 +4186,32 @@ definitions:
     - VideoStatusSucceeded
     - VideoStatusFailed
     - VideoStatusCancelled
+  model.VideosEditRequest:
+    properties:
+      input_reference:
+        type: string
+      model:
+        type: string
+      prompt:
+        type: string
+      seconds: {}
+      size:
+        type: string
+      video: {}
+    type: object
+  model.VideosExtensionRequest:
+    properties:
+      input_reference:
+        type: string
+      model:
+        type: string
+      prompt:
+        type: string
+      seconds: {}
+      size:
+        type: string
+      video: {}
+    type: object
   model.VideosRemixRequest:
     properties:
       input_reference:
@@ -3716,6 +4288,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -3765,6 +4349,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -3900,64 +4496,6 @@ paths:
       summary: Update a channel
       tags:
       - channel
-  /api/channel/{id}/{model}:
-    get:
-      description: Tests a single model in the channel
-      parameters:
-      - description: Channel ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Model name
-        in: path
-        name: model
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/middleware.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/model.ChannelTest'
-              type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Test channel model
-      tags:
-      - channel
-  /api/channel/{id}/balance:
-    get:
-      description: Updates the balance for a single channel
-      parameters:
-      - description: Channel ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/middleware.APIResponse'
-            - properties:
-                data:
-                  format: float64
-                  type: number
-              type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Update channel balance
-      tags:
-      - channel
   /api/channel/{id}/status:
     post:
       consumes:
@@ -4027,7 +4565,65 @@ paths:
       summary: Test channel models
       tags:
       - channel
-  /api/channel/test:
+  /api/channel/{id}/test/{model}:
+    get:
+      description: Tests a single model in the channel
+      parameters:
+      - description: Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.ChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test channel model
+      tags:
+      - channel
+  /api/channel/{id}/update_balance:
+    get:
+      description: Updates the balance for a single channel
+      parameters:
+      - description: Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  format: float64
+                  type: number
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update channel balance
+      tags:
+      - channel
+  /api/channel/test-preview:
     post:
       consumes:
       - application/json
@@ -4056,7 +4652,7 @@ paths:
       summary: Test channel preview (single model)
       tags:
       - channel
-  /api/channel/test-all:
+  /api/channel/test-preview-all:
     post:
       consumes:
       - application/json
@@ -4210,21 +4806,6 @@ paths:
       summary: Get all channels
       tags:
       - channels
-  /api/channels/balance:
-    get:
-      description: Updates the balance for all channels
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/middleware.APIResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update all channels balance
-      tags:
-      - channel
   /api/channels/batch_delete:
     post:
       consumes:
@@ -4442,6 +5023,21 @@ paths:
       summary: Get channel type metadata
       tags:
       - channels
+  /api/channels/update_balance:
+    get:
+      description: Updates the balance for all channels
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update all channels balance
+      tags:
+      - channel
   /api/dashboard/:
     get:
       description: Returns the general dashboard data including usage statistics and
@@ -4582,6 +5178,62 @@ paths:
       summary: Get model usage data for a specific group
       tags:
       - dashboard
+  /api/dashboard/group_channel:
+    get:
+      description: Returns group-channel usage statistics across groups, optionally
+        filtered by group
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start second timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End second timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get global group channel dashboard data
+      tags:
+      - dashboard
   /api/dashboardv2/:
     get:
       description: Returns model-specific metrics and usage data for the given channel
@@ -4697,6 +5349,64 @@ paths:
       summary: Get model usage data for a specific group
       tags:
       - dashboard
+  /api/dashboardv2/group_channel:
+    get:
+      description: Returns group-channel model usage time series across groups, optionally
+        filtered by group
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.TimeSummaryDataV2'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get global group channel time series data
+      tags:
+      - dashboard
   /api/dashboardv3/:
     get:
       description: Returns model-specific metrics and usage data for the given channel
@@ -4808,6 +5518,62 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get model usage data for a specific group (V3 with detailed amounts)
+      tags:
+      - dashboard
+  /api/dashboardv3/group_channel:
+    get:
+      description: Returns group-channel dashboard V3 data across groups, optionally
+        filtered by group
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardV3Response'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get global group channel dashboard V3 data
       tags:
       - dashboard
   /api/embedmcp/:
@@ -4962,7 +5728,933 @@ paths:
       summary: Update a group
       tags:
       - group
-  /api/group/{group}/mcp:
+  /api/group/{group}/channel-dashboard:
+    get:
+      description: Returns group-channel usage statistics for a specific group
+      parameters:
+      - description: Group
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start second timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End second timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel dashboard data
+      tags:
+      - dashboard
+  /api/group/{group}/channel-dashboard/models:
+    get:
+      description: Returns group-channel model configs backed by enabled group channels
+        for the given group
+      parameters:
+      - description: Group
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupModel'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel dashboard models
+      tags:
+      - dashboard
+  /api/group/{group}/channel-dashboardv2:
+    get:
+      description: Returns group-channel model usage time series for a specific group
+      parameters:
+      - description: Group
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.TimeSummaryDataV2'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel time series data
+      tags:
+      - dashboard
+  /api/group/{group}/channel-dashboardv3:
+    get:
+      description: Returns group-channel dashboard V3 data for a specific group
+      parameters:
+      - description: Group
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: query
+        name: group_channel
+        type: integer
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Start timestamp
+        format: int64
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp
+        format: int64
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Time span type (minute, hour, day, month)
+        in: query
+        name: timespan
+        type: string
+      - description: Comma-separated list of fields to select
+        in: query
+        name: fields
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.DashboardV3Response'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel dashboard V3 data
+      tags:
+      - dashboard
+  /api/group/{group}/channel-models/enabled:
+    get:
+      description: Returns group channel model configs grouped by set for a group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    items:
+                      $ref: '#/definitions/model.ModelConfig'
+                    type: array
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get enabled group channel models
+      tags:
+      - group-channel
+  /api/group/{group}/channel-models/enabled/{set}:
+    get:
+      description: Returns group channel model configs for a specific set
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Models set
+        in: path
+        name: set
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.ModelConfig'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get enabled group channel models by set
+      tags:
+      - group-channel
+  /api/group/{group}/channel/:
+    post:
+      consumes:
+      - application/json
+      description: Adds a group channel to a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel information
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Add a group channel
+      tags:
+      - group-channel
+  /api/group/{group}/channel/{id}:
+    delete:
+      description: Deletes a group channel by ID in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a group channel
+      tags:
+      - group-channel
+    get:
+      description: Returns detailed information about a group channel in a specific
+        group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannel'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get a group channel by ID
+      tags:
+      - group-channel
+    put:
+      consumes:
+      - application/json
+      description: Updates a group channel by ID in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated group channel information
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannel'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a group channel
+      tags:
+      - group-channel
+  /api/group/{group}/channel/{id}/status:
+    post:
+      consumes:
+      - application/json
+      description: Updates the status of a group channel by ID in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status information
+        in: body
+        name: status
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateChannelStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update group channel status
+      tags:
+      - group-channel
+  /api/group/{group}/channel/{id}/test:
+    get:
+      description: Tests all models in the group channel
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Return success
+        in: query
+        name: return_success
+        type: boolean
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Stream
+        in: query
+        name: stream
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupChannelTestResult'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel models
+      tags:
+      - group-channel
+  /api/group/{group}/channel/{id}/test/{model}:
+    get:
+      description: Tests a single model in the group channel
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel model
+      tags:
+      - group-channel
+  /api/group/{group}/channel/{id}/tests:
+    get:
+      description: Returns persisted test results for a group channel
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupChannelTest'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel test results
+      tags:
+      - group-channel
+  /api/group/{group}/channel/test-preview:
+    post:
+      consumes:
+      - application/json
+      description: Test a single model in a group channel without saving to database
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Group channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestSingleGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel preview
+      tags:
+      - group-channel
+  /api/group/{group}/channel/test-preview-all:
+    post:
+      consumes:
+      - application/json
+      description: Test all models in a group channel without saving to database
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Return success
+        in: query
+        name: return_success
+        type: boolean
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Stream mode (SSE)
+        in: query
+        name: stream
+        type: boolean
+      - description: Group channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupChannelTestResult'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel preview models
+      tags:
+      - group-channel
+  /api/group/{group}/channels/:
+    get:
+      description: Returns a paginated list of group channels for a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by id
+        in: query
+        name: id
+        type: integer
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Filter by key
+        in: query
+        name: key
+        type: string
+      - description: Filter by channel type
+        in: query
+        name: channel_type
+        type: integer
+      - description: Filter by base URL
+        in: query
+        name: base_url
+        type: string
+      - description: Order by field
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        channels:
+                          items:
+                            $ref: '#/definitions/model.GroupChannel'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channels with pagination
+      tags:
+      - group-channel
+    post:
+      consumes:
+      - application/json
+      description: Adds group channels to a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel information
+        in: body
+        name: channels
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/controller.AddGroupChannelRequest'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Add multiple group channels
+      tags:
+      - group-channel
+  /api/group/{group}/channels/batch_delete:
+    post:
+      consumes:
+      - application/json
+      description: Deletes group channels by IDs in a specific group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel IDs
+        in: body
+        name: ids
+        required: true
+        schema:
+          items:
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete multiple group channels
+      tags:
+      - group-channel
+  /api/group/{group}/channels/batch_info:
+    post:
+      consumes:
+      - application/json
+      description: Returns id, group, name, and type for a batch of group channel
+        IDs filtered by group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Group channel IDs
+        in: body
+        name: ids
+        required: true
+        schema:
+          items:
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupChannelBasicInfo'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get basic info for multiple group channels in a group
+      tags:
+      - group-channel
+  /api/group/{group}/channels/import/oneapi:
+    post:
+      description: Imports group channels from OneAPI into a group
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Import group channel from OneAPI request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ImportChannelFromOneAPIRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items: {}
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Import group channel from OneAPI
+      tags:
+      - group-channel
+  /api/group/{group}/channels/search:
+    get:
+      description: Search group channels for a specific group with keyword and optional
+        filters
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Search keyword
+        in: query
+        name: keyword
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by id
+        in: query
+        name: id
+        type: integer
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Filter by key
+        in: query
+        name: key
+        type: string
+      - description: Filter by channel type
+        in: query
+        name: channel_type
+        type: integer
+      - description: Filter by base URL
+        in: query
+        name: base_url
+        type: string
+      - description: Order by field
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        channels:
+                          items:
+                            $ref: '#/definitions/model.GroupChannel'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search group channels
+      tags:
+      - group-channel
+  /api/group/{group}/channels/type_metas:
+    get:
+      description: Returns metadata for all channel types
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/adaptors.AdaptorMeta'
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get channel type metadata
+      tags:
+      - channels
+  /api/group/{group}/mcp/:
     get:
       description: Get MCPs by group
       parameters:
@@ -5305,6 +6997,330 @@ paths:
       summary: Update group RPM ratio
       tags:
       - group
+  /api/group/{group}/scope_model_config/{model}:
+    delete:
+      description: Deletes a group-channel scope model config for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete group scope model config
+      tags:
+      - group-scope-modelconfig
+    get:
+      description: Returns a group-channel scope model config for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupScopeModelConfig'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group scope model config
+      tags:
+      - group-scope-modelconfig
+    post:
+      consumes:
+      - application/json
+      description: Saves a group-channel scope model config for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      - description: Model config
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SaveGroupScopeModelConfigsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Save group scope model config
+      tags:
+      - group-scope-modelconfig
+  /api/group/{group}/scope_model_configs/:
+    get:
+      description: Returns group-channel scope model configs with pagination for a
+        specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        configs:
+                          items:
+                            $ref: '#/definitions/model.GroupScopeModelConfig'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group scope model configs
+      tags:
+      - group-scope-modelconfig
+    post:
+      consumes:
+      - application/json
+      description: Saves group-channel scope model configs for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model configs
+        in: body
+        name: configs
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/controller.SaveGroupScopeModelConfigsRequest'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Save group scope model configs
+      tags:
+      - group-scope-modelconfig
+  /api/group/{group}/scope_model_configs/all:
+    get:
+      description: Returns all group-channel scope model configs for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupScopeModelConfig'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all group scope model configs
+      tags:
+      - group-scope-modelconfig
+  /api/group/{group}/scope_model_configs/batch_delete:
+    post:
+      consumes:
+      - application/json
+      description: Deletes group-channel scope model configs by model names for a
+        specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Model names
+        in: body
+        name: models
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete group scope model configs
+      tags:
+      - group-scope-modelconfig
+  /api/group/{group}/scope_model_configs/contains:
+    post:
+      consumes:
+      - application/json
+      description: Returns group-channel scope model configs for the requested models
+        in a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Models
+        in: body
+        name: models
+        required: true
+        schema:
+          $ref: '#/definitions/controller.GetModelConfigsByModelsContainsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupScopeModelConfig'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group scope model configs by models
+      tags:
+      - group-scope-modelconfig
+  /api/group/{group}/scope_model_configs/search:
+    get:
+      description: Returns group-channel scope model configs by keyword for a specific
+        group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Keyword
+        in: query
+        name: keyword
+        type: string
+      - description: Model name
+        in: query
+        name: model
+        type: string
+      - description: Owner
+        in: query
+        name: owner
+        type: string
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        configs:
+                          items:
+                            $ref: '#/definitions/model.GroupScopeModelConfig'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search group scope model configs
+      tags:
+      - group-scope-modelconfig
   /api/group/{group}/status:
     post:
       consumes:
@@ -5363,6 +7379,606 @@ paths:
       summary: Update group TPM ratio
       tags:
       - group
+  /api/group_channel/:
+    post:
+      consumes:
+      - application/json
+      description: Adds a group channel from the global management view. The request
+        body must include group_id.
+      parameters:
+      - description: Group channel information
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Add a group channel
+      tags:
+      - group_channel
+  /api/group_channel/{id}:
+    delete:
+      description: Deletes a group channel by ID from the global management view
+      parameters:
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a group channel
+      tags:
+      - group_channel
+    get:
+      description: Returns detailed information about a group channel across groups
+      parameters:
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannel'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get a group channel by ID
+      tags:
+      - group_channel
+    put:
+      consumes:
+      - application/json
+      description: Updates a group channel by ID from the global management view
+      parameters:
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated group channel information
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannel'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a group channel
+      tags:
+      - group_channel
+  /api/group_channel/{id}/status:
+    post:
+      consumes:
+      - application/json
+      description: Updates the status of a group channel by ID from the global management
+        view
+      parameters:
+      - description: Group channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status information
+        in: body
+        name: status
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateChannelStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update group channel status
+      tags:
+      - group_channel
+  /api/group_channel/{id}/test:
+    get:
+      description: Tests all models in a group channel from the global management
+        view
+      parameters:
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Return success
+        in: query
+        name: return_success
+        type: boolean
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Stream
+        in: query
+        name: stream
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupChannelTestResult'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel models
+      tags:
+      - group_channel
+  /api/group_channel/{id}/test/{model}:
+    get:
+      description: Tests a single model in a group channel from the global management
+        view
+      parameters:
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel model
+      tags:
+      - group_channel
+  /api/group_channel/{id}/tests:
+    get:
+      description: Returns persisted test results for a group channel from the global
+        management view
+      parameters:
+      - description: Group Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupChannelTest'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel test results
+      tags:
+      - group_channel
+  /api/group_channel/test-preview:
+    post:
+      consumes:
+      - application/json
+      description: Test a single model in a group channel without saving to database
+        from the global management view. The request body must include group_id.
+      parameters:
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Group channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestSingleGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GroupChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel preview
+      tags:
+      - group_channel
+  /api/group_channel/test-preview-all:
+    post:
+      consumes:
+      - application/json
+      description: Test all models in a group channel without saving to database from
+        the global management view. The request body must include group_id.
+      parameters:
+      - description: Return success
+        in: query
+        name: return_success
+        type: boolean
+      - description: Success body
+        in: query
+        name: success_body
+        type: boolean
+      - description: Stream mode (SSE)
+        in: query
+        name: stream
+        type: boolean
+      - description: Group channel test request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.TestGroupChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.GroupChannelTestResult'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test group channel preview models
+      tags:
+      - group_channel
+  /api/group_channels/:
+    get:
+      description: Returns a paginated list of group channels across groups with optional
+        filters
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by id
+        in: query
+        name: id
+        type: integer
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Filter by key
+        in: query
+        name: key
+        type: string
+      - description: Filter by channel type
+        in: query
+        name: channel_type
+        type: integer
+      - description: Filter by base URL
+        in: query
+        name: base_url
+        type: string
+      - description: Order by field
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        channels:
+                          items:
+                            $ref: '#/definitions/model.GroupChannel'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channels with pagination
+      tags:
+      - group_channels
+    post:
+      consumes:
+      - application/json
+      description: Adds group channels from the global management view. Each request
+        item must include group_id.
+      parameters:
+      - description: Group channel information
+        in: body
+        name: channels
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/controller.AddGroupChannelRequest'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Add multiple group channels
+      tags:
+      - group_channels
+  /api/group_channels/batch_delete:
+    post:
+      consumes:
+      - application/json
+      description: Deletes group channels by IDs from the global management view
+      parameters:
+      - description: Group channel IDs
+        in: body
+        name: ids
+        required: true
+        schema:
+          items:
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete multiple group channels
+      tags:
+      - group_channels
+  /api/group_channels/batch_info:
+    post:
+      consumes:
+      - application/json
+      description: Returns id, group, name, and type for a batch of group channel
+        IDs across groups
+      parameters:
+      - description: Group channel IDs
+        in: body
+        name: ids
+        required: true
+        schema:
+          items:
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.GroupChannelBasicInfo'
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get basic info for multiple group channels
+      tags:
+      - group_channels
+  /api/group_channels/import/oneapi:
+    post:
+      description: Imports group channels from OneAPI from the global management view.
+        The request body must include group_id.
+      parameters:
+      - description: Import group channel from OneAPI request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ImportChannelFromOneAPIRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items: {}
+                  type: array
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Import group channel from OneAPI
+      tags:
+      - group_channels
+  /api/group_channels/search:
+    get:
+      description: Search group channels across groups with keyword and optional filters
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Search keyword
+        in: query
+        name: keyword
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by id
+        in: query
+        name: id
+        type: integer
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Filter by key
+        in: query
+        name: key
+        type: string
+      - description: Filter by channel type
+        in: query
+        name: channel_type
+        type: integer
+      - description: Filter by base URL
+        in: query
+        name: base_url
+        type: string
+      - description: Order by field
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        channels:
+                          items:
+                            $ref: '#/definitions/model.GroupChannel'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search group channels
+      tags:
+      - group_channels
+  /api/group_channels/type_metas:
+    get:
+      description: Returns metadata for all channel types
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/adaptors.AdaptorMeta'
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get channel type metadata
+      tags:
+      - channels
   /api/groups/:
     get:
       description: Returns a list of all groups with pagination
@@ -5866,6 +8482,336 @@ paths:
       summary: Export group logs
       tags:
       - log
+  /api/log/{group}/group_channel:
+    delete:
+      description: Deletes group-channel logs older than the specified retention period
+      parameters:
+      - description: Timestamp (milliseconds)
+        in: query
+        name: timestamp
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  type: integer
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete historical group channel logs
+      tags:
+      - log
+    get:
+      description: Get group-channel logs for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Start timestamp (milliseconds)
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp (milliseconds)
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Group channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Order
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GetGroupChannelLogsResult'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel logs
+      tags:
+      - log
+  /api/log/{group}/group_channel/detail/{log_id}:
+    get:
+      description: Get detailed information about a group channel log entry in a group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Log ID
+        in: path
+        name: log_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.RequestDetail'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get group channel log detail for a group
+      tags:
+      - log
+  /api/log/{group}/group_channel/export:
+    get:
+      description: Streams filtered group-channel logs as a CSV table file
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Group channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Include retry_at column, default false
+        in: query
+        name: include_retry_at
+        type: boolean
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export group channel logs
+      tags:
+      - log
+  /api/log/{group}/group_channel/search:
+    get:
+      description: Search group-channel logs for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Keyword
+        in: query
+        name: keyword
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Start timestamp (milliseconds)
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp (milliseconds)
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Filter by token name
+        in: query
+        name: token_name
+        type: string
+      - description: Filter by model name
+        in: query
+        name: model_name
+        type: string
+      - description: Filter by token id
+        in: query
+        name: token_id
+        type: integer
+      - description: Filter by group channel
+        in: query
+        name: channel
+        type: integer
+      - description: Order
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GetGroupChannelLogsResult'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search group channel logs
+      tags:
+      - log
   /api/log/{group}/search:
     get:
       description: Search logs for a specific group with filters
@@ -6235,6 +9181,335 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Export global logs
+      tags:
+      - logs
+  /api/logs/group_channel:
+    delete:
+      description: Deletes group-channel logs older than the specified retention period,
+        optionally filtered by group
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Timestamp (milliseconds)
+        in: query
+        name: timestamp
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  type: integer
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete historical group channel logs
+      tags:
+      - logs
+    get:
+      description: Get group-channel logs across groups with optional filters
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Start timestamp (milliseconds)
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp (milliseconds)
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Group channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Order
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GetGroupChannelLogsResult'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get global group channel logs
+      tags:
+      - logs
+  /api/logs/group_channel/detail/{log_id}:
+    get:
+      description: Get detailed information about a group channel log entry across
+        groups
+      parameters:
+      - description: Log ID
+        in: path
+        name: log_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.RequestDetail'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get global group channel log detail
+      tags:
+      - logs
+  /api/logs/group_channel/export:
+    get:
+      description: Streams filtered group-channel logs across groups as a CSV table
+        file
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Start timestamp, max span 30 days
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp, max span 30 days
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Model name
+        in: query
+        name: model_name
+        type: string
+      - description: Group channel ID
+        in: query
+        name: channel
+        type: integer
+      - description: Token ID
+        in: query
+        name: token_id
+        type: integer
+      - description: Token name
+        in: query
+        name: token_name
+        type: string
+      - description: Sort order for created_at, supports desc or asc
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail, default false
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      - description: Timezone, default is Local
+        in: query
+        name: timezone
+        type: string
+      - description: Maximum exported rows; zero or negative means unlimited
+        in: query
+        name: max_entries
+        type: integer
+      - description: Include retry_at column, default false
+        in: query
+        name: include_retry_at
+        type: boolean
+      - description: Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m,
+          1h
+        in: query
+        name: chunk_interval
+        type: string
+      produces:
+      - text/csv
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Export global group channel logs
+      tags:
+      - logs
+  /api/logs/group_channel/search:
+    get:
+      description: Search group-channel logs across groups with optional filters
+      parameters:
+      - description: Filter by group
+        in: query
+        name: group
+        type: string
+      - description: Keyword
+        in: query
+        name: keyword
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Start timestamp (milliseconds)
+        in: query
+        name: start_timestamp
+        type: integer
+      - description: End timestamp (milliseconds)
+        in: query
+        name: end_timestamp
+        type: integer
+      - description: Filter by token name
+        in: query
+        name: token_name
+        type: string
+      - description: Filter by model name
+        in: query
+        name: model_name
+        type: string
+      - description: Filter by token id
+        in: query
+        name: token_id
+        type: integer
+      - description: Filter by group channel
+        in: query
+        name: channel
+        type: integer
+      - description: Order
+        in: query
+        name: order
+        type: string
+      - description: Request ID
+        in: query
+        name: request_id
+        type: string
+      - description: Upstream ID
+        in: query
+        name: upstream_id
+        type: string
+      - description: Status code type
+        in: query
+        name: code_type
+        type: string
+      - description: Status code
+        in: query
+        name: code
+        type: integer
+      - description: Include request and response detail
+        in: query
+        name: include_detail
+        type: boolean
+      - description: IP
+        in: query
+        name: ip
+        type: string
+      - description: User
+        in: query
+        name: user
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.GetGroupChannelLogsResult'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search global group channel logs
       tags:
       - logs
   /api/logs/search:
@@ -8024,6 +11299,58 @@ paths:
       - ApiKeyAuth: []
       summary: Test Public MCP SSE Server
   /api/token/{group}:
+    get:
+      description: Returns a paginated list of all tokens for a specific group
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Order
+        in: query
+        name: order
+        type: string
+      - description: Status
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  additionalProperties:
+                    allOf:
+                    - {}
+                    - properties:
+                        tokens:
+                          items:
+                            $ref: '#/definitions/controller.TokenResponse'
+                          type: array
+                        total:
+                          type: integer
+                      type: object
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all tokens for a specific group
+      tags:
+      - tokens
     post:
       consumes:
       - application/json
@@ -8375,59 +11702,6 @@ paths:
       summary: Get all tokens
       tags:
       - tokens
-  /api/tokens/{group}:
-    get:
-      description: Returns a paginated list of all tokens for a specific group
-      parameters:
-      - description: Group name
-        in: path
-        name: group
-        required: true
-        type: string
-      - description: Page number
-        in: query
-        name: page
-        type: integer
-      - description: Items per page
-        in: query
-        name: per_page
-        type: integer
-      - description: Order
-        in: query
-        name: order
-        type: string
-      - description: Status
-        in: query
-        name: status
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/middleware.APIResponse'
-            - properties:
-                data:
-                  additionalProperties:
-                    allOf:
-                    - {}
-                    - properties:
-                        tokens:
-                          items:
-                            $ref: '#/definitions/controller.TokenResponse'
-                          type: array
-                        total:
-                          type: integer
-                      type: object
-                  type: object
-              type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get all tokens for a specific group
-      tags:
-      - tokens
   /api/tokens/{id}:
     delete:
       description: Deletes a specific token by ID
@@ -8655,6 +11929,312 @@ paths:
       summary: Search tokens
       tags:
       - tokens
+  /api/v1/services/aigc/video-generation/video-synthesis:
+    post:
+      consumes:
+      - application/json
+      description: Create an Ali DashScope native video generation task.
+      parameters:
+      - description: Ali DashScope video synthesis request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create Ali native video task
+      tags:
+      - relay
+  /api/v1/tasks/{task_id}:
+    get:
+      description: Get an Ali DashScope native video generation task.
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get Ali native video task
+      tags:
+      - relay
+  /api/v3/contents/generations/tasks:
+    post:
+      consumes:
+      - application/json
+      description: Create a Doubao native video generation task.
+      parameters:
+      - description: Doubao video generation task request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create Doubao native video task
+      tags:
+      - relay
+  /api/v3/contents/generations/tasks/{task_id}:
+    delete:
+      description: Delete a Doubao native video generation task.
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: object
+        "204":
+          description: No Content
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Delete Doubao native video task
+      tags:
+      - relay
+    get:
+      description: Get a Doubao native video generation task.
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-RateLimit-Limit-Requests:
+              description: X-RateLimit-Limit-Requests
+              type: integer
+            X-RateLimit-Limit-Tokens:
+              description: X-RateLimit-Limit-Tokens
+              type: integer
+            X-RateLimit-Remaining-Requests:
+              description: X-RateLimit-Remaining-Requests
+              type: integer
+            X-RateLimit-Remaining-Tokens:
+              description: X-RateLimit-Remaining-Tokens
+              type: integer
+            X-RateLimit-Reset-Requests:
+              description: X-RateLimit-Reset-Requests
+              type: string
+            X-RateLimit-Reset-Tokens:
+              description: X-RateLimit-Reset-Tokens
+              type: string
+          schema:
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get Doubao native video task
+      tags:
+      - relay
   /mcp:
     delete:
       responses: {}
@@ -8739,6 +12319,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -8787,6 +12379,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -8837,6 +12441,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -8882,6 +12498,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -8926,6 +12554,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9017,6 +12657,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9071,6 +12723,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9116,6 +12780,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9160,6 +12836,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9247,6 +12935,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9291,6 +12991,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9337,6 +13049,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9381,6 +13105,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9402,6 +13138,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9428,6 +13176,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9452,6 +13212,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9478,6 +13250,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9524,6 +13308,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9568,6 +13364,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9614,6 +13422,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9658,6 +13478,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9679,6 +13511,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/json
@@ -9704,6 +13548,18 @@ paths:
       - description: Optional Aiproxy-Channel header
         in: header
         name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
         type: string
       produces:
       - application/octet-stream
@@ -9736,6 +13592,18 @@ paths:
         in: header
         name: Aiproxy-Channel
         type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
       produces:
       - application/json
       responses:
@@ -9746,6 +13614,82 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Remix video
+      tags:
+      - relay
+  /v1/videos/edits:
+    post:
+      description: Create a new video by editing a source video
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.VideosEditRequest'
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Video'
+      security:
+      - ApiKeyAuth: []
+      summary: Edit video
+      tags:
+      - relay
+  /v1/videos/extensions:
+    post:
+      description: Create an extension of a completed video
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.VideosExtensionRequest'
+      - description: Optional Aiproxy-Channel header
+        in: header
+        name: Aiproxy-Channel
+        type: string
+      - description: Optional group ID for internal token requests
+        in: header
+        name: X-Aiproxy-Group
+        type: string
+      - description: 'Optional group channel mode for internal token requests. Values:
+          global, own'
+        enum:
+        - global
+        - own
+        in: header
+        name: X-Aiproxy-Group-Channel-Mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Video'
+      security:
+      - ApiKeyAuth: []
+      summary: Extend video
       tags:
       - relay
 securityDefinitions:

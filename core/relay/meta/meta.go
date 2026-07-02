@@ -2,6 +2,7 @@ package meta
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/labring/aiproxy/core/model"
@@ -13,8 +14,10 @@ type ChannelMeta struct {
 	BaseURL                 string
 	ProxyURL                string
 	Key                     string
+	GroupID                 string
 	ID                      int
 	Type                    model.ChannelType
+	Scope                   model.ChannelScope
 	ModelMapping            map[string]string
 	EnabledAutoBalanceCheck bool
 	SkipTLSVerify           bool
@@ -93,6 +96,12 @@ func WithToken(token model.TokenCache) Option {
 	}
 }
 
+func WithModelConfig(modelConfig model.ModelConfig) Option {
+	return func(meta *Meta) {
+		meta.ModelConfig = modelConfig
+	}
+}
+
 func WithRequestUsage(requestUsage model.Usage) Option {
 	return func(meta *Meta) {
 		meta.RequestUsage = requestUsage
@@ -159,6 +168,13 @@ func WithUser(user string) Option {
 	}
 }
 
+func WithChannelScope(scope model.ChannelScope, groupID string) Option {
+	return func(meta *Meta) {
+		meta.Channel.Scope = scope
+		meta.Channel.GroupID = groupID
+	}
+}
+
 func NewMeta(
 	channel *model.Channel,
 	mode mode.Mode,
@@ -195,7 +211,12 @@ func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.ProxyURL = channel.ProxyURL
 	m.Channel.Key = channel.Key
 	m.Channel.ID = channel.ID
+
 	m.Channel.Type = channel.Type
+	if m.Channel.Scope == "" {
+		m.Channel.Scope = model.ChannelScopeGlobal
+	}
+
 	m.Channel.EnabledAutoBalanceCheck = channel.EnabledAutoBalanceCheck
 	m.Channel.SkipTLSVerify = channel.SkipTLSVerify
 	m.Channel.EnabledNoPermissionBan = channel.EnabledNoPermissionBan
@@ -206,6 +227,18 @@ func (m *Meta) SetChannel(channel *model.Channel) {
 	m.ChannelConfigs = channel.Configs
 
 	m.ActualModel, _ = GetMappedModelName(m.OriginModel, channel.ModelMapping)
+}
+
+func (m *Meta) ChannelMonitorKey() string {
+	if m == nil {
+		return "0"
+	}
+
+	if m.Channel.Scope == model.ChannelScopeGroup {
+		return model.GroupChannelMonitorKey(m.Channel.GroupID, m.Channel.ID)
+	}
+
+	return strconv.Itoa(m.Channel.ID)
 }
 
 func (m *Meta) CopyChannelFromMeta(meta *Meta) {

@@ -54,7 +54,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test": {
+        "/api/channel/test-preview": {
             "post": {
                 "security": [
                     {
@@ -105,7 +105,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test-all": {
+        "/api/channel/test-preview-all": {
             "post": {
                 "security": [
                     {
@@ -311,53 +311,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/{id}/balance": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Updates the balance for a single channel",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "channel"
-                ],
-                "summary": "Update channel balance",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Channel ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/middleware.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "number",
-                                            "format": "float64"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/api/channel/{id}/status": {
             "post": {
                 "security": [
@@ -471,7 +424,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/{id}/{model}": {
+        "/api/channel/{id}/test/{model}": {
             "get": {
                 "security": [
                     {
@@ -515,6 +468,53 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/model.ChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/channel/{id}/update_balance": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the balance for a single channel",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Update channel balance",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "number",
+                                            "format": "float64"
                                         }
                                     }
                                 }
@@ -705,31 +705,6 @@ const docTemplate = `{
                                     }
                                 }
                             ]
-                        }
-                    }
-                }
-            }
-        },
-        "/api/channels/balance": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Updates the balance for all channels",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "channel"
-                ],
-                "summary": "Update all channels balance",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/middleware.APIResponse"
                         }
                     }
                 }
@@ -1102,6 +1077,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/channels/update_balance": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the balance for all channels",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Update all channels balance",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/dashboard/": {
             "get": {
                 "security": [
@@ -1159,6 +1159,95 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,video_input_tokens,output_tokens,image_output_tokens,audio_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/group_channel": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel usage statistics across groups, optionally filtered by group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get global group channel dashboard data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start second timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End second timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
                         "name": "fields",
                         "in": "query"
                     }
@@ -1410,6 +1499,98 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/dashboardv2/group_channel": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel model usage time series across groups, optionally filtered by group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get global group channel time series data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.TimeSummaryDataV2"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/dashboardv2/{group}": {
             "get": {
                 "security": [
@@ -1560,6 +1741,95 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Comma-separated list of fields to select (e.g., request_count,exception_count,cache_hit_count). Available: request_count,retry_count,exception_count,status4xx_count,status5xx_count,status400_count,status429_count,status500_count,cache_hit_count,input_tokens,image_input_tokens,audio_input_tokens,video_input_tokens,output_tokens,image_output_tokens,audio_output_tokens,cached_tokens,cache_creation_tokens,total_tokens,web_search_count,used_amount,total_time,total_ttfb. Groups: count,usage,time,all",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardV3Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboardv3/group_channel": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel dashboard V3 data across groups, optionally filtered by group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get global group channel dashboard V3 data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
                         "name": "fields",
                         "in": "query"
                     }
@@ -1931,7 +2201,1524 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/group/{group}/mcp": {
+        "/api/group/{group}/channel-dashboard": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel usage statistics for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get group channel dashboard data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start second timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End second timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel-dashboard/models": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel model configs backed by enabled group channels for the given group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get group channel dashboard models",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupModel"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel-dashboardv2": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel model usage time series for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get group channel time series data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.TimeSummaryDataV2"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel-dashboardv3": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel dashboard V3 data for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get group channel dashboard V3 data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "group_channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Start timestamp",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "End timestamp",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time span type (minute, hour, day, month)",
+                        "name": "timespan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to select",
+                        "name": "fields",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.DashboardV3Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel-models/enabled": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group channel model configs grouped by set for a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get enabled group channel models",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "$ref": "#/definitions/model.ModelConfig"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel-models/enabled/{set}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group channel model configs for a specific set",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get enabled group channel models by set",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Models set",
+                        "name": "set",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.ModelConfig"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Adds a group channel to a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Add a group channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group channel information",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/test-preview": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test a single model in a group channel without saving to database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Test group channel preview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Group channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestSingleGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/test-preview-all": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test all models in a group channel without saving to database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Test group channel preview models",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return success",
+                        "name": "return_success",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Stream mode (SSE)",
+                        "name": "stream",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Group channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupChannelTestResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns detailed information about a group channel in a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get a group channel by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannel"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates a group channel by ID in a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Update a group channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated group channel information",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannel"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes a group channel by ID in a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Delete a group channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/{id}/status": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the status of a group channel by ID in a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Update group channel status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status information",
+                        "name": "status",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateChannelStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/{id}/test": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Tests all models in the group channel",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Test group channel models",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return success",
+                        "name": "return_success",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Stream",
+                        "name": "stream",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupChannelTestResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/{id}/test/{model}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Tests a single model in the group channel",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Test group channel model",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channel/{id}/tests": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns persisted test results for a group channel",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get group channel test results",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupChannelTest"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a paginated list of group channels for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get group channels with pagination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by id",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by name",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by channel type",
+                        "name": "channel_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by base URL",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order by field",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "channels": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupChannel"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Adds group channels to a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Add multiple group channels",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group channel information",
+                        "name": "channels",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/batch_delete": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes group channels by IDs in a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Delete multiple group channels",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group channel IDs",
+                        "name": "ids",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/batch_info": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns id, group, name, and type for a batch of group channel IDs filtered by group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Get basic info for multiple group channels in a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group channel IDs",
+                        "name": "ids",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupChannelBasicInfo"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/import/oneapi": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Imports group channels from OneAPI into a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Import group channel from OneAPI",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Import group channel from OneAPI request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.ImportChannelFromOneAPIRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Search group channels for a specific group with keyword and optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-channel"
+                ],
+                "summary": "Search group channels",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search keyword",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by id",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by name",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by channel type",
+                        "name": "channel_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by base URL",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order by field",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "channels": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupChannel"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/channels/type_metas": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns metadata for all channel types",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channels"
+                ],
+                "summary": "Get channel type metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "$ref": "#/definitions/adaptors.AdaptorMeta"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/mcp/": {
             "get": {
                 "security": [
                     {
@@ -2485,6 +4272,533 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/group/{group}/scope_model_config/{model}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a group-channel scope model config for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Get group scope model config",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupScopeModelConfig"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Saves a group-channel scope model config for a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Save group scope model config",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Model config",
+                        "name": "config",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SaveGroupScopeModelConfigsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes a group-channel scope model config for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Delete group scope model config",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/scope_model_configs/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel scope model configs with pagination for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Get group scope model configs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "configs": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupScopeModelConfig"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Saves group-channel scope model configs for a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Save group scope model configs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Model configs",
+                        "name": "configs",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.SaveGroupScopeModelConfigsRequest"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/scope_model_configs/all": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns all group-channel scope model configs for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Get all group scope model configs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupScopeModelConfig"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/scope_model_configs/batch_delete": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes group-channel scope model configs by model names for a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Delete group scope model configs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Model names",
+                        "name": "models",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/scope_model_configs/contains": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel scope model configs for the requested models in a specific group",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Get group scope model configs by models",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Models",
+                        "name": "models",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.GetModelConfigsByModelsContainsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupScopeModelConfig"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group/{group}/scope_model_configs/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns group-channel scope model configs by keyword for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group-scope-modelconfig"
+                ],
+                "summary": "Search group scope model configs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keyword",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Owner",
+                        "name": "owner",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "configs": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupScopeModelConfig"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/group/{group}/status": {
             "post": {
                 "security": [
@@ -2572,6 +4886,993 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Adds a group channel from the global management view. The request body must include group_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Add a group channel",
+                "parameters": [
+                    {
+                        "description": "Group channel information",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/test-preview": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test a single model in a group channel without saving to database from the global management view. The request body must include group_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Test group channel preview",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Group channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestSingleGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/test-preview-all": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Test all models in a group channel without saving to database from the global management view. The request body must include group_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Test group channel preview models",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Return success",
+                        "name": "return_success",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Stream mode (SSE)",
+                        "name": "stream",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Group channel test request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.TestGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupChannelTestResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns detailed information about a group channel across groups",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Get a group channel by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannel"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates a group channel by ID from the global management view",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Update a group channel",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated group channel information",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannel"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes a group channel by ID from the global management view",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Delete a group channel",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/{id}/status": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the status of a group channel by ID from the global management view",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Update group channel status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status information",
+                        "name": "status",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateChannelStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/{id}/test": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Tests all models in a group channel from the global management view",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Test group channel models",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return success",
+                        "name": "return_success",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Stream",
+                        "name": "stream",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.GroupChannelTestResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/{id}/test/{model}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Tests a single model in a group channel from the global management view",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Test group channel model",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GroupChannelTest"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channel/{id}/tests": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns persisted test results for a group channel from the global management view",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channel"
+                ],
+                "summary": "Get group channel test results",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Group Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Success body",
+                        "name": "success_body",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupChannelTest"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a paginated list of group channels across groups with optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Get group channels with pagination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by id",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by name",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by channel type",
+                        "name": "channel_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by base URL",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order by field",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "channels": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupChannel"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Adds group channels from the global management view. Each request item must include group_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Add multiple group channels",
+                "parameters": [
+                    {
+                        "description": "Group channel information",
+                        "name": "channels",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/batch_delete": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes group channels by IDs from the global management view",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Delete multiple group channels",
+                "parameters": [
+                    {
+                        "description": "Group channel IDs",
+                        "name": "ids",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/batch_info": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns id, group, name, and type for a batch of group channel IDs across groups",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Get basic info for multiple group channels",
+                "parameters": [
+                    {
+                        "description": "Group channel IDs",
+                        "name": "ids",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/model.GroupChannelBasicInfo"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/import/oneapi": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Imports group channels from OneAPI from the global management view. The request body must include group_id.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Import group channel from OneAPI",
+                "parameters": [
+                    {
+                        "description": "Import group channel from OneAPI request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.ImportChannelFromOneAPIRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Search group channels across groups with keyword and optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_channels"
+                ],
+                "summary": "Search group channels",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search keyword",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by id",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by name",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by key",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by channel type",
+                        "name": "channel_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by base URL",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order by field",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "channels": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/model.GroupChannel"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/group_channels/type_metas": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns metadata for all channel types",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channels"
+                ],
+                "summary": "Get channel type metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "$ref": "#/definitions/adaptors.AdaptorMeta"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -3380,6 +6681,528 @@ const docTemplate = `{
                 "responses": {}
             }
         },
+        "/api/log/{group}/group_channel": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get group-channel logs for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Get group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp (milliseconds)",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp (milliseconds)",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GetGroupChannelLogsResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes group-channel logs older than the specified retention period",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Delete historical group channel logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Timestamp (milliseconds)",
+                        "name": "timestamp",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/log/{group}/group_channel/detail/{log_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get detailed information about a group channel log entry in a group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Get group channel log detail for a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Log ID",
+                        "name": "log_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.RequestDetail"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/log/{group}/group_channel/export": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Streams filtered group-channel logs as a CSV table file",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Export group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp, max span 30 days",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp, max span 30 days",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort order for created_at, supports desc or asc",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail, default false",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum exported rows; zero or negative means unlimited",
+                        "name": "max_entries",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include retry_at column, default false",
+                        "name": "include_retry_at",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h",
+                        "name": "chunk_interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/log/{group}/group_channel/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Search group-channel logs for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "Search group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keyword",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp (milliseconds)",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp (milliseconds)",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by token id",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by group channel",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GetGroupChannelLogsResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/log/{group}/search": {
             "get": {
                 "security": [
@@ -3973,6 +7796,524 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {}
+            }
+        },
+        "/api/logs/group_channel": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get group-channel logs across groups with optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Get global group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp (milliseconds)",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp (milliseconds)",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GetGroupChannelLogsResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes group-channel logs older than the specified retention period, optionally filtered by group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Delete historical group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Timestamp (milliseconds)",
+                        "name": "timestamp",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/logs/group_channel/detail/{log_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get detailed information about a group channel log entry across groups",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Get global group channel log detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Log ID",
+                        "name": "log_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.RequestDetail"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/logs/group_channel/export": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Streams filtered group-channel logs across groups as a CSV table file",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Export global group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp, max span 30 days",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp, max span 30 days",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group channel ID",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort order for created_at, supports desc or asc",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail, default false",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Timezone, default is Local",
+                        "name": "timezone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum exported rows; zero or negative means unlimited",
+                        "name": "max_entries",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include retry_at column, default false",
+                        "name": "include_retry_at",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chunk interval, default 30m, min 10m, max 4h, e.g. 10m, 30m, 1h",
+                        "name": "chunk_interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/logs/group_channel/search": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Search group-channel logs across groups with optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Search global group channel logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by group",
+                        "name": "group",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keyword",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start timestamp (milliseconds)",
+                        "name": "start_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End timestamp (milliseconds)",
+                        "name": "end_timestamp",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by token name",
+                        "name": "token_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by model name",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by token id",
+                        "name": "token_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by group channel",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "request_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Upstream ID",
+                        "name": "upstream_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status code type",
+                        "name": "code_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status code",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include request and response detail",
+                        "name": "include_detail",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/model.GetGroupChannelLogsResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
             }
         },
         "/api/logs/search": {
@@ -6957,6 +11298,93 @@ const docTemplate = `{
             }
         },
         "/api/token/{group}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a paginated list of all tokens for a specific group",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tokens"
+                ],
+                "summary": "Get all tokens for a specific group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "allOf": [
+                                                    {},
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "tokens": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "$ref": "#/definitions/controller.TokenResponse"
+                                                                }
+                                                            },
+                                                            "total": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -7676,95 +12104,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/tokens/{group}": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns a paginated list of all tokens for a specific group",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tokens"
-                ],
-                "summary": "Get all tokens for a specific group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group name",
-                        "name": "group",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page",
-                        "name": "per_page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Order",
-                        "name": "order",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Status",
-                        "name": "status",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/middleware.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object",
-                                            "additionalProperties": {
-                                                "allOf": [
-                                                    {},
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "tokens": {
-                                                                "type": "array",
-                                                                "items": {
-                                                                    "$ref": "#/definitions/controller.TokenResponse"
-                                                                }
-                                                            },
-                                                            "total": {
-                                                                "type": "integer"
-                                                            }
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/api/tokens/{id}": {
             "get": {
                 "security": [
@@ -7991,6 +12330,453 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/services/aigc/video-generation/video-synthesis": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create an Ali DashScope native video generation task.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Create Ali native video task",
+                "parameters": [
+                    {
+                        "description": "Ali DashScope video synthesis request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{task_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get an Ali DashScope native video generation task.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Get Ali native video task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v3/contents/generations/tasks": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create a Doubao native video generation task.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Create Doubao native video task",
+                "parameters": [
+                    {
+                        "description": "Doubao video generation task request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v3/contents/generations/tasks/{task_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get a Doubao native video generation task.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Get Doubao native video task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Delete a Doubao native video generation task.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Delete Doubao native video task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        },
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    },
+                    "204": {
+                        "description": "No Content",
+                        "headers": {
+                            "X-RateLimit-Limit-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Requests"
+                            },
+                            "X-RateLimit-Limit-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Limit-Tokens"
+                            },
+                            "X-RateLimit-Remaining-Requests": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Requests"
+                            },
+                            "X-RateLimit-Remaining-Tokens": {
+                                "type": "integer",
+                                "description": "X-RateLimit-Remaining-Tokens"
+                            },
+                            "X-RateLimit-Reset-Requests": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Requests"
+                            },
+                            "X-RateLimit-Reset-Tokens": {
+                                "type": "string",
+                                "description": "X-RateLimit-Reset-Tokens"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/mcp": {
             "get": {
                 "security": [
@@ -8147,6 +12933,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8219,6 +13021,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -8293,6 +13111,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8361,6 +13195,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8428,6 +13278,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -8572,6 +13438,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8652,6 +13534,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8720,6 +13618,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8787,6 +13701,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -8922,6 +13852,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -8989,6 +13935,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9058,6 +14020,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9124,6 +14102,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9162,6 +14156,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9198,6 +14208,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9238,6 +14264,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9280,6 +14322,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9349,6 +14407,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9416,6 +14490,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9485,6 +14575,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9523,6 +14629,122 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/videos/edits": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create a new video by editing a source video",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Edit video",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.VideosEditRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Video"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/videos/extensions": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create an extension of a completed video",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Extend video",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.VideosExtensionRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional Aiproxy-Channel header",
+                        "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Video"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/videos/{video_id}": {
             "get": {
                 "security": [
@@ -9550,6 +14772,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9589,6 +14827,22 @@ const docTemplate = `{
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
                         "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -9625,6 +14879,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9674,6 +14944,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9730,6 +15016,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9803,6 +15105,22 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Optional Aiproxy-Channel header",
                         "name": "Aiproxy-Channel",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional group ID for internal token requests",
+                        "name": "X-Aiproxy-Group",
+                        "in": "header"
+                    },
+                    {
+                        "enum": [
+                            "global",
+                            "own"
+                        ],
+                        "type": "string",
+                        "description": "Optional group channel mode for internal token requests. Values: global, own",
+                        "name": "X-Aiproxy-Group-Channel-Mode",
                         "in": "header"
                     }
                 ],
@@ -9938,9 +15256,80 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.AddGroupChannelRequest": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                }
+            }
+        },
         "controller.AddTokenRequest": {
             "type": "object",
             "properties": {
+                "group_channel_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "group_channel_sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "models": {
                     "type": "array",
                     "items": {
@@ -9961,6 +15350,15 @@ const docTemplate = `{
                 },
                 "quota": {
                     "type": "number"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "subnets": {
                     "type": "array",
@@ -10007,12 +15405,21 @@ const docTemplate = `{
         "controller.BuiltinModelConfig": {
             "type": "object",
             "properties": {
+                "allowed_resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "config": {
                     "type": "object",
                     "additionalProperties": {}
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "disable_resolution_fuzzy_match": {
+                    "type": "boolean"
                 },
                 "exclude_from_tests": {
                     "type": "boolean"
@@ -10196,6 +15603,20 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "controller.GroupChannelTestResult": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/model.GroupChannelTest"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -10496,6 +15917,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "group_channel_request_count": {
+                    "type": "integer"
+                },
+                "group_channel_used_amount": {
+                    "type": "number"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -10579,6 +16006,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "dsn": {
+                    "type": "string"
+                },
+                "group_id": {
                     "type": "string"
                 }
             }
@@ -10997,15 +16427,109 @@ const docTemplate = `{
                 }
             }
         },
-        "controller.SaveModelConfigsRequest": {
+        "controller.SaveGroupScopeModelConfigsRequest": {
             "type": "object",
             "properties": {
+                "allowed_resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "config": {
                     "type": "object",
                     "additionalProperties": {}
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "disable_resolution_fuzzy_match": {
+                    "type": "boolean"
+                },
+                "exclude_from_tests": {
+                    "type": "boolean"
+                },
+                "force_save_detail": {
+                    "type": "boolean"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "max_image_generation_count": {
+                    "type": "integer"
+                },
+                "max_video_generation_count": {
+                    "type": "integer"
+                },
+                "max_video_generation_seconds": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "owner": {
+                    "$ref": "#/definitions/model.ModelOwner"
+                },
+                "plugin": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "price": {
+                    "$ref": "#/definitions/model.Price"
+                },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "retry_times": {
+                    "type": "integer"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
+                },
+                "timeout_config": {
+                    "$ref": "#/definitions/model.TimeoutConfig"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SaveModelConfigsRequest": {
+            "type": "object",
+            "properties": {
+                "allowed_resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "disable_resolution_fuzzy_match": {
+                    "type": "boolean"
                 },
                 "exclude_from_tests": {
                     "type": "boolean"
@@ -11121,6 +16645,65 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.TestGroupChannelRequest": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                }
+            }
+        },
         "controller.TestResult": {
             "type": "object",
             "properties": {
@@ -11132,6 +16715,55 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "controller.TestSingleGroupChannelRequest": {
+            "type": "object",
+            "required": [
+                "key",
+                "model",
+                "type"
+            ],
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "integer"
                 }
             }
         },
@@ -11188,6 +16820,24 @@ const docTemplate = `{
                 "group": {
                     "type": "string"
                 },
+                "group_channel_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "group_channel_request_count": {
+                    "type": "integer"
+                },
+                "group_channel_sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "group_channel_used_amount": {
+                    "type": "number"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -11223,6 +16873,15 @@ const docTemplate = `{
                 },
                 "request_count": {
                     "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/definitions/model.ChannelScope"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "integer"
@@ -11578,7 +17237,15 @@ const docTemplate = `{
                 27,
                 28,
                 29,
-                30
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -11611,7 +17278,15 @@ const docTemplate = `{
                 "GeminiVideo",
                 "GeminiVideoOperations",
                 "GeminiTTS",
-                "GeminiImage"
+                "GeminiImage",
+                "GeminiFiles",
+                "VideosEdits",
+                "VideosExtensions",
+                "AliVideo",
+                "AliVideoTasks",
+                "DoubaoVideo",
+                "DoubaoVideoTasks",
+                "DoubaoVideoTasksDelete"
             ]
         },
         "model.Amount": {
@@ -11804,6 +17479,17 @@ const docTemplate = `{
         "model.ChannelConfigs": {
             "type": "object",
             "additionalProperties": {}
+        },
+        "model.ChannelScope": {
+            "type": "string",
+            "enum": [
+                "global",
+                "group"
+            ],
+            "x-enum-varnames": [
+                "ChannelScopeGlobal",
+                "ChannelScopeGroup"
+            ]
         },
         "model.ChannelTest": {
             "type": "object",
@@ -12568,11 +18254,23 @@ const docTemplate = `{
                     }
                 },
                 "metadata": {},
+                "modalities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "model": {
                     "type": "string"
                 },
+                "n": {
+                    "type": "integer"
+                },
                 "num_ctx": {
                     "type": "integer"
+                },
+                "parallel_tool_calls": {
+                    "type": "boolean"
                 },
                 "presence_penalty": {
                     "type": "number"
@@ -12650,6 +18348,32 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/model.ClaudeThinkingType"
+                }
+            }
+        },
+        "model.GetGroupChannelLogsResult": {
+            "type": "object",
+            "properties": {
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.GroupChannelLog"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -12737,6 +18461,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "group_channel_request_count": {
+                    "type": "integer"
+                },
+                "group_channel_used_amount": {
+                    "type": "number"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -12753,6 +18483,259 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "used_amount": {
+                    "type": "number"
+                }
+            }
+        },
+        "model.GroupChannel": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
+                "group_channel_tests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.GroupChannelTest"
+                    }
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "last_test_error_at": {
+                    "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "request_count": {
+                    "type": "integer"
+                },
+                "retry_count": {
+                    "type": "integer"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                },
+                "used_amount": {
+                    "type": "number"
+                }
+            }
+        },
+        "model.GroupChannelBasicInfo": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                }
+            }
+        },
+        "model.GroupChannelLog": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/model.Amount"
+                },
+                "async_usage_status": {
+                    "$ref": "#/definitions/model.AsyncUsageStatus"
+                },
+                "code": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "group": {
+                    "type": "string"
+                },
+                "group_channel_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "price": {
+                    "$ref": "#/definitions/model.Price"
+                },
+                "prompt_cache_key": {
+                    "type": "string"
+                },
+                "request_at": {
+                    "type": "string"
+                },
+                "request_detail": {
+                    "$ref": "#/definitions/model.GroupChannelRequestDetail"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "retry_at": {
+                    "type": "string"
+                },
+                "retry_times": {
+                    "type": "integer"
+                },
+                "token_id": {
+                    "type": "integer"
+                },
+                "token_name": {
+                    "type": "string"
+                },
+                "ttfb_milliseconds": {
+                    "type": "integer"
+                },
+                "upstream_id": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/model.Usage"
+                },
+                "usage_context": {
+                    "$ref": "#/definitions/model.UsageContext"
+                },
+                "user": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.GroupChannelRequestDetail": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "log_id": {
+                    "type": "integer"
+                },
+                "request_body": {
+                    "type": "string"
+                },
+                "request_body_truncated": {
+                    "type": "boolean"
+                },
+                "response_body": {
+                    "type": "string"
+                },
+                "response_body_truncated": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "model.GroupChannelTest": {
+            "type": "object",
+            "properties": {
+                "actual_model": {
+                    "type": "string"
+                },
+                "channel_name": {
+                    "type": "string"
+                },
+                "channel_type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                },
+                "code": {
+                    "type": "integer"
+                },
+                "group_channel_id": {
+                    "type": "integer"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "response": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "test_at": {
+                    "type": "string"
+                },
+                "took": {
                     "type": "number"
                 }
             }
@@ -13087,6 +19070,91 @@ const docTemplate = `{
                 }
             }
         },
+        "model.GroupScopeModelConfig": {
+            "type": "object",
+            "properties": {
+                "allowed_resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "disable_resolution_fuzzy_match": {
+                    "type": "boolean"
+                },
+                "exclude_from_tests": {
+                    "type": "boolean"
+                },
+                "force_save_detail": {
+                    "type": "boolean"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "max_image_generation_count": {
+                    "type": "integer"
+                },
+                "max_video_generation_count": {
+                    "type": "integer"
+                },
+                "max_video_generation_seconds": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "owner": {
+                    "$ref": "#/definitions/model.ModelOwner"
+                },
+                "plugin": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "price": {
+                    "$ref": "#/definitions/model.Price"
+                },
+                "request_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "response_body_storage_max_size": {
+                    "type": "integer"
+                },
+                "retry_times": {
+                    "type": "integer"
+                },
+                "rpm": {
+                    "type": "integer"
+                },
+                "summary_claude_long_context": {
+                    "type": "boolean"
+                },
+                "summary_service_tier": {
+                    "type": "boolean"
+                },
+                "timeout_config": {
+                    "$ref": "#/definitions/model.TimeoutConfig"
+                },
+                "tpm": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "model.ImageData": {
             "type": "object",
             "properties": {
@@ -13252,8 +19320,18 @@ const docTemplate = `{
                     "description": "Fields for function_result type",
                     "type": "string"
                 },
+                "detail": {
+                    "type": "string"
+                },
+                "file_id": {
+                    "type": "string"
+                },
                 "id": {
                     "description": "Fields for function_call type",
+                    "type": "string"
+                },
+                "image_url": {
+                    "description": "Fields for input_image type",
                     "type": "string"
                 },
                 "name": {
@@ -13411,9 +19489,6 @@ const docTemplate = `{
                 "retry_times": {
                     "type": "integer"
                 },
-                "service_tier": {
-                    "type": "string"
-                },
                 "token_id": {
                     "type": "integer"
                 },
@@ -13523,12 +19598,21 @@ const docTemplate = `{
         "model.ModelConfig": {
             "type": "object",
             "properties": {
+                "allowed_resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "config": {
                     "type": "object",
                     "additionalProperties": {}
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "disable_resolution_fuzzy_match": {
+                    "type": "boolean"
                 },
                 "exclude_from_tests": {
                     "type": "boolean"
@@ -13852,11 +19936,20 @@ const docTemplate = `{
                     "description": "Unix timestamp, 0 means no end limit",
                     "type": "integer"
                 },
+                "input_media": {
+                    "type": "boolean"
+                },
                 "input_token_max": {
                     "type": "integer"
                 },
                 "input_token_min": {
                     "type": "integer"
+                },
+                "input_video": {
+                    "type": "boolean"
+                },
+                "output_audio": {
+                    "type": "boolean"
                 },
                 "output_token_max": {
                     "type": "integer"
@@ -14354,6 +20447,19 @@ const docTemplate = `{
         "model.ResponseTextFormat": {
             "type": "object",
             "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "strict": {
+                    "type": "boolean"
+                },
                 "type": {
                     "type": "string"
                 }
@@ -14652,6 +20758,9 @@ const docTemplate = `{
                 "exception_count": {
                     "type": "integer"
                 },
+                "group_channel_id": {
+                    "type": "integer"
+                },
                 "group_id": {
                     "type": "string"
                 },
@@ -14923,6 +21032,18 @@ const docTemplate = `{
         "model.UpdateTokenRequest": {
             "type": "object",
             "properties": {
+                "group_channel_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "group_channel_sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "models": {
                     "type": "array",
                     "items": {
@@ -14944,6 +21065,15 @@ const docTemplate = `{
                 "quota": {
                     "description": "Quota system",
                     "type": "number"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "integer"
@@ -15000,23 +21130,26 @@ const docTemplate = `{
         "model.UsageContext": {
             "type": "object",
             "properties": {
+                "input_media": {
+                    "type": "boolean"
+                },
+                "input_video": {
+                    "type": "boolean"
+                },
+                "native_resolution": {
+                    "type": "string"
+                },
+                "output_audio": {
+                    "type": "boolean"
+                },
                 "quality": {
                     "type": "string"
                 },
                 "resolution": {
                     "type": "string"
                 },
-                "native_resolution": {
-                    "type": "string"
-                },
                 "service_tier": {
                     "type": "string"
-                },
-                "input_video": {
-                    "type": "boolean"
-                },
-                "output_audio": {
-                    "type": "boolean"
                 }
             }
         },
@@ -15127,9 +21260,6 @@ const docTemplate = `{
                 "seconds": {
                     "type": "integer"
                 },
-                "size": {
-                    "type": "string"
-                },
                 "width": {
                     "type": "integer"
                 }
@@ -15197,6 +21327,44 @@ const docTemplate = `{
                 "VideoStatusFailed",
                 "VideoStatusCancelled"
             ]
+        },
+        "model.VideosEditRequest": {
+            "type": "object",
+            "properties": {
+                "input_reference": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "seconds": {},
+                "size": {
+                    "type": "string"
+                },
+                "video": {}
+            }
+        },
+        "model.VideosExtensionRequest": {
+            "type": "object",
+            "properties": {
+                "input_reference": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "seconds": {},
+                "size": {
+                    "type": "string"
+                },
+                "video": {}
+            }
         },
         "model.VideosRemixRequest": {
             "type": "object",

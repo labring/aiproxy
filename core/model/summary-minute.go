@@ -130,6 +130,7 @@ func getChartDataMinute(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]ChartData, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	query := LogDB.Model(&SummaryMinute{})
 
 	if channelID != 0 {
@@ -181,6 +182,8 @@ func getGroupChartDataMinute(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]ChartData, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
+
 	query := LogDB.Model(&GroupSummaryMinute{})
 	if group != "" {
 		query = query.Where("group_id = ?", group)
@@ -532,11 +535,12 @@ func getGroupDashboardDataMinute(
 }
 
 type SummaryDataV2 struct {
-	Timestamp int64  `json:"timestamp,omitempty"`
-	ChannelID int    `json:"channel_id,omitempty"`
-	GroupID   string `json:"group_id,omitempty"`
-	TokenName string `json:"token_name,omitempty"`
-	Model     string `json:"model"`
+	Timestamp      int64  `json:"timestamp,omitempty"`
+	ChannelID      int    `json:"channel_id,omitempty"`
+	GroupChannelID int    `json:"group_channel_id,omitempty"`
+	GroupID        string `json:"group_id,omitempty"`
+	TokenName      string `json:"token_name,omitempty"`
+	Model          string `json:"model"`
 
 	SummaryDataSet
 	ServiceTierFlex     SummaryDataSet `json:"service_tier_flex,omitempty"     gorm:"embedded;embeddedPrefix:service_tier_flex_"`
@@ -727,6 +731,7 @@ func GetGroupDashboardV3Data(
 }
 
 func getCurrentRPM(channelID int, modelName string) (int64, int64) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	now := time.Now()
 	recentStart := now.Add(-2 * time.Minute).Unix()
 	recentEnd := now.Unix()
@@ -776,6 +781,7 @@ func getCurrentRPM(channelID int, modelName string) (int64, int64) {
 }
 
 func getGroupCurrentRPM(group, tokenName, modelName string) (int64, int64) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	now := time.Now()
 	recentStart := now.Add(-2 * time.Minute).Unix()
 	recentEnd := now.Unix()
@@ -834,6 +840,7 @@ func GetTimeSeriesModelData(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	if timeSpan == TimeSpanMinute {
 		return getTimeSeriesModelDataMinute(
 			channelID, modelName, start, end, timeSpan, timezone, fields,
@@ -906,6 +913,7 @@ func GetGroupTimeSeriesModelData(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	if timeSpan == TimeSpanMinute {
 		return getGroupTimeSeriesModelDataMinute(
 			group,
@@ -982,6 +990,7 @@ func batchFillMaxValues(
 	modelName string,
 	start, end time.Time,
 ) error {
+	modelName = normalizeSummaryModelFilter(modelName)
 	minuteQuery := LogDB.Model(&SummaryMinute{})
 
 	if channelID != 0 {
@@ -1067,6 +1076,7 @@ func batchFillGroupMaxValues(
 	group, tokenName, modelName string,
 	start, end time.Time,
 ) error {
+	modelName = normalizeSummaryModelFilter(modelName)
 	minuteQuery := LogDB.Model(&GroupSummaryMinute{}).
 		Where("group_id = ?", group)
 
@@ -1161,6 +1171,8 @@ func getTimeSeriesModelDataMinute(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
+
 	if end.IsZero() {
 		end = time.Now()
 	} else if end.Before(start) {
@@ -1225,6 +1237,8 @@ func getGroupTimeSeriesModelDataMinute(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]TimeSummaryDataV2, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
+
 	if end.IsZero() {
 		end = time.Now()
 	} else if end.Before(start) {
@@ -1334,9 +1348,11 @@ func aggregatToSpan(
 		currentData, exists := dataMap[key]
 		if !exists {
 			currentData = SummaryDataV2{
-				Timestamp: key.Timestamp,
-				ChannelID: data.ChannelID,
-				Model:     data.Model,
+				Timestamp:      key.Timestamp,
+				ChannelID:      data.ChannelID,
+				GroupChannelID: data.GroupChannelID,
+				GroupID:        data.GroupID,
+				Model:          data.Model,
 			}
 		}
 

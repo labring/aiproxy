@@ -122,7 +122,7 @@ func TestOpenAIVideoErrorHandlerKeepsAliStatusNormalization(t *testing.T) {
 	}
 }
 
-func (s *aliTestStore) GetStore(_ string, _ int, id string) (adaptor.StoreCache, error) {
+func (s *aliTestStore) getStore(id string) (adaptor.StoreCache, error) {
 	for _, cache := range s.saved {
 		if cache.ID == id {
 			return cache, nil
@@ -132,20 +132,36 @@ func (s *aliTestStore) GetStore(_ string, _ int, id string) (adaptor.StoreCache,
 	return adaptor.StoreCache{}, nil
 }
 
-func (s *aliTestStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *aliTestStore) GetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	_ coremodel.ChannelScope,
+) (adaptor.StoreCache, error) {
+	return s.getStore(id)
+}
+
+func (s *aliTestStore) SaveStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *aliTestStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
 	_ adaptor.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *aliTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *aliTestStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	_ coremodel.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

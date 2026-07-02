@@ -73,14 +73,14 @@ func TestGetRequestModelProviderVideoTaskPinsStoredChannel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	withTestStoreDB(t, func() {
-		require.NoError(t, model.CacheSetStore(&model.StoreCache{
+		require.NoError(t, model.CacheSetStoreByScope(&model.StoreCache{
 			ID:        model.VideoGenerationStoreID("task-123"),
 			GroupID:   "group-1",
 			TokenID:   7,
 			ChannelID: 42,
 			Model:     "provider-video",
 			ExpiresAt: time.Now().Add(time.Hour),
-		}))
+		}, model.ChannelScopeGroup))
 
 		for _, relayMode := range []mode.Mode{
 			mode.AliVideoTasks,
@@ -98,12 +98,14 @@ func TestGetRequestModelProviderVideoTaskPinsStoredChannel(t *testing.T) {
 				ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 				ctx.Request = req
 				ctx.Params = gin.Params{{Key: "task_id", Value: "task-123"}}
+				ctx.Set(GroupChannelMode, GroupChannelModeOwn)
 
 				modelName, err := getRequestModel(ctx, relayMode, "group-1", 7)
 				require.NoError(t, err)
 				assert.Equal(t, "provider-video", modelName)
 				assert.Equal(t, "task-123", GetVideoID(ctx))
 				assert.Equal(t, 42, GetChannelID(ctx))
+				assert.Equal(t, model.ChannelScopeGroup, GetChannelScope(ctx))
 			})
 		}
 	})

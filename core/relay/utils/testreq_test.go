@@ -80,6 +80,32 @@ func TestBuildRequestDoubaoVideo(t *testing.T) {
 	)
 }
 
+func TestBuildRequestAnthropic(t *testing.T) {
+	body, relayMode, err := utils.BuildRequest(model.ModelConfig{
+		Model: "claude-sonnet-4-5",
+		Type:  mode.Anthropic,
+	})
+	require.NoError(t, err)
+	require.Equal(t, mode.Anthropic, relayMode)
+
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.JSONEq(
+		t,
+		`{
+			"model":"claude-sonnet-4-5",
+			"messages":[
+				{
+					"role":"user",
+					"content":"hi"
+				}
+			],
+			"max_tokens":16
+		}`,
+		string(data),
+	)
+}
+
 func TestBuildRequestVideoGenerationJob(t *testing.T) {
 	body, relayMode, err := utils.BuildRequest(model.ModelConfig{
 		Model: "happyhorse-1.0-t2v",

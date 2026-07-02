@@ -177,7 +177,7 @@ func NewGroupPublicMCPDetailResponse(
 //	@Param			type		query		string	false	"hosted or local"
 //	@Param			keyword		query		string	false	"Keyword"
 //	@Success		200			{object}	middleware.APIResponse{data=[]GroupPublicMCPResponse}
-//	@Router			/api/group/{group}/mcp [get]
+//	@Router			/api/group/{group}/mcp/ [get]
 func GetGroupPublicMCPs(c *gin.Context) {
 	page, perPage := utils.ParsePageParams(c)
 	id := c.Query("id")

@@ -61,10 +61,26 @@ type Channel struct {
 }
 
 func (c *Channel) GetSets() []string {
-	if len(c.Sets) == 0 {
-		return []string{ChannelDefaultSet}
+	return NormalizeAvailableSets(c.Sets)
+}
+
+func ChannelAccessModels(channel *Channel) []string {
+	if channel == nil {
+		return nil
 	}
-	return c.Sets
+
+	models := cloneStringSlice(channel.Models)
+	for publicModel := range channel.ModelMapping {
+		models = append(models, publicModel)
+	}
+
+	return models
+}
+
+func ChannelSupportsModel(channel *Channel, modelName string) bool {
+	return slices.ContainsFunc(ChannelAccessModels(channel), func(item string) bool {
+		return strings.EqualFold(item, modelName)
+	})
 }
 
 func (c *Channel) BeforeDelete(tx *gorm.DB) (err error) {

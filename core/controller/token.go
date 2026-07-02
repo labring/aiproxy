@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -46,6 +48,10 @@ type (
 		Name                 string   `json:"name"`
 		Subnets              []string `json:"subnets"`
 		Models               []string `json:"models"`
+		Sets                 []string `json:"sets"`
+		GroupChannelModels   []string `json:"group_channel_models"`
+		GroupChannelSets     []string `json:"group_channel_sets"`
+		Scope                string   `json:"scope"`
 		Quota                float64  `json:"quota"`
 		PeriodQuota          float64  `json:"period_quota"`
 		PeriodType           string   `json:"period_type"`
@@ -63,12 +69,16 @@ type (
 
 func (at *AddTokenRequest) ToToken() *model.Token {
 	token := &model.Token{
-		Name:        model.EmptyNullString(at.Name),
-		Subnets:     at.Subnets,
-		Models:      at.Models,
-		Quota:       at.Quota,
-		PeriodQuota: at.PeriodQuota,
-		PeriodType:  model.EmptyNullString(at.PeriodType),
+		Name:               model.EmptyNullString(at.Name),
+		Subnets:            at.Subnets,
+		Models:             at.Models,
+		Sets:               at.Sets,
+		GroupChannelModels: at.GroupChannelModels,
+		GroupChannelSets:   at.GroupChannelSets,
+		Scope:              model.ParseChannelScope(at.Scope),
+		Quota:              at.Quota,
+		PeriodQuota:        at.PeriodQuota,
+		PeriodType:         model.EmptyNullString(at.PeriodType),
 	}
 
 	if at.PeriodLastUpdateTime > 0 {
@@ -79,8 +89,16 @@ func (at *AddTokenRequest) ToToken() *model.Token {
 }
 
 func validateToken(token AddTokenRequest) error {
+	if strings.TrimSpace(token.Name) == "" {
+		return errors.New("name is required")
+	}
+
 	if err := network.IsValidSubnets(token.Subnets); err != nil {
 		return fmt.Errorf("invalid subnet: %w", err)
+	}
+
+	if token.Scope != "" && model.ParseChannelScope(token.Scope) == "" {
+		return fmt.Errorf("invalid scope: %s", token.Scope)
 	}
 
 	return nil
@@ -103,12 +121,58 @@ func buildTokenResponse(token *model.Token) *TokenResponse {
 }
 
 func buildTokenResponses(tokens []*model.Token) []*TokenResponse {
+	lastRequestTimes := getTokenLastRequestTimes(tokens)
+
 	responses := make([]*TokenResponse, len(tokens))
 	for i, token := range tokens {
-		responses[i] = buildTokenResponse(token)
+		responses[i] = &TokenResponse{
+			Token:      token,
+			AccessedAt: lastRequestTimes[tokenLastRequestTimeKey(token.GroupID, string(token.Name))],
+		}
 	}
 
 	return responses
+}
+
+func getTokenLastRequestTimes(tokens []*model.Token) map[string]time.Time {
+	tokenNamesByGroup := make(map[string][]string)
+	seen := make(map[string]struct{})
+
+	for _, token := range tokens {
+		if token == nil || token.GroupID == "" || token.Name == "" {
+			continue
+		}
+
+		key := tokenLastRequestTimeKey(token.GroupID, string(token.Name))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+
+		seen[key] = struct{}{}
+
+		tokenNamesByGroup[token.GroupID] = append(
+			tokenNamesByGroup[token.GroupID],
+			string(token.Name),
+		)
+	}
+
+	lastRequestTimes := make(map[string]time.Time)
+	for group, tokenNames := range tokenNamesByGroup {
+		groupLastRequestTimes, err := model.GetGroupTokenLastRequestTimesMinute(group, tokenNames)
+		if err != nil {
+			continue
+		}
+
+		for tokenName, lastRequestAt := range groupLastRequestTimes {
+			lastRequestTimes[tokenLastRequestTimeKey(group, tokenName)] = lastRequestAt
+		}
+	}
+
+	return lastRequestTimes
+}
+
+func tokenLastRequestTimeKey(group, tokenName string) string {
+	return group + "\x00" + tokenName
 }
 
 // GetTokens godoc
@@ -156,7 +220,7 @@ func GetTokens(c *gin.Context) {
 //	@Param			order		query		string	false	"Order"
 //	@Param			status		query		int		false	"Status"
 //	@Success		200			{object}	middleware.APIResponse{data=map[string]any{tokens=[]TokenResponse,total=int}}
-//	@Router			/api/tokens/{group} [get]
+//	@Router			/api/token/{group} [get]
 func GetGroupTokens(c *gin.Context) {
 	group := c.Param("group")
 	if group == "" {
