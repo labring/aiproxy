@@ -19,6 +19,11 @@ const (
 )
 
 const (
+	storeV2Table             = "store_v2"
+	groupChannelStoreV2Table = "group_channel_store_v2"
+)
+
+const (
 	StorePrefixResponse        = "response"
 	StorePrefixVideoJob        = "video_job"
 	StorePrefixVideoGeneration = "video_generation"
@@ -168,7 +173,7 @@ func SaveIfNotExistStoreByScope(s *StoreV2, scope ChannelScope) (*StoreV2, error
 		return nil, err
 	}
 
-	tx := LogDB.Clauses(clause.OnConflict{DoNothing: true}).Create(storeDBModel(s, scope))
+	tx := storeScopedDB(scope).Clauses(clause.OnConflict{DoNothing: true}).Create(s)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -195,7 +200,7 @@ func SaveIfNotExistStoreByScope(s *StoreV2, scope ChannelScope) (*StoreV2, error
 	}
 
 	tx = LogDB.Session(&gorm.Session{SkipHooks: true}).
-		Model(storeDBModelForScope(scope)).
+		Table(storeTable(scope)).
 		Where(
 			"group_id = ? and token_id = ? and id = ? and expires_at <= ?",
 			s.GroupID,
@@ -258,52 +263,16 @@ func normalizeChannelScope(scope ChannelScope) ChannelScope {
 	return NormalizeChannelScope(scope)
 }
 
-func storeDBModel(s *StoreV2, scope ChannelScope) any {
+func storeTable(scope ChannelScope) string {
 	if normalizeChannelScope(scope) == ChannelScopeGroup {
-		return groupChannelStoreFromStore(s)
+		return groupChannelStoreV2Table
 	}
 
-	return s
+	return storeV2Table
 }
 
-func storeDBModelForScope(scope ChannelScope) any {
-	if normalizeChannelScope(scope) == ChannelScopeGroup {
-		return &GroupChannelStoreV2{}
-	}
-
-	return &StoreV2{}
-}
-
-func groupChannelStoreFromStore(s *StoreV2) *GroupChannelStoreV2 {
-	return &GroupChannelStoreV2{
-		ID:        s.ID,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
-		ExpiresAt: s.ExpiresAt,
-		GroupID:   s.GroupID,
-		TokenID:   s.TokenID,
-		ChannelID: s.ChannelID,
-		Model:     s.Model,
-		Metadata:  s.Metadata,
-	}
-}
-
-func (s *GroupChannelStoreV2) ToStoreV2() *StoreV2 {
-	if s == nil {
-		return nil
-	}
-
-	return &StoreV2{
-		ID:        s.ID,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
-		ExpiresAt: s.ExpiresAt,
-		GroupID:   s.GroupID,
-		TokenID:   s.TokenID,
-		ChannelID: s.ChannelID,
-		Model:     s.Model,
-		Metadata:  s.Metadata,
-	}
+func storeScopedDB(scope ChannelScope) *gorm.DB {
+	return LogDB.Table(storeTable(scope))
 }
 
 func saveStoreWithMinUpdateInterval(
@@ -318,7 +287,7 @@ func saveStoreWithMinUpdateInterval(
 
 	cutoff := now.Add(-opt.MinUpdateInterval)
 
-	tx := LogDB.Clauses(clause.OnConflict{
+	tx := storeScopedDB(scope).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "group_id"},
 			{Name: "token_id"},
@@ -332,7 +301,7 @@ func saveStoreWithMinUpdateInterval(
 			"metadata":   s.Metadata,
 		}),
 		Where: storeUpsertUpdateWhere(cutoff, now),
-	}).Create(storeDBModel(s, scope))
+	}).Create(s)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -350,7 +319,7 @@ func upsertStore(s *StoreV2, scope ChannelScope, opt SaveStoreOption) (*StoreV2,
 		return nil, err
 	}
 
-	tx := LogDB.Clauses(clause.OnConflict{
+	tx := storeScopedDB(scope).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "group_id"},
 			{Name: "token_id"},
@@ -363,7 +332,7 @@ func upsertStore(s *StoreV2, scope ChannelScope, opt SaveStoreOption) (*StoreV2,
 			"model":      s.Model,
 			"metadata":   s.Metadata,
 		}),
-	}).Create(storeDBModel(s, scope))
+	}).Create(s)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -446,22 +415,10 @@ func getStore(
 	includeExpired bool,
 ) (*StoreV2, error) {
 	scope = normalizeChannelScope(scope)
-	if scope == ChannelScopeGroup {
-		var s GroupChannelStoreV2
-
-		tx := LogDB.Where("group_id = ? and token_id = ? and id = ?", group, tokenID, id)
-		if !includeExpired {
-			tx = tx.Where("expires_at > ?", time.Now())
-		}
-
-		err := tx.First(&s).Error
-
-		return s.ToStoreV2(), HandleNotFound(err, ErrStoreNotFound)
-	}
 
 	var s StoreV2
 
-	tx := LogDB.Where("group_id = ? and token_id = ? and id = ?", group, tokenID, id)
+	tx := storeScopedDB(scope).Where("group_id = ? and token_id = ? and id = ?", group, tokenID, id)
 	if !includeExpired {
 		tx = tx.Where("expires_at > ?", time.Now())
 	}
