@@ -449,14 +449,66 @@ func ApplyReasoningToDoubaoNode(
 	node *ast.Node,
 	reasoning relaymodel.NormalizedReasoning,
 ) error {
-	return applyReasoningToThinkingNode(node, reasoning)
+	if node == nil || !reasoning.Specified {
+		return nil
+	}
+
+	effort := doubaoReasoningEffort(reasoning)
+	if effort == "" {
+		return nil
+	}
+
+	thinkingType := relaymodel.ClaudeThinkingTypeEnabled
+	if reasoning.Disabled || effort == "minimal" {
+		thinkingType = relaymodel.ClaudeThinkingTypeDisabled
+	}
+
+	_, _ = node.Unset("thinking")
+
+	if _, err := node.SetAny("thinking", relaymodel.ClaudeThinking{Type: thinkingType}); err != nil {
+		return err
+	}
+
+	_, err := node.Set("reasoning_effort", ast.NewString(effort))
+	return err
 }
 
 func ApplyReasoningToDoubaoRequest(
 	req *relaymodel.GeneralOpenAIRequest,
 	reasoning relaymodel.NormalizedReasoning,
 ) {
-	applyReasoningToThinkingRequest(req, reasoning)
+	if req == nil || !reasoning.Specified {
+		return
+	}
+
+	effort := doubaoReasoningEffort(reasoning)
+	if effort == "" {
+		return
+	}
+
+	thinkingType := relaymodel.ClaudeThinkingTypeEnabled
+	if reasoning.Disabled || effort == "minimal" {
+		thinkingType = relaymodel.ClaudeThinkingTypeDisabled
+	}
+
+	req.Thinking = &relaymodel.GeneralThinking{Type: thinkingType}
+	req.ReasoningEffort = &effort
+}
+
+func doubaoReasoningEffort(reasoning relaymodel.NormalizedReasoning) string {
+	effort := ReasoningToOpenAIEffort(reasoning)
+	switch effort {
+	case relaymodel.ReasoningEffortNone, relaymodel.ReasoningEffortMinimal:
+		return "minimal"
+	case relaymodel.ReasoningEffortLow:
+		return "low"
+	case relaymodel.ReasoningEffortMedium:
+		return "medium"
+	case relaymodel.ReasoningEffortHigh, relaymodel.ReasoningEffortXHigh:
+		return "high"
+	default:
+		return ""
+	}
 }
 
 func applyReasoningToThinkingNode(

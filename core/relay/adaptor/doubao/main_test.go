@@ -2239,16 +2239,20 @@ func TestAdaptorConvertRequestGeminiReasoning(t *testing.T) {
 		t.Fatalf("failed to unmarshal converted body: %v", err)
 	}
 
+	if openAIReq.ReasoningEffort == nil {
+		t.Fatal("expected reasoning_effort to be set")
+	}
+
+	if *openAIReq.ReasoningEffort != "low" {
+		t.Fatalf("expected reasoning_effort=low, got %s", *openAIReq.ReasoningEffort)
+	}
+
 	if openAIReq.Thinking == nil {
 		t.Fatal("expected thinking to be set")
 	}
 
 	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
-		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
-	}
-
-	if openAIReq.ReasoningEffort != nil {
-		t.Fatal("expected reasoning_effort to be removed")
+		t.Fatalf("expected thinking.type=enabled, got %s", openAIReq.Thinking.Type)
 	}
 }
 
@@ -2290,12 +2294,20 @@ func TestAdaptorConvertRequestChatReasoning(t *testing.T) {
 		t.Fatalf("failed to unmarshal converted body: %v", err)
 	}
 
+	if openAIReq.ReasoningEffort == nil {
+		t.Fatal("expected reasoning_effort to be set")
+	}
+
+	if *openAIReq.ReasoningEffort != "high" {
+		t.Fatalf("expected reasoning_effort=high, got %s", *openAIReq.ReasoningEffort)
+	}
+
 	if openAIReq.Thinking == nil {
 		t.Fatal("expected thinking to be set")
 	}
 
 	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
-		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
+		t.Fatalf("expected thinking.type=enabled, got %s", openAIReq.Thinking.Type)
 	}
 }
 
@@ -2337,12 +2349,20 @@ func TestAdaptorConvertRequestChatReasoningDisabled(t *testing.T) {
 		t.Fatalf("failed to unmarshal converted body: %v", err)
 	}
 
+	if openAIReq.ReasoningEffort == nil {
+		t.Fatal("expected reasoning_effort to be set")
+	}
+
+	if *openAIReq.ReasoningEffort != "minimal" {
+		t.Fatalf("expected reasoning_effort=minimal, got %s", *openAIReq.ReasoningEffort)
+	}
+
 	if openAIReq.Thinking == nil {
 		t.Fatal("expected thinking to be set")
 	}
 
 	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeDisabled {
-		t.Fatalf("expected thinking.type disabled, got %s", openAIReq.Thinking.Type)
+		t.Fatalf("expected thinking.type=disabled, got %s", openAIReq.Thinking.Type)
 	}
 }
 
@@ -2478,15 +2498,19 @@ func TestAdaptorConvertRequestAnthropicReasoning(t *testing.T) {
 		t.Fatalf("failed to unmarshal converted body: %v", err)
 	}
 
+	if openAIReq.ReasoningEffort == nil {
+		t.Fatal("expected reasoning_effort to be set")
+	}
+
+	if *openAIReq.ReasoningEffort != "low" {
+		t.Fatalf("expected reasoning_effort=low, got %s", *openAIReq.ReasoningEffort)
+	}
+
 	if openAIReq.Thinking == nil {
 		t.Fatal("expected thinking to be set")
 	}
 
 	if openAIReq.Thinking.Type != relaymodel.ClaudeThinkingTypeEnabled {
-		t.Fatalf("expected thinking.type enabled, got %s", openAIReq.Thinking.Type)
-	}
-
-	if openAIReq.ReasoningEffort != nil {
-		t.Fatal("expected reasoning_effort to be removed")
+		t.Fatalf("expected thinking.type=enabled, got %s", openAIReq.Thinking.Type)
 	}
 }
