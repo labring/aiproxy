@@ -465,11 +465,15 @@ func ApplyReasoningToDoubaoNode(
 
 	_, _ = node.Unset("thinking")
 
-	if _, err := node.SetAny("thinking", relaymodel.ClaudeThinking{Type: thinkingType}); err != nil {
+	if _, err := node.SetAny(
+		"thinking",
+		relaymodel.ClaudeThinking{Type: thinkingType},
+	); err != nil {
 		return err
 	}
 
 	_, err := node.Set("reasoning_effort", ast.NewString(effort))
+
 	return err
 }
 
