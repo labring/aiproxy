@@ -310,7 +310,7 @@ func importGroupChannelsFromOneAPI(
 // ImportGlobalGroupChannelFromOneAPI godoc
 //
 //	@Summary		Import group channel from OneAPI
-//	@Description	Imports group channels from OneAPI from the global management view. The request body must include group_id.
+//	@Description	Imports group channels from OneAPI from the global management view and atomically creates the group when it does not exist. Existing group configuration is preserved. The request body must include group_id.
 //	@Tags			group_channels
 //	@Produce		json
 //	@Security		ApiKeyAuth
@@ -330,7 +330,7 @@ func ImportGlobalGroupChannelFromOneAPI(c *gin.Context) {
 // ImportGroupChannelFromOneAPI godoc
 //
 //	@Summary		Import group channel from OneAPI
-//	@Description	Imports group channels from OneAPI into a group
+//	@Description	Imports group channels from OneAPI into a group and atomically creates the group when it does not exist. Existing group configuration is preserved.
 //	@Tags			group-channel
 //	@Produce		json
 //	@Security		ApiKeyAuth

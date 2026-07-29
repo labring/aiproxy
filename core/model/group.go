@@ -586,3 +586,27 @@ func SearchGroup(
 func CreateGroup(group *Group) error {
 	return DB.Create(group).Error
 }
+
+func ensureGroups(tx *gorm.DB, groupIDs []string) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	groups := make([]Group, 0, len(groupIDs))
+	seen := make(map[string]struct{}, len(groupIDs))
+
+	for _, groupID := range groupIDs {
+		if groupID == "" {
+			return errors.New("group id is required")
+		}
+
+		if _, ok := seen[groupID]; ok {
+			continue
+		}
+
+		seen[groupID] = struct{}{}
+		groups = append(groups, Group{ID: groupID})
+	}
+
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&groups).Error
+}

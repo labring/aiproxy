@@ -6117,7 +6117,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Adds a group channel to a specific group
+      description: Adds a group channel to a specific group and atomically creates
+        the group when it does not exist. Existing group configuration is preserved.
       parameters:
       - description: Group ID
         in: path
@@ -6551,7 +6552,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Adds group channels to a specific group
+      description: Adds group channels to a specific group and atomically creates
+        the group when it does not exist. Existing group configuration is preserved.
       parameters:
       - description: Group ID
         in: path
@@ -6650,7 +6652,9 @@ paths:
       - group-channel
   /api/group/{group}/channels/import/oneapi:
     post:
-      description: Imports group channels from OneAPI into a group
+      description: Imports group channels from OneAPI into a group and atomically
+        creates the group when it does not exist. Existing group configuration is
+        preserved.
       parameters:
       - description: Group ID
         in: path
@@ -7506,8 +7510,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Adds a group channel from the global management view. The request
-        body must include group_id.
+      description: Adds a group channel from the global management view and atomically
+        creates the group when it does not exist. Existing group configuration is
+        preserved. The request body must include group_id.
       parameters:
       - description: Group channel information
         in: body
@@ -7896,7 +7901,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Adds group channels from the global management view. Each request
+      description: Adds group channels from the global management view and atomically
+        creates missing groups. Existing group configuration is preserved. Each request
         item must include group_id.
       parameters:
       - description: Group channel information
@@ -7981,8 +7987,9 @@ paths:
       - group_channels
   /api/group_channels/import/oneapi:
     post:
-      description: Imports group channels from OneAPI from the global management view.
-        The request body must include group_id.
+      description: Imports group channels from OneAPI from the global management view
+        and atomically creates the group when it does not exist. Existing group configuration
+        is preserved. The request body must include group_id.
       parameters:
       - description: Import group channel from OneAPI request
         in: body

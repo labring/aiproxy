@@ -610,7 +610,7 @@ func (r *AddGroupChannelRequest) toGroupChannel(group string) (*model.GroupChann
 // AddGroupChannel godoc
 //
 //	@Summary		Add a group channel
-//	@Description	Adds a group channel to a specific group
+//	@Description	Adds a group channel to a specific group and atomically creates the group when it does not exist. Existing group configuration is preserved.
 //	@Tags			group-channel
 //	@Accept			json
 //	@Produce		json
@@ -643,7 +643,7 @@ func AddGroupChannel(c *gin.Context) {
 // AddGlobalGroupChannel godoc
 //
 //	@Summary		Add a group channel
-//	@Description	Adds a group channel from the global management view. The request body must include group_id.
+//	@Description	Adds a group channel from the global management view and atomically creates the group when it does not exist. Existing group configuration is preserved. The request body must include group_id.
 //	@Tags			group_channel
 //	@Accept			json
 //	@Produce		json
@@ -680,7 +680,7 @@ func AddGlobalGroupChannel(c *gin.Context) {
 // AddGroupChannels godoc
 //
 //	@Summary		Add multiple group channels
-//	@Description	Adds group channels to a specific group
+//	@Description	Adds group channels to a specific group and atomically creates the group when it does not exist. Existing group configuration is preserved.
 //	@Tags			group-channel
 //	@Accept			json
 //	@Produce		json
@@ -718,7 +718,7 @@ func AddGroupChannels(c *gin.Context) {
 // AddGlobalGroupChannels godoc
 //
 //	@Summary		Add multiple group channels
-//	@Description	Adds group channels from the global management view. Each request item must include group_id.
+//	@Description	Adds group channels from the global management view and atomically creates missing groups. Existing group configuration is preserved. Each request item must include group_id.
 //	@Tags			group_channels
 //	@Accept			json
 //	@Produce		json
