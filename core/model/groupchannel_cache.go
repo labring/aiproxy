@@ -2,8 +2,9 @@ package model
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"errors"
-	"math/rand/v2"
+	"math/big"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -166,7 +167,14 @@ func cacheSetGroupChannelsRedis(cache *GroupChannelsCache) error {
 
 	pipe.HSet(ctx, key, "c", channels)
 
-	expireTime := SyncFrequency + time.Duration(rand.Int64N(60)-30)*time.Second
+	expireTime := SyncFrequency
+	randomJitter, randomErr := cryptorand.Int(cryptorand.Reader, big.NewInt(60))
+	if randomErr != nil {
+		log.Warnf("failed to generate group channel cache expiry jitter: %s", randomErr)
+	} else {
+		expireTime += time.Duration(randomJitter.Int64()-30) * time.Second
+	}
+
 	pipe.Expire(ctx, key, expireTime)
 	_, err = pipe.Exec(ctx)
 

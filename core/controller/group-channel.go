@@ -1,10 +1,11 @@
 package controller
 
 import (
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"maps"
-	"math/rand/v2"
+	"math/big"
 	"net/http"
 	"slices"
 	"strconv"
@@ -24,6 +25,19 @@ import (
 	"github.com/labring/aiproxy/core/relay/render"
 	log "github.com/sirupsen/logrus"
 )
+
+func secureShuffleStrings(values []string) {
+	for i := len(values) - 1; i > 0; i-- {
+		randomIndex, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			log.Warnf("failed to securely shuffle values: %s", err.Error())
+			return
+		}
+
+		j := int(randomIndex.Int64())
+		values[i], values[j] = values[j], values[i]
+	}
+}
 
 type GroupChannelResponse struct {
 	*model.GroupChannel
@@ -1654,9 +1668,7 @@ func TestGroupChannelModels(c *gin.Context) {
 		return
 	}
 
-	rand.Shuffle(len(models), func(i, j int) {
-		models[i], models[j] = models[j], models[i]
-	})
+	secureShuffleStrings(models)
 
 	mc := model.LoadModelCaches()
 
@@ -1776,9 +1788,7 @@ func TestGlobalGroupChannelModels(c *gin.Context) {
 		return
 	}
 
-	rand.Shuffle(len(models), func(i, j int) {
-		models[i], models[j] = models[j], models[i]
-	})
+	secureShuffleStrings(models)
 
 	mc := model.LoadModelCaches()
 
@@ -1993,9 +2003,7 @@ func TestGroupChannelPreviewAll(c *gin.Context) {
 
 	semaphore := make(chan struct{}, 5)
 
-	rand.Shuffle(len(models), func(i, j int) {
-		models[i], models[j] = models[j], models[i]
-	})
+	secureShuffleStrings(models)
 
 	mc := model.LoadModelCaches()
 
@@ -2101,9 +2109,7 @@ func TestGlobalGroupChannelPreviewAll(c *gin.Context) {
 
 	semaphore := make(chan struct{}, 5)
 
-	rand.Shuffle(len(models), func(i, j int) {
-		models[i], models[j] = models[j], models[i]
-	})
+	secureShuffleStrings(models)
 
 	mc := model.LoadModelCaches()
 
