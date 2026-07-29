@@ -3,14 +3,19 @@ package monitor
 import (
 	"context"
 	"math/rand/v2"
+	"strconv"
 	"sync"
 	"time"
 )
 
-var memModelMonitor *MemModelMonitor
+var (
+	memModelMonitor             *MemModelMonitor
+	memGroupChannelModelMonitor *MemModelMonitor
+)
 
 func init() {
 	memModelMonitor = NewMemModelMonitor()
+	memGroupChannelModelMonitor = NewMemModelMonitor()
 }
 
 const (
@@ -36,7 +41,7 @@ type MemModelMonitor struct {
 }
 
 type ModelData struct {
-	channels   map[int64]*ChannelStats
+	channels   map[string]*ChannelStats
 	totalStats *TimeWindowStats
 }
 
@@ -118,6 +123,21 @@ func (m *MemModelMonitor) AddRequest(
 	isError, tryBan bool,
 	maxErrorRate float64,
 ) (errorRate float64, banExecution bool) {
+	return m.AddRequestByChannelKey(
+		model,
+		strconv.FormatInt(channelID, 10),
+		isError,
+		tryBan,
+		maxErrorRate,
+	)
+}
+
+func (m *MemModelMonitor) AddRequestByChannelKey(
+	model string,
+	channelKey string,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (errorRate float64, banExecution bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -130,18 +150,18 @@ func (m *MemModelMonitor) AddRequest(
 
 	if modelData, exists = m.models[model]; !exists {
 		modelData = &ModelData{
-			channels:   make(map[int64]*ChannelStats),
+			channels:   make(map[string]*ChannelStats),
 			totalStats: NewTimeWindowStats(),
 		}
 		m.models[model] = modelData
 	}
 
 	var channel *ChannelStats
-	if channel, exists = modelData.channels[channelID]; !exists {
+	if channel, exists = modelData.channels[channelKey]; !exists {
 		channel = &ChannelStats{
 			timeWindows: NewTimeWindowStats(),
 		}
-		modelData.channels[channelID] = channel
+		modelData.channels[channelKey] = channel
 	}
 
 	modelData.totalStats.AddRequest(now, isError)
@@ -212,7 +232,12 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(
 
 	result := make(map[int64]float64)
 	if data, exists := m.models[model]; exists {
-		for channelID, channel := range data.channels {
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
 			result[channelID] = getErrorRateFromStats(channel.timeWindows)
 		}
 	}
@@ -220,10 +245,39 @@ func (m *MemModelMonitor) GetModelChannelErrorRate(
 	return result, nil
 }
 
-func (m *MemModelMonitor) GetChannelModelErrorRate(
+func (m *MemModelMonitor) GetModelChannelErrorRateByKey(
 	_ context.Context,
 	model string,
+) (map[string]float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]float64)
+	if data, exists := m.models[model]; exists {
+		for channelKey, channel := range data.channels {
+			result[channelKey] = getErrorRateFromStats(channel.timeWindows)
+		}
+	}
+
+	return result, nil
+}
+
+func (m *MemModelMonitor) GetChannelModelErrorRate(
+	ctx context.Context,
+	model string,
 	channelID int64,
+) (float64, error) {
+	return m.GetChannelModelErrorRateByKey(
+		ctx,
+		model,
+		strconv.FormatInt(channelID, 10),
+	)
+}
+
+func (m *MemModelMonitor) GetChannelModelErrorRateByKey(
+	_ context.Context,
+	model string,
+	channelKey string,
 ) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -233,7 +287,7 @@ func (m *MemModelMonitor) GetChannelModelErrorRate(
 		return 0, nil
 	}
 
-	channel, exists := data.channels[channelID]
+	channel, exists := data.channels[channelKey]
 	if !exists {
 		return 0, nil
 	}
@@ -250,7 +304,7 @@ func (m *MemModelMonitor) GetChannelModelErrorRates(
 
 	result := make(map[string]float64)
 	for model, data := range m.models {
-		if channel, exists := data.channels[channelID]; exists {
+		if channel, exists := data.channels[strconv.FormatInt(channelID, 10)]; exists {
 			result[model] = getErrorRateFromStats(channel.timeWindows)
 		}
 	}
@@ -266,7 +320,12 @@ func (m *MemModelMonitor) GetAllChannelModelErrorRates(
 
 	result := make(map[int64]map[string]float64)
 	for model, data := range m.models {
-		for channelID, channel := range data.channels {
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
 			if _, exists := result[channelID]; !exists {
 				result[channelID] = make(map[string]float64)
 			}
@@ -292,11 +351,16 @@ func (m *MemModelMonitor) GetAllModelChannelStats(
 			result[model] = make(map[int64]ModelChannelStatsSnapshot)
 		}
 
-		for channelID, channel := range data.channels {
-			req, err := channel.timeWindows.GetStats()
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
+			req, errCount := channel.timeWindows.GetStats()
 			result[model][channelID] = ModelChannelStatsSnapshot{
 				Requests: int64(req),
-				Errors:   int64(err),
+				Errors:   int64(errCount),
 				Banned:   channel.bannedUntil.After(now),
 			}
 		}
@@ -315,7 +379,12 @@ func (m *MemModelMonitor) GetBannedChannelsWithModel(
 	var banned []int64
 	if data, exists := m.models[model]; exists {
 		now := time.Now()
-		for channelID, channel := range data.channels {
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
 			if channel.bannedUntil.After(now) {
 				banned = append(banned, channelID)
 			}
@@ -335,9 +404,34 @@ func (m *MemModelMonitor) GetBannedChannelsMapWithModel(
 	banned := make(map[int64]struct{})
 	if data, exists := m.models[model]; exists {
 		now := time.Now()
-		for channelID, channel := range data.channels {
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
 			if channel.bannedUntil.After(now) {
 				banned[channelID] = struct{}{}
+			}
+		}
+	}
+
+	return banned, nil
+}
+
+func (m *MemModelMonitor) GetBannedChannelsMapWithModelByKey(
+	_ context.Context,
+	model string,
+) (map[string]struct{}, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	banned := make(map[string]struct{})
+	if data, exists := m.models[model]; exists {
+		now := time.Now()
+		for channelKey, channel := range data.channels {
+			if channel.bannedUntil.After(now) {
+				banned[channelKey] = struct{}{}
 			}
 		}
 	}
@@ -353,7 +447,12 @@ func (m *MemModelMonitor) GetAllBannedModelChannels(_ context.Context) (map[stri
 	now := time.Now()
 
 	for model, data := range m.models {
-		for channelID, channel := range data.channels {
+		for channelKey, channel := range data.channels {
+			channelID, err := strconv.ParseInt(channelKey, 10, 64)
+			if err != nil {
+				continue
+			}
+
 			if channel.bannedUntil.After(now) {
 				if _, exists := result[model]; !exists {
 					result[model] = []int64{}
@@ -368,26 +467,45 @@ func (m *MemModelMonitor) GetAllBannedModelChannels(_ context.Context) (map[stri
 }
 
 func (m *MemModelMonitor) ClearChannelModelErrors(
-	_ context.Context,
+	ctx context.Context,
 	model string,
 	channelID int,
+) error {
+	return m.ClearChannelModelErrorsByKey(
+		ctx,
+		model,
+		strconv.Itoa(channelID),
+	)
+}
+
+func (m *MemModelMonitor) ClearChannelModelErrorsByKey(
+	_ context.Context,
+	model string,
+	channelKey string,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if data, exists := m.models[model]; exists {
-		delete(data.channels, int64(channelID))
+		delete(data.channels, channelKey)
 	}
 
 	return nil
 }
 
-func (m *MemModelMonitor) ClearChannelAllModelErrors(_ context.Context, channelID int) error {
+func (m *MemModelMonitor) ClearChannelAllModelErrors(ctx context.Context, channelID int) error {
+	return m.ClearChannelAllModelErrorsByKey(ctx, strconv.Itoa(channelID))
+}
+
+func (m *MemModelMonitor) ClearChannelAllModelErrorsByKey(
+	_ context.Context,
+	channelKey string,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for _, data := range m.models {
-		delete(data.channels, int64(channelID))
+		delete(data.channels, channelKey)
 	}
 
 	return nil

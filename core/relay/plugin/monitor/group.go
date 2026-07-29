@@ -42,6 +42,18 @@ func (m *GroupMonitor) DoResponse(
 	result, relayErr := do.DoResponse(meta, store, c, resp)
 
 	if result.Usage.TotalTokens > 0 {
+		if meta.Channel.Scope == model.ChannelScopeGroup {
+			count, secondCount := reqlimit.GetGroupChannelModelTokensRequest(
+				context.Background(),
+				meta.Group.ID,
+				strconv.Itoa(meta.Channel.ID),
+				meta.OriginModel,
+			)
+			UpdateGroupChannelModelTokensRequest(c, meta.Group, count, secondCount)
+
+			return result, relayErr
+		}
+
 		count, overLimitCount, secondCount := reqlimit.PushGroupModelTokensRequest(
 			context.Background(),
 			meta.Group.ID,
@@ -82,6 +94,16 @@ func UpdateGroupModelTokensRequest(c *gin.Context, group model.GroupCache, tpm, 
 	log := common.GetLogger(c)
 	log.Data["group_tpm"] = strconv.FormatInt(tpm, 10)
 	log.Data["group_tps"] = strconv.FormatInt(tps, 10)
+}
+
+func UpdateGroupChannelModelTokensRequest(c *gin.Context, group model.GroupCache, tpm, tps int64) {
+	if group.Status == model.GroupStatusInternal {
+		return
+	}
+
+	log := common.GetLogger(c)
+	log.Data["group_channel_tpm"] = strconv.FormatInt(tpm, 10)
+	log.Data["group_channel_tps"] = strconv.FormatInt(tps, 10)
 }
 
 func UpdateGroupModelTokennameRequest(c *gin.Context, rpm, rps int64) {

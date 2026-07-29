@@ -1399,7 +1399,7 @@ func saveDoubaoVideoJobStore(
 		Model:     meta.OriginModel,
 		Metadata:  doubaoVideoStoreMetadataString(meta),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveDoubaoVideoStore(
@@ -1420,7 +1420,7 @@ func saveDoubaoVideoStore(
 		Model:     meta.OriginModel,
 		Metadata:  doubaoVideoStoreMetadataString(meta),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func doubaoVideoStoreMetadataString(meta *meta.Meta) string {
@@ -1444,7 +1444,7 @@ func applyStoredDoubaoVideoMetadata(
 		return
 	}
 
-	cache, err := store.GetStore(meta.Group.ID, meta.Token.ID, storeID)
+	cache, err := store.GetStoreByScope(meta.Group.ID, meta.Token.ID, storeID, meta.Channel.Scope)
 	if err != nil || cache.Metadata == "" {
 		return
 	}

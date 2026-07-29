@@ -23,19 +23,28 @@ import (
 
 type noopStore struct{}
 
-func (noopStore) GetStore(string, int, string) (adaptor.StoreCache, error) {
+func (noopStore) GetStoreByScope(
+	string,
+	int,
+	string,
+	model.ChannelScope,
+) (adaptor.StoreCache, error) {
 	return adaptor.StoreCache{}, nil
 }
 
-func (noopStore) SaveStore(adaptor.StoreCache) error {
+func (noopStore) SaveStore(adaptor.StoreCache, model.ChannelScope) error {
 	return nil
 }
 
-func (noopStore) SaveStoreWithOption(adaptor.StoreCache, adaptor.SaveStoreOption) error {
+func (noopStore) SaveStoreWithOption(
+	adaptor.StoreCache,
+	model.ChannelScope,
+	adaptor.SaveStoreOption,
+) error {
 	return nil
 }
 
-func (noopStore) SaveIfNotExistStore(adaptor.StoreCache) error {
+func (noopStore) SaveIfNotExistStore(adaptor.StoreCache, model.ChannelScope) error {
 	return nil
 }
 
@@ -43,24 +52,36 @@ type recordingStore struct {
 	saved []adaptor.StoreCache
 }
 
-func (s *recordingStore) GetStore(string, int, string) (adaptor.StoreCache, error) {
+func (s *recordingStore) GetStoreByScope(
+	string,
+	int,
+	string,
+	model.ChannelScope,
+) (adaptor.StoreCache, error) {
 	return adaptor.StoreCache{}, nil
 }
 
-func (s *recordingStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *recordingStore) SaveStore(
+	cache adaptor.StoreCache,
+	_ model.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *recordingStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	_ model.ChannelScope,
 	_ adaptor.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *recordingStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *recordingStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	_ model.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }

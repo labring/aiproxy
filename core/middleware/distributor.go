@@ -15,7 +15,6 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/balance"
 	"github.com/labring/aiproxy/core/common/config"
-	"github.com/labring/aiproxy/core/common/consume"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/reqlimit"
 	"github.com/labring/aiproxy/core/model"
@@ -74,12 +73,46 @@ func GetGroupAdjustedModelConfig(group model.GroupCache, mc model.ModelConfig) m
 		mc = mc.LoadFromGroupModelConfig(groupModelConfig)
 	}
 
+	return ApplyGroupModelRatios(group, mc)
+}
+
+func GetGroupScopeAdjustedModelConfig(
+	group model.GroupCache,
+	mc model.ModelConfig,
+) model.ModelConfig {
+	return ApplyGroupModelRatios(group, mc)
+}
+
+func ApplyGroupModelRatios(group model.GroupCache, mc model.ModelConfig) model.ModelConfig {
 	rpmRatio, tpmRatio := getGroupPMRatio(group)
 	groupConsumeLevelRatio := calculateGroupConsumeLevelRatio(group.UsedAmount)
 	mc.RPM = int64(float64(mc.RPM) * rpmRatio * groupConsumeLevelRatio)
 	mc.TPM = int64(float64(mc.TPM) * tpmRatio * groupConsumeLevelRatio)
 
 	return mc
+}
+
+func ResolveModelConfig(
+	group model.GroupCache,
+	groupChannelMode string,
+	modelCaches *model.ModelCaches,
+	modelName string,
+) (model.ModelConfig, bool) {
+	if groupChannelMode == GroupChannelModeOwn {
+		mc, ok := model.ResolveGroupScopeModelConfig(group.ID, modelName)
+		if !ok {
+			return model.ModelConfig{}, false
+		}
+
+		return GetGroupScopeAdjustedModelConfig(group, mc), true
+	}
+
+	mc, ok := modelCaches.ModelConfig.GetModelConfig(modelName)
+	if !ok {
+		return model.ModelConfig{}, false
+	}
+
+	return GetGroupAdjustedModelConfig(group, mc), true
 }
 
 var (
@@ -111,12 +144,18 @@ func setTpmHeaders(c *gin.Context, tpm, remainingRequests int64) {
 	c.Header(XRateLimitResetTokens, "1m0s")
 }
 
-func checkGroupModelRPMAndTPM(
+func CheckGroupModelRPMAndTPM(
 	c *gin.Context,
 	group model.GroupCache,
 	mc model.ModelConfig,
 	tokenName string,
+	channelScope model.ChannelScope,
+	channelID int,
 ) error {
+	if channelScope == model.ChannelScopeGroup {
+		return checkGroupChannelModelRPMAndTPM(c, group, mc, channelID)
+	}
+
 	log := common.GetLogger(c)
 
 	groupModelCount, groupModelOverLimitCount, groupModelSecondCount := reqlimit.PushGroupModelRequest(
@@ -183,6 +222,59 @@ func checkGroupModelRPMAndTPM(
 		}
 
 		setTpmHeaders(c, mc.TPM, mc.TPM-groupModelCountTPM)
+	}
+
+	return nil
+}
+
+func checkGroupChannelModelRPMAndTPM(
+	c *gin.Context,
+	group model.GroupCache,
+	mc model.ModelConfig,
+	channelID int,
+) error {
+	log := common.GetLogger(c)
+	channelKey := strconv.Itoa(channelID)
+
+	groupModelCount, groupModelOverLimitCount, groupModelSecondCount := reqlimit.PushGroupChannelModelRequest(
+		c.Request.Context(),
+		group.ID,
+		channelKey,
+		mc.Model,
+	)
+
+	if group.Status != model.GroupStatusInternal && mc.RPM > 0 {
+		totalRequests := groupModelCount + groupModelOverLimitCount
+
+		log.Data["group_channel_rpm_limit"] = strconv.FormatInt(mc.RPM, 10)
+		if groupModelCount > mc.RPM {
+			setRpmHeaders(c, mc.RPM, 0)
+			return ErrRequestRateLimitExceeded
+		}
+
+		setRpmHeaders(c, mc.RPM, mc.RPM-groupModelCount)
+
+		log.Data["group_channel_rpm"] = strconv.FormatInt(totalRequests, 10)
+		log.Data["group_channel_rps"] = strconv.FormatInt(groupModelSecondCount, 10)
+	}
+
+	groupModelCountTPM, groupModelCountTPS := reqlimit.GetGroupChannelModelTokensRequest(
+		c.Request.Context(),
+		group.ID,
+		channelKey,
+		mc.Model,
+	)
+
+	if group.Status != model.GroupStatusInternal && mc.TPM > 0 {
+		log.Data["group_channel_tpm_limit"] = strconv.FormatInt(mc.TPM, 10)
+		if groupModelCountTPM >= mc.TPM {
+			setTpmHeaders(c, mc.TPM, 0)
+			return ErrRequestTpmLimitExceeded
+		}
+
+		setTpmHeaders(c, mc.TPM, mc.TPM-groupModelCountTPM)
+		log.Data["group_channel_tpm"] = strconv.FormatInt(groupModelCountTPM, 10)
+		log.Data["group_channel_tps"] = strconv.FormatInt(groupModelCountTPS, 10)
 	}
 
 	return nil
@@ -471,7 +563,12 @@ func distribute(c *gin.Context, mode mode.Mode) {
 		return
 	}
 
-	findModel := token.FindModel(requestModel)
+	findModel := model.FindModelWithAllowList(
+		GetActiveTokenModels(c),
+		requestModel,
+		GetActiveAvailableSets(c),
+		GetActiveAvailableModels(c),
+	)
 
 	if findModel == "" {
 		AbortLogWithMessage(
@@ -488,7 +585,7 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	SetLogModelFields(log.Data, findModel)
 
-	mc, ok := GetModelCaches(c).ModelConfig.GetModelConfig(findModel)
+	mc, ok := ResolveModelConfig(group, GetGroupChannelMode(c), GetModelCaches(c), findModel)
 	if !ok {
 		AbortLogWithMessage(
 			c,
@@ -502,23 +599,8 @@ func distribute(c *gin.Context, mode mode.Mode) {
 		return
 	}
 
-	mc = GetGroupAdjustedModelConfig(group, mc)
-
 	c.Set(RequestModel, findModel)
 	c.Set(ModelConfig, mc)
-
-	if !CheckRelayMode(mode, mc.Type) {
-		AbortLogWithMessage(
-			c,
-			http.StatusNotFound,
-			fmt.Sprintf(
-				"The model `%s` does not exist on this endpoint.",
-				findModel,
-			),
-		)
-
-		return
-	}
 
 	user, err := getRequestUser(c, mode)
 	if err != nil {
@@ -575,23 +657,6 @@ func distribute(c *gin.Context, mode mode.Mode) {
 
 	c.Set(RequestMetadata, metadata)
 
-	if err := checkGroupModelRPMAndTPM(c, group, mc, token.Name); err != nil {
-		errMsg := err.Error()
-
-		consume.Summary(
-			http.StatusTooManyRequests,
-			time.Time{},
-			NewMetaByContext(c, nil, mode),
-			model.Usage{},
-			model.UsageContext{ServiceTier: requestServiceTier},
-			model.Price{},
-			true,
-		)
-		AbortLogWithMessage(c, http.StatusTooManyRequests, errMsg)
-
-		return
-	}
-
 	clearRequestBodyNode(c)
 	c.Next()
 }
@@ -610,6 +675,45 @@ func GetPromptCacheKey(c *gin.Context) string {
 
 func GetChannelID(c *gin.Context) int {
 	return c.GetInt(ChannelID)
+}
+
+func GetChannelScope(c *gin.Context) model.ChannelScope {
+	scope, _ := c.Get(ChannelScope)
+	if typedScope, ok := scope.(model.ChannelScope); ok {
+		return typedScope
+	}
+
+	if stringScope, ok := scope.(string); ok {
+		return model.ChannelScope(stringScope)
+	}
+
+	return ""
+}
+
+func setStoreChannel(c *gin.Context, store *model.StoreCache, scope model.ChannelScope) {
+	if store == nil {
+		return
+	}
+
+	c.Set(ChannelID, store.ChannelID)
+	c.Set(ChannelScope, scope)
+}
+
+func getStoredRequestStore(
+	group string,
+	tokenID int,
+	storeID string,
+	scope model.ChannelScope,
+) (*model.StoreCache, error) {
+	return model.CacheGetStoreByScope(group, tokenID, storeID, scope)
+}
+
+func getStoredRequestStoreScope(c *gin.Context) model.ChannelScope {
+	if GetGroupChannelMode(c) == GroupChannelModeOwn {
+		return model.ChannelScopeGroup
+	}
+
+	return model.ChannelScopeGlobal
 }
 
 func GetJobID(c *gin.Context) string {
@@ -788,29 +892,39 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 	case m == mode.VideoGenerationsGetJobs:
 		jobID := c.Param("id")
 
-		store, err := model.CacheGetStore(group, tokenID, model.VideoJobStoreID(jobID))
+		storeScope := getStoredRequestStoreScope(c)
+
+		store, err := getStoredRequestStore(
+			group,
+			tokenID,
+			model.VideoJobStoreID(jobID),
+			storeScope,
+		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
 		c.Set(JobID, jobID)
-		c.Set(ChannelID, store.ChannelID)
+		setStoreChannel(c, store, storeScope)
 
 		return store.Model, nil
 	case m == mode.VideoGenerationsContent:
 		generationID := c.Param("id")
 
-		store, err := model.CacheGetStore(
+		storeScope := getStoredRequestStoreScope(c)
+
+		store, err := getStoredRequestStore(
 			group,
 			tokenID,
 			model.VideoGenerationStoreID(generationID),
+			storeScope,
 		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
 		c.Set(GenerationID, generationID)
-		c.Set(ChannelID, store.ChannelID)
+		setStoreChannel(c, store, storeScope)
 
 		return store.Model, nil
 	case isVideosStoredMode(m):
@@ -838,17 +952,20 @@ func getRequestModel(c *gin.Context, m mode.Mode, group string, tokenID int) (st
 		}
 
 		if responseID != "" {
-			store, err := model.CacheGetStore(
+			storeScope := getStoredRequestStoreScope(c)
+
+			store, err := getStoredRequestStore(
 				group,
 				tokenID,
 				model.ResponseStoreID(responseID),
+				storeScope,
 			)
 			if err != nil {
 				return "", fmt.Errorf("get request model failed: %w", err)
 			}
 
 			c.Set(ResponseID, responseID)
-			c.Set(ChannelID, store.ChannelID)
+			setStoreChannel(c, store, storeScope)
 		}
 
 		return modelName, nil
@@ -872,17 +989,20 @@ func getGeminiRequestModel(c *gin.Context, group string, tokenID int) (string, e
 	modelName, operationID := getGeminiPathModelAndOperationID(c)
 
 	if operationID != "" {
-		store, err := model.CacheGetStore(
+		storeScope := getStoredRequestStoreScope(c)
+
+		store, err := getStoredRequestStore(
 			group,
 			tokenID,
 			model.VideoJobStoreID(operationID),
+			storeScope,
 		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
 		c.Set(OperationID, operationID)
-		c.Set(ChannelID, store.ChannelID)
+		setStoreChannel(c, store, storeScope)
 
 		return store.Model, nil
 	}
@@ -902,13 +1022,20 @@ func isStoredResponseMode(m mode.Mode) bool {
 func getStoredResponseRequestModel(c *gin.Context, group string, tokenID int) (string, error) {
 	responseID := c.Param("response_id")
 
-	store, err := model.CacheGetStore(group, tokenID, model.ResponseStoreID(responseID))
+	storeScope := getStoredRequestStoreScope(c)
+
+	store, err := getStoredRequestStore(
+		group,
+		tokenID,
+		model.ResponseStoreID(responseID),
+		storeScope,
+	)
 	if err != nil {
 		return "", fmt.Errorf("get request model failed: %w", err)
 	}
 
 	c.Set(ResponseID, responseID)
-	c.Set(ChannelID, store.ChannelID)
+	setStoreChannel(c, store, storeScope)
 
 	return store.Model, nil
 }
@@ -947,17 +1074,20 @@ func getGeminiFileRequestModel(c *gin.Context, group string, tokenID int) (strin
 		return "", errors.New("get request model failed: file id is empty")
 	}
 
-	store, err := model.CacheGetStore(
+	storeScope := getStoredRequestStoreScope(c)
+
+	store, err := getStoredRequestStore(
 		group,
 		tokenID,
 		model.GeminiFileStoreID(fileID),
+		storeScope,
 	)
 	if err != nil {
 		return "", fmt.Errorf("get request model failed: %w", err)
 	}
 
 	c.Set(FileID, fileID)
-	c.Set(ChannelID, store.ChannelID)
+	setStoreChannel(c, store, storeScope)
 
 	return store.Model, nil
 }
@@ -1006,17 +1136,20 @@ func isVideosStoredMode(m mode.Mode) bool {
 func getVideosCreateRequestModel(c *gin.Context, group string, tokenID int) (string, error) {
 	videoID := c.Param("video_id")
 	if videoID != "" {
-		store, err := model.CacheGetStore(
+		storeScope := getStoredRequestStoreScope(c)
+
+		store, err := getStoredRequestStore(
 			group,
 			tokenID,
 			model.VideoGenerationStoreID(videoID),
+			storeScope,
 		)
 		if err != nil {
 			return "", fmt.Errorf("get request model failed: %w", err)
 		}
 
 		c.Set(VideoID, videoID)
-		c.Set(ChannelID, store.ChannelID)
+		setStoreChannel(c, store, storeScope)
 	}
 
 	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
@@ -1086,10 +1219,13 @@ func getVideoCreateRequestModelFromReference(
 		return "", nil
 	}
 
-	store, err := model.CacheGetStore(
+	storeScope := getStoredRequestStoreScope(c)
+
+	store, err := getStoredRequestStore(
 		group,
 		tokenID,
 		model.VideoGenerationStoreID(videoID),
+		storeScope,
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1100,7 +1236,7 @@ func getVideoCreateRequestModelFromReference(
 	}
 
 	c.Set(VideoID, videoID)
-	c.Set(ChannelID, store.ChannelID)
+	setStoreChannel(c, store, storeScope)
 
 	return store.Model, nil
 }
@@ -1125,10 +1261,13 @@ func getLimitedMultipartFormValue(req *http.Request, key string) (string, error)
 func getStoredVideoRequestModel(c *gin.Context, group string, tokenID int) (string, error) {
 	videoID := c.Param("video_id")
 
-	store, err := model.CacheGetStore(
+	storeScope := getStoredRequestStoreScope(c)
+
+	store, err := getStoredRequestStore(
 		group,
 		tokenID,
 		model.VideoGenerationStoreID(videoID),
+		storeScope,
 	)
 	if err != nil {
 		return "", fmt.Errorf("get request model failed: %w", err)
@@ -1136,7 +1275,7 @@ func getStoredVideoRequestModel(c *gin.Context, group string, tokenID int) (stri
 
 	c.Set(VideoID, videoID)
 	c.Set(GenerationID, videoID)
-	c.Set(ChannelID, store.ChannelID)
+	setStoreChannel(c, store, storeScope)
 
 	return store.Model, nil
 }
@@ -1151,10 +1290,13 @@ func getNativeVideoTaskRequestModel(c *gin.Context, group string, tokenID int) (
 		return "", errors.New("get request model failed: task id is empty")
 	}
 
-	store, err := model.CacheGetStore(
+	storeScope := getStoredRequestStoreScope(c)
+
+	store, err := getStoredRequestStore(
 		group,
 		tokenID,
 		model.VideoGenerationStoreID(taskID),
+		storeScope,
 	)
 	if err != nil {
 		return "", fmt.Errorf("get request model failed: %w", err)
@@ -1162,7 +1304,7 @@ func getNativeVideoTaskRequestModel(c *gin.Context, group string, tokenID int) (
 
 	c.Set(VideoID, taskID)
 	c.Set(GenerationID, taskID)
-	c.Set(ChannelID, store.ChannelID)
+	setStoreChannel(c, store, storeScope)
 
 	return store.Model, nil
 }

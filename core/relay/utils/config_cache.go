@@ -1,11 +1,12 @@
 package utils
 
 import (
-	"strconv"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
 	gcache "github.com/patrickmn/go-cache"
 )
@@ -28,7 +29,7 @@ func (c *ChannelConfigCache[T]) Load(meta *meta.Meta, defaults T) (T, error) {
 
 	c.init()
 
-	key := strconv.Itoa(meta.Channel.ID)
+	key := meta.ChannelMonitorKey()
 
 	return common.LoadWithKeyLock(
 		c.locker,
@@ -161,6 +162,15 @@ func loadPluginConfig[T any](meta *meta.Meta, pluginName string, defaults T) (T,
 func pluginConfigCacheKey(meta *meta.Meta) string {
 	if meta == nil {
 		return ""
+	}
+
+	if meta.Channel.Scope == model.ChannelScopeGroup {
+		return fmt.Sprintf(
+			"%s:%s:%s",
+			meta.Channel.Scope,
+			meta.Channel.GroupID,
+			meta.ModelConfig.Model,
+		)
 	}
 
 	return meta.ModelConfig.Model

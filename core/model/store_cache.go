@@ -17,8 +17,8 @@ const (
 	storeLocalMissTTL = 500 * time.Millisecond
 	storeRedisMissTTL = 15 * time.Second
 
-	StoreCacheKey         = "storev2:%s:%d:%s"
-	StoreCacheNotFoundKey = "storev2notfound:%s:%d:%s"
+	StoreCacheKey         = "storev2:%s:%d:%s:%s"
+	StoreCacheNotFoundKey = "storev2notfound:%s:%d:%s:%s"
 )
 
 var (
@@ -85,12 +85,12 @@ func (s *StoreCache) ToStoreV2() *StoreV2 {
 	}
 }
 
-func getStoreCacheKey(group string, tokenID int, id string) string {
-	return common.RedisKeyf(StoreCacheKey, group, tokenID, id)
+func getStoreCacheKey(group string, tokenID int, id string, scope ChannelScope) string {
+	return common.RedisKeyf(StoreCacheKey, group, tokenID, normalizeChannelScope(scope), id)
 }
 
-func getStoreCacheNotFoundKey(group string, tokenID int, id string) string {
-	return common.RedisKeyf(StoreCacheNotFoundKey, group, tokenID, id)
+func getStoreCacheNotFoundKey(group string, tokenID int, id string, scope ChannelScope) string {
+	return common.RedisKeyf(StoreCacheNotFoundKey, group, tokenID, normalizeChannelScope(scope), id)
 }
 
 func getStoreLocalTTL(store *StoreCache) time.Duration {
@@ -168,10 +168,29 @@ func cacheGetStoreLocal(key string) (*StoreCache, bool, bool) {
 	return cloneStoreCache(item.Store), false, true
 }
 
-func cachePeekStore(group string, tokenID int, id string) (*StoreCache, bool) {
-	cacheKey := getStoreCacheKey(group, tokenID, id)
+func validStoreCache(store *StoreCache) bool {
+	return store != nil && store.ID != ""
+}
 
-	if storeCache, notFound, ok := cacheGetStoreLocal(cacheKey); ok {
+func cacheGetValidStoreLocal(key string) (*StoreCache, bool, bool) {
+	storeCache, notFound, ok := cacheGetStoreLocal(key)
+	if !ok || notFound {
+		return storeCache, notFound, ok
+	}
+
+	if !validStoreCache(storeCache) {
+		storeLocalCache.Delete(key)
+		return nil, false, false
+	}
+
+	return storeCache, false, true
+}
+
+func cachePeekStore(group string, tokenID int, id string, scope ChannelScope) (*StoreCache, bool) {
+	scope = normalizeChannelScope(scope)
+	cacheKey := getStoreCacheKey(group, tokenID, id, scope)
+
+	if storeCache, notFound, ok := cacheGetValidStoreLocal(cacheKey); ok {
 		if notFound {
 			return nil, false
 		}
@@ -216,8 +235,20 @@ func cacheSetStoreNotFound(ctx context.Context, key string) error {
 }
 
 func CacheSetStore(store *StoreCache) error {
-	key := getStoreCacheKey(store.GroupID, store.TokenID, store.ID)
-	cacheSetStoreLocal(key, store)
+	return CacheSetStoreByScope(store, ChannelScopeGlobal)
+}
+
+func CacheSetStoreByScope(store *StoreCache, scope ChannelScope) error {
+	scope = normalizeChannelScope(scope)
+	cacheStore := cloneStoreCache(store)
+
+	key := getStoreCacheKey(
+		cacheStore.GroupID,
+		cacheStore.TokenID,
+		cacheStore.ID,
+		scope,
+	)
+	cacheSetStoreLocal(key, cacheStore)
 
 	if !common.RedisEnabled {
 		return nil
@@ -229,8 +260,13 @@ func CacheSetStore(store *StoreCache) error {
 	return cacheSetStore(
 		ctx,
 		key,
-		getStoreCacheNotFoundKey(store.GroupID, store.TokenID, store.ID),
-		store,
+		getStoreCacheNotFoundKey(
+			cacheStore.GroupID,
+			cacheStore.TokenID,
+			cacheStore.ID,
+			scope,
+		),
+		cacheStore,
 	)
 }
 
@@ -256,8 +292,23 @@ func cacheSetStore(ctx context.Context, key, notFoundKey string, store *StoreCac
 }
 
 func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
-	cacheKey := getStoreCacheKey(group, tokenID, id)
-	if storeCache, notFound, ok := cacheGetStoreLocal(cacheKey); ok {
+	return CacheGetStoreByScope(group, tokenID, id, ChannelScopeGlobal)
+}
+
+func CacheGetStoreByScope(
+	group string,
+	tokenID int,
+	id string,
+	scope ChannelScope,
+) (*StoreCache, error) {
+	return cacheGetStore(group, tokenID, id, scope)
+}
+
+func cacheGetStore(group string, tokenID int, id string, scope ChannelScope) (*StoreCache, error) {
+	scope = normalizeChannelScope(scope)
+
+	cacheKey := getStoreCacheKey(group, tokenID, id, scope)
+	if storeCache, notFound, ok := cacheGetValidStoreLocal(cacheKey); ok {
 		if notFound {
 			return nil, NotFoundError(ErrStoreNotFound)
 		}
@@ -281,7 +332,7 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 			}
 		}
 
-		notFoundKey := getStoreCacheNotFoundKey(group, tokenID, id)
+		notFoundKey := getStoreCacheNotFoundKey(group, tokenID, id, scope)
 
 		exists, err := common.RDB.Exists(ctx, notFoundKey).Result()
 		if err == nil && exists > 0 {
@@ -294,10 +345,10 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 		storeCacheLoadLocker,
 		cacheKey,
 		func() (*StoreCache, bool, bool) {
-			return cacheGetStoreLocal(cacheKey)
+			return cacheGetValidStoreLocal(cacheKey)
 		},
 		func() (*StoreCache, error) {
-			store, err := GetStore(group, tokenID, id)
+			store, err := GetStoreByScope(group, tokenID, id, scope)
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					cacheSetStoreNotFoundLocalUnlocked(cacheKey)
@@ -319,7 +370,7 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 
 			if cacheErr := cacheSetStoreNotFound(
 				ctx,
-				getStoreCacheNotFoundKey(group, tokenID, id),
+				getStoreCacheNotFoundKey(group, tokenID, id, scope),
 			); cacheErr != nil {
 				log.Error("redis set store not found cache error: " + cacheErr.Error())
 			}
@@ -339,7 +390,7 @@ func CacheGetStore(group string, tokenID int, id string) (*StoreCache, error) {
 		if err := cacheSetStore(
 			ctx,
 			cacheKey,
-			getStoreCacheNotFoundKey(group, tokenID, id),
+			getStoreCacheNotFoundKey(group, tokenID, id, scope),
 			storeCache,
 		); err != nil {
 			log.Error("redis set store error: " + err.Error())

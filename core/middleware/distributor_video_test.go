@@ -180,23 +180,23 @@ func TestGetRequestModelVideosEditFallsBackToStoredVideoModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	withTestStoreDB(t, func() {
-		_, err := coremodel.SaveStore(&coremodel.StoreV2{
+		_, err := coremodel.SaveStoreByScope(&coremodel.StoreV2{
 			ID:        coremodel.VideoGenerationStoreID("video-123"),
 			GroupID:   "group-1",
 			TokenID:   7,
 			ChannelID: 42,
 			Model:     "sora-2-pro",
 			ExpiresAt: time.Now().Add(time.Hour),
-		})
+		}, coremodel.ChannelScopeGroup)
 		require.NoError(t, err)
-		require.NoError(t, coremodel.CacheSetStore(&coremodel.StoreCache{
+		require.NoError(t, coremodel.CacheSetStoreByScope(&coremodel.StoreCache{
 			ID:        coremodel.VideoGenerationStoreID("video-123"),
 			GroupID:   "group-1",
 			TokenID:   7,
 			ChannelID: 42,
 			Model:     "sora-2-pro",
 			ExpiresAt: time.Now().Add(time.Hour),
-		}))
+		}, coremodel.ChannelScopeGroup))
 
 		req := httptest.NewRequestWithContext(
 			t.Context(),
@@ -209,12 +209,14 @@ func TestGetRequestModelVideosEditFallsBackToStoredVideoModel(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		ctx.Request = req
 		ctx.Set(Mode, mode.VideosEdits)
+		ctx.Set(GroupChannelMode, GroupChannelModeOwn)
 
 		modelName, err := getRequestModel(ctx, mode.VideosEdits, "group-1", 7)
 		require.NoError(t, err)
 		assert.Equal(t, "sora-2-pro", modelName)
 		assert.Equal(t, "video-123", GetVideoID(ctx))
 		assert.Equal(t, 42, GetChannelID(ctx))
+		assert.Equal(t, coremodel.ChannelScopeGroup, GetChannelScope(ctx))
 	})
 }
 
@@ -398,7 +400,7 @@ func withTestStoreDB(t *testing.T, fn func()) {
 
 	db, err := coremodel.OpenSQLite(filepath.Join(t.TempDir(), "middleware_store_test.db"))
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&coremodel.StoreV2{}))
+	require.NoError(t, db.AutoMigrate(&coremodel.StoreV2{}, &coremodel.GroupChannelStoreV2{}))
 
 	coremodel.LogDB = db
 	coremodel.DB = db

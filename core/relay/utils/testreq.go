@@ -26,100 +26,89 @@ func NewErrUnsupportedModelType(modelType string) *UnsupportedModelTypeError {
 func BuildRequest(modelConfig model.ModelConfig) (io.Reader, mode.Mode, error) {
 	switch modelConfig.Type {
 	case mode.ChatCompletions:
-		body, err := BuildChatCompletionRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.ChatCompletions, nil
+		return buildModelRequest(
+			modelConfig.Model,
+			mode.ChatCompletions,
+			BuildChatCompletionRequest,
+		)
 	case mode.Completions:
-		body, err := BuildCompletionsRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.Completions, nil
+		return buildModelRequest(modelConfig.Model, mode.Completions, BuildCompletionsRequest)
 	case mode.Embeddings:
-		body, err := BuildEmbeddingsRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.Embeddings, nil
+		return buildModelRequest(modelConfig.Model, mode.Embeddings, BuildEmbeddingsRequest)
 	case mode.Moderations:
-		body, err := BuildModerationsRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.Moderations, nil
+		return buildModelRequest(modelConfig.Model, mode.Moderations, BuildModerationsRequest)
 	case mode.ImagesGenerations, mode.GeminiImage:
-		body, err := BuildImagesGenerationsRequest(modelConfig)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.ImagesGenerations, nil
+		return buildModelConfigRequest(
+			modelConfig,
+			mode.ImagesGenerations,
+			BuildImagesGenerationsRequest,
+		)
 	case mode.ImagesEdits:
 		return nil, mode.Unknown, NewErrUnsupportedModelType("edits")
 	case mode.AudioSpeech, mode.GeminiTTS:
-		body, err := BuildAudioSpeechRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.AudioSpeech, nil
+		return buildModelRequest(modelConfig.Model, mode.AudioSpeech, BuildAudioSpeechRequest)
 	case mode.AudioTranscription:
 		return nil, mode.Unknown, NewErrUnsupportedModelType("audio transcription")
 	case mode.AudioTranslation:
 		return nil, mode.Unknown, NewErrUnsupportedModelType("audio translation")
 	case mode.Rerank:
-		body, err := BuildRerankRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.Rerank, nil
+		return buildModelRequest(modelConfig.Model, mode.Rerank, BuildRerankRequest)
+	case mode.Anthropic:
+		return buildModelRequest(modelConfig.Model, mode.Anthropic, BuildAnthropicRequest)
 	case mode.VideoGenerationsJobs:
-		body, err := BuildVideoGenerationJobRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.VideoGenerationsJobs, nil
+		return buildModelRequest(
+			modelConfig.Model,
+			mode.VideoGenerationsJobs,
+			BuildVideoGenerationJobRequest,
+		)
 	case mode.Videos:
-		body, err := BuildVideosRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.Videos, nil
+		return buildModelRequest(modelConfig.Model, mode.Videos, BuildVideosRequest)
 	case mode.ParsePdf:
 		return nil, mode.Unknown, NewErrUnsupportedModelType("parse pdf")
 	case mode.GeminiVideo:
-		body, err := BuildGeminiVideoRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.GeminiVideo, nil
+		return buildModelRequest(modelConfig.Model, mode.GeminiVideo, BuildGeminiVideoRequest)
 	case mode.AliVideo:
-		body, err := BuildAliVideoRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.AliVideo, nil
+		return buildModelRequest(modelConfig.Model, mode.AliVideo, BuildAliVideoRequest)
 	case mode.DoubaoVideo:
-		body, err := BuildDoubaoVideoRequest(modelConfig.Model)
-		if err != nil {
-			return nil, mode.Unknown, err
-		}
-
-		return body, mode.DoubaoVideo, nil
+		return buildModelRequest(modelConfig.Model, mode.DoubaoVideo, BuildDoubaoVideoRequest)
 	default:
 		return nil, mode.Unknown, NewErrUnsupportedModelType(modelConfig.Type.String())
 	}
+}
+
+func buildModelRequest(
+	modelName string,
+	relayMode mode.Mode,
+	build func(string) (io.Reader, error),
+) (io.Reader, mode.Mode, error) {
+	body, err := build(modelName)
+	if err != nil {
+		return nil, mode.Unknown, err
+	}
+
+	return body, relayMode, nil
+}
+
+func buildModelConfigRequest(
+	modelConfig model.ModelConfig,
+	relayMode mode.Mode,
+	build func(model.ModelConfig) (io.Reader, error),
+) (io.Reader, mode.Mode, error) {
+	body, err := build(modelConfig)
+	if err != nil {
+		return nil, mode.Unknown, err
+	}
+
+	return body, relayMode, nil
+}
+
+func marshalRequestReader(request any) (io.Reader, error) {
+	jsonBytes, err := sonic.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.NewReader(jsonBytes), nil
 }
 
 func BuildChatCompletionRequest(model string) (io.Reader, error) {
@@ -133,12 +122,7 @@ func BuildChatCompletionRequest(model string) (io.Reader, error) {
 		},
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }
 
 func BuildCompletionsRequest(model string) (io.Reader, error) {
@@ -147,12 +131,7 @@ func BuildCompletionsRequest(model string) (io.Reader, error) {
 		Prompt: "hi",
 	}
 
-	jsonBytes, err := sonic.Marshal(completionsRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(completionsRequest)
 }
 
 func BuildEmbeddingsRequest(model string) (io.Reader, error) {
@@ -161,12 +140,7 @@ func BuildEmbeddingsRequest(model string) (io.Reader, error) {
 		Input: "hi",
 	}
 
-	jsonBytes, err := sonic.Marshal(embeddingsRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(embeddingsRequest)
 }
 
 func BuildModerationsRequest(model string) (io.Reader, error) {
@@ -175,12 +149,7 @@ func BuildModerationsRequest(model string) (io.Reader, error) {
 		Input: "hi",
 	}
 
-	jsonBytes, err := sonic.Marshal(moderationsRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(moderationsRequest)
 }
 
 func BuildImagesGenerationsRequest(modelConfig model.ModelConfig) (io.Reader, error) {
@@ -190,12 +159,7 @@ func BuildImagesGenerationsRequest(modelConfig model.ModelConfig) (io.Reader, er
 		Size:   "1024x1024",
 	}
 
-	jsonBytes, err := sonic.Marshal(imagesGenerationsRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(imagesGenerationsRequest)
 }
 
 func BuildAudioSpeechRequest(model string) (io.Reader, error) {
@@ -204,12 +168,7 @@ func BuildAudioSpeechRequest(model string) (io.Reader, error) {
 		Input: "hi",
 	}
 
-	jsonBytes, err := sonic.Marshal(audioSpeechRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(audioSpeechRequest)
 }
 
 func BuildRerankRequest(model string) (io.Reader, error) {
@@ -219,12 +178,22 @@ func BuildRerankRequest(model string) (io.Reader, error) {
 		Documents: []string{"hi"},
 	}
 
-	jsonBytes, err := sonic.Marshal(rerankRequest)
-	if err != nil {
-		return nil, err
+	return marshalRequestReader(rerankRequest)
+}
+
+func BuildAnthropicRequest(model string) (io.Reader, error) {
+	anthropicRequest := map[string]any{
+		"model":      model,
+		"max_tokens": 16,
+		"messages": []relaymodel.Message{
+			{
+				Role:    relaymodel.RoleUser,
+				Content: "hi",
+			},
+		},
 	}
 
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(anthropicRequest)
 }
 
 func BuildVideoGenerationJobRequest(model string) (io.Reader, error) {
@@ -233,12 +202,7 @@ func BuildVideoGenerationJobRequest(model string) (io.Reader, error) {
 		"prompt": "A calm cinematic shot of clouds moving over a mountain.",
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }
 
 func BuildVideosRequest(model string) (io.Reader, error) {
@@ -247,12 +211,7 @@ func BuildVideosRequest(model string) (io.Reader, error) {
 		Prompt: "A calm cinematic shot of clouds moving over a mountain.",
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }
 
 func BuildGeminiVideoRequest(_ string) (io.Reader, error) {
@@ -264,12 +223,7 @@ func BuildGeminiVideoRequest(_ string) (io.Reader, error) {
 		},
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }
 
 func BuildAliVideoRequest(model string) (io.Reader, error) {
@@ -284,12 +238,7 @@ func BuildAliVideoRequest(model string) (io.Reader, error) {
 		},
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }
 
 func BuildDoubaoVideoRequest(model string) (io.Reader, error) {
@@ -306,10 +255,5 @@ func BuildDoubaoVideoRequest(model string) (io.Reader, error) {
 		"ratio":      "16:9",
 	}
 
-	jsonBytes, err := sonic.Marshal(testRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(jsonBytes), nil
+	return marshalRequestReader(testRequest)
 }

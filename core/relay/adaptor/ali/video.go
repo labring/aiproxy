@@ -159,10 +159,11 @@ func aliVideoUpstreamTaskID(meta *meta.Meta, store adaptor.Store, videoID string
 		return videoID, nil
 	}
 
-	cache, err := store.GetStore(
+	cache, err := store.GetStoreByScope(
 		meta.Group.ID,
 		meta.Token.ID,
 		coremodel.VideoGenerationStoreID(videoID),
+		meta.Channel.Scope,
 	)
 	if err != nil || cache.ID == "" {
 		return videoID, nil
@@ -2151,7 +2152,7 @@ func saveAliVideoJobStore(meta *meta.Meta, store adaptor.Store, jobID string) er
 		Model:     meta.OriginModel,
 		Metadata:  aliVideoStoreMetadataString(meta),
 		ExpiresAt: time.Now().Add(aliVideoTaskTTL),
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveAliVideoGenerationStore(
@@ -2178,7 +2179,7 @@ func saveAliVideoGenerationStore(
 		Model:     meta.OriginModel,
 		Metadata:  aliVideoStoreMetadataString(meta, upstreamID),
 		ExpiresAt: expiresAtTime,
-	})
+	}, meta.Channel.Scope)
 }
 
 func aliVideoStoreMetadataString(meta *meta.Meta, upstreamID ...string) string {
@@ -2208,7 +2209,7 @@ func applyStoredAliVideoRequestMetadata(meta *meta.Meta, store adaptor.Store, st
 		return
 	}
 
-	cache, err := store.GetStore(meta.Group.ID, meta.Token.ID, storeID)
+	cache, err := store.GetStoreByScope(meta.Group.ID, meta.Token.ID, storeID, meta.Channel.Scope)
 	if err != nil || cache.Metadata == "" {
 		return
 	}

@@ -12,17 +12,25 @@ import (
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/oncall"
 	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
 type batchUpdateData struct {
-	Groups               map[string]*GroupUpdate
-	Tokens               map[int]*TokenUpdate
-	Channels             map[int]*ChannelUpdate
-	Summaries            map[SummaryUnique]*SummaryUpdate
-	GroupSummaries       map[GroupSummaryUnique]*GroupSummaryUpdate
-	SummariesMinute      map[SummaryMinuteUnique]*SummaryMinuteUpdate
-	GroupSummariesMinute map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate
+	Groups                           map[string]*GroupUpdate
+	Tokens                           map[int]*TokenUpdate
+	Channels                         map[int]*ChannelUpdate
+	GroupChannels                    map[groupChannelUpdateKey]*ChannelUpdate
+	GroupChannelGroups               map[string]*GroupUpdate
+	GroupChannelTokens               map[int]*TokenUpdate
+	Summaries                        map[SummaryUnique]*SummaryUpdate
+	GroupSummaries                   map[GroupSummaryUnique]*GroupSummaryUpdate
+	GroupChannelSummaries            map[GroupChannelSummaryUnique]*GroupChannelSummaryUpdate
+	GroupChannelTokenSummaries       map[GroupChannelTokenSummaryUnique]*GroupChannelTokenSummaryUpdate
+	SummariesMinute                  map[SummaryMinuteUnique]*SummaryMinuteUpdate
+	GroupSummariesMinute             map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate
+	GroupChannelSummariesMinute      map[GroupChannelSummaryMinuteUnique]*GroupChannelSummaryMinuteUpdate
+	GroupChannelTokenSummariesMinute map[GroupChannelTokenSummaryMinuteUnique]*GroupChannelTokenSummaryMinuteUpdate
 	sync.Mutex
 }
 
@@ -37,10 +45,17 @@ func (b *batchUpdateData) isCleanLocked() bool {
 	return len(b.Groups) == 0 &&
 		len(b.Tokens) == 0 &&
 		len(b.Channels) == 0 &&
+		len(b.GroupChannels) == 0 &&
+		len(b.GroupChannelGroups) == 0 &&
+		len(b.GroupChannelTokens) == 0 &&
 		len(b.Summaries) == 0 &&
 		len(b.GroupSummaries) == 0 &&
+		len(b.GroupChannelSummaries) == 0 &&
+		len(b.GroupChannelTokenSummaries) == 0 &&
 		len(b.SummariesMinute) == 0 &&
-		len(b.GroupSummariesMinute) == 0
+		len(b.GroupSummariesMinute) == 0 &&
+		len(b.GroupChannelSummariesMinute) == 0 &&
+		len(b.GroupChannelTokenSummariesMinute) == 0
 }
 
 type GroupUpdate struct {
@@ -57,6 +72,11 @@ type ChannelUpdate struct {
 	Amount     decimal.Decimal
 	Count      int
 	RetryCount int
+}
+
+type groupChannelUpdateKey struct {
+	GroupID string
+	ID      int
 }
 
 type SummaryUpdate struct {
@@ -79,17 +99,54 @@ type GroupSummaryMinuteUpdate struct {
 	SummaryData
 }
 
+type GroupChannelSummaryUpdate struct {
+	GroupChannelSummaryUnique
+	SummaryData
+}
+
+type GroupChannelSummaryMinuteUpdate struct {
+	GroupChannelSummaryMinuteUnique
+	SummaryData
+}
+
+type GroupChannelTokenSummaryUpdate struct {
+	GroupChannelTokenSummaryUnique
+	SummaryData
+}
+
+type GroupChannelTokenSummaryMinuteUpdate struct {
+	GroupChannelTokenSummaryMinuteUnique
+	SummaryData
+}
+
 var batchData batchUpdateData
 
 func init() {
 	batchData = batchUpdateData{
-		Groups:               make(map[string]*GroupUpdate),
-		Tokens:               make(map[int]*TokenUpdate),
-		Channels:             make(map[int]*ChannelUpdate),
-		Summaries:            make(map[SummaryUnique]*SummaryUpdate),
-		GroupSummaries:       make(map[GroupSummaryUnique]*GroupSummaryUpdate),
-		SummariesMinute:      make(map[SummaryMinuteUnique]*SummaryMinuteUpdate),
-		GroupSummariesMinute: make(map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate),
+		Groups:             make(map[string]*GroupUpdate),
+		Tokens:             make(map[int]*TokenUpdate),
+		Channels:           make(map[int]*ChannelUpdate),
+		GroupChannels:      make(map[groupChannelUpdateKey]*ChannelUpdate),
+		GroupChannelGroups: make(map[string]*GroupUpdate),
+		GroupChannelTokens: make(map[int]*TokenUpdate),
+		Summaries:          make(map[SummaryUnique]*SummaryUpdate),
+		GroupSummaries:     make(map[GroupSummaryUnique]*GroupSummaryUpdate),
+		GroupChannelSummaries: make(
+			map[GroupChannelSummaryUnique]*GroupChannelSummaryUpdate,
+		),
+		GroupChannelTokenSummaries: make(
+			map[GroupChannelTokenSummaryUnique]*GroupChannelTokenSummaryUpdate,
+		),
+		SummariesMinute: make(map[SummaryMinuteUnique]*SummaryMinuteUpdate),
+		GroupSummariesMinute: make(
+			map[GroupSummaryMinuteUnique]*GroupSummaryMinuteUpdate,
+		),
+		GroupChannelSummariesMinute: make(
+			map[GroupChannelSummaryMinuteUnique]*GroupChannelSummaryMinuteUpdate,
+		),
+		GroupChannelTokenSummariesMinute: make(
+			map[GroupChannelTokenSummaryMinuteUnique]*GroupChannelTokenSummaryMinuteUpdate,
+		),
 	}
 }
 
@@ -184,7 +241,27 @@ func ProcessBatchUpdatesSummary() {
 		return nil
 	})
 	g.Go(func() error {
+		processGroupChannelUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelGroupUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelTokenUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
 		processGroupSummaryUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelSummaryUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelTokenSummaryUpdates(errs)
 		return nil
 	})
 	g.Go(func() error {
@@ -197,6 +274,14 @@ func ProcessBatchUpdatesSummary() {
 	})
 	g.Go(func() error {
 		processGroupSummaryMinuteUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelSummaryMinuteUpdates(errs)
+		return nil
+	})
+	g.Go(func() error {
+		processGroupChannelTokenSummaryMinuteUpdates(errs)
 		return nil
 	})
 
@@ -270,6 +355,60 @@ func processChannelUpdates(errs *batchErrors) {
 	}
 }
 
+func logBatchGroupChannelUpdateError(message string, err error) {
+	log.WithError(err).Error(message)
+}
+
+func processGroupChannelUpdates(errs *batchErrors) {
+	for key, data := range batchData.GroupChannels {
+		err := UpdateGroupChannelUsedAmount(
+			key.GroupID,
+			key.ID,
+			data.Amount.InexactFloat64(),
+			data.Count,
+			data.RetryCount,
+		)
+		if IgnoreNotFound(err) != nil {
+			logBatchGroupChannelUpdateError("failed to batch update group channel", err)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannels, key)
+		}
+	}
+}
+
+func processGroupChannelGroupUpdates(errs *batchErrors) {
+	for groupID, data := range batchData.GroupChannelGroups {
+		err := UpdateGroupChannelGroupUsedAmountAndRequestCount(
+			groupID,
+			data.Amount.InexactFloat64(),
+			data.Count,
+		)
+		if IgnoreNotFound(err) != nil {
+			logBatchGroupChannelUpdateError("failed to batch update group channel group", err)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelGroups, groupID)
+		}
+	}
+}
+
+func processGroupChannelTokenUpdates(errs *batchErrors) {
+	for tokenID, data := range batchData.GroupChannelTokens {
+		err := UpdateGroupChannelTokenUsedAmount(
+			tokenID,
+			data.Amount.InexactFloat64(),
+			data.Count,
+		)
+		if IgnoreNotFound(err) != nil {
+			logBatchGroupChannelUpdateError("failed to batch update group channel token", err)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelTokens, tokenID)
+		}
+	}
+}
+
 func processGroupSummaryUpdates(errs *batchErrors) {
 	for key, data := range batchData.GroupSummaries {
 		err := UpsertGroupSummary(data.GroupSummaryUnique, data.SummaryData)
@@ -287,6 +426,36 @@ func processGroupSummaryUpdates(errs *batchErrors) {
 	}
 }
 
+func processGroupChannelSummaryUpdates(errs *batchErrors) {
+	for key, data := range batchData.GroupChannelSummaries {
+		err := UpsertGroupChannelSummary(data.GroupChannelSummaryUnique, data.SummaryData)
+		if err != nil {
+			logBatchGroupChannelUpdateError("failed to batch update group channel summary", err)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelSummaries, key)
+		}
+	}
+}
+
+func processGroupChannelTokenSummaryUpdates(errs *batchErrors) {
+	for key, data := range batchData.GroupChannelTokenSummaries {
+		err := UpsertGroupChannelTokenSummary(
+			data.GroupChannelTokenSummaryUnique,
+			data.SummaryData,
+		)
+		if err != nil {
+			logBatchGroupChannelUpdateError(
+				"failed to batch update group channel token summary",
+				err,
+			)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelTokenSummaries, key)
+		}
+	}
+}
+
 func processGroupSummaryMinuteUpdates(errs *batchErrors) {
 	for key, data := range batchData.GroupSummariesMinute {
 		err := UpsertGroupSummaryMinute(data.GroupSummaryMinuteUnique, data.SummaryData)
@@ -300,6 +469,42 @@ func processGroupSummaryMinuteUpdates(errs *batchErrors) {
 			errs.Add(err)
 		} else {
 			delete(batchData.GroupSummariesMinute, key)
+		}
+	}
+}
+
+func processGroupChannelSummaryMinuteUpdates(errs *batchErrors) {
+	for key, data := range batchData.GroupChannelSummariesMinute {
+		err := UpsertGroupChannelSummaryMinute(
+			data.GroupChannelSummaryMinuteUnique,
+			data.SummaryData,
+		)
+		if err != nil {
+			logBatchGroupChannelUpdateError(
+				"failed to batch update group channel summary minute",
+				err,
+			)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelSummariesMinute, key)
+		}
+	}
+}
+
+func processGroupChannelTokenSummaryMinuteUpdates(errs *batchErrors) {
+	for key, data := range batchData.GroupChannelTokenSummariesMinute {
+		err := UpsertGroupChannelTokenSummaryMinute(
+			data.GroupChannelTokenSummaryMinuteUnique,
+			data.SummaryData,
+		)
+		if err != nil {
+			logBatchGroupChannelUpdateError(
+				"failed to batch update group channel token summary minute",
+				err,
+			)
+			errs.Add(err)
+		} else {
+			delete(batchData.GroupChannelTokenSummariesMinute, key)
 		}
 	}
 }
@@ -346,6 +551,7 @@ func BatchRecordLogs(
 	firstByteAt time.Time,
 	group string,
 	code int,
+	channelScope ChannelScope,
 	channelID int,
 	modelName string,
 	tokenID int,
@@ -373,6 +579,10 @@ func BatchRecordLogs(
 		now = time.Now()
 	}
 
+	if channelScope == ChannelScopeGroup {
+		asyncUsageStatus = AsyncUsageStatusNone
+	}
+
 	if code == http.StatusTooManyRequests ||
 		config.GetLogDetailStorageHours() < 0 ||
 		config.GetLogStorageHours() < 0 {
@@ -381,52 +591,56 @@ func BatchRecordLogs(
 
 	if downstreamResult {
 		if config.GetLogStorageHours() >= 0 {
-			err = RecordConsumeLog(
-				requestID,
-				now,
-				requestAt,
-				retryAt,
-				firstByteAt,
-				group,
-				code,
-				channelID,
-				modelName,
-				tokenID,
-				tokenName,
-				endpoint,
-				content,
-				mode,
-				ip,
-				retryTimes,
-				requestDetail,
-				usage,
-				usageContext,
-				modelPrice,
-				amount,
-				user,
-				metadata,
-				promptCacheKey,
-				upstreamID,
-				asyncUsageStatus,
-			)
+			if channelScope == ChannelScopeGroup {
+				err = RecordGroupChannelConsumeLog(
+					requestID, now, requestAt, retryAt, firstByteAt, group, code, channelID,
+					modelName, tokenID, tokenName, endpoint, content, mode, ip, retryTimes,
+					requestDetail, usage, usageContext, modelPrice, amount, user, metadata,
+					promptCacheKey, upstreamID, asyncUsageStatus,
+				)
+			} else {
+				err = RecordConsumeLog(
+					requestID, now, requestAt, retryAt, firstByteAt, group, code, channelID,
+					modelName, tokenID, tokenName, endpoint, content, mode, ip, retryTimes,
+					requestDetail, usage, usageContext, modelPrice, amount, user, metadata,
+					promptCacheKey, upstreamID, asyncUsageStatus,
+				)
+			}
 		}
 	} else {
 		if code != http.StatusTooManyRequests &&
 			config.GetLogStorageHours() >= 0 &&
 			config.GetRetryLogStorageHours() > 0 {
-			err = RecordRetryLog(
-				requestID,
-				now,
-				requestAt,
-				retryAt,
-				firstByteAt,
-				code,
-				channelID,
-				modelName,
-				mode,
-				retryTimes,
-				requestDetail,
-			)
+			if channelScope == ChannelScopeGroup {
+				err = RecordGroupChannelRetryLog(
+					requestID,
+					now,
+					requestAt,
+					retryAt,
+					firstByteAt,
+					group,
+					code,
+					channelID,
+					modelName,
+					mode,
+					retryTimes,
+					requestDetail,
+				)
+			} else {
+				err = RecordRetryLog(
+					requestID,
+					now,
+					requestAt,
+					retryAt,
+					firstByteAt,
+					code,
+					channelID,
+					modelName,
+					mode,
+					retryTimes,
+					requestDetail,
+				)
+			}
 		}
 	}
 
@@ -436,6 +650,7 @@ func BatchRecordLogs(
 		firstByteAt,
 		group,
 		code,
+		channelScope,
 		channelID,
 		modelName,
 		tokenID,
@@ -456,6 +671,7 @@ func BatchUpdateSummary(
 	firstByteAt time.Time,
 	group string,
 	code int,
+	channelScope ChannelScope,
 	channelID int,
 	modelName string,
 	tokenID int,
@@ -475,9 +691,19 @@ func BatchUpdateSummary(
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	updateChannelData(channelID, amount.UsedAmount, amountDecimal, !downstreamResult)
+	if channelScope == ChannelScopeGroup {
+		updateGroupChannelData(
+			group,
+			channelID,
+			amount.UsedAmount,
+			amountDecimal,
+			!downstreamResult,
+		)
+	} else {
+		updateChannelData(channelID, amount.UsedAmount, amountDecimal, !downstreamResult)
+	}
 
-	if channelID != 0 {
+	if channelID != 0 && channelScope != ChannelScopeGroup {
 		updateSummaryData(
 			channelID,
 			modelName,
@@ -507,8 +733,79 @@ func BatchUpdateSummary(
 		)
 	}
 
+	if channelID != 0 && channelScope == ChannelScopeGroup && group != "" {
+		updateGroupChannelSummaryData(
+			group,
+			channelID,
+			modelName,
+			now,
+			requestAt,
+			firstByteAt,
+			code,
+			amount,
+			usage,
+			!downstreamResult,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+
+		updateGroupChannelSummaryDataMinute(
+			group,
+			channelID,
+			modelName,
+			now,
+			requestAt,
+			firstByteAt,
+			code,
+			amount,
+			usage,
+			!downstreamResult,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+	}
+
 	// group related data only records downstream result
 	if !downstreamResult {
+		return
+	}
+
+	if channelScope == ChannelScopeGroup {
+		if group != "" && tokenID > 0 {
+			updateGroupChannelGroupData(group, amount.UsedAmount, amountDecimal)
+			updateGroupChannelTokenData(tokenID, amount.UsedAmount, amountDecimal)
+		}
+
+		if group != "" && tokenName != "" {
+			updateGroupChannelTokenSummaryData(
+				group,
+				tokenName,
+				modelName,
+				now,
+				requestAt,
+				firstByteAt,
+				code,
+				amount,
+				usage,
+				serviceTier,
+				summaryClaudeLongContext,
+			)
+
+			updateGroupChannelTokenSummaryDataMinute(
+				group,
+				tokenName,
+				modelName,
+				now,
+				requestAt,
+				firstByteAt,
+				code,
+				amount,
+				usage,
+				serviceTier,
+				summaryClaudeLongContext,
+			)
+		}
+
 		return
 	}
 
@@ -551,6 +848,7 @@ func BatchUpdateSummaryOnlyUsage(
 	now time.Time,
 	requestAt time.Time,
 	group string,
+	channelScope ChannelScope,
 	channelID int,
 	modelName string,
 	tokenID int,
@@ -574,25 +872,75 @@ func BatchUpdateSummaryOnlyUsage(
 	batchData.Lock()
 	defer batchData.Unlock()
 
-	updateChannelAmountData(channelID, amount.UsedAmount, amountDecimal)
-	updateSummaryUsageData(
-		channelID,
-		modelName,
-		summaryAt,
-		usage,
-		amount,
-		serviceTier,
-		summaryClaudeLongContext,
-	)
-	updateSummaryUsageDataMinute(
-		channelID,
-		modelName,
-		summaryAt,
-		usage,
-		amount,
-		serviceTier,
-		summaryClaudeLongContext,
-	)
+	if channelScope == ChannelScopeGroup {
+		updateGroupChannelSummaryUsageData(
+			group,
+			channelID,
+			modelName,
+			summaryAt,
+			usage,
+			amount,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+		updateGroupChannelSummaryUsageDataMinute(
+			group,
+			channelID,
+			modelName,
+			summaryAt,
+			usage,
+			amount,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+	} else {
+		updateChannelAmountData(channelID, amount.UsedAmount, amountDecimal)
+		updateSummaryUsageData(
+			channelID,
+			modelName,
+			summaryAt,
+			usage,
+			amount,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+		updateSummaryUsageDataMinute(
+			channelID,
+			modelName,
+			summaryAt,
+			usage,
+			amount,
+			serviceTier,
+			summaryClaudeLongContext,
+		)
+	}
+
+	if channelScope == ChannelScopeGroup {
+		if group != "" && tokenID > 0 && tokenName != "" {
+			updateGroupChannelTokenSummaryUsageData(
+				group,
+				tokenName,
+				modelName,
+				summaryAt,
+				usage,
+				amount,
+				serviceTier,
+				summaryClaudeLongContext,
+			)
+			updateGroupChannelTokenSummaryUsageDataMinute(
+				group,
+				tokenName,
+				modelName,
+				summaryAt,
+				usage,
+				amount,
+				serviceTier,
+				summaryClaudeLongContext,
+			)
+		}
+
+		return
+	}
 
 	updateGroupAmountData(group, amount.UsedAmount, amountDecimal)
 	updateTokenAmountData(tokenID, amount.UsedAmount, amountDecimal)
@@ -656,6 +1004,33 @@ func updateChannelAmountData(channelID int, amount float64, amountDecimal decima
 		Add(batchData.Channels[channelID].Amount)
 }
 
+func updateGroupChannelData(
+	group string,
+	channelID int,
+	amount float64,
+	amountDecimal decimal.Decimal,
+	isRetry bool,
+) {
+	if group == "" || channelID <= 0 {
+		return
+	}
+
+	key := groupChannelUpdateKey{GroupID: group, ID: channelID}
+	if _, ok := batchData.GroupChannels[key]; !ok {
+		batchData.GroupChannels[key] = &ChannelUpdate{}
+	}
+
+	if amount > 0 {
+		batchData.GroupChannels[key].Amount = amountDecimal.
+			Add(batchData.GroupChannels[key].Amount)
+	}
+
+	batchData.GroupChannels[key].Count++
+	if isRetry {
+		batchData.GroupChannels[key].RetryCount++
+	}
+}
+
 func updateGroupData(group string, amount float64, amountDecimal decimal.Decimal) {
 	if group == "" {
 		return
@@ -684,6 +1059,23 @@ func updateGroupAmountData(group string, amount float64, amountDecimal decimal.D
 
 	batchData.Groups[group].Amount = amountDecimal.
 		Add(batchData.Groups[group].Amount)
+}
+
+func updateGroupChannelGroupData(group string, amount float64, amountDecimal decimal.Decimal) {
+	if group == "" {
+		return
+	}
+
+	if _, ok := batchData.GroupChannelGroups[group]; !ok {
+		batchData.GroupChannelGroups[group] = &GroupUpdate{}
+	}
+
+	if amount > 0 {
+		batchData.GroupChannelGroups[group].Amount = amountDecimal.
+			Add(batchData.GroupChannelGroups[group].Amount)
+	}
+
+	batchData.GroupChannelGroups[group].Count++
 }
 
 func updateTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal) {
@@ -716,6 +1108,23 @@ func updateTokenAmountData(tokenID int, amount float64, amountDecimal decimal.De
 		Add(batchData.Tokens[tokenID].Amount)
 }
 
+func updateGroupChannelTokenData(tokenID int, amount float64, amountDecimal decimal.Decimal) {
+	if tokenID <= 0 {
+		return
+	}
+
+	if _, ok := batchData.GroupChannelTokens[tokenID]; !ok {
+		batchData.GroupChannelTokens[tokenID] = &TokenUpdate{}
+	}
+
+	if amount > 0 {
+		batchData.GroupChannelTokens[tokenID].Amount = amountDecimal.
+			Add(batchData.GroupChannelTokens[tokenID].Amount)
+	}
+
+	batchData.GroupChannelTokens[tokenID].Count++
+}
+
 func updateGroupSummaryData(
 	group, tokenName, modelName string,
 	createAt time.Time,
@@ -724,6 +1133,51 @@ func updateGroupSummaryData(
 	code int,
 	amount Amount,
 	usage Usage,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	groupUnique := GroupSummaryUnique{
+		GroupID:       group,
+		TokenName:     tokenName,
+		Model:         modelName,
+		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
+	}
+
+	groupSummary, ok := batchData.GroupSummaries[groupUnique]
+	if !ok {
+		groupSummary = &GroupSummaryUpdate{
+			GroupSummaryUnique: groupUnique,
+		}
+		batchData.GroupSummaries[groupUnique] = groupSummary
+	}
+
+	addRequestSummaryData(
+		&groupSummary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
+		code,
+		amount,
+		usage,
+		false,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func addRequestSummaryData(
+	data *SummaryData,
+	createAt time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	code int,
+	amount Amount,
+	usage Usage,
+	isRetry bool,
 	serviceTier string,
 	summaryClaudeLongContext bool,
 ) {
@@ -745,51 +1199,228 @@ func updateGroupSummaryData(
 		firstByteAt,
 	)
 
-	groupUnique := GroupSummaryUnique{
+	data.Amount.Add(amount)
+	data.TotalTimeMilliseconds += totalTimeMilliseconds
+	data.TotalTTFBMilliseconds += totalTTFBMilliseconds
+	data.Usage.Add(usage)
+	data.AddRequest(code, isRetry)
+	data.AddServiceTierBreakdown(
+		serviceTier,
+		usage,
+		amount,
+		totalTimeMilliseconds,
+		totalTTFBMilliseconds,
+		isRetry,
+		code,
+	)
+
+	if summaryClaudeLongContext {
+		data.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
+		data.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
+		data.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
+	}
+
+	if usage.CachedTokens > 0 {
+		data.CacheHitCount++
+	}
+
+	if usage.CacheCreationTokens > 0 {
+		data.CacheCreationCount++
+	}
+}
+
+func updateGroupChannelSummaryData(
+	group string,
+	groupChannelID int,
+	modelName string,
+	createAt time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	code int,
+	amount Amount,
+	usage Usage,
+	isRetry bool,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || groupChannelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelSummaryUnique{
+		GroupID:        group,
+		GroupChannelID: groupChannelID,
+		Model:          modelName,
+		HourTimestamp:  createAt.Truncate(time.Hour).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelSummaries[unique]
+	if !ok {
+		summary = &GroupChannelSummaryUpdate{GroupChannelSummaryUnique: unique}
+		batchData.GroupChannelSummaries[unique] = summary
+	}
+
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
+		code,
+		amount,
+		usage,
+		isRetry,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func updateGroupChannelSummaryDataMinute(
+	group string,
+	groupChannelID int,
+	modelName string,
+	createAt time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	code int,
+	amount Amount,
+	usage Usage,
+	isRetry bool,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || groupChannelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelSummaryMinuteUnique{
+		GroupID:         group,
+		GroupChannelID:  groupChannelID,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelSummariesMinute[unique]
+	if !ok {
+		summary = &GroupChannelSummaryMinuteUpdate{GroupChannelSummaryMinuteUnique: unique}
+		batchData.GroupChannelSummariesMinute[unique] = summary
+	}
+
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
+		code,
+		amount,
+		usage,
+		isRetry,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func updateGroupChannelTokenSummaryData(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	code int,
+	amount Amount,
+	usage Usage,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || tokenName == "" {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelTokenSummaryUnique{
 		GroupID:       group,
 		TokenName:     tokenName,
 		Model:         modelName,
 		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
 	}
 
-	groupSummary, ok := batchData.GroupSummaries[groupUnique]
+	summary, ok := batchData.GroupChannelTokenSummaries[unique]
 	if !ok {
-		groupSummary = &GroupSummaryUpdate{
-			GroupSummaryUnique: groupUnique,
+		summary = &GroupChannelTokenSummaryUpdate{
+			GroupChannelTokenSummaryUnique: unique,
 		}
-		batchData.GroupSummaries[groupUnique] = groupSummary
+		batchData.GroupChannelTokenSummaries[unique] = summary
 	}
 
-	groupSummary.Amount.Add(amount)
-
-	groupSummary.TotalTimeMilliseconds += totalTimeMilliseconds
-	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
-
-	groupSummary.Usage.Add(usage)
-	groupSummary.AddRequest(code, false)
-	groupSummary.AddServiceTierBreakdown(
-		serviceTier,
-		usage,
-		amount,
-		totalTimeMilliseconds,
-		totalTTFBMilliseconds,
-		false,
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
 		code,
+		amount,
+		usage,
+		false,
+		serviceTier,
+		summaryClaudeLongContext,
 	)
+}
 
-	if summaryClaudeLongContext {
-		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
+func updateGroupChannelTokenSummaryDataMinute(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	requestAt time.Time,
+	firstByteAt time.Time,
+	code int,
+	amount Amount,
+	usage Usage,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || tokenName == "" {
+		return
 	}
 
-	if usage.CachedTokens > 0 {
-		groupSummary.CacheHitCount++
+	if createAt.IsZero() {
+		createAt = time.Now()
 	}
 
-	if usage.CacheCreationTokens > 0 {
-		groupSummary.CacheCreationCount++
+	unique := GroupChannelTokenSummaryMinuteUnique{
+		GroupID:         group,
+		TokenName:       tokenName,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
 	}
+
+	summary, ok := batchData.GroupChannelTokenSummariesMinute[unique]
+	if !ok {
+		summary = &GroupChannelTokenSummaryMinuteUpdate{
+			GroupChannelTokenSummaryMinuteUnique: unique,
+		}
+		batchData.GroupChannelTokenSummariesMinute[unique] = summary
+	}
+
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
+		code,
+		amount,
+		usage,
+		false,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
 }
 
 func updateSummaryUsageData(
@@ -858,6 +1489,154 @@ func updateSummaryUsageDataMinute(
 	}
 
 	addSummaryUsageOnly(&summary.SummaryData, usage, amount, serviceTier, summaryClaudeLongContext)
+}
+
+func updateGroupChannelSummaryUsageData(
+	group string,
+	groupChannelID int,
+	modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || groupChannelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelSummaryUnique{
+		GroupID:        group,
+		GroupChannelID: groupChannelID,
+		Model:          modelName,
+		HourTimestamp:  createAt.Truncate(time.Hour).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelSummaries[unique]
+	if !ok {
+		summary = &GroupChannelSummaryUpdate{GroupChannelSummaryUnique: unique}
+		batchData.GroupChannelSummaries[unique] = summary
+	}
+
+	addSummaryUsageOnly(&summary.SummaryData, usage, amount, serviceTier, summaryClaudeLongContext)
+}
+
+func updateGroupChannelSummaryUsageDataMinute(
+	group string,
+	groupChannelID int,
+	modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || groupChannelID <= 0 {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelSummaryMinuteUnique{
+		GroupID:         group,
+		GroupChannelID:  groupChannelID,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelSummariesMinute[unique]
+	if !ok {
+		summary = &GroupChannelSummaryMinuteUpdate{GroupChannelSummaryMinuteUnique: unique}
+		batchData.GroupChannelSummariesMinute[unique] = summary
+	}
+
+	addSummaryUsageOnly(&summary.SummaryData, usage, amount, serviceTier, summaryClaudeLongContext)
+}
+
+func updateGroupChannelTokenSummaryUsageData(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || tokenName == "" {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelTokenSummaryUnique{
+		GroupID:       group,
+		TokenName:     tokenName,
+		Model:         modelName,
+		HourTimestamp: createAt.Truncate(time.Hour).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelTokenSummaries[unique]
+	if !ok {
+		summary = &GroupChannelTokenSummaryUpdate{
+			GroupChannelTokenSummaryUnique: unique,
+		}
+		batchData.GroupChannelTokenSummaries[unique] = summary
+	}
+
+	addSummaryUsageOnly(
+		&summary.SummaryData,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
+}
+
+func updateGroupChannelTokenSummaryUsageDataMinute(
+	group, tokenName, modelName string,
+	createAt time.Time,
+	usage Usage,
+	amount Amount,
+	serviceTier string,
+	summaryClaudeLongContext bool,
+) {
+	if group == "" || tokenName == "" {
+		return
+	}
+
+	if createAt.IsZero() {
+		createAt = time.Now()
+	}
+
+	unique := GroupChannelTokenSummaryMinuteUnique{
+		GroupID:         group,
+		TokenName:       tokenName,
+		Model:           modelName,
+		MinuteTimestamp: createAt.Truncate(time.Minute).Unix(),
+	}
+
+	summary, ok := batchData.GroupChannelTokenSummariesMinute[unique]
+	if !ok {
+		summary = &GroupChannelTokenSummaryMinuteUpdate{
+			GroupChannelTokenSummaryMinuteUnique: unique,
+		}
+		batchData.GroupChannelTokenSummariesMinute[unique] = summary
+	}
+
+	addSummaryUsageOnly(
+		&summary.SummaryData,
+		usage,
+		amount,
+		serviceTier,
+		summaryClaudeLongContext,
+	)
 }
 
 func updateGroupSummaryUsageData(
@@ -1012,20 +1791,6 @@ func updateGroupSummaryDataMinute(
 		createAt = time.Now()
 	}
 
-	if requestAt.IsZero() {
-		requestAt = createAt
-	}
-
-	if firstByteAt.IsZero() || firstByteAt.Before(requestAt) {
-		firstByteAt = requestAt
-	}
-
-	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
-		createAt,
-		requestAt,
-		firstByteAt,
-	)
-
 	groupUnique := GroupSummaryMinuteUnique{
 		GroupID:         group,
 		TokenName:       tokenName,
@@ -1041,36 +1806,18 @@ func updateGroupSummaryDataMinute(
 		batchData.GroupSummariesMinute[groupUnique] = groupSummary
 	}
 
-	groupSummary.Amount.Add(amount)
-
-	groupSummary.TotalTimeMilliseconds += totalTimeMilliseconds
-	groupSummary.TotalTTFBMilliseconds += totalTTFBMilliseconds
-
-	groupSummary.Usage.Add(usage)
-	groupSummary.AddRequest(code, false)
-	groupSummary.AddServiceTierBreakdown(
-		serviceTier,
-		usage,
-		amount,
-		totalTimeMilliseconds,
-		totalTTFBMilliseconds,
-		false,
+	addRequestSummaryData(
+		&groupSummary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
 		code,
+		amount,
+		usage,
+		false,
+		serviceTier,
+		summaryClaudeLongContext,
 	)
-
-	if summaryClaudeLongContext {
-		groupSummary.AddClaudeLongContextBreakdown(usage, amount, false, code)
-		groupSummary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
-		groupSummary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
-	}
-
-	if usage.CachedTokens > 0 {
-		groupSummary.CacheHitCount++
-	}
-
-	if usage.CacheCreationTokens > 0 {
-		groupSummary.CacheCreationCount++
-	}
 }
 
 func updateSummaryData(
@@ -1090,20 +1837,6 @@ func updateSummaryData(
 		createAt = time.Now()
 	}
 
-	if requestAt.IsZero() {
-		requestAt = createAt
-	}
-
-	if firstByteAt.IsZero() || firstByteAt.Before(requestAt) {
-		firstByteAt = requestAt
-	}
-
-	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
-		createAt,
-		requestAt,
-		firstByteAt,
-	)
-
 	summaryUnique := SummaryUnique{
 		ChannelID:     channelID,
 		Model:         modelName,
@@ -1118,36 +1851,18 @@ func updateSummaryData(
 		batchData.Summaries[summaryUnique] = summary
 	}
 
-	summary.Amount.Add(amount)
-
-	summary.TotalTimeMilliseconds += totalTimeMilliseconds
-	summary.TotalTTFBMilliseconds += totalTTFBMilliseconds
-
-	summary.Usage.Add(usage)
-	summary.AddRequest(code, isRetry)
-	summary.AddServiceTierBreakdown(
-		serviceTier,
-		usage,
-		amount,
-		totalTimeMilliseconds,
-		totalTTFBMilliseconds,
-		isRetry,
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
 		code,
+		amount,
+		usage,
+		isRetry,
+		serviceTier,
+		summaryClaudeLongContext,
 	)
-
-	if summaryClaudeLongContext {
-		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
-		summary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
-		summary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
-	}
-
-	if usage.CachedTokens > 0 {
-		summary.CacheHitCount++
-	}
-
-	if usage.CacheCreationTokens > 0 {
-		summary.CacheCreationCount++
-	}
 }
 
 func updateSummaryDataMinute(
@@ -1167,20 +1882,6 @@ func updateSummaryDataMinute(
 		createAt = time.Now()
 	}
 
-	if requestAt.IsZero() {
-		requestAt = createAt
-	}
-
-	if firstByteAt.IsZero() || firstByteAt.Before(requestAt) {
-		firstByteAt = requestAt
-	}
-
-	totalTimeMilliseconds, totalTTFBMilliseconds := getSummaryLatencyMetrics(
-		createAt,
-		requestAt,
-		firstByteAt,
-	)
-
 	summaryUnique := SummaryMinuteUnique{
 		ChannelID:       channelID,
 		Model:           modelName,
@@ -1195,36 +1896,18 @@ func updateSummaryDataMinute(
 		batchData.SummariesMinute[summaryUnique] = summary
 	}
 
-	summary.Amount.Add(amount)
-
-	summary.TotalTimeMilliseconds += totalTimeMilliseconds
-	summary.TotalTTFBMilliseconds += totalTTFBMilliseconds
-
-	summary.Usage.Add(usage)
-	summary.AddRequest(code, isRetry)
-	summary.AddServiceTierBreakdown(
-		serviceTier,
-		usage,
-		amount,
-		totalTimeMilliseconds,
-		totalTTFBMilliseconds,
-		isRetry,
+	addRequestSummaryData(
+		&summary.SummaryData,
+		createAt,
+		requestAt,
+		firstByteAt,
 		code,
+		amount,
+		usage,
+		isRetry,
+		serviceTier,
+		summaryClaudeLongContext,
 	)
-
-	if summaryClaudeLongContext {
-		summary.AddClaudeLongContextBreakdown(usage, amount, isRetry, code)
-		summary.ClaudeLongContext.TotalTimeMilliseconds += totalTimeMilliseconds
-		summary.ClaudeLongContext.TotalTTFBMilliseconds += totalTTFBMilliseconds
-	}
-
-	if usage.CachedTokens > 0 {
-		summary.CacheHitCount++
-	}
-
-	if usage.CacheCreationTokens > 0 {
-		summary.CacheCreationCount++
-	}
 }
 
 func getSummaryLatencyMetrics(

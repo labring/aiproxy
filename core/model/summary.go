@@ -17,6 +17,13 @@ import (
 // SummarySelectFields is a list of field names to select when querying summary data
 type SummarySelectFields []string
 
+func normalizeSummaryModelFilter(modelName string) string {
+	if strings.TrimSpace(modelName) == "*" {
+		return ""
+	}
+	return modelName
+}
+
 var (
 	baseCountSummaryFields = []string{
 		"request_count",
@@ -830,6 +837,7 @@ func getChartData(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]ChartData, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
 	query := LogDB.Model(&Summary{})
 
 	if channelID != 0 {
@@ -881,6 +889,8 @@ func getGroupChartData(
 	timezone *time.Location,
 	fields SummarySelectFields,
 ) ([]ChartData, error) {
+	modelName = normalizeSummaryModelFilter(modelName)
+
 	query := LogDB.Model(&GroupSummary{})
 	if group != "" {
 		query = query.Where("group_id = ?", group)

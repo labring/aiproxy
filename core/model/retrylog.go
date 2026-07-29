@@ -80,8 +80,12 @@ func RecordRetryLog(
 		Mode:             mode,
 		ChannelID:        channelID,
 		RetryTimes:       ZeroNullInt64(retryTimes),
-		RequestBody:      requestDetail.RequestBody,
-		ResponseBody:     requestDetail.ResponseBody,
+	}
+	if requestDetail != nil {
+		log.RequestBody = requestDetail.RequestBody
+		log.ResponseBody = requestDetail.ResponseBody
+		log.RequestBodyTruncated = requestDetail.RequestBodyTruncated
+		log.ResponseBodyTruncated = requestDetail.ResponseBodyTruncated
 	}
 
 	return LogDB.Create(log).Error

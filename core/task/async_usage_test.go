@@ -4,6 +4,8 @@ package task
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,6 +62,37 @@ func (b preChargeFailingAsyncUsageBalance) GetGroupQuota(
 	model.GroupCache,
 ) (*balance.GroupQuota, error) {
 	return nil, b.err
+}
+
+type countingAsyncUsageBalance struct {
+	calls *atomic.Int64
+}
+
+func (b countingAsyncUsageBalance) GetGroupRemainBalance(
+	context.Context,
+	model.GroupCache,
+) (float64, balance.PostGroupConsumer, error) {
+	return 100, countingAsyncUsageConsumer(b), nil
+}
+
+func (b countingAsyncUsageBalance) GetGroupQuota(
+	context.Context,
+	model.GroupCache,
+) (*balance.GroupQuota, error) {
+	return &balance.GroupQuota{Total: 100, Remain: 100}, nil
+}
+
+type countingAsyncUsageConsumer struct {
+	calls *atomic.Int64
+}
+
+func (c countingAsyncUsageConsumer) PostGroupConsume(
+	context.Context,
+	string,
+	float64,
+) (float64, error) {
+	c.calls.Add(1)
+	return 0, nil
 }
 
 func TestCompleteAsyncUsageIgnoresMissingLog(t *testing.T) {
@@ -123,6 +156,68 @@ func TestCompleteAsyncUsageReturnsLogUpdateError(t *testing.T) {
 	require.Equal(t, model.ZeroNullInt64(0), info.Usage.InputTokens)
 }
 
+func TestCompleteAsyncUsageKeepsClaimPendingWhenLogUpdateFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "async_usage_log_retry.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.AsyncUsageInfo{}))
+
+	oldLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = oldLogDB
+	})
+
+	requestID := "async_log_retry"
+	require.NoError(t, db.Create(&model.Log{
+		RequestID:        model.EmptyNullString(requestID),
+		AsyncUsageStatus: model.AsyncUsageStatusPending,
+	}).Error)
+
+	info := &model.AsyncUsageInfo{
+		RequestID:       requestID,
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		ProcessingToken: "claim-token",
+	}
+	require.NoError(t, model.CreateAsyncUsageInfo(info))
+	require.NoError(t, db.Migrator().DropTable(&model.Log{}))
+
+	usage := model.Usage{
+		InputTokens: 10,
+		TotalTokens: 10,
+	}
+	err = completeAsyncUsage(context.Background(), info, usage, model.UsageContext{})
+	require.ErrorContains(t, err, "update async usage log")
+	require.Equal(t, model.AsyncUsageStatusPending, info.Status)
+	require.Equal(t, usage.InputTokens, info.Usage.InputTokens)
+
+	var got model.AsyncUsageInfo
+	require.NoError(t, db.First(&got, info.ID).Error)
+	require.Equal(t, model.AsyncUsageStatusPending, got.Status)
+	require.Equal(t, "claim-token", got.ProcessingToken)
+	require.Equal(t, model.ZeroNullInt64(10), got.Usage.InputTokens)
+
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	require.NoError(t, db.Create(&model.Log{
+		RequestID:        model.EmptyNullString(requestID),
+		AsyncUsageStatus: model.AsyncUsageStatusPending,
+	}).Error)
+
+	require.NoError(t, completeAsyncUsage(context.Background(), info, usage, model.UsageContext{}))
+	require.Equal(t, model.AsyncUsageStatusCompleted, info.Status)
+
+	require.NoError(t, db.First(&got, info.ID).Error)
+	require.Equal(t, model.AsyncUsageStatusCompleted, got.Status)
+	require.Empty(t, got.ProcessingToken)
+
+	var gotLog model.Log
+	require.NoError(t, db.Where("request_id = ?", requestID).First(&gotLog).Error)
+	require.Equal(t, model.AsyncUsageStatusCompleted, gotLog.AsyncUsageStatus)
+	require.Equal(t, model.ZeroNullInt64(10), gotLog.Usage.InputTokens)
+}
+
 func TestCompleteAsyncUsageRecordsBalanceConsumeErrorWithoutRetry(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -153,15 +248,16 @@ func TestCompleteAsyncUsageRecordsBalanceConsumeErrorWithoutRetry(t *testing.T) 
 	})
 
 	info := &model.AsyncUsageInfo{
-		RequestID:  "balance_error",
-		RequestAt:  time.Now(),
-		Status:     model.AsyncUsageStatusPending,
-		Model:      "gpt-5.4",
-		GroupID:    "group-async-balance",
-		TokenID:    1,
-		TokenName:  "token-1",
-		Price:      model.Price{InputPrice: 1, InputPriceUnit: 1},
-		UpstreamID: "resp_balance_error",
+		RequestID:       "balance_error",
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		GroupID:         "group-async-balance",
+		TokenID:         1,
+		TokenName:       "token-1",
+		Price:           model.Price{InputPrice: 1, InputPriceUnit: 1},
+		UpstreamID:      "resp_balance_error",
+		ProcessingToken: "claim-token",
 	}
 	require.NoError(t, model.CreateAsyncUsageInfo(info))
 
@@ -218,15 +314,16 @@ func TestCompleteAsyncUsageRetriesPreChargeBalanceError(t *testing.T) {
 	})
 
 	info := &model.AsyncUsageInfo{
-		RequestID:  "pre_charge_balance_error",
-		RequestAt:  time.Now(),
-		Status:     model.AsyncUsageStatusPending,
-		Model:      "gpt-5.4",
-		GroupID:    "group-pre-charge-balance",
-		TokenID:    1,
-		TokenName:  "token-1",
-		Price:      model.Price{InputPrice: 1, InputPriceUnit: 1},
-		UpstreamID: "resp_pre_charge_balance_error",
+		RequestID:       "pre_charge_balance_error",
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		GroupID:         "group-pre-charge-balance",
+		TokenID:         1,
+		TokenName:       "token-1",
+		Price:           model.Price{InputPrice: 1, InputPriceUnit: 1},
+		UpstreamID:      "resp_pre_charge_balance_error",
+		ProcessingToken: "claim-token",
 	}
 	require.NoError(t, model.CreateAsyncUsageInfo(info))
 
@@ -345,6 +442,109 @@ func TestCompleteAsyncUsageChargesStoredPerRequestPrice(t *testing.T) {
 	var got model.Log
 	require.NoError(t, db.Where("request_id = ?", requestID).First(&got).Error)
 	require.Equal(t, 0.25, got.Amount.UsedAmount)
+}
+
+func TestCompleteAsyncUsageSkipsSideEffectsAfterClaimLost(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.AsyncUsageInfo{}))
+
+	oldLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = oldLogDB
+	})
+
+	requestID := "async_claim_lost"
+	require.NoError(t, db.Create(&model.Log{
+		RequestID:        model.EmptyNullString(requestID),
+		AsyncUsageStatus: model.AsyncUsageStatusPending,
+	}).Error)
+
+	info := &model.AsyncUsageInfo{
+		RequestID:       requestID,
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		ProcessingToken: "stale-token",
+	}
+	require.NoError(t, model.CreateAsyncUsageInfo(info))
+	require.NoError(t, db.Model(&model.AsyncUsageInfo{}).
+		Where("id = ?", info.ID).
+		Update("processing_token", "other-token").Error)
+
+	err = completeAsyncUsage(context.Background(), info, model.Usage{
+		InputTokens: 3,
+		TotalTokens: 3,
+	}, model.UsageContext{})
+	require.ErrorContains(t, err, "async usage claim lost")
+
+	var gotLog model.Log
+	require.NoError(t, db.Where("request_id = ?", requestID).First(&gotLog).Error)
+	require.Equal(t, model.AsyncUsageStatusPending, gotLog.AsyncUsageStatus)
+	require.Equal(t, model.ZeroNullInt64(0), gotLog.Usage.TotalTokens)
+
+	var gotInfo model.AsyncUsageInfo
+	require.NoError(t, db.First(&gotInfo, info.ID).Error)
+	require.Equal(t, model.AsyncUsageStatusPending, gotInfo.Status)
+	require.Equal(t, model.ZeroNullInt64(0), gotInfo.Usage.TotalTokens)
+}
+
+func TestCompleteAsyncUsageDoesNotChargeAfterClaimLost(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.AsyncUsageInfo{}))
+
+	oldLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = oldLogDB
+	})
+
+	require.NoError(t, model.CacheSetGroup(&model.GroupCache{
+		ID:     "group-claim-lost-charge",
+		Status: model.GroupStatusEnabled,
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, model.CacheDeleteGroup("group-claim-lost-charge"))
+	})
+
+	var chargeCalls atomic.Int64
+
+	oldBalance := balance.Default
+	balance.Default = countingAsyncUsageBalance{calls: &chargeCalls}
+	t.Cleanup(func() {
+		balance.Default = oldBalance
+	})
+
+	info := &model.AsyncUsageInfo{
+		RequestID:       "async_claim_lost_charge",
+		RequestAt:       time.Now(),
+		Status:          model.AsyncUsageStatusPending,
+		Model:           "gpt-5.4",
+		GroupID:         "group-claim-lost-charge",
+		TokenID:         1,
+		TokenName:       "token-1",
+		Price:           model.Price{InputPrice: 1, InputPriceUnit: 1},
+		ProcessingToken: "stale-token",
+	}
+	require.NoError(t, model.CreateAsyncUsageInfo(info))
+	require.NoError(t, db.Model(&model.AsyncUsageInfo{}).
+		Where("id = ?", info.ID).
+		Update("processing_token", "other-token").Error)
+
+	err = completeAsyncUsage(context.Background(), info, model.Usage{
+		InputTokens: 3,
+		TotalTokens: 3,
+	}, model.UsageContext{})
+	require.ErrorContains(t, err, "async usage claim lost")
+	require.Zero(t, chargeCalls.Load())
+
+	var gotInfo model.AsyncUsageInfo
+	require.NoError(t, db.First(&gotInfo, info.ID).Error)
+	require.Equal(t, model.AsyncUsageStatusPending, gotInfo.Status)
+	require.False(t, gotInfo.BalanceConsumed)
+	require.Equal(t, model.ZeroNullInt64(0), gotInfo.Usage.TotalTokens)
 }
 
 func TestCompleteAsyncUsagePersistsBalanceConsumed(t *testing.T) {

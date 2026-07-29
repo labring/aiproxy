@@ -3,6 +3,7 @@ package reqlimit
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
@@ -23,6 +24,76 @@ type RateSnapshot struct {
 	SecondCount int64    `json:"second_count"`
 }
 
+type ChannelRateScope string
+
+const (
+	ChannelRateScopeGlobal ChannelRateScope = "global"
+	ChannelRateScopeGroup  ChannelRateScope = "group"
+)
+
+func chooseRecordSnapshots(
+	redisEnabled bool,
+	redisSnapshots []recordSnapshot,
+	redisErr error,
+	memorySnapshots func() []recordSnapshot,
+	logMessage string,
+) []recordSnapshot {
+	if redisEnabled {
+		if redisErr != nil {
+			log.Error(logMessage + redisErr.Error())
+			return memorySnapshots()
+		}
+
+		return redisSnapshots
+	}
+
+	return memorySnapshots()
+}
+
+func pushRateRecord(
+	ctx context.Context,
+	redisRecord *redisRateRecord,
+	memoryRecord *InMemoryRecord,
+	overed int64,
+	n int64,
+	keys ...string,
+) (int64, int64, int64) {
+	if common.RedisEnabled {
+		count, overLimitCount, secondCount, err := redisRecord.PushRequest(
+			ctx,
+			overed,
+			time.Minute,
+			n,
+			keys...,
+		)
+		if err == nil {
+			return count, overLimitCount, secondCount
+		}
+
+		log.Error("redis push request error: " + err.Error())
+	}
+
+	return memoryRecord.PushRequest(overed, time.Minute, n, keys...)
+}
+
+func getRateRecord(
+	ctx context.Context,
+	redisRecord *redisRateRecord,
+	memoryRecord *InMemoryRecord,
+	keys ...string,
+) (int64, int64) {
+	if common.RedisEnabled {
+		totalCount, secondCount, err := redisRecord.GetRequest(ctx, time.Minute, keys...)
+		if err == nil {
+			return totalCount, secondCount
+		}
+
+		log.Error("redis get request error: " + err.Error())
+	}
+
+	return memoryRecord.GetRequest(time.Minute, keys...)
+}
+
 //nolint:unparam
 func snapshotRateRecord(
 	ctx context.Context,
@@ -38,14 +109,15 @@ func snapshotRateRecord(
 
 	if common.RedisEnabled {
 		rawSnapshots, err = redisRecord.SnapshotByPattern(ctx, duration, keys...)
-		if err != nil {
-			log.Error("redis snapshot error: " + err.Error())
-		}
 	}
 
-	if len(rawSnapshots) == 0 {
-		rawSnapshots = memoryRecord.SnapshotByPattern(duration, keys...)
-	}
+	rawSnapshots = chooseRecordSnapshots(
+		common.RedisEnabled,
+		rawSnapshots,
+		err,
+		func() []recordSnapshot { return memoryRecord.SnapshotByPattern(duration, keys...) },
+		"redis snapshot error: ",
+	)
 
 	snapshots := make([]RateSnapshot, 0, len(rawSnapshots))
 	for _, snapshot := range rawSnapshots {
@@ -69,23 +141,15 @@ func PushGroupModelRequest(
 	group, model string,
 	overed int64,
 ) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisGroupModelLimiter.PushRequest(
-			ctx,
-			overed,
-			time.Minute,
-			1,
-			group,
-			model,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryGroupModelLimiter.PushRequest(overed, time.Minute, 1, group, model)
+	return pushRateRecord(
+		ctx,
+		redisGroupModelLimiter,
+		memoryGroupModelLimiter,
+		overed,
+		1,
+		group,
+		model,
+	)
 }
 
 func GetGroupModelRequest(ctx context.Context, group, model string) (int64, int64) {
@@ -93,21 +157,13 @@ func GetGroupModelRequest(ctx context.Context, group, model string) (int64, int6
 		model = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisGroupModelLimiter.GetRequest(
-			ctx,
-			time.Minute,
-			group,
-			model,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
-
-		log.Error("redis get request error: " + err.Error())
-	}
-
-	return memoryGroupModelLimiter.GetRequest(time.Minute, group, model)
+	return getRateRecord(
+		ctx,
+		redisGroupModelLimiter,
+		memoryGroupModelLimiter,
+		group,
+		model,
+	)
 }
 
 func GetGroupModelRequestSnapshots(
@@ -143,24 +199,16 @@ func PushGroupModelTokennameRequest(
 	ctx context.Context,
 	group, model, tokenname string,
 ) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisGroupModelTokennameLimiter.PushRequest(
-			ctx,
-			0,
-			time.Minute,
-			1,
-			group,
-			model,
-			tokenname,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokennameLimiter.PushRequest(0, time.Minute, 1, group, model, tokenname)
+	return pushRateRecord(
+		ctx,
+		redisGroupModelTokennameLimiter,
+		memoryGroupModelTokennameLimiter,
+		0,
+		1,
+		group,
+		model,
+		tokenname,
+	)
 }
 
 func GetGroupModelTokennameRequest(
@@ -175,22 +223,14 @@ func GetGroupModelTokennameRequest(
 		tokenname = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisGroupModelTokennameLimiter.GetRequest(
-			ctx,
-			time.Minute,
-			group,
-			model,
-			tokenname,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
-
-		log.Error("redis get request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokennameLimiter.GetRequest(time.Minute, group, model, tokenname)
+	return getRateRecord(
+		ctx,
+		redisGroupModelTokennameLimiter,
+		memoryGroupModelTokennameLimiter,
+		group,
+		model,
+		tokenname,
+	)
 }
 
 func GetGroupModelTokennameRequestSnapshots(
@@ -225,29 +265,65 @@ var (
 	redisChannelModelRecord  = newRedisChannelModelRecord(
 		func() *redis.Client { return common.RDB },
 	)
+	memoryGroupChannelModelRecord = NewInMemoryRecord()
+	redisGroupChannelModelRecord  = newRedisGroupChannelModelRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushChannelModelRequest(ctx context.Context, channel, model string) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisChannelModelRecord.PushRequest(
-			ctx,
-			0,
-			time.Minute,
-			1,
-			channel,
-			model,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryChannelModelRecord.PushRequest(0, time.Minute, 1, channel, model)
+	return pushRateRecord(
+		ctx,
+		redisChannelModelRecord,
+		memoryChannelModelRecord,
+		0,
+		1,
+		channel,
+		model,
+	)
 }
 
 func GetChannelModelRequest(ctx context.Context, channel, model string) (int64, int64) {
+	if channel == "" || channel == "*" {
+		return getGlobalChannelModelRequest(ctx, model)
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	return getChannelModelRequestByPattern(ctx, channel, model)
+}
+
+func PushGroupChannelModelRequest(
+	ctx context.Context,
+	group, channel, model string,
+) (int64, int64, int64) {
+	return pushRateRecord(
+		ctx,
+		redisGroupChannelModelRecord,
+		memoryGroupChannelModelRecord,
+		0,
+		1,
+		group,
+		channel,
+		model,
+	)
+}
+
+func PushScopedChannelModelRequest(
+	ctx context.Context,
+	scope ChannelRateScope,
+	group, channel, model string,
+) (int64, int64, int64) {
+	if scope == ChannelRateScopeGroup {
+		return PushGroupChannelModelRequest(ctx, group, channel, model)
+	}
+
+	return PushChannelModelRequest(ctx, channel, model)
+}
+
+func GetGroupChannelModelRequest(ctx context.Context, group, channel, model string) (int64, int64) {
 	if channel == "" {
 		channel = "*"
 	}
@@ -256,21 +332,45 @@ func GetChannelModelRequest(ctx context.Context, channel, model string) (int64, 
 		model = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisChannelModelRecord.GetRequest(
-			ctx,
-			time.Minute,
-			channel,
-			model,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
+	return getRateRecord(
+		ctx,
+		redisGroupChannelModelRecord,
+		memoryGroupChannelModelRecord,
+		group,
+		channel,
+		model,
+	)
+}
 
-		log.Error("redis get request error: " + err.Error())
+func getChannelModelRequestByPattern(ctx context.Context, channel, model string) (int64, int64) {
+	if channel == "" {
+		channel = "*"
 	}
 
-	return memoryChannelModelRecord.GetRequest(time.Minute, channel, model)
+	if model == "" {
+		model = "*"
+	}
+
+	return getRateRecord(
+		ctx,
+		redisChannelModelRecord,
+		memoryChannelModelRecord,
+		channel,
+		model,
+	)
+}
+
+func getGlobalChannelModelRequest(ctx context.Context, model string) (int64, int64) {
+	return aggregateChannelModelSnapshots(
+		ctx,
+		model,
+		redisChannelModelRecord,
+		memoryChannelModelRecord,
+		func(channel string) bool {
+			_, err := strconv.ParseInt(channel, 10, 64)
+			return err == nil
+		},
+	)
 }
 
 var (
@@ -285,23 +385,15 @@ func PushGroupModelTokensRequest(
 	group, model string,
 	maxTokens, tokens int64,
 ) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisGroupModelTokensLimiter.PushRequest(
-			ctx,
-			maxTokens,
-			time.Minute,
-			tokens,
-			group,
-			model,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokensLimiter.PushRequest(maxTokens, time.Minute, tokens, group, model)
+	return pushRateRecord(
+		ctx,
+		redisGroupModelTokensLimiter,
+		memoryGroupModelTokensLimiter,
+		maxTokens,
+		tokens,
+		group,
+		model,
+	)
 }
 
 func GetGroupModelTokensRequest(ctx context.Context, group, model string) (int64, int64) {
@@ -309,21 +401,13 @@ func GetGroupModelTokensRequest(ctx context.Context, group, model string) (int64
 		model = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisGroupModelTokensLimiter.GetRequest(
-			ctx,
-			time.Minute,
-			group,
-			model,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
-
-		log.Error("redis get request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokensLimiter.GetRequest(time.Minute, group, model)
+	return getRateRecord(
+		ctx,
+		redisGroupModelTokensLimiter,
+		memoryGroupModelTokensLimiter,
+		group,
+		model,
+	)
 }
 
 func GetGroupModelTokensRequestSnapshots(
@@ -360,26 +444,11 @@ func PushGroupModelTokennameTokensRequest(
 	group, model, tokenname string,
 	tokens int64,
 ) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisGroupModelTokennameTokensLimiter.PushRequest(
-			ctx,
-			0,
-			time.Minute,
-			tokens,
-			group,
-			model,
-			tokenname,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokennameTokensLimiter.PushRequest(
+	return pushRateRecord(
+		ctx,
+		redisGroupModelTokennameTokensLimiter,
+		memoryGroupModelTokennameTokensLimiter,
 		0,
-		time.Minute,
 		tokens,
 		group,
 		model,
@@ -399,22 +468,14 @@ func GetGroupModelTokennameTokensRequest(
 		tokenname = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisGroupModelTokennameTokensLimiter.GetRequest(
-			ctx,
-			time.Minute,
-			group,
-			model,
-			tokenname,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
-
-		log.Error("redis get request error: " + err.Error())
-	}
-
-	return memoryGroupModelTokennameTokensLimiter.GetRequest(time.Minute, group, model, tokenname)
+	return getRateRecord(
+		ctx,
+		redisGroupModelTokennameTokensLimiter,
+		memoryGroupModelTokennameTokensLimiter,
+		group,
+		model,
+		tokenname,
+	)
 }
 
 func GetGroupModelTokennameTokensRequestSnapshots(
@@ -449,6 +510,10 @@ var (
 	redisChannelModelTokensRecord  = newRedisChannelModelTokensRecord(
 		func() *redis.Client { return common.RDB },
 	)
+	memoryGroupChannelModelTokensRecord = NewInMemoryRecord()
+	redisGroupChannelModelTokensRecord  = newRedisGroupChannelModelTokensRecord(
+		func() *redis.Client { return common.RDB },
+	)
 )
 
 func PushChannelModelTokensRequest(
@@ -456,26 +521,63 @@ func PushChannelModelTokensRequest(
 	channel, model string,
 	tokens int64,
 ) (int64, int64, int64) {
-	if common.RedisEnabled {
-		count, overLimitCount, secondCount, err := redisChannelModelTokensRecord.PushRequest(
-			ctx,
-			0,
-			time.Minute,
-			tokens,
-			channel,
-			model,
-		)
-		if err == nil {
-			return count, overLimitCount, secondCount
-		}
-
-		log.Error("redis push request error: " + err.Error())
-	}
-
-	return memoryChannelModelTokensRecord.PushRequest(0, time.Minute, tokens, channel, model)
+	return pushRateRecord(
+		ctx,
+		redisChannelModelTokensRecord,
+		memoryChannelModelTokensRecord,
+		0,
+		tokens,
+		channel,
+		model,
+	)
 }
 
 func GetChannelModelTokensRequest(ctx context.Context, channel, model string) (int64, int64) {
+	if channel == "" || channel == "*" {
+		return getGlobalChannelModelTokensRequest(ctx, model)
+	}
+
+	if model == "" {
+		model = "*"
+	}
+
+	return getChannelModelTokensRequestByPattern(ctx, channel, model)
+}
+
+func PushGroupChannelModelTokensRequest(
+	ctx context.Context,
+	group, channel, model string,
+	tokens int64,
+) (int64, int64, int64) {
+	return pushRateRecord(
+		ctx,
+		redisGroupChannelModelTokensRecord,
+		memoryGroupChannelModelTokensRecord,
+		0,
+		tokens,
+		group,
+		channel,
+		model,
+	)
+}
+
+func PushScopedChannelModelTokensRequest(
+	ctx context.Context,
+	scope ChannelRateScope,
+	group, channel, model string,
+	tokens int64,
+) (int64, int64, int64) {
+	if scope == ChannelRateScopeGroup {
+		return PushGroupChannelModelTokensRequest(ctx, group, channel, model, tokens)
+	}
+
+	return PushChannelModelTokensRequest(ctx, channel, model, tokens)
+}
+
+func GetGroupChannelModelTokensRequest(
+	ctx context.Context,
+	group, channel, model string,
+) (int64, int64) {
 	if channel == "" {
 		channel = "*"
 	}
@@ -484,21 +586,108 @@ func GetChannelModelTokensRequest(ctx context.Context, channel, model string) (i
 		model = "*"
 	}
 
-	if common.RedisEnabled {
-		totalCount, secondCount, err := redisChannelModelTokensRecord.GetRequest(
-			ctx,
-			time.Minute,
-			channel,
-			model,
-		)
-		if err == nil {
-			return totalCount, secondCount
-		}
+	return getRateRecord(
+		ctx,
+		redisGroupChannelModelTokensRecord,
+		memoryGroupChannelModelTokensRecord,
+		group,
+		channel,
+		model,
+	)
+}
 
-		log.Error("redis get request error: " + err.Error())
+func getChannelModelTokensRequestByPattern(
+	ctx context.Context,
+	channel, model string,
+) (int64, int64) {
+	if channel == "" {
+		channel = "*"
 	}
 
-	return memoryChannelModelTokensRecord.GetRequest(time.Minute, channel, model)
+	if model == "" {
+		model = "*"
+	}
+
+	return getRateRecord(
+		ctx,
+		redisChannelModelTokensRecord,
+		memoryChannelModelTokensRecord,
+		channel,
+		model,
+	)
+}
+
+func getGlobalChannelModelTokensRequest(ctx context.Context, model string) (int64, int64) {
+	return aggregateChannelModelSnapshots(
+		ctx,
+		model,
+		redisChannelModelTokensRecord,
+		memoryChannelModelTokensRecord,
+		func(channel string) bool {
+			_, err := strconv.ParseInt(channel, 10, 64)
+			return err == nil
+		},
+	)
+}
+
+func aggregateChannelModelSnapshots(
+	ctx context.Context,
+	model string,
+	redisRecord *redisRateRecord,
+	memoryRecord *InMemoryRecord,
+	matchChannel func(string) bool,
+) (int64, int64) {
+	model = normalizeAggregateModel(model)
+	matchSnapshot := func(snapshot recordSnapshot) bool {
+		if len(snapshot.Keys) < 2 {
+			return false
+		}
+
+		snapshotModel := snapshot.Keys[len(snapshot.Keys)-1]
+		if model != "" && snapshotModel != model {
+			return false
+		}
+
+		channel := strings.Join(snapshot.Keys[:len(snapshot.Keys)-1], ":")
+
+		return matchChannel(channel)
+	}
+
+	var (
+		snapshots []recordSnapshot
+		err       error
+	)
+	if common.RedisEnabled {
+		snapshots, err = redisRecord.Snapshot(ctx, time.Minute)
+	}
+
+	snapshots = chooseRecordSnapshots(
+		common.RedisEnabled,
+		snapshots,
+		err,
+		func() []recordSnapshot { return memoryRecord.Snapshot(time.Minute) },
+		"redis channel model snapshot error: ",
+	)
+
+	var totalCount, secondCount int64
+	for _, snapshot := range snapshots {
+		if !matchSnapshot(snapshot) {
+			continue
+		}
+
+		totalCount += snapshot.TotalCount
+		secondCount += snapshot.SecondCount
+	}
+
+	return totalCount, secondCount
+}
+
+func normalizeAggregateModel(model string) string {
+	if model == "*" {
+		return ""
+	}
+
+	return model
 }
 
 func GetAllChannelModelRates(ctx context.Context) (map[int64]map[string]ChannelModelRate, error) {
@@ -532,21 +721,24 @@ func GetAllChannelModelRates(ctx context.Context) (map[int64]map[string]ChannelM
 
 	if common.RedisEnabled {
 		requestSnapshots, err = redisChannelModelRecord.Snapshot(ctx, time.Minute)
-		if err != nil {
-			log.Error("redis snapshot request error: " + err.Error())
-		}
+		requestSnapshots = chooseRecordSnapshots(
+			true,
+			requestSnapshots,
+			err,
+			func() []recordSnapshot { return memoryChannelModelRecord.Snapshot(time.Minute) },
+			"redis snapshot request error: ",
+		)
 
 		tokenSnapshots, err = redisChannelModelTokensRecord.Snapshot(ctx, time.Minute)
-		if err != nil {
-			log.Error("redis snapshot token error: " + err.Error())
-		}
-	}
-
-	if len(requestSnapshots) == 0 {
+		tokenSnapshots = chooseRecordSnapshots(
+			true,
+			tokenSnapshots,
+			err,
+			func() []recordSnapshot { return memoryChannelModelTokensRecord.Snapshot(time.Minute) },
+			"redis snapshot token error: ",
+		)
+	} else {
 		requestSnapshots = memoryChannelModelRecord.Snapshot(time.Minute)
-	}
-
-	if len(tokenSnapshots) == 0 {
 		tokenSnapshots = memoryChannelModelTokensRecord.Snapshot(time.Minute)
 	}
 

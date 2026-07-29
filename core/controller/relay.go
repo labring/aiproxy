@@ -17,15 +17,17 @@ import (
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.GeneralOpenAIRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string						false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.TextResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.GeneralOpenAIRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string						false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string						false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string						false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.TextResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/completions [post]
 func Completions() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -41,15 +43,17 @@ func Completions() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.AnthropicMessageRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.TextResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.AnthropicMessageRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.TextResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/messages [post]
 func Anthropic() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -65,15 +69,17 @@ func Anthropic() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.GeneralOpenAIRequest		true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.TextResponse				|		model.ChatCompletionsStreamResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.GeneralOpenAIRequest		true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.TextResponse				|		model.ChatCompletionsStreamResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/chat/completions [post]
 func ChatCompletions() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -89,15 +95,17 @@ func ChatCompletions() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.EmbeddingRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string					false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.EmbeddingResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.EmbeddingRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string					false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string					false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string					false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.EmbeddingResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/embeddings [post]
 func Embeddings() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -113,17 +121,19 @@ func Embeddings() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			prompt			formData	string	true	"Prompt"
-//	@Param			model			formData	string	true	"Model"
-//	@Param			image			formData	file	true	"Images"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.SttJSONResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			prompt							formData	string	true	"Prompt"
+//	@Param			model							formData	string	true	"Model"
+//	@Param			image							formData	file	true	"Images"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.SttJSONResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/images/edits [post]
 func ImagesEdits() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -139,15 +149,17 @@ func ImagesEdits() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.ImageRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string				false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.ImageResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.ImageRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string				false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string				false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string				false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.ImageResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/images/generations [post]
 func ImagesGenerations() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -163,15 +175,17 @@ func ImagesGenerations() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.TextToSpeechRequest		true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{file}		file							"audio binary"
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.TextToSpeechRequest		true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{file}		file							"audio binary"
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/audio/speech [post]
 func AudioSpeech() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -187,16 +201,18 @@ func AudioSpeech() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			model			formData	string	true	"Model"
-//	@Param			file			formData	file	true	"File"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.SttJSONResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			model							formData	string	true	"Model"
+//	@Param			file							formData	file	true	"File"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.SttJSONResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/audio/transcriptions [post]
 func AudioTranscription() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -212,16 +228,18 @@ func AudioTranscription() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			model			formData	string	true	"Model"
-//	@Param			file			formData	file	true	"File"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.SttJSONResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			model							formData	string	true	"Model"
+//	@Param			file							formData	file	true	"File"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.SttJSONResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/audio/translations [post]
 func AudioTranslation() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -244,15 +262,17 @@ func Moderations() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.RerankRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string				false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.RerankResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.RerankRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string				false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string				false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string				false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.RerankResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/rerank [post]
 func Rerank() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -268,16 +288,18 @@ func Rerank() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			model			formData	string	true	"Model"
-//	@Param			file			formData	file	true	"File"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.ParsePdfResponse
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			model							formData	string	true	"Model"
+//	@Param			file							formData	file	true	"File"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.ParsePdfResponse
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/parse/pdf [post]
 func ParsePdf() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -293,15 +315,17 @@ func ParsePdf() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.VideoGenerationJob
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.VideoGenerationJob
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/video/generations/jobs [post]
 func VideoGenerationsJobs() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -318,15 +342,17 @@ func VideoGenerationsJobs() []gin.HandlerFunc {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		object	true	"Ali DashScope video synthesis request"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		object	true	"Ali DashScope video synthesis request"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/api/v1/services/aigc/video-generation/video-synthesis [post]
 func AliVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -342,15 +368,17 @@ func AliVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			task_id			path		string	true	"Task ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			task_id							path		string	true	"Task ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/api/v1/tasks/{task_id} [get]
 func AliVideoTask() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -367,15 +395,17 @@ func AliVideoTask() []gin.HandlerFunc {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		object	true	"Doubao video generation task request"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		object	true	"Doubao video generation task request"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/api/v3/contents/generations/tasks [post]
 func DoubaoVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -391,15 +421,17 @@ func DoubaoVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			task_id			path		string	true	"Task ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			task_id							path		string	true	"Task ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/api/v3/contents/generations/tasks/{task_id} [get]
 func DoubaoVideoTask() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -415,16 +447,18 @@ func DoubaoVideoTask() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			task_id			path		string	true	"Task ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Success		204				{object}	nil
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			task_id							path		string	true	"Task ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Success		204								{object}	nil
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/api/v3/contents/generations/tasks/{task_id} [delete]
 func DeleteDoubaoVideoTask() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -440,15 +474,17 @@ func DeleteDoubaoVideoTask() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.VideoGenerationJob
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.VideoGenerationJob
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/video/generations/jobs/{id} [get]
 func VideoGenerationsGetJobs() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -464,15 +500,17 @@ func VideoGenerationsGetJobs() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideoGenerationJobRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{file}		file							"video binary"
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.VideoGenerationJobRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{file}		file							"video binary"
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/video/generations/{id}/content/video [get]
 func VideoGenerationsContent() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -488,15 +526,17 @@ func VideoGenerationsContent() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideosRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string				false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Video
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.VideosRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string				false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string				false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string				false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Video
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/videos [post]
 func Videos() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -512,9 +552,11 @@ func Videos() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideosEditRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string					false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Video
+//	@Param			request							body		model.VideosEditRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string					false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string					false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string					false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Video
 //	@Router			/v1/videos/edits [post]
 func EditVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -530,9 +572,11 @@ func EditVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.VideosExtensionRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string							false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Video
+//	@Param			request							body		model.VideosExtensionRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string							false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string							false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string							false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Video
 //	@Router			/v1/videos/extensions [post]
 func ExtendVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -548,9 +592,11 @@ func ExtendVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			video_id		path		string	true	"Video ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Video
+//	@Param			video_id						path		string	true	"Video ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Video
 //	@Router			/v1/videos/{video_id} [get]
 func GetVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -566,9 +612,11 @@ func GetVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		application/octet-stream
 //	@Security		ApiKeyAuth
-//	@Param			video_id		path	string	true	"Video ID"
-//	@Param			Aiproxy-Channel	header	string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{file}	file	"video binary"
+//	@Param			video_id						path	string	true	"Video ID"
+//	@Param			Aiproxy-Channel					header	string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header	string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header	string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{file}	file	"video binary"
 //	@Router			/v1/videos/{video_id}/content [get]
 func GetVideoContent() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -584,8 +632,10 @@ func GetVideoContent() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			video_id		path	string	true	"Video ID"
-//	@Param			Aiproxy-Channel	header	string	false	"Optional Aiproxy-Channel header"
+//	@Param			video_id						path	string	true	"Video ID"
+//	@Param			Aiproxy-Channel					header	string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header	string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header	string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
 //	@Success		204
 //	@Router			/v1/videos/{video_id} [delete]
 func DeleteVideo() []gin.HandlerFunc {
@@ -602,10 +652,12 @@ func DeleteVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			video_id		path		string						true	"Video ID"
-//	@Param			request			body		model.VideosRemixRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string						false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Video
+//	@Param			video_id						path		string						true	"Video ID"
+//	@Param			request							body		model.VideosRemixRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string						false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string						false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string						false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Video
 //	@Router			/v1/videos/{video_id}/remix [post]
 func RemixVideo() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -621,15 +673,17 @@ func RemixVideo() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request			body		model.CreateResponseRequest	true	"Request"
-//	@Param			Aiproxy-Channel	header		string						false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Response
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			request							body		model.CreateResponseRequest	true	"Request"
+//	@Param			Aiproxy-Channel					header		string						false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string						false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string						false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Response
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/v1/responses [post]
 func CreateResponse() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -645,9 +699,11 @@ func CreateResponse() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			response_id		path		string	true	"Response ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Response
+//	@Param			response_id						path		string	true	"Response ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Response
 //	@Router			/v1/responses/{response_id} [get]
 func GetResponse() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -663,8 +719,10 @@ func GetResponse() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			response_id		path	string	true	"Response ID"
-//	@Param			Aiproxy-Channel	header	string	false	"Optional Aiproxy-Channel header"
+//	@Param			response_id						path	string	true	"Response ID"
+//	@Param			Aiproxy-Channel					header	string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header	string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header	string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
 //	@Success		204
 //	@Router			/v1/responses/{response_id} [delete]
 func DeleteResponse() []gin.HandlerFunc {
@@ -681,9 +739,11 @@ func DeleteResponse() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			response_id		path		string	true	"Response ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.Response
+//	@Param			response_id						path		string	true	"Response ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.Response
 //	@Router			/v1/responses/{response_id}/cancel [post]
 func CancelResponse() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -699,9 +759,11 @@ func CancelResponse() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			response_id		path		string	true	"Response ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	model.InputItemList
+//	@Param			response_id						path		string	true	"Response ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	model.InputItemList
 //	@Router			/v1/responses/{response_id}/input_items [get]
 func GetResponseInputItems() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -717,17 +779,19 @@ func GetResponseInputItems() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			version			path		string	true	"API Version (v1 or v1beta)"
-//	@Param			model			path		string	true	"Model name with action (e.g., gemini-2.0-flash:generateContent)"
-//	@Param			request			body		object	true	"Request"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			version							path		string	true	"API Version (v1 or v1beta)"
+//	@Param			model							path		string	true	"Model name with action (e.g., gemini-2.0-flash:generateContent)"
+//	@Param			request							body		object	true	"Request"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/{version}/models/{model} [post]
 func GeminiByPath() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
@@ -761,16 +825,18 @@ func GeminiByPath() []gin.HandlerFunc {
 //	@Tags			relay
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			version			path		string	true	"API Version (v1 or v1beta)"
-//	@Param			operation_id	path		string	true	"Operation ID"
-//	@Param			Aiproxy-Channel	header		string	false	"Optional Aiproxy-Channel header"
-//	@Success		200				{object}	object
-//	@Header			all				{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
-//	@Header			all				{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
-//	@Header			all				{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
-//	@Header			all				{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
-//	@Header			all				{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Param			version							path		string	true	"API Version (v1 or v1beta)"
+//	@Param			operation_id					path		string	true	"Operation ID"
+//	@Param			Aiproxy-Channel					header		string	false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string	false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string	false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
 //	@Router			/{version}/operations/{operation_id} [get]
 func GeminiOperation() []gin.HandlerFunc {
 	return []gin.HandlerFunc{

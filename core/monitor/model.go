@@ -19,10 +19,19 @@ const (
 	statsKeySuffix        = ":stats"
 	modelTotalStatsSuffix = ":total_stats"
 	channelKeyPart        = ":channel:"
+	groupChannelKeyPrefix = "group_channel:"
 )
 
 func modelKeyPrefix() string {
 	return common.RedisKey("model:")
+}
+
+func groupChannelModelKeyPrefix() string {
+	return common.RedisKey("group_channel", "model:")
+}
+
+func groupChannelMonitorRedisPrefix() string {
+	return common.RedisKey("group_channel")
 }
 
 // Redis scripts
@@ -34,18 +43,59 @@ var (
 	clearChannelAllModelErrorsScript = redis.NewScript(clearChannelAllModelErrorsLuaScript)
 	clearAllModelErrorsScript        = redis.NewScript(clearAllModelErrorsLuaScript)
 	redisMonitorModel                = newRedisModelMonitor(
+		modelKeyPrefix,
+		common.RedisKeyPrefix,
+		func() *redis.Client {
+			return common.RDB
+		},
+	)
+	redisGroupChannelMonitorModel = newRedisModelMonitor(
+		groupChannelModelKeyPrefix,
+		groupChannelMonitorRedisPrefix,
 		func() *redis.Client { return common.RDB },
 	)
 )
 
 type redisModelMonitor struct {
-	getRDB func() *redis.Client
+	keyPrefix   func() string
+	redisPrefix func() string
+	getRDB      func() *redis.Client
 }
 
-func newRedisModelMonitor(getRDB func() *redis.Client) *redisModelMonitor {
+func newRedisModelMonitor(
+	keyPrefix func() string,
+	redisPrefix func() string,
+	getRDB func() *redis.Client,
+) *redisModelMonitor {
 	return &redisModelMonitor{
-		getRDB: getRDB,
+		keyPrefix:   keyPrefix,
+		redisPrefix: redisPrefix,
+		getRDB:      getRDB,
 	}
+}
+
+func (m *redisModelMonitor) modelKeyPrefix() string {
+	if m == nil || m.keyPrefix == nil {
+		return modelKeyPrefix()
+	}
+
+	return m.keyPrefix()
+}
+
+func (m *redisModelMonitor) redisKeyPrefix() string {
+	if m == nil || m.redisPrefix == nil {
+		return common.RedisKeyPrefix()
+	}
+
+	return m.redisPrefix()
+}
+
+func (m *redisModelMonitor) cacheModel(model string) string {
+	if m.modelKeyPrefix() == modelKeyPrefix() {
+		return model
+	}
+
+	return m.modelKeyPrefix() + model
 }
 
 func GetModelsErrorRate(ctx context.Context) (map[string]float64, error) {
@@ -76,14 +126,15 @@ func (m *redisModelMonitor) GetModelsErrorRate(ctx context.Context) (map[string]
 	}
 
 	result := make(map[string]float64)
-	pattern := modelKeyPrefix() + "*" + modelTotalStatsSuffix
+	keyPrefix := m.modelKeyPrefix()
+	pattern := keyPrefix + "*" + modelTotalStatsSuffix
 
 	now := time.Now().UnixMilli()
 
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
-		model := strings.TrimPrefix(key, modelKeyPrefix())
+		model := strings.TrimPrefix(key, keyPrefix)
 		model = strings.TrimSuffix(model, modelTotalStatsSuffix)
 
 		rate, err := getErrorRateScript.Run(
@@ -137,6 +188,83 @@ func AddRequest(
 	)
 }
 
+func AddRequestByChannelKey(
+	ctx context.Context,
+	modelName string,
+	channelKey string,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (errorRate float64, banExecution bool, err error) {
+	if strings.HasPrefix(channelKey, groupChannelKeyPrefix) {
+		return AddGroupChannelRequestByChannelKey(
+			ctx,
+			modelName,
+			channelKey,
+			isError,
+			tryBan,
+			maxErrorRate,
+		)
+	}
+
+	if channelKey == "" {
+		channelKey = "0"
+	}
+
+	if !common.RedisEnabled {
+		errorRate, banExecution = memModelMonitor.AddRequestByChannelKey(
+			modelName,
+			channelKey,
+			isError,
+			tryBan,
+			maxErrorRate,
+		)
+
+		return errorRate, banExecution, nil
+	}
+
+	return redisMonitorModel.AddRequestByChannelKey(
+		ctx,
+		modelName,
+		channelKey,
+		isError,
+		tryBan,
+		maxErrorRate,
+	)
+}
+
+func AddGroupChannelRequestByChannelKey(
+	ctx context.Context,
+	modelName string,
+	channelKey string,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (errorRate float64, banExecution bool, err error) {
+	if channelKey == "" {
+		channelKey = "0"
+	}
+
+	if !common.RedisEnabled {
+		errorRate, banExecution = memGroupChannelModelMonitor.AddRequestByChannelKey(
+			modelName,
+			channelKey,
+			isError,
+			tryBan,
+			maxErrorRate,
+		)
+
+		return errorRate, banExecution, nil
+	}
+
+	return redisGroupChannelMonitorModel.AddRequestByChannelKey(
+		ctx,
+		modelName,
+		channelKey,
+		isError,
+		tryBan,
+		maxErrorRate,
+	)
+}
+
 func (m *redisModelMonitor) AddRequest(
 	ctx context.Context,
 	model string,
@@ -161,7 +289,7 @@ func (m *redisModelMonitor) AddRequest(
 	val, err := addRequestScript.Run(
 		ctx,
 		rdb,
-		[]string{common.RedisKeyPrefix(), model},
+		[]string{m.redisKeyPrefix(), model},
 		channelID,
 		errorFlag,
 		now,
@@ -179,6 +307,45 @@ func (m *redisModelMonitor) AddRequest(
 	}
 
 	return errorRate, banExecution, nil
+}
+
+func (m *redisModelMonitor) AddRequestByChannelKey(
+	ctx context.Context,
+	modelName string,
+	channelKey string,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (errorRate float64, banExecution bool, err error) {
+	rdb, err := m.rdb()
+	if err != nil {
+		return 0, false, err
+	}
+
+	errorFlag := 0
+	if isError {
+		errorFlag = 1
+	} else {
+		tryBan = false
+	}
+
+	val, err := addRequestScript.Run(
+		ctx,
+		rdb,
+		[]string{m.redisKeyPrefix(), modelName},
+		channelKey,
+		errorFlag,
+		time.Now().UnixMilli(),
+		maxErrorRate,
+		tryBan,
+		getBanDuration().Milliseconds(),
+	).Slice()
+	if err != nil {
+		return 0, false, err
+	}
+
+	banExecution, errorRate, err = parseAddRequestResult(val)
+
+	return errorRate, banExecution, err
 }
 
 func parseAddRequestResult(result []any) (banExecution bool, errorRate float64, err error) {
@@ -225,10 +392,10 @@ func parseLuaFloat(value any) (float64, error) {
 	}
 }
 
-func buildStatsKey(model, channelID string) string {
+func buildStatsKey(keyPrefix, model, channelID string) string {
 	return fmt.Sprintf(
 		"%s%s%s%v%s",
-		modelKeyPrefix(),
+		keyPrefix,
 		model,
 		channelKeyPart,
 		channelID,
@@ -236,8 +403,8 @@ func buildStatsKey(model, channelID string) string {
 	)
 }
 
-func getModelChannelID(key string) (string, int64, bool) {
-	content := strings.TrimPrefix(key, modelKeyPrefix())
+func getModelChannelID(keyPrefix, key string) (string, int64, bool) {
+	content := strings.TrimPrefix(key, keyPrefix)
 	content = strings.TrimSuffix(content, statsKeySuffix)
 
 	model, channelIDStr, ok := strings.Cut(content, channelKeyPart)
@@ -251,6 +418,18 @@ func getModelChannelID(key string) (string, int64, bool) {
 	}
 
 	return model, channelID, true
+}
+
+func getModelChannelKey(keyPrefix, key string) (string, string, bool) {
+	content := strings.TrimPrefix(key, keyPrefix)
+	content = strings.TrimSuffix(content, statsKeySuffix)
+
+	modelName, channelKey, ok := strings.Cut(content, channelKeyPart)
+	if !ok {
+		return "", "", false
+	}
+
+	return modelName, channelKey, true
 }
 
 // GetChannelModelErrorRates gets error rates for a specific channel
@@ -284,14 +463,15 @@ func (m *redisModelMonitor) GetChannelModelErrorRates(
 	}
 
 	result := make(map[string]float64)
-	pattern := buildStatsKey("*", strconv.FormatInt(channelID, 10))
+	keyPrefix := m.modelKeyPrefix()
+	pattern := buildStatsKey(keyPrefix, "*", strconv.FormatInt(channelID, 10))
 	now := time.Now().UnixMilli()
 
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
-		model, _, ok := getModelChannelID(key)
+		model, _, ok := getModelChannelID(keyPrefix, key)
 		if !ok {
 			continue
 		}
@@ -324,19 +504,91 @@ func GetModelChannelErrorRate(ctx context.Context, model string) (map[int64]floa
 	return redisMonitorModel.GetModelChannelErrorRate(ctx, model)
 }
 
-func (m *redisModelMonitor) GetModelChannelErrorRate(
+func GetModelChannelErrorRateByKey(ctx context.Context, model string) (map[string]float64, error) {
+	if !common.RedisEnabled {
+		return memModelMonitor.GetModelChannelErrorRateByKey(ctx, model)
+	}
+	return redisMonitorModel.GetModelChannelErrorRateByKey(ctx, model)
+}
+
+func GetGroupChannelModelErrorRateByKey(
 	ctx context.Context,
 	model string,
-) (map[int64]float64, error) {
-	if result, ok := getModelChannelErrorRateLocal(model); ok {
+) (map[string]float64, error) {
+	if !common.RedisEnabled {
+		return memGroupChannelModelMonitor.GetModelChannelErrorRateByKey(ctx, model)
+	}
+	return redisGroupChannelMonitorModel.GetModelChannelErrorRateByKey(ctx, model)
+}
+
+func (m *redisModelMonitor) GetModelChannelErrorRateByKey(
+	ctx context.Context,
+	model string,
+) (map[string]float64, error) {
+	cacheModel := m.cacheModel(model)
+	if result, ok := getModelChannelStringErrorRateLocal(cacheModel); ok {
 		return result, nil
 	}
 
 	return loadWithLocalKeyLock(
 		monitorLocalLoadLocker,
-		modelChannelErrorRateLocalCacheKey(model),
+		modelChannelErrorRateLocalCacheKey(cacheModel)+":string",
+		func() (map[string]float64, bool) {
+			return getModelChannelStringErrorRateLocal(cacheModel)
+		},
+		func() (map[string]float64, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return nil, err
+			}
+
+			result := make(map[string]float64)
+			keyPrefix := m.modelKeyPrefix()
+			pattern := buildStatsKey(keyPrefix, model, "*")
+			now := time.Now().UnixMilli()
+
+			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
+			for iter.Next(ctx) {
+				key := iter.Val()
+
+				_, channelKey, ok := getModelChannelKey(keyPrefix, key)
+				if !ok {
+					continue
+				}
+
+				rate, err := getErrorRateScript.Run(ctx, rdb, []string{key}, now).Float64()
+				if err != nil {
+					return nil, err
+				}
+
+				result[channelKey] = rate
+			}
+
+			if err := iter.Err(); err != nil {
+				return nil, err
+			}
+
+			setModelChannelStringErrorRateLocalUnlocked(cacheModel, result)
+
+			return result, nil
+		},
+	)
+}
+
+func (m *redisModelMonitor) GetModelChannelErrorRate(
+	ctx context.Context,
+	model string,
+) (map[int64]float64, error) {
+	cacheModel := m.cacheModel(model)
+	if result, ok := getModelChannelErrorRateLocal(cacheModel); ok {
+		return result, nil
+	}
+
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		modelChannelErrorRateLocalCacheKey(cacheModel),
 		func() (map[int64]float64, bool) {
-			return getModelChannelErrorRateLocal(model)
+			return getModelChannelErrorRateLocal(cacheModel)
 		},
 		func() (map[int64]float64, error) {
 			rdb, err := m.rdb()
@@ -345,14 +597,15 @@ func (m *redisModelMonitor) GetModelChannelErrorRate(
 			}
 
 			result := make(map[int64]float64)
-			pattern := buildStatsKey(model, "*")
+			keyPrefix := m.modelKeyPrefix()
+			pattern := buildStatsKey(keyPrefix, model, "*")
 			now := time.Now().UnixMilli()
 
 			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 			for iter.Next(ctx) {
 				key := iter.Val()
 
-				_, channelID, ok := getModelChannelID(key)
+				_, channelID, ok := getModelChannelID(keyPrefix, key)
 				if !ok {
 					continue
 				}
@@ -374,7 +627,7 @@ func (m *redisModelMonitor) GetModelChannelErrorRate(
 				return nil, err
 			}
 
-			setModelChannelErrorRateLocalUnlocked(model, result)
+			setModelChannelErrorRateLocalUnlocked(cacheModel, result)
 
 			return result, nil
 		},
@@ -386,21 +639,22 @@ func (m *redisModelMonitor) GetChannelModelErrorRate(
 	model string,
 	channelID int64,
 ) (float64, error) {
-	if rate, ok := getChannelModelErrorRateLocal(model, channelID); ok {
+	cacheModel := m.cacheModel(model)
+	if rate, ok := getChannelModelErrorRateLocal(cacheModel, channelID); ok {
 		return rate, nil
 	}
 
-	if rates, ok := getModelChannelErrorRateLocal(model); ok {
+	if rates, ok := getModelChannelErrorRateLocal(cacheModel); ok {
 		rate := rates[channelID]
-		setChannelModelErrorRateLocalUnlocked(model, channelID, rate)
+		setChannelModelErrorRateLocalUnlocked(cacheModel, channelID, rate)
 		return rate, nil
 	}
 
 	return loadWithLocalKeyLock(
 		monitorLocalLoadLocker,
-		channelModelErrorRateLocalCacheKey(model, channelID),
+		channelModelErrorRateLocalCacheKey(cacheModel, channelID),
 		func() (float64, bool) {
-			return getChannelModelErrorRateLocal(model, channelID)
+			return getChannelModelErrorRateLocal(cacheModel, channelID)
 		},
 		func() (float64, error) {
 			rdb, err := m.rdb()
@@ -411,14 +665,86 @@ func (m *redisModelMonitor) GetChannelModelErrorRate(
 			rate, err := getErrorRateScript.Run(
 				ctx,
 				rdb,
-				[]string{buildStatsKey(model, strconv.FormatInt(channelID, 10))},
+				[]string{
+					buildStatsKey(m.modelKeyPrefix(), model, strconv.FormatInt(channelID, 10)),
+				},
 				time.Now().UnixMilli(),
 			).Float64()
 			if err != nil {
 				return 0, err
 			}
 
-			setChannelModelErrorRateLocalUnlocked(model, channelID, rate)
+			setChannelModelErrorRateLocalUnlocked(cacheModel, channelID, rate)
+
+			return rate, nil
+		},
+	)
+}
+
+func GetChannelModelErrorRateByKey(
+	ctx context.Context,
+	modelName, channelKey string,
+) (float64, error) {
+	if strings.HasPrefix(channelKey, groupChannelKeyPrefix) {
+		return GetGroupChannelChannelModelErrorRateByKey(ctx, modelName, channelKey)
+	}
+
+	if !common.RedisEnabled {
+		return memModelMonitor.GetChannelModelErrorRateByKey(ctx, modelName, channelKey)
+	}
+
+	return redisMonitorModel.GetChannelModelErrorRateByKey(ctx, modelName, channelKey)
+}
+
+func GetGroupChannelChannelModelErrorRateByKey(
+	ctx context.Context,
+	modelName, channelKey string,
+) (float64, error) {
+	if !common.RedisEnabled {
+		return memGroupChannelModelMonitor.GetChannelModelErrorRateByKey(ctx, modelName, channelKey)
+	}
+	return redisGroupChannelMonitorModel.GetChannelModelErrorRateByKey(ctx, modelName, channelKey)
+}
+
+func (m *redisModelMonitor) GetChannelModelErrorRateByKey(
+	ctx context.Context,
+	modelName string,
+	channelKey string,
+) (float64, error) {
+	cacheModel := m.cacheModel(modelName)
+	if rate, ok := getChannelModelStringErrorRateLocal(cacheModel, channelKey); ok {
+		return rate, nil
+	}
+
+	if rates, ok := getModelChannelStringErrorRateLocal(cacheModel); ok {
+		rate := rates[channelKey]
+		setChannelModelStringErrorRateLocalUnlocked(cacheModel, channelKey, rate)
+		return rate, nil
+	}
+
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		channelModelErrorRateStringLocalCacheKey(cacheModel, channelKey),
+		func() (float64, bool) {
+			return getChannelModelStringErrorRateLocal(cacheModel, channelKey)
+		},
+		func() (float64, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return 0, err
+			}
+
+			rate, err := getErrorRateScript.Run(
+				ctx,
+				rdb,
+				[]string{buildStatsKey(m.modelKeyPrefix(), modelName, channelKey)},
+				time.Now().UnixMilli(),
+			).Float64()
+			if err != nil {
+				return 0, err
+			}
+
+			setChannelModelStringErrorRateLocalUnlocked(cacheModel, channelKey, rate)
 
 			return rate, nil
 		},
@@ -444,7 +770,7 @@ func (m *redisModelMonitor) GetBannedChannelsWithModel(
 	}
 
 	result := []int64{}
-	prefix := modelKeyPrefix() + model + channelKeyPart
+	prefix := m.modelKeyPrefix() + model + channelKeyPart
 	pattern := prefix + "*" + bannedKeySuffix
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
@@ -476,19 +802,42 @@ func GetBannedChannelsMapWithModel(ctx context.Context, model string) (map[int64
 	return redisMonitorModel.GetBannedChannelsMapWithModel(ctx, model)
 }
 
+func GetBannedChannelKeysMapWithModel(
+	ctx context.Context,
+	model string,
+) (map[string]struct{}, error) {
+	if !common.RedisEnabled {
+		return memModelMonitor.GetBannedChannelsMapWithModelByKey(ctx, model)
+	}
+
+	return redisMonitorModel.GetBannedChannelKeysMapWithModel(ctx, model)
+}
+
+func GetGroupChannelBannedChannelKeysMapWithModel(
+	ctx context.Context,
+	model string,
+) (map[string]struct{}, error) {
+	if !common.RedisEnabled {
+		return memGroupChannelModelMonitor.GetBannedChannelsMapWithModelByKey(ctx, model)
+	}
+
+	return redisGroupChannelMonitorModel.GetBannedChannelKeysMapWithModel(ctx, model)
+}
+
 func (m *redisModelMonitor) GetBannedChannelsMapWithModel(
 	ctx context.Context,
 	model string,
 ) (map[int64]struct{}, error) {
-	if result, ok := getBannedChannelsLocal(model); ok {
+	cacheModel := m.cacheModel(model)
+	if result, ok := getBannedChannelsLocal(cacheModel); ok {
 		return result, nil
 	}
 
 	return loadWithLocalKeyLock(
 		monitorLocalLoadLocker,
-		bannedChannelsLocalCacheKey(model),
+		bannedChannelsLocalCacheKey(cacheModel),
 		func() (map[int64]struct{}, bool) {
-			return getBannedChannelsLocal(model)
+			return getBannedChannelsLocal(cacheModel)
 		},
 		func() (map[int64]struct{}, error) {
 			rdb, err := m.rdb()
@@ -497,7 +846,7 @@ func (m *redisModelMonitor) GetBannedChannelsMapWithModel(
 			}
 
 			result := make(map[int64]struct{})
-			prefix := modelKeyPrefix() + model + channelKeyPart
+			prefix := m.modelKeyPrefix() + model + channelKeyPart
 			pattern := prefix + "*" + bannedKeySuffix
 			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
@@ -517,7 +866,50 @@ func (m *redisModelMonitor) GetBannedChannelsMapWithModel(
 				return nil, err
 			}
 
-			setBannedChannelsLocalUnlocked(model, result)
+			setBannedChannelsLocalUnlocked(cacheModel, result)
+
+			return result, nil
+		},
+	)
+}
+
+func (m *redisModelMonitor) GetBannedChannelKeysMapWithModel(
+	ctx context.Context,
+	model string,
+) (map[string]struct{}, error) {
+	cacheModel := m.cacheModel(model)
+	if result, ok := getBannedChannelKeysLocal(cacheModel); ok {
+		return result, nil
+	}
+
+	return loadWithLocalKeyLock(
+		monitorLocalLoadLocker,
+		bannedChannelsStringLocalCacheKey(cacheModel),
+		func() (map[string]struct{}, bool) {
+			return getBannedChannelKeysLocal(cacheModel)
+		},
+		func() (map[string]struct{}, error) {
+			rdb, err := m.rdb()
+			if err != nil {
+				return nil, err
+			}
+
+			result := make(map[string]struct{})
+			prefix := m.modelKeyPrefix() + model + channelKeyPart
+			pattern := prefix + "*" + bannedKeySuffix
+			iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
+
+			for iter.Next(ctx) {
+				key := iter.Val()
+				channelKey := strings.TrimSuffix(strings.TrimPrefix(key, prefix), bannedKeySuffix)
+				result[channelKey] = struct{}{}
+			}
+
+			if err := iter.Err(); err != nil {
+				return nil, err
+			}
+
+			setBannedChannelKeysLocalUnlocked(cacheModel, result)
 
 			return result, nil
 		},
@@ -538,6 +930,38 @@ func (m *redisModelMonitor) ClearChannelModelErrors(
 	model string,
 	channelID int,
 ) error {
+	return m.ClearChannelModelErrorsByKey(ctx, model, strconv.Itoa(channelID))
+}
+
+func ClearChannelModelErrorsByKey(ctx context.Context, model, channelKey string) error {
+	if strings.HasPrefix(channelKey, groupChannelKeyPrefix) {
+		return ClearGroupChannelModelErrorsByKey(ctx, model, channelKey)
+	}
+
+	if !common.RedisEnabled {
+		return memModelMonitor.ClearChannelModelErrorsByKey(ctx, model, channelKey)
+	}
+
+	return redisMonitorModel.ClearChannelModelErrorsByKey(ctx, model, channelKey)
+}
+
+func ClearGroupChannelModelErrorsByKey(
+	ctx context.Context,
+	model string,
+	channelKey string,
+) error {
+	if !common.RedisEnabled {
+		return memGroupChannelModelMonitor.ClearChannelModelErrorsByKey(ctx, model, channelKey)
+	}
+
+	return redisGroupChannelMonitorModel.ClearChannelModelErrorsByKey(ctx, model, channelKey)
+}
+
+func (m *redisModelMonitor) ClearChannelModelErrorsByKey(
+	ctx context.Context,
+	model string,
+	channelKey string,
+) error {
 	rdb, err := m.rdb()
 	if err != nil {
 		return err
@@ -546,13 +970,14 @@ func (m *redisModelMonitor) ClearChannelModelErrors(
 	err = clearChannelModelErrorsScript.Run(
 		ctx,
 		rdb,
-		[]string{common.RedisKeyPrefix(), model},
-		strconv.Itoa(channelID),
+		[]string{m.redisKeyPrefix(), model},
+		channelKey,
 	).Err()
 	if err == nil {
-		deleteModelChannelErrorRateLocal(model)
-		deleteChannelModelErrorRateLocal(model, int64(channelID))
-		deleteBannedChannelsLocal(model)
+		cacheModel := m.cacheModel(model)
+		deleteModelChannelErrorRateLocal(cacheModel)
+		deleteChannelModelStringErrorRateLocal(cacheModel, channelKey)
+		deleteBannedChannelsLocal(cacheModel)
 	}
 
 	return err
@@ -568,6 +993,33 @@ func ClearChannelAllModelErrors(ctx context.Context, channelID int) error {
 }
 
 func (m *redisModelMonitor) ClearChannelAllModelErrors(ctx context.Context, channelID int) error {
+	return m.ClearChannelAllModelErrorsByKey(ctx, strconv.Itoa(channelID))
+}
+
+func ClearChannelAllModelErrorsByKey(ctx context.Context, channelKey string) error {
+	if strings.HasPrefix(channelKey, groupChannelKeyPrefix) {
+		return ClearGroupChannelAllModelErrorsByKey(ctx, channelKey)
+	}
+
+	if !common.RedisEnabled {
+		return memModelMonitor.ClearChannelAllModelErrorsByKey(ctx, channelKey)
+	}
+
+	return redisMonitorModel.ClearChannelAllModelErrorsByKey(ctx, channelKey)
+}
+
+func ClearGroupChannelAllModelErrorsByKey(ctx context.Context, channelKey string) error {
+	if !common.RedisEnabled {
+		return memGroupChannelModelMonitor.ClearChannelAllModelErrorsByKey(ctx, channelKey)
+	}
+
+	return redisGroupChannelMonitorModel.ClearChannelAllModelErrorsByKey(ctx, channelKey)
+}
+
+func (m *redisModelMonitor) ClearChannelAllModelErrorsByKey(
+	ctx context.Context,
+	channelKey string,
+) error {
 	rdb, err := m.rdb()
 	if err != nil {
 		return err
@@ -576,8 +1028,8 @@ func (m *redisModelMonitor) ClearChannelAllModelErrors(ctx context.Context, chan
 	err = clearChannelAllModelErrorsScript.Run(
 		ctx,
 		rdb,
-		[]string{common.RedisKeyPrefix()},
-		strconv.Itoa(channelID),
+		[]string{m.redisKeyPrefix()},
+		channelKey,
 	).Err()
 	if err == nil {
 		flushMonitorLocalCache()
@@ -601,7 +1053,7 @@ func (m *redisModelMonitor) ClearAllModelErrors(ctx context.Context) error {
 		return err
 	}
 
-	err = clearAllModelErrorsScript.Run(ctx, rdb, []string{common.RedisKeyPrefix()}).Err()
+	err = clearAllModelErrorsScript.Run(ctx, rdb, []string{m.redisKeyPrefix()}).Err()
 	if err == nil {
 		flushMonitorLocalCache()
 	}
@@ -627,12 +1079,13 @@ func (m *redisModelMonitor) GetAllBannedModelChannels(
 	}
 
 	result := make(map[string][]int64)
-	pattern := modelKeyPrefix() + "*" + channelKeyPart + "*" + bannedKeySuffix
+	keyPrefix := m.modelKeyPrefix()
+	pattern := keyPrefix + "*" + channelKeyPart + "*" + bannedKeySuffix
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 
 	for iter.Next(ctx) {
 		key := iter.Val()
-		parts := strings.TrimPrefix(key, modelKeyPrefix())
+		parts := strings.TrimPrefix(key, keyPrefix)
 		parts = strings.TrimSuffix(parts, bannedKeySuffix)
 
 		model, channelIDStr, ok := strings.Cut(parts, channelKeyPart)
@@ -687,14 +1140,15 @@ func (m *redisModelMonitor) GetAllChannelModelErrorRates(
 	}
 
 	result := make(map[int64]map[string]float64)
-	pattern := buildStatsKey("*", "*")
+	keyPrefix := m.modelKeyPrefix()
+	pattern := buildStatsKey(keyPrefix, "*", "*")
 	now := time.Now().UnixMilli()
 
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
-		model, channelID, ok := getModelChannelID(key)
+		model, channelID, ok := getModelChannelID(keyPrefix, key)
 		if !ok {
 			continue
 		}
@@ -732,14 +1186,15 @@ func (m *redisModelMonitor) GetAllModelChannelStats(
 	}
 
 	result := make(map[string]map[int64]ModelChannelStatsSnapshot)
-	pattern := buildStatsKey("*", "*")
+	keyPrefix := m.modelKeyPrefix()
+	pattern := buildStatsKey(keyPrefix, "*", "*")
 	now := time.Now().UnixMilli()
 
 	iter := rdb.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
 
-		model, channelID, ok := getModelChannelID(key)
+		model, channelID, ok := getModelChannelID(keyPrefix, key)
 		if !ok {
 			continue
 		}
@@ -755,7 +1210,7 @@ func (m *redisModelMonitor) GetAllModelChannelStats(
 
 		bannedKey := fmt.Sprintf(
 			"%s%s%s%d%s",
-			modelKeyPrefix(),
+			keyPrefix,
 			model,
 			channelKeyPart,
 			channelID,

@@ -2006,10 +2006,11 @@ func storedNativeGeminiVideoOperationName(meta *meta.Meta, store adaptor.Store) 
 	}
 
 	if store != nil {
-		cache, err := store.GetStore(
+		cache, err := store.GetStoreByScope(
 			meta.Group.ID,
 			meta.Token.ID,
 			model.VideoJobStoreID(meta.OperationID),
+			meta.Channel.Scope,
 		)
 		if err != nil {
 			return ""
@@ -2017,10 +2018,11 @@ func storedNativeGeminiVideoOperationName(meta *meta.Meta, store adaptor.Store) 
 
 		return strings.TrimSpace(cache.Metadata)
 	} else {
-		cache, err := model.CacheGetStore(
+		cache, err := model.CacheGetStoreByScope(
 			meta.Group.ID,
 			meta.Token.ID,
 			model.VideoJobStoreID(meta.OperationID),
+			meta.Channel.Scope,
 		)
 		if err != nil {
 			return ""
@@ -2271,7 +2273,7 @@ func geminiVideoStoredMetadata(
 		return geminiVideoStoreMetadata{}, nil
 	}
 
-	cache, err := store.GetStore(meta.Group.ID, meta.Token.ID, storeID)
+	cache, err := store.GetStoreByScope(meta.Group.ID, meta.Token.ID, storeID, meta.Channel.Scope)
 	if err != nil {
 		return geminiVideoStoreMetadata{}, err
 	}
@@ -2403,7 +2405,7 @@ func saveGeminiVideoJobStore(
 		Model:     meta.OriginModel,
 		Metadata:  geminiVideoStoreMetadataString(meta, operationName),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveGeminiVideoStore(
@@ -2425,7 +2427,7 @@ func saveGeminiVideoStore(
 		Model:     meta.OriginModel,
 		Metadata:  geminiVideoStoreMetadataString(meta, operationName),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveGeminiFileStores(
@@ -2451,7 +2453,7 @@ func saveGeminiFileStores(
 			Model:     meta.OriginModel,
 			Metadata:  geminiFileStoreMetadataString(uri),
 			ExpiresAt: time.Now().Add(geminiVideoTTL),
-		}); err != nil {
+		}, meta.Channel.Scope); err != nil {
 			return err
 		}
 	}
@@ -2479,16 +2481,18 @@ func storedGeminiFileURL(meta *meta.Meta, store adaptor.Store) string {
 	)
 
 	if store != nil {
-		cache, err = store.GetStore(
+		cache, err = store.GetStoreByScope(
 			meta.Group.ID,
 			meta.Token.ID,
 			model.GeminiFileStoreID(meta.FileID),
+			meta.Channel.Scope,
 		)
 	} else {
-		storeCache, getErr := model.CacheGetStore(
+		storeCache, getErr := model.CacheGetStoreByScope(
 			meta.Group.ID,
 			meta.Token.ID,
 			model.GeminiFileStoreID(meta.FileID),
+			meta.Channel.Scope,
 		)
 		if getErr == nil && storeCache != nil {
 			cache = adaptor.StoreCache(*storeCache)

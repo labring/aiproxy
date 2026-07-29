@@ -31,18 +31,24 @@ const (
 )
 
 type Token struct {
-	CreatedAt time.Time       `json:"created_at"`
-	Group     *Group          `json:"-"          gorm:"foreignKey:GroupID"`
-	Key       string          `json:"key"        gorm:"type:char(48);uniqueIndex"`
-	Name      EmptyNullString `json:"name"       gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
-	GroupID   string          `json:"group"      gorm:"size:64;index;uniqueIndex:idx_group_name"`
-	Subnets   []string        `json:"subnets"    gorm:"serializer:fastjson;type:text"`
-	Models    []string        `json:"models"     gorm:"serializer:fastjson;type:text"`
-	Status    int             `json:"status"     gorm:"default:1;index"`
-	ID        int             `json:"id"         gorm:"primaryKey"`
+	CreatedAt          time.Time       `json:"created_at"`
+	Group              *Group          `json:"-"                    gorm:"foreignKey:GroupID"`
+	Key                string          `json:"key"                  gorm:"type:char(48);uniqueIndex"`
+	Name               EmptyNullString `json:"name"                 gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
+	GroupID            string          `json:"group"                gorm:"size:64;index;uniqueIndex:idx_group_name"`
+	Scope              ChannelScope    `json:"scope"                gorm:"size:16;index"`
+	Subnets            []string        `json:"subnets"              gorm:"serializer:fastjson;type:text"`
+	Models             []string        `json:"models"               gorm:"serializer:fastjson;type:text"`
+	Sets               []string        `json:"sets"                 gorm:"serializer:fastjson;type:text"`
+	GroupChannelModels []string        `json:"group_channel_models" gorm:"serializer:fastjson;type:text"`
+	GroupChannelSets   []string        `json:"group_channel_sets"   gorm:"serializer:fastjson;type:text"`
+	Status             int             `json:"status"               gorm:"default:1;index"`
+	ID                 int             `json:"id"                   gorm:"primaryKey"`
 
-	UsedAmount   float64 `json:"used_amount"   gorm:"index"`
-	RequestCount int     `json:"request_count" gorm:"index"`
+	UsedAmount               float64 `json:"used_amount"                 gorm:"index"`
+	RequestCount             int     `json:"request_count"               gorm:"index"`
+	GroupChannelUsedAmount   float64 `json:"group_channel_used_amount"   gorm:"index"`
+	GroupChannelRequestCount int     `json:"group_channel_request_count" gorm:"index"`
 
 	Quota                  float64         `json:"quota"`
 	PeriodQuota            float64         `json:"period_quota"`
@@ -67,6 +73,15 @@ func (t *Token) BeforeSave(_ *gorm.DB) error {
 	if len(t.Name) > 32 {
 		return errors.New("token name is too long")
 	}
+
+	if t.Scope != "" {
+		t.Scope = ParseChannelScope(string(t.Scope))
+	}
+
+	if !ValidTokenChannelScope(t.Scope) {
+		return errors.New("invalid token scope")
+	}
+
 	return nil
 }
 
@@ -431,9 +446,7 @@ func GetTokenByKey(key string) (*Token, error) {
 	return &token, HandleNotFound(err, ErrTokenNotFound)
 }
 
-// GetAndValidateToken validates a token and checks quota limits
-// This function is safe for concurrent use and handles period resets atomically
-func GetAndValidateToken(key string) (token *TokenCache, err error) {
+func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 	if key == "" {
 		return nil, errors.New("no token provided")
 	}
@@ -453,6 +466,14 @@ func GetAndValidateToken(key string) (token *TokenCache, err error) {
 		return nil, fmt.Errorf("token (%s[%d]) is disabled", token.Name, token.ID)
 	}
 
+	return token, nil
+}
+
+func ValidateTokenQuota(token *TokenCache) error {
+	if token == nil {
+		return errors.New("no token provided")
+	}
+
 	// Convert TokenCache to Token for quota checking
 	tokenModel := Token{
 		ID:                     token.ID,
@@ -466,15 +487,30 @@ func GetAndValidateToken(key string) (token *TokenCache, err error) {
 
 	totalExceeded, periodExceeded, err := tokenModel.GetEffectiveQuotaStatus()
 	if err != nil {
-		return nil, fmt.Errorf("token (%s[%d]) quota check failed: %w", token.Name, token.ID, err)
+		return fmt.Errorf("token (%s[%d]) quota check failed: %w", token.Name, token.ID, err)
 	}
 
 	if totalExceeded {
-		return nil, fmt.Errorf("token (%s[%d]) total quota is exhausted", token.Name, token.ID)
+		return fmt.Errorf("token (%s[%d]) total quota is exhausted", token.Name, token.ID)
 	}
 
 	if periodExceeded {
-		return nil, fmt.Errorf("token (%s[%d]) period quota is exhausted", token.Name, token.ID)
+		return fmt.Errorf("token (%s[%d]) period quota is exhausted", token.Name, token.ID)
+	}
+
+	return nil
+}
+
+// GetAndValidateToken validates a token and checks quota limits
+// This function is safe for concurrent use and handles period resets atomically
+func GetAndValidateToken(key string) (token *TokenCache, err error) {
+	token, err = GetTokenByKeyForAuth(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ValidateTokenQuota(token); err != nil {
+		return nil, err
 	}
 
 	return token, nil
@@ -678,10 +714,14 @@ func DeleteTokensByIDs(ids []int) (err error) {
 }
 
 type UpdateTokenRequest struct {
-	Name    *string   `json:"name"`
-	Subnets *[]string `json:"subnets"`
-	Models  *[]string `json:"models"`
-	Status  int       `json:"status"`
+	Name               *string   `json:"name"`
+	Subnets            *[]string `json:"subnets"`
+	Models             *[]string `json:"models"`
+	Sets               *[]string `json:"sets"`
+	GroupChannelModels *[]string `json:"group_channel_models"`
+	GroupChannelSets   *[]string `json:"group_channel_sets"`
+	Scope              *string   `json:"scope"`
+	Status             int       `json:"status"`
 	// Quota system
 	Quota                *float64 `json:"quota"`
 	PeriodQuota          *float64 `json:"period_quota"`
@@ -763,6 +803,35 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.Models = *update.Models
 
 		selects = append(selects, "models")
+	}
+
+	if update.Sets != nil {
+		token.Sets = *update.Sets
+
+		selects = append(selects, "sets")
+	}
+
+	if update.GroupChannelModels != nil {
+		token.GroupChannelModels = *update.GroupChannelModels
+
+		selects = append(selects, "group_channel_models")
+	}
+
+	if update.GroupChannelSets != nil {
+		token.GroupChannelSets = *update.GroupChannelSets
+
+		selects = append(selects, "group_channel_sets")
+	}
+
+	if update.Scope != nil {
+		scope := ParseChannelScope(*update.Scope)
+		if *update.Scope != "" && scope == "" {
+			return nil, errors.New("invalid token scope")
+		}
+
+		token.Scope = scope
+
+		selects = append(selects, "scope")
 	}
 
 	if update.Status != 0 {
@@ -868,6 +937,35 @@ func UpdateGroupToken(
 		selects = append(selects, "models")
 	}
 
+	if update.Sets != nil {
+		token.Sets = *update.Sets
+
+		selects = append(selects, "sets")
+	}
+
+	if update.GroupChannelModels != nil {
+		token.GroupChannelModels = *update.GroupChannelModels
+
+		selects = append(selects, "group_channel_models")
+	}
+
+	if update.GroupChannelSets != nil {
+		token.GroupChannelSets = *update.GroupChannelSets
+
+		selects = append(selects, "group_channel_sets")
+	}
+
+	if update.Scope != nil {
+		scope := ParseChannelScope(*update.Scope)
+		if *update.Scope != "" && scope == "" {
+			return nil, errors.New("invalid token scope")
+		}
+
+		token.Scope = scope
+
+		selects = append(selects, "scope")
+	}
+
 	if update.Status != 0 {
 		selects = append(selects, "status")
 	}
@@ -918,6 +1016,23 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 			map[string]any{
 				"used_amount":   gorm.Expr("used_amount + ?", amount),
 				"request_count": gorm.Expr("request_count + ?", requestCount),
+			},
+		)
+
+	return HandleUpdateResult(result, ErrTokenNotFound)
+}
+
+func UpdateGroupChannelTokenUsedAmount(id int, amount float64, requestCount int) error {
+	result := DB.
+		Model(&Token{}).
+		Where("id = ?", id).
+		Updates(
+			map[string]any{
+				"group_channel_used_amount": gorm.Expr("group_channel_used_amount + ?", amount),
+				"group_channel_request_count": gorm.Expr(
+					"group_channel_request_count + ?",
+					requestCount,
+				),
 			},
 		)
 

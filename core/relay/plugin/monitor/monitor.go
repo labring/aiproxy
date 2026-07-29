@@ -14,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/common/conv"
 	"github.com/labring/aiproxy/core/common/notify"
 	"github.com/labring/aiproxy/core/common/reqlimit"
+	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -29,6 +30,130 @@ type ChannelMonitor struct {
 
 func NewChannelMonitorPlugin() plugin.Plugin {
 	return &ChannelMonitor{}
+}
+
+func channelMonitorKey(meta *meta.Meta) string {
+	if meta == nil {
+		return "0"
+	}
+	return meta.ChannelMonitorKey()
+}
+
+func channelRateKey(meta *meta.Meta) string {
+	if meta != nil && meta.Channel.Scope == model.ChannelScopeGroup {
+		return strconv.Itoa(meta.Channel.ID)
+	}
+
+	return channelMonitorKey(meta)
+}
+
+func channelRateScope(meta *meta.Meta) reqlimit.ChannelRateScope {
+	if meta != nil && meta.Channel.Scope == model.ChannelScopeGroup {
+		return reqlimit.ChannelRateScopeGroup
+	}
+
+	return reqlimit.ChannelRateScopeGlobal
+}
+
+func isGroupChannelMeta(meta *meta.Meta) bool {
+	return meta != nil && meta.Channel.Scope == model.ChannelScopeGroup
+}
+
+func observeChannelModelRequestRate(
+	meta *meta.Meta,
+) (int64, int64, int64) {
+	if isGroupChannelMeta(meta) {
+		count, secondCount := reqlimit.GetGroupChannelModelRequest(
+			context.Background(),
+			meta.Channel.GroupID,
+			channelRateKey(meta),
+			meta.OriginModel,
+		)
+
+		return count, 0, secondCount
+	}
+
+	return reqlimit.PushScopedChannelModelRequest(
+		context.Background(),
+		channelRateScope(meta),
+		meta.Channel.GroupID,
+		channelRateKey(meta),
+		meta.OriginModel,
+	)
+}
+
+func observeChannelModelTokenRate(
+	meta *meta.Meta,
+	tokens int64,
+) (int64, int64, int64) {
+	return reqlimit.PushScopedChannelModelTokensRequest(
+		context.Background(),
+		channelRateScope(meta),
+		meta.Channel.GroupID,
+		channelRateKey(meta),
+		meta.OriginModel,
+		tokens,
+	)
+}
+
+func addChannelMonitorRequest(
+	meta *meta.Meta,
+	isError, tryBan bool,
+	maxErrorRate float64,
+) (float64, bool, error) {
+	if isGroupChannelMeta(meta) {
+		return monitor.AddGroupChannelRequestByChannelKey(
+			context.Background(),
+			meta.OriginModel,
+			meta.ChannelMonitorKey(),
+			isError,
+			tryBan,
+			maxErrorRate,
+		)
+	}
+
+	return monitor.AddRequestByChannelKey(
+		context.Background(),
+		meta.OriginModel,
+		meta.ChannelMonitorKey(),
+		isError,
+		tryBan,
+		maxErrorRate,
+	)
+}
+
+func getChannelRequestRate(meta *meta.Meta) (int64, int64) {
+	if isGroupChannelMeta(meta) {
+		return reqlimit.GetGroupChannelModelRequest(
+			context.Background(),
+			meta.Channel.GroupID,
+			channelRateKey(meta),
+			meta.OriginModel,
+		)
+	}
+
+	return reqlimit.GetChannelModelRequest(
+		context.Background(),
+		channelMonitorKey(meta),
+		meta.OriginModel,
+	)
+}
+
+func getChannelTokenRate(meta *meta.Meta) (int64, int64) {
+	if isGroupChannelMeta(meta) {
+		return reqlimit.GetGroupChannelModelTokensRequest(
+			context.Background(),
+			meta.Channel.GroupID,
+			channelRateKey(meta),
+			meta.OriginModel,
+		)
+	}
+
+	return reqlimit.GetChannelModelTokensRequest(
+		context.Background(),
+		channelMonitorKey(meta),
+		meta.OriginModel,
+	)
 }
 
 var channelNoRetryStatusCodesMap = map[int]struct{}{
@@ -104,11 +229,7 @@ func (m *ChannelMonitor) DoRequest(
 	req *http.Request,
 	do adaptor.DoRequest,
 ) (*http.Response, error) {
-	count, overLimitCount, secondCount := reqlimit.PushChannelModelRequest(
-		context.Background(),
-		strconv.Itoa(meta.Channel.ID),
-		meta.OriginModel,
-	)
+	count, overLimitCount, secondCount := observeChannelModelRequestRate(meta)
 	updateChannelModelRequestRate(c, meta, count+overLimitCount, secondCount)
 
 	requestAt := time.Now()
@@ -144,16 +265,14 @@ func handleDoRequestError(meta *meta.Meta, c *gin.Context, err error, requestCos
 	warnErrorRate := getChannelWarnErrorRate(meta)
 	maxErrorRate := getChannelMaxErrorRate(meta)
 
-	errorRate, banExecution, _err := monitor.AddRequest(
-		context.Background(),
-		meta.OriginModel,
-		int64(meta.Channel.ID),
-		true,
-		false,
-		maxErrorRate,
-	)
+	errorRate, banExecution, _err := addChannelMonitorRequest(meta, true, false, maxErrorRate)
 	if _err != nil {
 		common.GetLogger(c).Errorf("add request failed: %+v", _err)
+	}
+
+	if isGroupChannelMeta(meta) {
+		common.GetLogger(c).WithError(err).Warn("group channel request failed")
+		return
 	}
 
 	switch {
@@ -185,6 +304,10 @@ func notifyChannelRequestIssue(
 	requestCost time.Duration,
 	interval time.Duration,
 ) {
+	if isGroupChannelMeta(meta) {
+		return
+	}
+
 	var notifyFunc func(title, message string)
 
 	lockKey := fmt.Sprintf(
@@ -234,10 +357,8 @@ func (m *ChannelMonitor) DoResponse(
 	result, relayErr := do.DoResponse(meta, store, c, resp)
 
 	if result.Usage.TotalTokens > 0 {
-		count, overLimitCount, secondCount := reqlimit.PushChannelModelTokensRequest(
-			context.Background(),
-			strconv.Itoa(meta.Channel.ID),
-			meta.OriginModel,
+		count, overLimitCount, secondCount := observeChannelModelTokenRate(
+			meta,
 			int64(result.Usage.TotalTokens),
 		)
 		updateChannelModelTokensRequestRate(c, meta, count+overLimitCount, secondCount)
@@ -245,14 +366,7 @@ func (m *ChannelMonitor) DoResponse(
 
 	if relayErr == nil {
 		maxErrorRate := getChannelMaxErrorRate(meta)
-		if _, _, err := monitor.AddRequest(
-			context.Background(),
-			meta.OriginModel,
-			int64(meta.Channel.ID),
-			false,
-			false,
-			maxErrorRate,
-		); err != nil {
+		if _, _, err := addChannelMonitorRequest(meta, false, false, maxErrorRate); err != nil {
 			common.GetLogger(c).Errorf("add request failed: %+v", err)
 		}
 
@@ -274,16 +388,19 @@ func handleAdaptorError(meta *meta.Meta, c *gin.Context, relayErr adaptor.Error)
 	maxErrorRate := getChannelMaxErrorRate(meta)
 	tryBanNoPermission := shouldTryBanNoPermission(meta, hasPermission)
 
-	errorRate, banExecution, err := monitor.AddRequest(
-		context.Background(),
-		meta.OriginModel,
-		int64(meta.Channel.ID),
+	errorRate, banExecution, err := addChannelMonitorRequest(
+		meta,
 		true,
 		tryBanNoPermission,
 		maxErrorRate,
 	)
 	if err != nil {
 		common.GetLogger(c).Errorf("add request failed: %+v", err)
+	}
+
+	if isGroupChannelMeta(meta) {
+		common.GetLogger(c).WithError(relayErr).Warn("group channel response failed")
+		return
 	}
 
 	switch {
@@ -341,6 +458,10 @@ func notifyChannelResponseIssue(
 	err adaptor.Error,
 	interval time.Duration,
 ) {
+	if isGroupChannelMeta(meta) {
+		return
+	}
+
 	var notifyFunc func(title, message string)
 
 	lockKey := fmt.Sprintf(
@@ -415,11 +536,7 @@ func GetChannelModelRequestRate(c *gin.Context, meta *meta.Meta) RequestRate {
 		rate.RPM, _ = rpm.(int64)
 		rate.RPS = meta.GetInt64(MetaChannelModelKeyRPS)
 	} else {
-		rpm, rps := reqlimit.GetChannelModelRequest(
-			context.Background(),
-			strconv.Itoa(meta.Channel.ID),
-			meta.OriginModel,
-		)
+		rpm, rps := getChannelRequestRate(meta)
 		rate.RPM = rpm
 		rate.RPS = rps
 		updateChannelModelRequestRate(c, meta, rpm, rps)
@@ -429,11 +546,7 @@ func GetChannelModelRequestRate(c *gin.Context, meta *meta.Meta) RequestRate {
 		rate.TPM, _ = tpm.(int64)
 		rate.TPS = meta.GetInt64(MetaChannelModelKeyTPS)
 	} else {
-		tpm, tps := reqlimit.GetChannelModelTokensRequest(
-			context.Background(),
-			strconv.Itoa(meta.Channel.ID),
-			meta.OriginModel,
-		)
+		tpm, tps := getChannelTokenRate(meta)
 		rate.TPM = tpm
 		rate.TPS = tps
 		updateChannelModelTokensRequestRate(c, meta, tpm, tps)

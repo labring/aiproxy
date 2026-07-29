@@ -155,7 +155,7 @@ func ResponseHandler(
 			ChannelID: meta.Channel.ID,
 			Model:     meta.OriginModel,
 			ExpiresAt: time.Now().Add(time.Hour * 24 * 7), // Store for 7 days
-		})
+		}, meta.Channel.Scope)
 		if err != nil {
 			log := common.GetLogger(c)
 			log.Errorf("save response store failed: %v", err)
@@ -272,7 +272,7 @@ readLoop:
 					ChannelID: meta.Channel.ID,
 					Model:     meta.OriginModel,
 					ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
-				})
+				}, meta.Channel.Scope)
 				if saveErr != nil {
 					log.Errorf("save response store failed: %v", saveErr)
 				}

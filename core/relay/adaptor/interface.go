@@ -30,10 +30,15 @@ type SaveStoreOption struct {
 }
 
 type Store interface {
-	GetStore(group string, tokenID int, id string) (StoreCache, error)
-	SaveStore(store StoreCache) error
-	SaveStoreWithOption(store StoreCache, opt SaveStoreOption) error
-	SaveIfNotExistStore(store StoreCache) error
+	GetStoreByScope(
+		group string,
+		tokenID int,
+		id string,
+		scope model.ChannelScope,
+	) (StoreCache, error)
+	SaveStore(store StoreCache, scope model.ChannelScope) error
+	SaveStoreWithOption(store StoreCache, scope model.ChannelScope, opt SaveStoreOption) error
+	SaveIfNotExistStore(store StoreCache, scope model.ChannelScope) error
 }
 
 type Metadata struct {

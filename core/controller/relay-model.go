@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/middleware"
+	"github.com/labring/aiproxy/core/model"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
@@ -19,26 +20,37 @@ import (
 //	@Success		200	{object}	object{object=string,data=[]OpenAIModels}
 //	@Router			/v1/models [get]
 func ListModels(c *gin.Context) {
-	enabledModelConfigsMap := middleware.GetModelCaches(c).EnabledModelConfigsMap
-	token := middleware.GetToken(c)
+	modelCaches := middleware.GetModelCaches(c)
+	group := middleware.GetGroup(c)
+	groupChannelMode := middleware.GetGroupChannelMode(c)
+	allowedModels := middleware.GetActiveTokenModels(c)
 
 	availableOpenAIModels := make([]*OpenAIModels, 0)
 
-	token.Range(func(model string) bool {
-		if mc, ok := enabledModelConfigsMap[model]; ok {
-			availableOpenAIModels = append(availableOpenAIModels, &OpenAIModels{
-				ID:         model,
-				Object:     "model",
-				Created:    1626777600,
-				OwnedBy:    string(mc.Owner),
-				Root:       model,
-				Permission: permission,
-				Parent:     nil,
-			})
-		}
+	model.RangeModelsWithAllowList(
+		allowedModels,
+		middleware.GetActiveAvailableSets(c),
+		middleware.GetActiveAvailableModels(c),
+		func(modelName string) bool {
+			if mc, ok := middleware.ResolveModelConfig(
+				group,
+				groupChannelMode,
+				modelCaches,
+				modelName,
+			); ok {
+				availableOpenAIModels = append(availableOpenAIModels, &OpenAIModels{
+					ID:         modelName,
+					Object:     "model",
+					Created:    1626777600,
+					OwnedBy:    string(mc.Owner),
+					Root:       modelName,
+					Permission: permission,
+					Parent:     nil,
+				})
+			}
 
-		return true
-	})
+			return true
+		})
 
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
@@ -56,12 +68,33 @@ func ListModels(c *gin.Context) {
 //	@Success		200	{object}	OpenAIModels
 //	@Router			/v1/models/{model} [get]
 func RetrieveModel(c *gin.Context) {
-	token := middleware.GetToken(c)
 	modelName := c.Param("model")
-	findModelName := token.FindModel(modelName)
-	enabledModelConfigsMap := middleware.GetModelCaches(c).EnabledModelConfigsMap
+	findModelName := model.FindModelWithAllowList(
+		middleware.GetActiveTokenModels(c),
+		modelName,
+		middleware.GetActiveAvailableSets(c),
+		middleware.GetActiveAvailableModels(c),
+	)
 
-	mc, ok := enabledModelConfigsMap[findModelName]
+	if findModelName == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": &relaymodel.OpenAIError{
+				Message: fmt.Sprintf("the model '%s' does not exist", modelName),
+				Type:    "invalid_request_error",
+				Param:   "model",
+				Code:    "model_not_found",
+			},
+		})
+
+		return
+	}
+
+	mc, ok := middleware.ResolveModelConfig(
+		middleware.GetGroup(c),
+		middleware.GetGroupChannelMode(c),
+		middleware.GetModelCaches(c),
+		findModelName,
+	)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": &relaymodel.OpenAIError{
@@ -76,11 +109,11 @@ func RetrieveModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, &OpenAIModels{
-		ID:         modelName,
+		ID:         findModelName,
 		Object:     "model",
 		Created:    1626777600,
 		OwnedBy:    string(mc.Owner),
-		Root:       modelName,
+		Root:       findModelName,
 		Permission: permission,
 		Parent:     nil,
 	})

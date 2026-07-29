@@ -36,6 +36,10 @@ func newRedisChannelModelRecord(getRDB func() *redis.Client) *redisRateRecord {
 	return newRedisRateRecord("channel-model-record", getRDB)
 }
 
+func newRedisGroupChannelModelRecord(getRDB func() *redis.Client) *redisRateRecord {
+	return newRedisRateRecord("group-channel-model-record", getRDB)
+}
+
 func newRedisGroupModelTokensRecord(getRDB func() *redis.Client) *redisRateRecord {
 	return newRedisRateRecord("group-model-tokens-record", getRDB)
 }
@@ -46,6 +50,10 @@ func newRedisGroupModelTokennameTokensRecord(getRDB func() *redis.Client) *redis
 
 func newRedisChannelModelTokensRecord(getRDB func() *redis.Client) *redisRateRecord {
 	return newRedisRateRecord("channel-model-tokens-record", getRDB)
+}
+
+func newRedisGroupChannelModelTokensRecord(getRDB func() *redis.Client) *redisRateRecord {
+	return newRedisRateRecord("group-channel-model-tokens-record", getRDB)
 }
 
 const pushRequestLuaScript = `
