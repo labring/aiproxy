@@ -269,6 +269,7 @@ func cacheSetGroupScopeModelConfigsRedis(cache *GroupScopeModelConfigsCache) err
 	pipe.HSet(ctx, key, "l", list)
 
 	expireTime := SyncFrequency
+
 	randomJitter, randomErr := cryptorand.Int(cryptorand.Reader, big.NewInt(60))
 	if randomErr != nil {
 		log.Warnf("failed to generate group scope model config cache expiry jitter: %s", randomErr)
