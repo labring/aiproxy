@@ -2638,7 +2638,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Adds a group channel to a specific group",
+                "description": "Adds a group channel to a specific group and atomically creates the group when it does not exist. Existing group configuration is preserved.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3348,7 +3348,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Adds group channels to a specific group",
+                "description": "Adds group channels to a specific group and atomically creates the group when it does not exist. Existing group configuration is preserved.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3510,7 +3510,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Imports group channels from OneAPI into a group",
+                "description": "Imports group channels from OneAPI into a group and atomically creates the group when it does not exist. Existing group configuration is preserved.",
                 "produces": [
                     "application/json"
                 ],
@@ -4898,7 +4898,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Adds a group channel from the global management view. The request body must include group_id.",
+                "description": "Adds a group channel from the global management view and atomically creates the group when it does not exist. Existing group configuration is preserved. The request body must include group_id.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5537,7 +5537,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Adds group channels from the global management view. Each request item must include group_id.",
+                "description": "Adds group channels from the global management view and atomically creates missing groups. Existing group configuration is preserved. Each request item must include group_id.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5678,7 +5678,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Imports group channels from OneAPI from the global management view. The request body must include group_id.",
+                "description": "Imports group channels from OneAPI from the global management view and atomically creates the group when it does not exist. Existing group configuration is preserved. The request body must include group_id.",
                 "produces": [
                     "application/json"
                 ],

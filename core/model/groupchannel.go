@@ -576,15 +576,34 @@ func GetGroupChannelTests(group string, id int) ([]*GroupChannelTest, error) {
 }
 
 func BatchInsertGroupChannels(channels []*GroupChannel) (err error) {
+	groupIDs := make([]string, 0, len(channels))
+	seenGroups := make(map[string]struct{}, len(channels))
+
+	for _, channel := range channels {
+		if channel == nil {
+			return errors.New("group channel is required")
+		}
+
+		if channel.GroupID == "" {
+			return errors.New("group id is required")
+		}
+
+		if _, ok := seenGroups[channel.GroupID]; ok {
+			continue
+		}
+
+		seenGroups[channel.GroupID] = struct{}{}
+		groupIDs = append(groupIDs, channel.GroupID)
+	}
+
 	defer func() {
 		if err == nil {
-			groups := map[string]struct{}{}
-			for _, channel := range channels {
-				groups[channel.GroupID] = struct{}{}
-			}
+			for _, groupID := range groupIDs {
+				if err := CacheDeleteGroup(groupID); err != nil {
+					log.Error("cache delete group failed: " + err.Error())
+				}
 
-			for group := range groups {
-				if err := CacheDeleteGroupChannels(group); err != nil {
+				if err := CacheDeleteGroupChannels(groupID); err != nil {
 					log.Error("cache delete group channels failed: " + err.Error())
 				}
 			}
@@ -592,6 +611,10 @@ func BatchInsertGroupChannels(channels []*GroupChannel) (err error) {
 	}()
 
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureGroups(tx, groupIDs); err != nil {
+			return err
+		}
+
 		return tx.Create(&channels).Error
 	})
 }

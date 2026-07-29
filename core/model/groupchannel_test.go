@@ -3,12 +3,214 @@ package model
 
 import (
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/labring/aiproxy/core/common"
 	"github.com/stretchr/testify/require"
 )
+
+func withGroupChannelInsertDB(t *testing.T, groupIDs []string, fn func()) {
+	t.Helper()
+
+	oldDB := DB
+	oldRedisEnabled := common.RedisEnabled
+
+	db, err := OpenSQLite(filepath.Join(t.TempDir(), "groupchannel_insert_test.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Group{}, &GroupModelConfig{}, &GroupChannel{}))
+
+	DB = db
+	common.RedisEnabled = false
+
+	t.Cleanup(func() {
+		DB = oldDB
+		common.RedisEnabled = oldRedisEnabled
+
+		for _, groupID := range groupIDs {
+			require.NoError(t, CacheDeleteGroup(groupID))
+			require.NoError(t, CacheDeleteGroupChannels(groupID))
+		}
+
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+	})
+
+	fn()
+}
+
+func TestBatchInsertGroupChannelsEnsuresGroups(t *testing.T) {
+	groupIDs := []string{"group-new", "group-existing"}
+	withGroupChannelInsertDB(t, groupIDs, func() {
+		_, err := CacheGetGroup("group-new")
+		require.Error(t, err)
+
+		require.NoError(t, DB.Create(&Group{
+			ID:            "group-existing",
+			Status:        GroupStatusDisabled,
+			RPMRatio:      1.5,
+			TPMRatio:      2.5,
+			AvailableSets: []string{"existing-set"},
+		}).Error)
+
+		require.NoError(t, BatchInsertGroupChannels([]*GroupChannel{
+			{
+				ID:      1,
+				GroupID: "group-new",
+				Name:    "new-1",
+				Type:    ChannelTypeOpenAI,
+				Status:  ChannelStatusEnabled,
+			},
+			{
+				ID:      2,
+				GroupID: "group-new",
+				Name:    "new-2",
+				Type:    ChannelTypeOpenAI,
+				Status:  ChannelStatusEnabled,
+			},
+			{
+				ID:      3,
+				GroupID: "group-existing",
+				Name:    "existing",
+				Type:    ChannelTypeOpenAI,
+				Status:  ChannelStatusEnabled,
+			},
+		}))
+
+		var newGroup Group
+		require.NoError(t, DB.First(&newGroup, "id = ?", "group-new").Error)
+		require.Equal(t, GroupStatusEnabled, newGroup.Status)
+
+		var existingGroup Group
+		require.NoError(t, DB.First(&existingGroup, "id = ?", "group-existing").Error)
+		require.Equal(t, GroupStatusDisabled, existingGroup.Status)
+		require.Equal(t, 1.5, existingGroup.RPMRatio)
+		require.Equal(t, 2.5, existingGroup.TPMRatio)
+		require.Equal(t, []string{"existing-set"}, existingGroup.AvailableSets)
+
+		var groupCount int64
+		require.NoError(t, DB.Model(&Group{}).Count(&groupCount).Error)
+		require.EqualValues(t, 2, groupCount)
+
+		var channelCount int64
+		require.NoError(t, DB.Model(&GroupChannel{}).Count(&channelCount).Error)
+		require.EqualValues(t, 3, channelCount)
+
+		cachedGroup, err := CacheGetGroup("group-new")
+		require.NoError(t, err)
+		require.Equal(t, "group-new", cachedGroup.ID)
+	})
+}
+
+func TestBatchInsertGroupChannelsRollsBackEnsuredGroup(t *testing.T) {
+	groupIDs := []string{"group-existing", "group-rollback"}
+	withGroupChannelInsertDB(t, groupIDs, func() {
+		require.NoError(t, DB.Create(&Group{ID: "group-existing"}).Error)
+		require.NoError(t, DB.Create(&GroupChannel{
+			ID:      7,
+			GroupID: "group-existing",
+			Name:    "existing",
+			Type:    ChannelTypeOpenAI,
+			Status:  ChannelStatusEnabled,
+		}).Error)
+
+		err := BatchInsertGroupChannels([]*GroupChannel{
+			{
+				ID:      7,
+				GroupID: "group-rollback",
+				Name:    "duplicate-id",
+				Type:    ChannelTypeOpenAI,
+				Status:  ChannelStatusEnabled,
+			},
+		})
+		require.Error(t, err)
+
+		var groupCount int64
+		require.NoError(t, DB.Model(&Group{}).
+			Where("id = ?", "group-rollback").
+			Count(&groupCount).Error)
+		require.Zero(t, groupCount)
+	})
+}
+
+func TestBatchInsertGroupChannelsRejectsInvalidGroups(t *testing.T) {
+	withGroupChannelInsertDB(t, nil, func() {
+		for name, channel := range map[string]*GroupChannel{
+			"nil channel": nil,
+			"empty group": {
+				Name: "empty",
+				Type: ChannelTypeOpenAI,
+			},
+			"long group": {
+				GroupID: strings.Repeat("g", 65),
+				Name:    "long",
+				Type:    ChannelTypeOpenAI,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				require.Error(t, BatchInsertGroupChannels([]*GroupChannel{channel}))
+			})
+		}
+
+		var groupCount int64
+		require.NoError(t, DB.Model(&Group{}).Count(&groupCount).Error)
+		require.Zero(t, groupCount)
+
+		var channelCount int64
+		require.NoError(t, DB.Model(&GroupChannel{}).Count(&channelCount).Error)
+		require.Zero(t, channelCount)
+	})
+}
+
+func TestBatchInsertGroupChannelsConcurrentlyEnsuresOneGroup(t *testing.T) {
+	const groupID = "group-concurrent"
+	withGroupChannelInsertDB(t, []string{groupID}, func() {
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+
+		var wg sync.WaitGroup
+		for i := 1; i <= 2; i++ {
+			wg.Add(1)
+
+			go func(id int) {
+				defer wg.Done()
+
+				<-start
+
+				errs <- BatchInsertGroupChannels([]*GroupChannel{
+					{
+						ID:      id,
+						GroupID: groupID,
+						Name:    "concurrent",
+						Type:    ChannelTypeOpenAI,
+						Status:  ChannelStatusEnabled,
+					},
+				})
+			}(i)
+		}
+
+		close(start)
+		wg.Wait()
+		close(errs)
+
+		for err := range errs {
+			require.NoError(t, err)
+		}
+
+		var groupCount int64
+		require.NoError(t, DB.Model(&Group{}).Where("id = ?", groupID).Count(&groupCount).Error)
+		require.EqualValues(t, 1, groupCount)
+
+		var channelCount int64
+		require.NoError(t, DB.Model(&GroupChannel{}).
+			Where("group_id = ?", groupID).
+			Count(&channelCount).Error)
+		require.EqualValues(t, 2, channelCount)
+	})
+}
 
 func TestGroupChannelPartialUpdatesPassHooks(t *testing.T) {
 	oldDB := DB
