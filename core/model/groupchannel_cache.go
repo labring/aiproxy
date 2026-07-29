@@ -168,6 +168,7 @@ func cacheSetGroupChannelsRedis(cache *GroupChannelsCache) error {
 	pipe.HSet(ctx, key, "c", channels)
 
 	expireTime := SyncFrequency
+
 	randomJitter, randomErr := cryptorand.Int(cryptorand.Reader, big.NewInt(60))
 	if randomErr != nil {
 		log.Warnf("failed to generate group channel cache expiry jitter: %s", randomErr)
