@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/iam v1.11.0
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.6
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.52.0
 	github.com/aws/smithy-go v1.25.1
 	github.com/bytedance/sonic v1.15.1
 	github.com/gin-contrib/cors v1.7.7
