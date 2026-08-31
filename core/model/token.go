@@ -137,13 +137,17 @@ func (t *Token) NeedsPeriodReset() (bool, error) {
 		// Check if we've passed 7 days since last reset
 		return now.Sub(baseTime) >= 7*24*time.Hour, nil
 	case PeriodTypeDaily:
-		// Check if we've crossed to a new day since last reset
-		baseDate := baseTime.Truncate(24 * time.Hour)
-		currentDate := now.Truncate(24 * time.Hour)
+		// Daily quotas use UTC calendar days, not rolling 24-hour windows.
+		baseDate := utcDayStart(baseTime)
+		currentDate := utcDayStart(now)
 		return currentDate.After(baseDate), nil
 	default:
 		return false, fmt.Errorf("unknown period type: %s", t.PeriodType)
 	}
+}
+
+func utcDayStart(t time.Time) time.Time {
+	return t.UTC().Truncate(24 * time.Hour)
 }
 
 const (
@@ -924,9 +928,9 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
-// calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
-// This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
-// This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.
+// calculateNextPeriodStartTime finds the current period boundary. Daily quotas
+// align to UTC midnight; weekly and monthly quotas retain their original
+// cadence from lastUpdateTime.
 func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNullString) time.Time {
 	if lastUpdateTime.IsZero() {
 		// If never initialized, return current time
@@ -980,17 +984,12 @@ func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNull
 		return lastUpdateTime.Add(time.Duration(weeksPassed*7*24) * time.Hour)
 
 	case PeriodTypeDaily:
-		// Calculate how many complete days have passed since lastUpdateTime
-		daysSinceLastUpdate := int(now.Sub(lastUpdateTime).Hours() / 24)
-
-		if daysSinceLastUpdate == 0 {
-			// Still in the same day period, no reset needed
+		currentDayStart := utcDayStart(now)
+		if !utcDayStart(lastUpdateTime).Before(currentDayStart) {
 			return lastUpdateTime
 		}
 
-		// Return the start of the most recent day period
-		// This is lastUpdateTime + (daysPassed * 1 day)
-		return lastUpdateTime.Add(time.Duration(daysSinceLastUpdate*24) * time.Hour)
+		return currentDayStart
 
 	default:
 		// Fallback to current time for unknown period types
