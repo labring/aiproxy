@@ -17,7 +17,8 @@ describe('getChannelFormDefaults', () => {
             status: 1,
             created_at: 0,
             accessed_at: 0,
-            priority: 10,
+            priority: 0,
+            sets: [],
         } satisfies Channel
 
         const defaults = getChannelFormDefaults(channel)
@@ -25,6 +26,9 @@ describe('getChannelFormDefaults', () => {
         expect(defaults.name).toBe(channel.name)
         expect(defaults.remark).toBe(channel.remark)
         expect(defaults.models).toEqual(channel.models)
+        expect(defaults.priority).toBe(10)
+        expect(defaults.sets).toEqual([])
+        expect(channel.priority).toBe(0)
     })
 
     it('starts an empty form without a source channel', () => {
@@ -33,5 +37,6 @@ describe('getChannelFormDefaults', () => {
         expect(defaults.name).toBe('')
         expect(defaults.remark).toBe('')
         expect(defaults.models).toEqual([])
+        expect(defaults.priority).toBe(10)
     })
 })

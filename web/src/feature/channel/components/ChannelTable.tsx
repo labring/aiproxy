@@ -54,6 +54,7 @@ import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 import { format } from 'date-fns'
 import { getChannelModelMetric, getTemporarilyExcludedModels } from '@/utils/runtime-metrics'
+import { getChannelPriority, getChannelSets } from '@/utils/channel'
 
 const formatTimestamp = (timestamp: number): string => {
     if (!timestamp) return '-'
@@ -417,8 +418,7 @@ export function ChannelTable() {
             accessorKey: 'sets',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.sets")}</div>,
             cell: ({ row }) => {
-                const sets = row.original.sets || [];
-                if (sets.length === 0) return <div className="text-muted-foreground text-xs">-</div>;
+                const sets = getChannelSets(row.original.sets);
 
                 return (
                     <div
@@ -446,7 +446,7 @@ export function ChannelTable() {
                     className={clickableCell}
                     onClick={() => openUpdateDialog(row.original)}
                 >
-                    {row.original.priority ?? 10}
+                    {getChannelPriority(row.original.priority)}
                 </div>
             ),
         },

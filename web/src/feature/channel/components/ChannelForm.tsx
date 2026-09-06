@@ -35,6 +35,7 @@ import { ChannelConfigEditor } from './ChannelConfigEditor'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { getChannelModelMetric } from '@/utils/runtime-metrics'
 import { DEFAULT_PRIORITY } from '@/types/channel'
+import { DEFAULT_CHANNEL_SET, MAX_CHANNEL_PRIORITY, getChannelPriority } from '@/utils/channel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -89,7 +90,7 @@ const normalizeChannelPayload = (
     models: payload.models ?? [],
     model_mapping: payload.model_mapping ?? {},
     sets: payload.sets ?? [],
-    priority: payload.priority ?? DEFAULT_PRIORITY,
+    priority: getChannelPriority(payload.priority),
     backup_only: payload.backup_only ?? false,
     skip_tls_verify: payload.skip_tls_verify ?? false,
     enabled_no_permission_ban: payload.enabled_no_permission_ban ?? false,
@@ -140,7 +141,7 @@ export function ChannelForm({
         models: [],
         model_mapping: {},
         sets: [],
-        priority: 10,
+        priority: DEFAULT_PRIORITY,
         backup_only: false,
         skip_tls_verify: false,
         enabled_no_permission_ban: false,
@@ -221,6 +222,7 @@ export function ChannelForm({
         resolver: zodResolver(channelCreateSchema),
         defaultValues: {
             ...defaultValues,
+            priority: getChannelPriority(defaultValues.priority),
             useDefaultModels: initialUseDefault,
         },
     })
@@ -292,7 +294,7 @@ export function ChannelForm({
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
-            priority: data.priority,
+            priority: getChannelPriority(data.priority),
             backup_only: data.backup_only ?? false,
             skip_tls_verify: data.skip_tls_verify ?? false,
             enabled_no_permission_ban: data.enabled_no_permission_ban ?? false,
@@ -958,22 +960,24 @@ export function ChannelForm({
                                         <FormItem>
                                             <FormControl>
                                                 <MultiSelectCombobox<string>
-                                                    dropdownItems={[]}
+                                                    dropdownItems={[DEFAULT_CHANNEL_SET]}
                                                     selectedItems={field.value || []}
                                                     setSelectedItems={(sets) => {
                                                         field.onChange(sets)
                                                     }}
                                                     handleFilteredDropdownItems={(dropdownItems, selectedItems, inputValue) => {
+                                                        const availableItems = dropdownItems.filter(item =>
+                                                            !selectedItems.includes(item) && item.includes(inputValue))
                                                         // 允许用户创建新的分组
                                                         if (inputValue && !selectedItems.includes(inputValue) && !dropdownItems.includes(inputValue)) {
-                                                            return [inputValue, ...dropdownItems]
+                                                            return [inputValue, ...availableItems]
                                                         }
-                                                        return dropdownItems
+                                                        return availableItems
                                                     }}
                                                     handleDropdownItemDisplay={(item) => item}
                                                     handleSelectedItemDisplay={(item) => item}
                                                     allowUserCreatedItems={true}
-                                                    placeholder={t("channel.dialog.setsPlaceholder")}
+                                                    placeholder={field.value?.length ? t("channel.dialog.setsPlaceholder") : DEFAULT_CHANNEL_SET}
                                                     label={t("channel.dialog.sets")}
                                                 />
                                             </FormControl>
@@ -1145,10 +1149,14 @@ export function ChannelForm({
                                             <Input
                                                 type="number"
                                                 min={0}
-                                                max={1000000}
+                                                max={MAX_CHANNEL_PRIORITY}
                                                 placeholder={t("channel.dialog.priorityPlaceholder")}
                                                 {...field}
                                                 value={field.value ?? ''}
+                                                onBlur={() => {
+                                                    if (!field.value) field.onChange(DEFAULT_PRIORITY)
+                                                    field.onBlur()
+                                                }}
                                                 onChange={(e) => {
                                                     const value = e.target.value
                                                     if (value === '') {

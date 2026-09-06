@@ -1,4 +1,6 @@
 import type { Channel } from '@/types/channel'
+import { DEFAULT_PRIORITY } from '@/types/channel'
+import { getChannelPriority } from '@/utils/channel'
 
 export const getChannelFormDefaults = (
     channel: Channel | null | undefined
@@ -13,7 +15,7 @@ export const getChannelFormDefaults = (
         models: channel.models || [],
         model_mapping: channel.model_mapping || {},
         sets: channel.sets || [],
-        priority: channel.priority,
+        priority: getChannelPriority(channel.priority),
         backup_only: channel.backup_only ?? false,
         skip_tls_verify: channel.skip_tls_verify ?? false,
         enabled_no_permission_ban: channel.enabled_no_permission_ban ?? false,
@@ -33,7 +35,7 @@ export const getChannelFormDefaults = (
         models: [],
         model_mapping: {},
         sets: [],
-        priority: 10,
+        priority: DEFAULT_PRIORITY,
         backup_only: false,
         skip_tls_verify: false,
         enabled_no_permission_ban: false,
