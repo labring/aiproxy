@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardTitle } from '@/components/ui/card'
 import { TimezoneInput } from '@/components/common/TimezoneInput'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -28,8 +28,8 @@ import { useConsumptionRanking } from '../hooks'
 import type { ConsumptionRankingType } from '@/types/consumption-ranking'
 import { useGroupSummaryMetrics, useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import type { RuntimeRateMetric } from '@/types/runtime-metrics'
-import { useAllChannels } from '@/feature/channel/hooks'
-import { BackupOnlyBadge } from '@/components/common/BackupOnlyBadge'
+import { useChannelInfoMap } from '@/feature/channel/hooks'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
 
 const getDefaultDateRange = (): DateRange => {
     const today = new Date()
@@ -45,7 +45,7 @@ const getDefaultDateRange = (): DateRange => {
 const formatAmount = (amount: number): string => {
     return `$${amount.toLocaleString(undefined, {
         minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: 6,
     })}`
 }
 
@@ -103,12 +103,16 @@ export function ConsumptionRankingPanel({
         rankingType === 'group' && currentPageGroupIds.length > 0,
     )
     const { data: runtimeMetrics } = useRuntimeMetrics()
-    const { data: allChannels } = useAllChannels(rankingType === 'channel')
     const effectiveTimezone = query.timezone || DEFAULT_TIMEZONE
-    const channelInfoMap = useMemo(
-        () => Object.fromEntries((allChannels || []).map((channel) => [channel.id, channel])),
-        [allChannels],
+    const rankingChannelIds = useMemo(
+        () => rankingType === 'channel'
+            ? (data?.items || []).map((item) => item.channel_id).filter((id): id is number => id !== undefined)
+            : [],
+        [data?.items, rankingType],
     )
+    // The batch endpoint includes soft-deleted channels so historical rankings
+    // keep their original display name.
+    const { data: channelInfoMap = {} } = useChannelInfoMap(rankingChannelIds, rankingType === 'channel')
 
     const handleDateRangeChange = (nextRange: DateRange | undefined) => {
         setDateRange(nextRange)
@@ -150,8 +154,7 @@ export function ConsumptionRankingPanel({
                 return item.channel_id !== undefined
                     ? (
                         <span className="inline-flex flex-wrap items-center gap-1.5">
-                            {channelInfoMap[item.channel_id]?.name || `#${item.channel_id}`}
-                            {channelInfoMap[item.channel_id]?.backup_only && <BackupOnlyBadge />}
+                            <ChannelLabel id={item.channel_id} info={channelInfoMap[item.channel_id]} compact />
                         </span>
                     )
                     : '-'
@@ -198,15 +201,15 @@ export function ConsumptionRankingPanel({
     }
 
     return (
-        <Card className="mb-6 gap-0">
-            <CardHeader className="gap-4">
+        <section className="space-y-5">
+            <div className="space-y-4 border-b pb-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
-                            <BarChart3 className="h-5 w-5 text-primary dark:text-[#6A6DE6]" />
+                            <BarChart3 className="h-5 w-5 text-primary " />
                             <CardTitle>{t('consumptionRanking.title')}</CardTitle>
                         </div>
-                        <CardDescription>{t('consumptionRanking.description')}</CardDescription>
+
                         {query.start_timestamp && query.end_timestamp && (
                             <div className="text-xs text-muted-foreground">
                                 {t('consumptionRanking.range', {
@@ -241,12 +244,12 @@ export function ConsumptionRankingPanel({
                         </Button>
                     </div>
                 </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="space-y-4">
-                <div className="rounded-lg border">
+            <div className="space-y-4">
+                <div className="overflow-hidden border-y bg-card">
                     <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-muted">
                             <TableRow>
                                 <TableHead className="w-16">#</TableHead>
                                 <TableHead>{nameHeader}</TableHead>
@@ -359,7 +362,7 @@ export function ConsumptionRankingPanel({
                         }}
                     />
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </section>
     )
 }

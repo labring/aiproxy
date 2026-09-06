@@ -78,7 +78,7 @@ export const SingleSelectCombobox: <T>(props: {
 
                     <div className="w-full relative flex items-center">
                         <Input
-                            className="h-8 py-2 pl-3 pr-11 rounded-md text-xs font-normal leading-4 tracking-[0.048px]"
+                            className="h-9 pl-3 pr-10 text-sm"
                             placeholder={t('channel.dialog.selectType')}
                             {...getInputProps()}
                         />
@@ -86,7 +86,7 @@ export const SingleSelectCombobox: <T>(props: {
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="absolute right-0 h-8 w-8 p-0 flex items-center justify-center"
+                            className="absolute right-0 h-9 w-9 p-0 flex items-center justify-center"
                             {...getToggleButtonProps()}
                         >
                             {isComboboxOpen ? (
@@ -101,11 +101,12 @@ export const SingleSelectCombobox: <T>(props: {
                 <ul
                     className={cn(
                         "absolute mt-1 w-full py-1.5 px-1.5 bg-popover",
-                        "border border-input max-h-60 overflow-y-auto z-10 rounded-md",
-                        isComboboxOpen && getFilteredDropdownItems.length ? "block" : "hidden"
+                        "border border-input max-h-60 overflow-y-auto z-30 rounded-md shadow-lg",
+                        isComboboxOpen ? "block" : "hidden"
                     )}
                     {...getMenuProps()}
                 >
+                    {isComboboxOpen && getFilteredDropdownItems.length === 0 && <li className="p-3 text-sm text-muted-foreground">{t("common.noResult")}</li>}
                     {isComboboxOpen &&
                         getFilteredDropdownItems.map((item, index) => (
                             <li
@@ -113,7 +114,7 @@ export const SingleSelectCombobox: <T>(props: {
                                 {...getItemProps({ item, index })}
                                 className={cn(
                                     "flex p-2 items-center gap-2 self-stretch rounded",
-                                    "text-xs font-normal leading-4 tracking-[0.5px] cursor-pointer",
+                                    "text-sm leading-5 cursor-pointer",
                                     highlightedIndex === index ? "bg-accent" : "bg-transparent",
                                     selectedItem === item ? "font-bold" : "font-normal",
                                     "hover:bg-accent text-foreground"

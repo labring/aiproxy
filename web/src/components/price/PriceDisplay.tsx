@@ -124,24 +124,8 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
     }
 
     const rows = getPriceRows(price)
-    const summaryCandidates = [
-        formatPriceValue(price.input_price, price.input_price_unit) && `In: ${formatPriceValue(price.input_price, price.input_price_unit)}`,
-        formatPriceValue(price.output_price, price.output_price_unit) && `Out: ${formatPriceValue(price.output_price, price.output_price_unit)}`,
-        price.per_request_price != null ? `Req: ${price.per_request_price}` : null,
-        formatPriceValue(price.cached_price, price.cached_price_unit) && `Cache: ${formatPriceValue(price.cached_price, price.cached_price_unit)}`,
-        formatPriceValue(price.cache_creation_price, price.cache_creation_price_unit) && `Cache Create: ${formatPriceValue(price.cache_creation_price, price.cache_creation_price_unit)}`,
-        formatPriceValue(price.image_input_price, price.image_input_price_unit) && `Img In: ${formatPriceValue(price.image_input_price, price.image_input_price_unit)}`,
-        formatPriceValue(price.image_output_price, price.image_output_price_unit) && `Img Out: ${formatPriceValue(price.image_output_price, price.image_output_price_unit)}`,
-        formatPriceValue(price.audio_input_price, price.audio_input_price_unit) && `Audio In: ${formatPriceValue(price.audio_input_price, price.audio_input_price_unit)}`,
-        formatPriceValue(price.video_input_price, price.video_input_price_unit) && `Video In: ${formatPriceValue(price.video_input_price, price.video_input_price_unit)}`,
-        formatPriceValue(price.audio_output_price, price.audio_output_price_unit) && `Audio Out: ${formatPriceValue(price.audio_output_price, price.audio_output_price_unit)}`,
-        formatPriceValue(price.thinking_mode_output_price, price.thinking_mode_output_price_unit) && `Think Out: ${formatPriceValue(price.thinking_mode_output_price, price.thinking_mode_output_price_unit)}`,
-        formatPriceValue(price.web_search_price, price.web_search_price_unit) && `Search: ${formatPriceValue(price.web_search_price, price.web_search_price_unit)}`,
-    ].filter(Boolean)
-
-    // Quick summary for cell display
-    const summary = summaryCandidates.slice(0, 2).join(' | ')
-    if (!summary && !price.conditional_prices?.length) {
+    const summary = rows.slice(0, 2)
+    if (!summary.length && !price.conditional_prices?.length) {
         return <span className="text-muted-foreground text-sm">-</span>
     }
 
@@ -150,16 +134,16 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <button className="text-left text-sm font-mono hover:underline cursor-pointer">
-                    {summary || t('group.price.conditionalPrices')}
+                <button type="button" aria-label={t('group.price.title')} className="group grid min-w-40 gap-1 rounded-sm text-left text-xs leading-5 outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+                    {summary.length ? summary.map(row => <span key={row.label} className="flex items-baseline justify-between gap-3 whitespace-nowrap"><span className="text-muted-foreground">{row.label}</span><span className="font-mono tabular-nums group-hover:underline">{row.value}</span></span>) : t('group.price.conditionalPrices')}
                     {hasConditional && (
-                        <Badge variant="secondary" className="text-[10px] ml-1 px-1 py-0">
-                            +{price.conditional_prices!.length}
+                        <Badge variant="secondary" className="w-fit px-1.5 py-0 text-[10px]">
+                            {t('group.price.conditionalPrices')} {price.conditional_prices!.length}
                         </Badge>
                     )}
                 </button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-3" align="start">
+            <PopoverContent className="max-h-[min(32rem,80dvh)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-4" align="start">
                 <div className="space-y-2">
                     <h4 className="font-medium text-sm">{t('group.price.title')}</h4>
                     <div className="space-y-1">

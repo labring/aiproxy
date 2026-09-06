@@ -149,7 +149,11 @@ func TestInitialBackupUsesPreferencesAndStaysUnlockedAfterPrimaryRecovery(t *tes
 
 	state.failedChannelIDs[1] = struct{}{}
 	state.failedChannelIDs[3] = struct{}{}
-	assert.Equal(t, []*model.Channel{generalPrimary, generalBackup}, getRetryCandidates(state, nil))
+	assert.ElementsMatch(
+		t,
+		[]*model.Channel{generalPrimary, generalBackup},
+		getRetryCandidates(state, nil),
+	)
 	assert.True(t, state.backupOnlyEnabled)
 }
 

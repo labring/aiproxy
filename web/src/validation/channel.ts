@@ -4,6 +4,7 @@ import { z } from 'zod'
 export const channelCreateSchema = z.object({
     type: z.number().min(1, '厂商不能为空'),
     name: z.string().min(1, '名称不能为空'),
+    remark: z.string().max(255, '备注不能超过 255 个字符').optional(),
     key: z.string().min(1, '密钥不能为空'),
     base_url: z.string().optional(),
     proxy_url: z.string().optional(),

@@ -58,7 +58,7 @@ export default function ConsumptionRankingPage() {
     }
 
     return (
-        <div className="h-full p-6">
+        <div className="mx-auto h-full w-full max-w-[1800px] p-4 sm:p-6 lg:p-8">
             <ConsumptionRankingPanel
                 onViewGroup={openGroupDialog}
                 onViewChannel={openChannelDialog}

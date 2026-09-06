@@ -1,5 +1,5 @@
 // src/feature/group/components/GroupModelConfigsTab.tsx
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { groupApi } from '@/api/group'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
     Dialog,
     DialogContent,
@@ -90,9 +90,36 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
     summary_claude_long_context: false,
 })
 
+
+function ConfigValues({ entries }: { entries: [string, string | number | boolean | undefined][] }) {
+    const { t } = useTranslation()
+    const active = entries.filter(([, value]) => value !== undefined)
+    const formatValue = (value: string | number | boolean | undefined) =>
+        typeof value === 'boolean' ? t(value ? 'common.yes' : 'common.no') : String(value)
+
+    if (!active.length) return <span className="text-xs text-muted-foreground">{t('ui.inheritModel')}</span>
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button type="button" onClick={event => event.stopPropagation()} className="grid gap-1 text-left text-xs leading-5 hover:text-primary focus-visible:outline-ring">
+                    <span className="whitespace-nowrap">{active[0][0]}: <span className="font-medium tabular-nums">{formatValue(active[0][1])}</span></span>
+                    {active.length > 1 && <span className="text-muted-foreground">+{active.length - 1} {t('ui.overrides')}</span>}
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 max-w-[calc(100vw-2rem)] p-4" onClick={event => event.stopPropagation()}>
+                <dl className="grid gap-3 text-xs">
+                    {active.map(([label, value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-muted-foreground">{label}</dt><dd className="shrink-0 font-mono">{formatValue(value)}</dd></div>)}
+                </dl>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
 export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
+    const formId = useId()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const { data, isLoading, refetch } = useGroupModelConfigs(groupId)
     const { data: systemModels } = useModels()
@@ -492,8 +519,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         <>
             <div className="space-y-4">
                 {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-wrap gap-2">
                         <div className="relative w-64">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
@@ -555,107 +582,53 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                 </div>
 
                 {/* Table */}
-                <div className="border rounded-lg overflow-hidden">
+                <div className="min-w-0 border-y">
                     <div className="overflow-auto">
-                        <table className="w-full">
-                            <thead className="bg-muted/50">
+                        <table className="w-full min-w-[900px]">
+                            <thead className="bg-muted">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.modelName')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideLimit')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">RPM</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">TPM</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideRetryTimes')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.retryTimes')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overrideTimeoutConfig')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.forceSaveDetail')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.maxImageGenerationCount')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.maxVideoGenerationSeconds')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.maxVideoGenerationCount')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.requestBodyStorageMaxSize')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.responseBodyStorageMaxSize')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordServiceTier')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('model.recordClaudeLongContext')}</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.overridePrice')}</th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">{t('group.modelConfig.actions')}</th>
+                                    {(['model.modelName', 'group.modelConfig.overrideLimit', 'ui.requestPolicy', 'ui.generationLimits', 'ui.loggingPolicy', 'group.price.title', 'group.modelConfig.actions'] as const).map(label => <th key={label} scope="col" className="h-10 whitespace-nowrap px-3 text-left text-xs font-medium text-muted-foreground">{t(label)}</th>)}
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredData.map((config) => (
                                     <tr
                                         key={config.model}
-                                        className="border-t hover:bg-muted/50 transition-colors cursor-pointer"
+                                        className="border-t hover:bg-muted/50 focus-visible:bg-accent outline-none transition-colors cursor-pointer"
+                                        tabIndex={0}
+                                        onKeyDown={event => { if (event.target === event.currentTarget && event.key === "Enter") openEditDialog(config) }}
                                         onClick={() => openEditDialog(config)}
                                     >
-                                        <td className="px-4 py-3 text-sm font-medium">{config.model}</td>
-                                        <td className="px-4 py-3 text-sm">
-                                            <Badge variant={config.override_limit ? 'default' : 'secondary'} className="text-xs">
-                                                {config.override_limit ? t('common.yes') : t('common.no')}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_limit ? config.rpm : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_limit ? config.tpm : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            <Badge variant={config.override_retry_times ? 'default' : 'secondary'} className="text-xs">
-                                                {config.override_retry_times ? t('common.yes') : t('common.no')}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_retry_times ? config.retry_times : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            <Badge variant={config.override_timeout_config ? 'default' : 'secondary'} className="text-xs">
-                                                {config.override_timeout_config ? t('common.yes') : t('common.no')}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {config.override_force_save_detail ? (
-                                                <Badge variant={config.force_save_detail ? 'default' : 'secondary'} className="text-xs">
-                                                    {config.force_save_detail ? t('common.yes') : t('common.no')}
-                                                </Badge>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_max_image_generation_count ? config.max_image_generation_count : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_max_video_generation_seconds ? config.max_video_generation_seconds : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_max_video_generation_count ? config.max_video_generation_count : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_request_body_storage_max_size ? config.request_body_storage_max_size : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-mono">
-                                            {config.override_response_body_storage_max_size ? config.response_body_storage_max_size : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {config.override_summary_service_tier ? (
-                                                <Badge variant={config.summary_service_tier ? 'default' : 'secondary'} className="text-xs">
-                                                    {config.summary_service_tier ? t('common.yes') : t('common.no')}
-                                                </Badge>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {config.override_summary_claude_long_context ? (
-                                                <Badge variant={config.summary_claude_long_context ? 'default' : 'secondary'} className="text-xs">
-                                                    {config.summary_claude_long_context ? t('common.yes') : t('common.no')}
-                                                </Badge>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {config.override_price ? (
-                                                <PriceDisplay price={config.price} />
-                                            ) : '-'}
+                                        <td className="px-3 py-3 text-sm font-medium">{config.model}</td>
+                                        <td className="px-3 py-3"><ConfigValues entries={[
+                                            ['RPM', config.override_limit ? config.rpm : undefined],
+                                            ['TPM', config.override_limit ? config.tpm : undefined],
+                                        ]} /></td>
+                                        <td className="px-3 py-3"><ConfigValues entries={[
+                                            [t('model.retryTimes'), config.override_retry_times ? config.retry_times : undefined],
+                                            [t('group.modelConfig.overrideTimeoutConfig'), config.override_timeout_config ? true : undefined],
+                                            [t('model.dialog.timeout'), config.override_timeout_config ? config.timeout_config?.request_timeout : undefined],
+                                            [t('model.dialog.streamTimeout'), config.override_timeout_config ? config.timeout_config?.stream_request_timeout : undefined],
+                                        ]} /></td>
+                                        <td className="px-3 py-3"><ConfigValues entries={[
+                                            [t('model.maxImageGenerationCount'), config.override_max_image_generation_count ? config.max_image_generation_count : undefined],
+                                            [t('model.maxVideoGenerationSeconds'), config.override_max_video_generation_seconds ? config.max_video_generation_seconds : undefined],
+                                            [t('model.maxVideoGenerationCount'), config.override_max_video_generation_count ? config.max_video_generation_count : undefined],
+                                        ]} /></td>
+                                        <td className="px-3 py-3"><ConfigValues entries={[
+                                            [t('model.forceSaveDetail'), config.override_force_save_detail ? config.force_save_detail : undefined],
+                                            [t('model.requestBodyStorageMaxSize'), config.override_request_body_storage_max_size ? config.request_body_storage_max_size : undefined],
+                                            [t('model.responseBodyStorageMaxSize'), config.override_response_body_storage_max_size ? config.response_body_storage_max_size : undefined],
+                                            [t('model.recordServiceTier'), config.override_summary_service_tier ? config.summary_service_tier : undefined],
+                                            [t('model.recordClaudeLongContext'), config.override_summary_claude_long_context ? config.summary_claude_long_context : undefined],
+                                        ]} /></td>
+                                        <td className="px-3 py-3" onClick={event => event.stopPropagation()}>
+                                            {config.override_price ? <PriceDisplay price={config.price} /> : <span className="text-xs text-muted-foreground">{t('ui.inheritModel')}</span>}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("ui.actions")}>
                                                         <MoreHorizontal className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -682,7 +655,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={16} className="px-4 py-12 text-center text-muted-foreground">
+                                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                                             {t('common.noResult')}
                                         </td>
                                     </tr>
@@ -708,9 +681,10 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                     <div className="space-y-4 py-2">
                         {/* Model name */}
                         <div className="space-y-2">
-                            <Label>{t('model.modelName')}</Label>
+                            <Label htmlFor={`${formId}-model`}>{t('model.modelName')}</Label>
                             {isCreating ? (
                                 <Combobox
+                                    id={`${formId}-model`}
                                     options={modelOptions}
                                     value={formModel}
                                     onValueChange={setFormModel}
@@ -726,12 +700,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         </div>
 
                         {/* Override Limit */}
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideLimit')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideLimit`}>{t('group.modelConfig.overrideLimit')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideLimitDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideLimit} onCheckedChange={setFormOverrideLimit} />
+                            <Switch id={`${formId}-formOverrideLimit`}  checked={formOverrideLimit} onCheckedChange={setFormOverrideLimit} />
                         </div>
 
                         {formOverrideLimit && (
@@ -758,12 +732,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         )}
 
                         {/* Override Retry Times */}
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideRetryTimes')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideRetryTimes`}>{t('group.modelConfig.overrideRetryTimes')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRetryTimesDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideRetryTimes} onCheckedChange={setFormOverrideRetryTimes} />
+                            <Switch id={`${formId}-formOverrideRetryTimes`}  checked={formOverrideRetryTimes} onCheckedChange={setFormOverrideRetryTimes} />
                         </div>
 
                         {formOverrideRetryTimes && (
@@ -780,12 +754,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideTimeoutConfig')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideTimeoutConfig`}>{t('group.modelConfig.overrideTimeoutConfig')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideTimeoutConfigDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideTimeoutConfig} onCheckedChange={setFormOverrideTimeoutConfig} />
+                            <Switch id={`${formId}-formOverrideTimeoutConfig`}  checked={formOverrideTimeoutConfig} onCheckedChange={setFormOverrideTimeoutConfig} />
                         </div>
 
                         {formOverrideTimeoutConfig && (
@@ -818,29 +792,29 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         )}
 
                         {/* Override Force Save Detail */}
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideForceSaveDetail')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideForceSaveDetail`}>{t('group.modelConfig.overrideForceSaveDetail')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideForceSaveDetailDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideForceSaveDetail} onCheckedChange={setFormOverrideForceSaveDetail} />
+                            <Switch id={`${formId}-formOverrideForceSaveDetail`}  checked={formOverrideForceSaveDetail} onCheckedChange={setFormOverrideForceSaveDetail} />
                         </div>
 
                         {formOverrideForceSaveDetail && (
                             <div className="flex items-center gap-2 pl-4">
-                                <Label>{t('model.forceSaveDetail')}</Label>
-                                <Switch checked={formForceSaveDetail} onCheckedChange={setFormForceSaveDetail} />
+                                <Label htmlFor={`${formId}-formForceSaveDetail`}>{t('model.forceSaveDetail')}</Label>
+                                <Switch id={`${formId}-formForceSaveDetail`}  checked={formForceSaveDetail} onCheckedChange={setFormForceSaveDetail} />
                             </div>
                         )}
 
                         {supportImageGenerationCountLimit && (
                             <>
-                                <div className="flex items-center justify-between rounded-lg border p-3">
+                                <div className="flex items-center justify-between gap-4 border-t py-4">
                                     <div className="space-y-0.5">
-                                        <Label>{t('group.modelConfig.overrideMaxImageGenerationCount')}</Label>
+                                        <Label htmlFor={`${formId}-formOverrideMaxImageGenerationCount`}>{t('group.modelConfig.overrideMaxImageGenerationCount')}</Label>
                                         <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideMaxImageGenerationCountDesc')}</p>
                                     </div>
-                                    <Switch
+                                    <Switch id={`${formId}-formOverrideMaxImageGenerationCount`}
                                         checked={formOverrideMaxImageGenerationCount}
                                         onCheckedChange={setFormOverrideMaxImageGenerationCount}
                                     />
@@ -865,12 +839,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
                         {supportVideoGenerationSecondsLimit && (
                             <>
-                                <div className="flex items-center justify-between rounded-lg border p-3">
+                                <div className="flex items-center justify-between gap-4 border-t py-4">
                                     <div className="space-y-0.5">
-                                        <Label>{t('group.modelConfig.overrideMaxVideoGenerationSeconds')}</Label>
+                                        <Label htmlFor={`${formId}-formOverrideMaxVideoGenerationSeconds`}>{t('group.modelConfig.overrideMaxVideoGenerationSeconds')}</Label>
                                         <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideMaxVideoGenerationSecondsDesc')}</p>
                                     </div>
-                                    <Switch
+                                    <Switch id={`${formId}-formOverrideMaxVideoGenerationSeconds`}
                                         checked={formOverrideMaxVideoGenerationSeconds}
                                         onCheckedChange={setFormOverrideMaxVideoGenerationSeconds}
                                     />
@@ -895,12 +869,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
                         {supportVideoGenerationCountLimit && (
                             <>
-                                <div className="flex items-center justify-between rounded-lg border p-3">
+                                <div className="flex items-center justify-between gap-4 border-t py-4">
                                     <div className="space-y-0.5">
-                                        <Label>{t('group.modelConfig.overrideMaxVideoGenerationCount')}</Label>
+                                        <Label htmlFor={`${formId}-formOverrideMaxVideoGenerationCount`}>{t('group.modelConfig.overrideMaxVideoGenerationCount')}</Label>
                                         <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideMaxVideoGenerationCountDesc')}</p>
                                     </div>
-                                    <Switch
+                                    <Switch id={`${formId}-formOverrideMaxVideoGenerationCount`}
                                         checked={formOverrideMaxVideoGenerationCount}
                                         onCheckedChange={setFormOverrideMaxVideoGenerationCount}
                                     />
@@ -923,12 +897,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </>
                         )}
 
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideRequestBodyStorageMaxSize')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideRequestBodyStorageMaxSize`}>{t('group.modelConfig.overrideRequestBodyStorageMaxSize')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRequestBodyStorageMaxSizeDesc')}</p>
                             </div>
-                            <Switch
+                            <Switch id={`${formId}-formOverrideRequestBodyStorageMaxSize`}
                                 checked={formOverrideRequestBodyStorageMaxSize}
                                 onCheckedChange={setFormOverrideRequestBodyStorageMaxSize}
                             />
@@ -948,12 +922,12 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideResponseBodyStorageMaxSize')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideResponseBodyStorageMaxSize`}>{t('group.modelConfig.overrideResponseBodyStorageMaxSize')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideResponseBodyStorageMaxSizeDesc')}</p>
                             </div>
-                            <Switch
+                            <Switch id={`${formId}-formOverrideResponseBodyStorageMaxSize`}
                                 checked={formOverrideResponseBodyStorageMaxSize}
                                 onCheckedChange={setFormOverrideResponseBodyStorageMaxSize}
                             />
@@ -974,43 +948,43 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         )}
 
                         {/* Override Record Service Tier */}
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideRecordServiceTier')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideSummaryServiceTier`}>{t('group.modelConfig.overrideRecordServiceTier')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRecordServiceTierDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideSummaryServiceTier} onCheckedChange={setFormOverrideSummaryServiceTier} />
+                            <Switch id={`${formId}-formOverrideSummaryServiceTier`}  checked={formOverrideSummaryServiceTier} onCheckedChange={setFormOverrideSummaryServiceTier} />
                         </div>
 
                         {formOverrideSummaryServiceTier && (
                             <div className="flex items-center gap-2 pl-4">
-                                <Label>{t('model.recordServiceTier')}</Label>
-                                <Switch checked={formSummaryServiceTier} onCheckedChange={setFormSummaryServiceTier} />
+                                <Label htmlFor={`${formId}-formSummaryServiceTier`}>{t('model.recordServiceTier')}</Label>
+                                <Switch id={`${formId}-formSummaryServiceTier`}  checked={formSummaryServiceTier} onCheckedChange={setFormSummaryServiceTier} />
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overrideRecordClaudeLongContext')}</Label>
+                                <Label htmlFor={`${formId}-formOverrideSummaryClaudeLongContext`}>{t('group.modelConfig.overrideRecordClaudeLongContext')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overrideRecordClaudeLongContextDesc')}</p>
                             </div>
-                            <Switch checked={formOverrideSummaryClaudeLongContext} onCheckedChange={setFormOverrideSummaryClaudeLongContext} />
+                            <Switch id={`${formId}-formOverrideSummaryClaudeLongContext`}  checked={formOverrideSummaryClaudeLongContext} onCheckedChange={setFormOverrideSummaryClaudeLongContext} />
                         </div>
 
                         {formOverrideSummaryClaudeLongContext && (
                             <div className="flex items-center gap-2 pl-4">
-                                <Label>{t('model.recordClaudeLongContext')}</Label>
-                                <Switch checked={formSummaryClaudeLongContext} onCheckedChange={setFormSummaryClaudeLongContext} />
+                                <Label htmlFor={`${formId}-formSummaryClaudeLongContext`}>{t('model.recordClaudeLongContext')}</Label>
+                                <Switch id={`${formId}-formSummaryClaudeLongContext`}  checked={formSummaryClaudeLongContext} onCheckedChange={setFormSummaryClaudeLongContext} />
                             </div>
                         )}
 
                         {/* Override Price */}
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
                             <div className="space-y-0.5">
-                                <Label>{t('group.modelConfig.overridePrice')}</Label>
+                                <Label htmlFor={`${formId}-formOverridePrice`}>{t('group.modelConfig.overridePrice')}</Label>
                                 <p className="text-xs text-muted-foreground">{t('group.modelConfig.overridePriceDesc')}</p>
                             </div>
-                            <Switch checked={formOverridePrice} onCheckedChange={setFormOverridePrice} />
+                            <Switch id={`${formId}-formOverridePrice`}  checked={formOverridePrice} onCheckedChange={setFormOverridePrice} />
                         </div>
 
                         {formOverridePrice && (
@@ -1020,7 +994,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                         )}
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="sticky bottom-0 border-t bg-card py-3">
                         <Button
                             variant="outline"
                             onClick={() => setEditDialogOpen(false)}

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useCallback } from 'react'
 
 import { useLogs } from '@/feature/log/hooks'
@@ -10,6 +11,7 @@ import type { LogFilters as LogFiltersType } from '@/types/log'
 import { DEFAULT_TIMEZONE, zonedBoundaryToUnixMs } from '@/utils/timezone'
 
 export default function LogPage() {
+    const { t } = useTranslation()
 
     const getDefaultFilters = (): LogFiltersType => {
         const today = new Date()
@@ -64,24 +66,28 @@ export default function LogPage() {
     }, [])
 
     return (
-        <div className="h-full flex flex-col">
-            <div className="flex-shrink-0 p-6 pb-2">
-                <div className="flex flex-col gap-2">
+        <div className="resource-page">
+            <div className="shrink-0 border-b px-4 py-3 sm:px-6">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h1 className="text-lg font-semibold">{t("sidebar.log")}</h1>
+
+                    </div>
                     <div className="flex justify-end">
                         <LogExportDialog
                             scope="global"
                             currentFilters={filters}
                         />
                     </div>
-
-                    <LogFilters
-                        onFiltersChange={handleFiltersChange}
-                        loading={isLoading}
-                        availableModels={logData?.models}
-                        availableTokenNames={logData?.token_names}
-                        availableChannels={logData?.channels}
-                    />
                 </div>
+
+                <LogFilters
+                    onFiltersChange={handleFiltersChange}
+                    loading={isLoading}
+                    availableModels={logData?.models}
+                    availableTokenNames={logData?.token_names}
+                    availableChannels={logData?.channels}
+                />
 
                 {error && (
                     <div className="mt-6">
@@ -94,7 +100,7 @@ export default function LogPage() {
                 )}
             </div>
 
-            <div className="flex-1 px-6 pb-6 min-h-0">
+            <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 sm:px-6">
                 <LogTable
                     data={logData?.logs || []}
                     total={logData?.total || 0}

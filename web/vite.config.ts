@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   server: {
@@ -17,6 +17,17 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/api'),
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/node_modules\/(echarts|zrender)\//.test(id)) return "charts"
+          if (/node_modules\/(react|react-dom|react-router|@tanstack\/react-query)\//.test(id)) return "ui-vendor"
+          if (/node_modules\/(react-hook-form|zod|@hookform\/resolvers)\//.test(id)) return "forms"
+        },
       },
     },
   },

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { JsonViewer } from './JsonViewer'
 import { useLogDetail } from '@/feature/log/hooks'
-import type { LogRecord, LogRequestDetail } from '@/types/log'
+import type { LogRecord } from '@/types/log'
 import { channelApi } from '@/api/channel'
 import { useChannelInfoMap, useChannelTypeMetas } from '@/feature/channel/hooks'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
@@ -15,9 +16,9 @@ import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-d
 import { writeTextToClipboard } from '@/lib/clipboard'
 
 // Format price with unit
-const formatPrice = (price: number, unit: number): string => {
-    if (!price) return '-'
-    if (unit > 0) return `${price}/${unit}`
+const formatPrice = (price: number | undefined, unit: number | undefined): string => {
+    if (price == null) return '-'
+    if (unit && unit > 0) return `${price}/${unit}`
     return price.toString()
 }
 
@@ -46,7 +47,6 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
     }
 
     const needsDetail = !!log.request_detail
-    const [requestDetail, setRequestDetail] = useState<LogRequestDetail | null>(null)
 
     const {
         data: logDetail,
@@ -54,11 +54,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
         error: logDetailError
     } = useLogDetail(needsDetail ? log.id : null)
 
-    useEffect(() => {
-        if (logDetail) {
-            setRequestDetail(logDetail)
-        }
-    }, [logDetail])
+    const requestDetail = logDetail
 
     const requestBody = needsDetail && requestDetail ? requestDetail.request_body : null
     const responseBody = needsDetail && requestDetail ? requestDetail.response_body : null
@@ -100,12 +96,19 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
     }
 
     return (
-        <div className="p-4 space-y-4 bg-muted/50 border-t">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
+        <div className="w-[calc(100vw-3rem)] min-w-0 border-y bg-muted/30 p-4 lg:w-auto">
+            <Tabs defaultValue="overview" className="gap-4">
+                <TabsList>
+                    <TabsTrigger value="overview">{t('log.basicInfo')}</TabsTrigger>
+                    <TabsTrigger value="billing">{t('log.billingContext')}</TabsTrigger>
+                    {needsDetail && <TabsTrigger value="payload">{t('ui.payload')}</TabsTrigger>}
+                </TabsList>
+                <TabsContent value="overview" className="space-y-4">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {/* Basic info */}
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-3">
                     <h4 className="font-semibold text-sm">{t('log.basicInfo')}</h4>
-                    <div className="space-y-1 text-sm">
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
                         <div><span className="font-medium">{t('log.id')}:</span> {log.id}</div>
                         <div className="min-w-0">
                             <span className="font-medium">{t('log.requestId')}:</span>{' '}
@@ -162,18 +165,18 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                             ) : '-'}
                         </div>
                         <div className="flex items-center gap-1 min-w-0">
-                            <span className="font-medium">{t('log.channel')}:</span>
+                            <span className="shrink-0 font-medium">{t('log.channel')}:</span>
                             {log.channel ? (
                                 <ChannelLabel
                                     id={log.channel}
                                     info={channelInfo || undefined}
                                     typeName={channelInfo ? typeMetas?.[channelInfo.type]?.name : undefined}
-                                    compact
                                     className="max-w-full"
                                     onClick={() => openChannelEdit(log.channel)}
                                 />
                             ) : '-'}
                         </div>
+                        {channelInfo?.remark && <div><span className="font-medium">{t('channel.remark')}:</span> <span className="break-words">{channelInfo.remark}</span></div>}
                         <div><span className="font-medium">{t('log.mode')}:</span> {t(`modeType.${log.mode}`, { defaultValue: log.mode?.toString() || '-' })}</div>
                         <div><span className="font-medium">{t('log.statusCode')}:</span> {log.code || '-'}</div>
                         <div><span className="font-medium">{t('log.user')}:</span> {log.user || '-'}</div>
@@ -184,9 +187,9 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                 </div>
 
                 {/* Time info */}
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-3">
                     <h4 className="font-semibold text-sm">{t('log.timeInfo')}</h4>
-                    <div className="space-y-1 text-sm">
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
                         <div><span className="font-medium">{t('log.created')}:</span> {log.created_at ? format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss') : '-'}</div>
                         <div><span className="font-medium">{t('log.request')}:</span> {log.request_at ? format(new Date(log.request_at), 'yyyy-MM-dd HH:mm:ss') : '-'}</div>
                         <div><span className="font-medium">{t('log.duration')}:</span> {calculateDuration()}</div>
@@ -197,9 +200,9 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                 </div>
 
                 {/* Token usage info */}
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-3">
                     <h4 className="font-semibold text-sm">{t('log.tokenInfo')}</h4>
-                    <div className="space-y-1 text-sm">
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
                         <div><span className="font-medium">{t('log.inputTokens')}:</span> {log.usage?.input_tokens?.toLocaleString() || 0}</div>
                         <div><span className="font-medium">{t('log.outputTokens')}:</span> {log.usage?.output_tokens?.toLocaleString() || 0}</div>
                         <div><span className="font-medium">{t('log.total')}:</span> {log.usage?.total_tokens?.toLocaleString() || 0}</div>
@@ -214,59 +217,7 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                         <div><span className="font-medium">{t('log.webSearchCount')}:</span> {log.usage?.web_search_count || 0}</div>
                     </div>
                 </div>
-
-                {/* Billing context */}
-                <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">{t('log.billingContext')}</h4>
-                    <div className="space-y-1 text-sm">
-                        <div><span className="font-medium">{t('log.resolution')}:</span> {usageContext?.resolution || '-'}</div>
-                        <div><span className="font-medium">{t('log.nativeResolution')}:</span> {usageContext?.native_resolution || '-'}</div>
-                        <div><span className="font-medium">{t('log.quality')}:</span> {usageContext?.quality || '-'}</div>
-                        <div><span className="font-medium">{t('log.serviceTier')}:</span> {usageContext?.service_tier || '-'}</div>
-                        <div><span className="font-medium">{t('log.inputMedia')}:</span> {usageContext?.input_media === undefined ? '-' : (usageContext.input_media ? t('common.yes') : t('common.no'))}</div>
-                        <div><span className="font-medium">{t('log.inputVideo')}:</span> {usageContext?.input_video === undefined ? '-' : (usageContext.input_video ? t('common.yes') : t('common.no'))}</div>
-                        <div><span className="font-medium">{t('log.outputAudio')}:</span> {usageContext?.output_audio === undefined ? '-' : (usageContext.output_audio ? t('common.yes') : t('common.no'))}</div>
                     </div>
-                </div>
-
-                {/* Price info */}
-                <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">{t('log.priceInfo')}</h4>
-                    <div className="space-y-1 text-sm">
-                        <div><span className="font-medium">{t('log.inputPrice')}:</span> {formatPrice(log.price?.input_price, log.price?.input_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.outputPrice')}:</span> {formatPrice(log.price?.output_price, log.price?.output_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.cacheCreationPrice')}:</span> {formatPrice(log.price?.cache_creation_price, log.price?.cache_creation_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.cachedPrice')}:</span> {formatPrice(log.price?.cached_price, log.price?.cached_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.imageInputPrice')}:</span> {formatPrice(log.price?.image_input_price, log.price?.image_input_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.audioInputPrice')}:</span> {formatPrice(log.price?.audio_input_price, log.price?.audio_input_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.videoInputPrice')}:</span> {formatPrice(log.price?.video_input_price, log.price?.video_input_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.imageOutputPrice')}:</span> {formatPrice(log.price?.image_output_price, log.price?.image_output_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.audioOutputPrice')}:</span> {formatPrice(log.price?.audio_output_price, log.price?.audio_output_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.perRequestPrice')}:</span> {log.price?.per_request_price || '-'}</div>
-                        <div><span className="font-medium">{t('log.thinkingPrice')}:</span> {formatPrice(log.price?.thinking_mode_output_price, log.price?.thinking_mode_output_price_unit)}</div>
-                        <div><span className="font-medium">{t('log.webSearchPrice')}:</span> {formatPrice(log.price?.web_search_price, log.price?.web_search_price_unit)}</div>
-                    </div>
-                </div>
-
-                {/* Consumption info */}
-                <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">{t('log.consumeInfo')}</h4>
-                    <div className="space-y-1 text-sm">
-                        <div><span className="font-medium">{t('log.usedAmount')}:</span> {formatAmount(totalUsedAmount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.input')}:</span> {formatAmount(amount?.input_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.cached')}:</span> {formatAmount(amount?.cached_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.cacheCreation')}:</span> {formatAmount(amount?.cache_creation_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.imageInput')}:</span> {formatAmount(amount?.image_input_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.audioInput')}:</span> {formatAmount(amount?.audio_input_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.videoInput')}:</span> {formatAmount(amount?.video_input_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.output')}:</span> {formatAmount(amount?.output_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.imageOutput')}:</span> {formatAmount(amount?.image_output_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.audioOutput')}:</span> {formatAmount(amount?.audio_output_amount)}</div>
-                        <div><span className="font-medium">{t('log.costBreakdown.webSearch')}:</span> {formatAmount(amount?.web_search_amount)}</div>
-                    </div>
-                </div>
-            </div>
-
             {/* Metadata */}
             {log.metadata && Object.keys(log.metadata).length > 0 && (
                 <>
@@ -284,8 +235,62 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                 </>
             )}
 
-            <Separator />
+                </TabsContent>
+                <TabsContent value="billing">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {/* Billing context */}
+                <div className="min-w-0 space-y-3">
+                    <h4 className="font-semibold text-sm">{t('log.billingContext')}</h4>
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
+                        <div><span className="font-medium">{t('log.resolution')}:</span> {usageContext?.resolution || '-'}</div>
+                        <div><span className="font-medium">{t('log.nativeResolution')}:</span> {usageContext?.native_resolution || '-'}</div>
+                        <div><span className="font-medium">{t('log.quality')}:</span> {usageContext?.quality || '-'}</div>
+                        <div><span className="font-medium">{t('log.serviceTier')}:</span> {usageContext?.service_tier || '-'}</div>
+                        <div><span className="font-medium">{t('log.inputMedia')}:</span> {usageContext?.input_media === undefined ? '-' : (usageContext.input_media ? t('common.yes') : t('common.no'))}</div>
+                        <div><span className="font-medium">{t('log.inputVideo')}:</span> {usageContext?.input_video === undefined ? '-' : (usageContext.input_video ? t('common.yes') : t('common.no'))}</div>
+                        <div><span className="font-medium">{t('log.outputAudio')}:</span> {usageContext?.output_audio === undefined ? '-' : (usageContext.output_audio ? t('common.yes') : t('common.no'))}</div>
+                    </div>
+                </div>
 
+                {/* Price info */}
+                <div className="min-w-0 space-y-3">
+                    <h4 className="font-semibold text-sm">{t('log.priceInfo')}</h4>
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
+                        <div><span className="font-medium">{t('log.inputPrice')}:</span> {formatPrice(log.price?.input_price, log.price?.input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.outputPrice')}:</span> {formatPrice(log.price?.output_price, log.price?.output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.cacheCreationPrice')}:</span> {formatPrice(log.price?.cache_creation_price, log.price?.cache_creation_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.cachedPrice')}:</span> {formatPrice(log.price?.cached_price, log.price?.cached_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.imageInputPrice')}:</span> {formatPrice(log.price?.image_input_price, log.price?.image_input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.audioInputPrice')}:</span> {formatPrice(log.price?.audio_input_price, log.price?.audio_input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.videoInputPrice')}:</span> {formatPrice(log.price?.video_input_price, log.price?.video_input_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.imageOutputPrice')}:</span> {formatPrice(log.price?.image_output_price, log.price?.image_output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.audioOutputPrice')}:</span> {formatPrice(log.price?.audio_output_price, log.price?.audio_output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.perRequestPrice')}:</span> {log.price?.per_request_price ?? '-'}</div>
+                        <div><span className="font-medium">{t('log.thinkingPrice')}:</span> {formatPrice(log.price?.thinking_mode_output_price, log.price?.thinking_mode_output_price_unit)}</div>
+                        <div><span className="font-medium">{t('log.webSearchPrice')}:</span> {formatPrice(log.price?.web_search_price, log.price?.web_search_price_unit)}</div>
+                    </div>
+                </div>
+
+                {/* Consumption info */}
+                <div className="min-w-0 space-y-3">
+                    <h4 className="font-semibold text-sm">{t('log.consumeInfo')}</h4>
+                    <div className="grid gap-2 text-xs leading-5 [&>div]:flex [&>div]:flex-wrap [&>div]:justify-between [&>div]:gap-x-3 [&>div>span:first-child]:font-normal [&>div>span:first-child]:text-muted-foreground">
+                        <div><span className="font-medium">{t('log.usedAmount')}:</span> {formatAmount(totalUsedAmount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.input')}:</span> {formatAmount(amount?.input_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.cached')}:</span> {formatAmount(amount?.cached_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.cacheCreation')}:</span> {formatAmount(amount?.cache_creation_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.imageInput')}:</span> {formatAmount(amount?.image_input_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.audioInput')}:</span> {formatAmount(amount?.audio_input_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.videoInput')}:</span> {formatAmount(amount?.video_input_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.output')}:</span> {formatAmount(amount?.output_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.imageOutput')}:</span> {formatAmount(amount?.image_output_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.audioOutput')}:</span> {formatAmount(amount?.audio_output_amount)}</div>
+                        <div><span className="font-medium">{t('log.costBreakdown.webSearch')}:</span> {formatAmount(amount?.web_search_amount)}</div>
+                    </div>
+                </div>
+                    </div>
+                </TabsContent>
+                <TabsContent value="payload">
             {/* Request and response body */}
             {needsDetail && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -349,7 +354,8 @@ export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
                     </div>
                 </div>
             )}
-
+                </TabsContent>
+            </Tabs>
             {editingChannel && (
                 <ChannelDialog
                     open={channelDialogOpen}

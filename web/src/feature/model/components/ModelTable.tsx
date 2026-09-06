@@ -1,7 +1,7 @@
 // src/feature/model/components/ModelTable.tsx
 import { useState, useMemo, useRef } from "react";
 import { useModels, useModelSets } from "../hooks";
-import { useChannelTypeMetas } from "@/feature/channel/hooks";
+import { useChannelInfoMap, useChannelTypeMetas } from "@/feature/channel/hooks";
 import { useRuntimeMetrics } from "@/feature/monitor/runtime-hooks";
 import { ModelConfig, ModelSaveRequest } from "@/types/model";
 import { PriceDisplay } from "@/components/price/PriceDisplay";
@@ -33,7 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Card } from "@/components/ui/card";
 import { ModelDialog } from "./ModelDialog";
 import { BuiltinModelsDialog } from "./BuiltinModelsDialog";
 import { DeleteModelDialog } from "./DeleteModelDialog";
@@ -50,7 +49,6 @@ import { AnimatedButton } from "@/components/ui/animation/components/animated-bu
 import { AnimatedIcon } from "@/components/ui/animation/components/animated-icon";
 import ApiDocDrawer from "./api-doc/ApiDoc";
 import { Badge } from "@/components/ui/badge";
-import { BackupOnlyBadge } from "@/components/common/BackupOnlyBadge";
 import {
   Popover,
   PopoverContent,
@@ -65,6 +63,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { openResourceDialog, showDeletedResourceToast } from "@/utils/resource-dialog";
 import { getChannelModelMetric } from "@/utils/runtime-metrics";
 import { writeTextToClipboard } from "@/lib/clipboard";
+import { ChannelLabel } from "@/components/common/ChannelLabel";
+import { DEFAULT_CHANNEL_SET, getChannelPriority } from "@/utils/channel";
 
 export function ModelTable() {
   const { t } = useTranslation();
@@ -97,7 +97,15 @@ export function ModelTable() {
 
   // Get model sets data
   const { data: modelSets, isLoading: isLoadingModelSets } = useModelSets();
-  const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics();
+  const modelSetChannelIds = useMemo(() => {
+    const ids = new Set<number>();
+    Object.values(modelSets ?? {}).forEach((sets) => {
+      Object.values(sets).forEach((channels) => channels.forEach((channel) => ids.add(channel.id)));
+    });
+    return [...ids];
+  }, [modelSets]);
+  const { data: channelInfoMap = {} } = useChannelInfoMap(modelSetChannelIds, !isLoadingModelSets);
+  const { data: runtimeMetrics } = useRuntimeMetrics();
 
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
@@ -157,13 +165,15 @@ export function ModelTable() {
   // Get channel type name by type ID
   const getChannelTypeName = (typeId: number): string => {
     if (!channelTypeMetas) return `Type: ${typeId}`;
-    
+
     const typeKey = String(typeId);
     return channelTypeMetas[typeKey]?.name || `Type: ${typeId}`;
   };
 
   const toModelSaveRequest = (model: ModelConfig): ModelSaveRequest => {
-    const { created_at, updated_at, ...rest } = model;
+    const rest = { ...model };
+    delete rest.created_at;
+    delete rest.updated_at;
     return rest;
   };
 
@@ -204,7 +214,7 @@ export function ModelTable() {
   const formatPercent = (value?: number) => `${((value || 0) * 100).toFixed(1)}%`;
 
   // Create table columns
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const columns: ColumnDef<ModelConfig>[] = useMemo(() => [
     {
       accessorKey: "model",
@@ -316,7 +326,7 @@ export function ModelTable() {
                     variant="outline"
                     className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    <span>{setName || "default"}</span>
+                    <span>{setName || DEFAULT_CHANNEL_SET}</span>
                     <span className="ml-1 text-[11px] opacity-80">
                       {t("model.channelCount", { count: channels.length })}
                     </span>
@@ -354,11 +364,10 @@ export function ModelTable() {
                           }}
                         >
                           <Badge variant="secondary" className="max-w-full text-xs">
-                            <span className="truncate">{channel.name}</span>
+                            <ChannelLabel id={channel.id} info={channelInfoMap[channel.id] ?? channel} compact />
                           </Badge>
-                          {channel.backup_only && <BackupOnlyBadge />}
                           <span className="text-xs text-muted-foreground">
-                            ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
+                            ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {getChannelPriority(channel.priority)}
                           </span>
                           {(() => {
                             const pair = getChannelModelMetric(runtimeMetrics, channel.id, modelName);
@@ -440,20 +449,15 @@ export function ModelTable() {
         }
 
         return (
-          <div
-            className="flex flex-wrap gap-1 cursor-pointer"
+          <button
+            type="button"
+            className="flex max-w-44 flex-col items-start gap-1 text-left text-xs leading-5 hover:text-primary focus-visible:outline-ring"
+            title={enabledPlugins.join(', ')}
             onClick={() => openUpdateDialog(row.original)}
           >
-            {enabledPlugins.map((pluginName) => (
-              <Badge
-                key={pluginName}
-                variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
-              >
-                {pluginName}
-              </Badge>
-            ))}
-          </div>
+            {enabledPlugins.slice(0, 2).map((pluginName) => <span key={pluginName} className="flex items-center gap-1.5 whitespace-nowrap"><span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />{pluginName}</span>)}
+            {enabledPlugins.length > 2 && <span className="text-muted-foreground">+{enabledPlugins.length - 2}</span>}
+          </button>
         );
       },
     },
@@ -478,25 +482,15 @@ export function ModelTable() {
         }
 
         return (
-          <div
-            className="flex flex-wrap gap-1 cursor-pointer"
+          <button
+            type="button"
+            className="grid min-w-32 gap-1 text-left text-xs leading-5 hover:text-primary focus-visible:outline-ring"
+            title={summary.join(', ')}
             onClick={() => openUpdateDialog(row.original)}
           >
-            {summary.slice(0, 6).map((item) => (
-              <Badge
-                key={item}
-                variant="outline"
-                className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
-              >
-                {item}
-              </Badge>
-            ))}
-            {summary.length > 6 && (
-              <Badge variant="outline" className="text-xs">
-                +{summary.length - 6}
-              </Badge>
-            )}
-          </div>
+            <span className="whitespace-nowrap font-medium">{summary[0]}</span>
+            <span className="whitespace-nowrap text-muted-foreground">{summary[1]}{summary.length > 2 && <span className="ml-2">+{summary.length - 2}</span>}</span>
+          </button>
         );
       },
     },
@@ -512,7 +506,7 @@ export function ModelTable() {
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -543,7 +537,7 @@ export function ModelTable() {
         </DropdownMenu>
       ),
     },
-  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
+  ], [t, modelSets, channelInfoMap, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
 
   // Initialize table
   const table = useReactTable({
@@ -707,20 +701,22 @@ export function ModelTable() {
 
   return (
     <>
-      <Card className="border-none shadow-none p-6 flex flex-col h-full">
+      <section className="resource-page">
         {/* Title and action buttons */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-primary">
-            {t("model.management")}
+        <div className="contents">
+        <div className="resource-header">
+          <h2 className="text-lg font-semibold text-foreground">
+            {t("model.management")} <Badge variant="secondary" className="ml-2 rounded-full">{sortedModels.length}</Badge>
           </h2>
-          <div className="flex gap-2">
+
+          <div className="resource-actions">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t("common.search")}
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="h-9 w-48 pl-8"
+                className="h-9 w-full pl-8 sm:w-56"
               />
             </div>
             <div className="w-44">
@@ -809,17 +805,18 @@ export function ModelTable() {
             </AnimatedButton>
           </div>
         </div>
+        </div>
 
         {/* Table container */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="overflow-auto h-full">
+        <div className="resource-table">
+          <div className="resource-table-body">
             {isError ? (
               <AdvancedErrorDisplay error={error} onRetry={refetch} />
             ) : (
               <DataTable
                 table={table}
                 columns={columns}
-                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas || isLoadingRuntimeMetrics}
+                isLoading={isLoading}
                 loadingStyle="skeleton"
                 fixedHeader={true}
                 animatedRows={true}
@@ -828,7 +825,7 @@ export function ModelTable() {
             )}
           </div>
         </div>
-      </Card>
+      </section>
 
       <BuiltinModelsDialog
         open={builtinModelsDialogOpen}

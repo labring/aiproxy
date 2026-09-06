@@ -3,6 +3,7 @@ export interface Channel {
     id: number
     type: number
     name: string
+    remark?: string
     key: string
     base_url?: string
     proxy_url?: string
@@ -27,7 +28,7 @@ export interface Channel {
 
 export const DEFAULT_PRIORITY = 10
 
-export type ChannelBasicInfo = Pick<Channel, 'id' | 'name' | 'type' | 'backup_only'>
+export type ChannelBasicInfo = Pick<Channel, 'id' | 'name' | 'remark' | 'type' | 'status' | 'backup_only'>
 
 export interface ChannelConfigSchema {
     type?: string
@@ -58,6 +59,7 @@ export interface ChannelsResponse {
 export interface ChannelCreateRequest {
     type: number
     name: string
+    remark?: string
     key: string
     base_url?: string
     proxy_url?: string
@@ -76,6 +78,7 @@ export interface ChannelCreateRequest {
 export interface ChannelUpdateRequest {
     type: number
     name: string
+    remark?: string
     key: string
     base_url?: string
     proxy_url?: string

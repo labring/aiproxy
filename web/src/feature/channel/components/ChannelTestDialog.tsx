@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { ChannelTestResult } from '@/api/channel'
 import { JsonViewer } from '@/feature/log/components/JsonViewer'
 import { useChannelInfoMap } from '../hooks'
-import { BackupOnlyBadge } from '@/components/common/BackupOnlyBadge'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
 
 interface ChannelTestDialogProps {
     open: boolean
@@ -263,12 +263,9 @@ export function ChannelTestDialog({
                                                     )}
 
                                                     <div className="min-w-0 flex-1">
-                                                        {showChannelInfo && result.data?.channel_name && (
+                                                        {showChannelInfo && result.data?.channel_id && (
                                                             <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                                                                <span className="break-all text-xs font-medium text-primary dark:text-primary/80">
-                                                                    {result.data.channel_name}
-                                                                </span>
-                                                                {channelInfoMap[result.data.channel_id]?.backup_only && <BackupOnlyBadge />}
+                                                                <ChannelLabel id={result.data.channel_id} info={channelInfoMap[result.data.channel_id]} compact className="text-primary dark:text-primary/80" />
                                                                 {result.data.channel_id && (
                                                                     <span className="text-xs text-muted-foreground">
                                                                         (ID: {result.data.channel_id})

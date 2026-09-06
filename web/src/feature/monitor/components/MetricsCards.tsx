@@ -48,31 +48,30 @@ function formatCompact(v: number): string {
     return v.toLocaleString()
 }
 
-function MetricCard({ title, value, icon, className, tooltip, bgColor, iconColor, subtitle }: MetricCardProps) {
+function MetricCard({ title, value, icon, className, tooltip, iconColor, subtitle }: MetricCardProps) {
     const fullValue = typeof value === 'number' ? value.toLocaleString() : value
     const formattedValue = typeof value === 'number' ? formatCompact(value) : value
     const isAbbreviated = typeof value === 'number' && value >= 10000
 
     const cardContent = (
         <Card className={cn(
-            "border-0 shadow-sm hover:shadow-md transition-all duration-200 h-28",
-            "dark:bg-card dark:shadow-lg dark:hover:shadow-xl",
-            bgColor,
+            "min-h-28 gap-0 rounded-lg border p-0",
+            "bg-card",
             className
         )}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 h-full px-6 py-4">
+            <CardHeader className="flex flex-row-reverse items-start justify-between gap-3 space-y-0 h-full p-4">
                 <div className={cn("p-2 rounded-lg shrink-0", iconColor)}>
                     {icon}
                 </div>
-                <div className="text-right flex-1 ml-3 flex flex-col justify-center">
+                <div className="min-w-0 flex-1 flex flex-col justify-center">
                     <CardTitle className="text-xs font-medium text-muted-foreground mb-1 leading-tight">
                         {title}
                     </CardTitle>
-                    <div className="text-2xl font-bold text-foreground truncate">
+                    <div className="text-2xl font-semibold tabular-nums text-foreground break-all">
                         {formattedValue}
                     </div>
                     {subtitle && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
                             {subtitle}
                         </div>
                     )}
@@ -113,14 +112,14 @@ export function MetricsCards({
 
     if (loading) {
         return (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 9 }).map((_, index) => (
                     <Card key={index} className="border-0 shadow-sm h-28 dark:bg-card">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 h-full px-6 py-4">
+                        <CardHeader className="flex flex-row-reverse items-start justify-between gap-3 space-y-0 h-full p-4">
                             <div className="p-2 shrink-0">
                                 <Skeleton className="h-5 w-5" />
                             </div>
-                            <div className="text-right flex-1 ml-3 flex flex-col justify-center">
+                            <div className="min-w-0 flex-1 flex flex-col justify-center">
                                 <Skeleton className="h-3 w-16 mb-2" />
                                 <Skeleton className="h-6 w-12" />
                             </div>
@@ -150,7 +149,7 @@ export function MetricsCards({
         : '0.0'
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 xl:grid-cols-3">
             {/* Row 1: Core metrics */}
             <MetricCard
                 title={t('monitor.metrics.totalRequests')}

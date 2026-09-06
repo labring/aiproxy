@@ -1,5 +1,6 @@
+import { StatusBadge } from '@/components/common/StatusBadge'
 // src/feature/channel/components/ChannelTable.tsx
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -10,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels, useAllChannelDefaultModels } from '../hooks'
 import { channelApi } from '@/api/channel'
 import { BackupOnlyBadge } from '@/components/common/BackupOnlyBadge'
+import { ChannelDisabledBadge } from '@/components/common/ChannelDisabledBadge'
 import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,7 +22,6 @@ import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ChannelDialog } from './ChannelDialog'
 import { Loader2 } from 'lucide-react'
@@ -53,15 +54,16 @@ import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 import { format } from 'date-fns'
 import { getChannelModelMetric, getTemporarilyExcludedModels } from '@/utils/runtime-metrics'
+import { getChannelPriority, getChannelSets } from '@/utils/channel'
 
 const formatTimestamp = (timestamp: number): string => {
     if (!timestamp) return '-'
-    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+    return format(timestamp, 'yyyy-MM-dd HH:mm')
 }
 
 const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
     if (!timestamp || timestamp <= 0) return neverLabel
-    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+    return format(timestamp, 'yyyy-MM-dd HH:mm')
 }
 
 export function ChannelTable() {
@@ -97,6 +99,8 @@ export function ChannelTable() {
         }, 300)
     }, [])
 
+    useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }, [])
+
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
     const { data: allDefaultModels } = useAllChannelDefaultModels()
@@ -127,7 +131,7 @@ export function ChannelTable() {
         [data?.channels]
     )
     const total = data?.total || 0
-    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
+    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     // 打开创建渠道对话框
     const openCreateDialog = () => {
@@ -184,6 +188,7 @@ export function ChannelTable() {
             const exportData: ChannelCreateRequest[] = allChannels.map(channel => ({
                 type: channel.type,
                 name: channel.name,
+                remark: channel.remark,
                 key: channel.key,
                 base_url: channel.base_url,
                 proxy_url: channel.proxy_url,
@@ -221,6 +226,7 @@ export function ChannelTable() {
         const exportData: ChannelCreateRequest[] = [{
             type: channel.type,
             name: channel.name,
+            remark: channel.remark,
             key: channel.key,
             base_url: channel.base_url,
             proxy_url: channel.proxy_url,
@@ -312,11 +318,11 @@ export function ChannelTable() {
     }
 
     // 获取渠道类型名称
-    const getChannelTypeName = (typeId: number): string => {
+    const getChannelTypeName = useCallback((typeId: number): string => {
         if (!typeMetas) return String(typeId)
         const meta = typeMetas[typeId]
         return meta ? meta.name : String(typeId)
-    }
+    }, [typeMetas])
 
     const providerOptions = useMemo(() => {
         if (!typeMetas) return []
@@ -353,7 +359,7 @@ export function ChannelTable() {
     const dashboardCell = 'cursor-pointer hover:text-primary transition-colors'
 
     // 表格列定义
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     const columns: ColumnDef<Channel>[] = useMemo(() => [
         {
             accessorKey: 'id',
@@ -373,12 +379,26 @@ export function ChannelTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.name")}</div>,
             cell: ({ row }) => (
                 <div
-                    className={cn("flex max-w-[240px] flex-wrap items-center gap-1.5 font-medium", clickableCell)}
+                    className={cn("flex min-w-[160px] max-w-[240px] flex-wrap items-center gap-1.5 font-medium", clickableCell)}
                     onClick={() => openUpdateDialog(row.original)}
                     title={row.original.name}
                 >
                     <span className="truncate" title={row.original.name}>{row.original.name}</span>
-                    {row.original.backup_only && <BackupOnlyBadge />}
+                    {(row.original.status === 2 || row.original.backup_only) && (
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                            {row.original.status === 2 && <ChannelDisabledBadge />}
+                            {row.original.backup_only && <BackupOnlyBadge />}
+                        </span>
+                    )}
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'remark',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.remark")}</div>,
+            cell: ({ row }) => (
+                <div className="max-w-[220px] truncate text-sm text-muted-foreground" title={row.original.remark || undefined}>
+                    {row.original.remark || <span className="text-muted-foreground/50">-</span>}
                 </div>
             ),
         },
@@ -398,8 +418,7 @@ export function ChannelTable() {
             accessorKey: 'sets',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.sets")}</div>,
             cell: ({ row }) => {
-                const sets = row.original.sets || [];
-                if (sets.length === 0) return <div className="text-muted-foreground text-xs">-</div>;
+                const sets = getChannelSets(row.original.sets);
 
                 return (
                     <div
@@ -427,7 +446,7 @@ export function ChannelTable() {
                     className={clickableCell}
                     onClick={() => openUpdateDialog(row.original)}
                 >
-                    {row.original.priority || 10}
+                    {getChannelPriority(row.original.priority)}
                 </div>
             ),
         },
@@ -681,23 +700,7 @@ export function ChannelTable() {
             accessorKey: 'status',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.status")}</div>,
             cell: ({ row }) => (
-                <div>
-                    {row.original.status === 2 ? (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-destructive dark:bg-red-600/90"
-                        )}>
-                            {t("token.disabled")}
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-primary dark:bg-[#4A4DA0]"
-                        )}>
-                            {t("token.enabled")}
-                        </Badge>
-                    )}
-                </div>
+                <StatusBadge enabled={row.original.status !== 2} />
             ),
         },
         {
@@ -705,7 +708,7 @@ export function ChannelTable() {
             cell: ({ row }) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
@@ -766,7 +769,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent, getExcludedModels])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent, getExcludedModels, getChannelTypeName])
 
     // 初始化表格
     const table = useReactTable({
@@ -777,12 +780,18 @@ export function ChannelTable() {
 
     return (
         <>
-            <Card className="border-none shadow-none p-6 flex flex-col h-full">
-                {/* 标题和操作按钮 */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
-                    <div className="flex gap-2">
-                        <div className="w-48">
+            <section className="resource-page">
+                <div className="contents">
+                    <div className="resource-header">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-lg font-semibold text-foreground">{t("channel.management")}</h2>
+                                <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">{total}</Badge>
+                            </div>
+
+                        </div>
+                        <div className="resource-actions">
+                        <div className="w-full sm:w-48">
                             <Select
                                 value={selectedChannelType ? String(selectedChannelType) : ''}
                                 onValueChange={(value) => {
@@ -803,13 +812,13 @@ export function ChannelTable() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="relative">
+                        <div className="relative w-full sm:w-56">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("common.search")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
-                                className="h-9 w-48 pl-8"
+                                className="h-9 w-full pl-8"
                             />
                         </div>
                         <AnimatedButton>
@@ -892,23 +901,24 @@ export function ChannelTable() {
                             <Button
                                 size="sm"
                                 onClick={openCreateDialog}
-                                className="flex items-center gap-1 bg-primary hover:bg-primary/90 dark:bg-[#4A4DA0] dark:hover:bg-[#5155A5]"
+                                className="flex items-center gap-1 bg-primary hover:bg-primary/90"
                             >
                                 <Plus className="h-3.5 w-3.5" />
                                 {t("channel.add")}
                             </Button>
                         </AnimatedButton>
+                        </div>
                     </div>
                 </div>
 
                 {/* 表格容器 */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1">
+                <div className="resource-table">
+                    <div className="resource-table-body">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
                             columns={columns}
-                            isLoading={isLoading || isLoadingRuntimeMetrics}
+                            isLoading={isLoading}
                             fixedHeader={true}
                             animatedRows={true}
                             showScrollShadows={true}
@@ -924,7 +934,7 @@ export function ChannelTable() {
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />
                 </div>
-            </Card>
+            </section>
 
             {/* 默认模型管理对话框 */}
             <DefaultModelsDialog

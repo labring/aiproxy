@@ -1,3 +1,4 @@
+import { StatusBadge } from '@/components/common/StatusBadge'
 // src/feature/token/components/TokenTable.tsx
 import { useState, useCallback, useMemo } from 'react'
 import {
@@ -16,7 +17,6 @@ import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { TokenQuotaDialog } from './TokenQuotaDialog'
 import { DataTable } from '@/components/table/motion-data-table'
@@ -209,7 +209,7 @@ export function TokenTable() {
     }
 
     // 表格列定义
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     const columns: ColumnDef<Token>[] = useMemo(() => [
         {
             accessorKey: 'name',
@@ -266,8 +266,10 @@ export function TokenTable() {
                     </span>
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
+                        size="icon"
+                        className="size-8 shrink-0"
+                        aria-label={t("token.copyKey")}
+                        title={t("token.copyKey")}
                         onClick={() => copyToClipboard(row.original.key)}
                     >
                         <Copy className="h-3.5 w-3.5" />
@@ -316,7 +318,7 @@ export function TokenTable() {
                     >
                         {token.quota > 0 && (
                             <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground">Total:</span>
+                                <span className="text-muted-foreground">{t("token.quota.total")}:</span>
                                 <span className={cn(
                                     remaining.total < token.quota * 0.1 ? "text-destructive" : "text-emerald-600"
                                 )}>
@@ -326,7 +328,7 @@ export function TokenTable() {
                         )}
                         {token.period_quota > 0 && (
                             <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground">Period:</span>
+                                <span className="text-muted-foreground">{t("token.quota.period")}:</span>
                                 <span className={cn(
                                     remaining.period < token.period_quota * 0.1 ? "text-destructive" : "text-emerald-600"
                                 )}>
@@ -432,23 +434,7 @@ export function TokenTable() {
             accessorKey: 'status',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.status")}</div>,
             cell: ({ row }) => (
-                <div>
-                    {row.original.status === 2 ? (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-destructive dark:bg-red-600/90"
-                        )}>
-                            {t("token.disabled")}
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-primary dark:bg-[#4A4DA0]"
-                        )}>
-                            {t("token.enabled")}
-                        </Badge>
-                    )}
-                </div>
+                <StatusBadge enabled={row.original.status !== 2} />
             ),
         },
         {
@@ -456,7 +442,7 @@ export function TokenTable() {
             cell: ({ row }) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
@@ -510,20 +496,21 @@ export function TokenTable() {
 
     return (
         <>
-            <Card className="border-none shadow-none p-6 flex flex-col h-full">
+            <section className="resource-page">
                 {/* 标题和操作按钮 */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
+                <div className="contents">
+                <div className="resource-header">
+                    <h2 className="text-lg font-semibold text-foreground">
                         {t("token.management")}
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="resource-actions">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("common.search")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
-                                className="h-9 w-48 pl-8"
+                                className="h-9 w-full pl-8 sm:w-56"
                             />
                         </div>
                         <AnimatedButton>
@@ -541,10 +528,11 @@ export function TokenTable() {
                         </AnimatedButton>
                     </div>
                 </div>
+                </div>
 
                 {/* 表格容器 */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1">
+                <div className="resource-table">
+                    <div className="resource-table-body">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -565,7 +553,7 @@ export function TokenTable() {
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />
                 </div>
-            </Card>
+            </section>
 
             {/* Token限额配置对话框 */}
             <TokenQuotaDialog

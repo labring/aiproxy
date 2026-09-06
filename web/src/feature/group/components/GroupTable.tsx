@@ -17,7 +17,6 @@ import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Card } from '@/components/ui/card'
 import { DataTable } from '@/components/table/motion-data-table'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteGroupDialog } from './DeleteGroupDialog'
@@ -28,7 +27,7 @@ import { useTranslation } from 'react-i18next'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { format } from 'date-fns'
 import { useGroupSummaryMetrics } from '@/feature/monitor/runtime-hooks'
 
@@ -40,7 +39,7 @@ const formatAmount = (amount: number): string => {
     if (amount >= 1000) {
         return `${(amount / 1000).toFixed(2)}K`
     }
-    return amount.toFixed(2)
+    return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })
 }
 
 // Format timestamp to date string
@@ -147,7 +146,7 @@ export function GroupTable() {
     }
 
     // Table column definitions
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     const columns: ColumnDef<Group>[] = useMemo(() => [
         {
             accessorKey: 'id',
@@ -162,23 +161,7 @@ export function GroupTable() {
             accessorKey: 'status',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("group.status")}</div>,
             cell: ({ row }) => (
-                <div>
-                    {row.original.status === 2 ? (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-destructive dark:bg-red-600/90"
-                        )}>
-                            {t("group.disabled")}
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-primary dark:bg-[#4A4DA0]"
-                        )}>
-                            {t("group.enabled")}
-                        </Badge>
-                    )}
-                </div>
+                <StatusBadge enabled={row.original.status !== 2} label={t(row.original.status === 2 ? "group.disabled" : "group.enabled")} />
             ),
         },
         {
@@ -272,7 +255,7 @@ export function GroupTable() {
                 <div onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
                                 <MoreHorizontal className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
@@ -328,20 +311,21 @@ export function GroupTable() {
 
     return (
         <div className="h-full flex flex-col min-h-0">
-            <Card className="border-none shadow-none p-6 flex flex-col flex-1 min-h-0">
+            <section className="resource-page">
                 {/* Title and action buttons */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
+                <div className="contents">
+                <div className="resource-header">
+                    <h2 className="text-lg font-semibold text-foreground">
                         {t("group.management")}
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="resource-actions">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("common.search")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
-                                className="h-9 w-48 pl-8"
+                                className="h-9 w-full pl-8 sm:w-56"
                             />
                         </div>
                         <AnimatedButton>
@@ -361,7 +345,7 @@ export function GroupTable() {
                             <Button
                                 size="sm"
                                 onClick={openCreateDialog}
-                                className="flex items-center gap-1 bg-primary hover:bg-primary/90 dark:bg-[#4A4DA0] dark:hover:bg-[#5155A5]"
+                                className="flex items-center gap-1 bg-primary hover:bg-primary/90"
                             >
                                 <Plus className="h-3.5 w-3.5" />
                                 {t("group.add")}
@@ -369,10 +353,11 @@ export function GroupTable() {
                         </AnimatedButton>
                     </div>
                 </div>
+                </div>
 
                 {/* Table container */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1">
+                <div className="resource-table">
+                    <div className="resource-table-body">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
@@ -394,7 +379,7 @@ export function GroupTable() {
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />
                 </div>
-            </Card>
+            </section>
 
             {/* Group detail dialog */}
             <GroupDialog

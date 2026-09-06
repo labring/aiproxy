@@ -117,7 +117,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="max-w-xl">
                 <DialogHeader>
                     <DialogTitle>{isEdit ? t('group.dialog.updateTitle') : t('group.dialog.createTitle')}</DialogTitle>
                     <DialogDescription>
@@ -185,6 +185,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
                         <div className="flex items-center justify-between rounded-lg border p-3">
                             <Label htmlFor="group-balance-alert">{t('group.dialog.balanceAlertEnabled')}</Label>
                             <Switch
+                                id="group-balance-alert"
                                 checked={balanceAlertEnabled}
                                 onCheckedChange={setBalanceAlertEnabled}
                                 disabled={loading}
@@ -204,7 +205,7 @@ export function CreateGroupDialog({ open, onOpenChange, group = null }: CreateGr
                             />
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="form-actions">
                         <Button
                             type="button"
                             variant="outline"

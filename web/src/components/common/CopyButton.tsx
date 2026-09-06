@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Check, Copy } from 'lucide-react'
 import { writeTextToClipboard } from '@/lib/clipboard'
@@ -9,19 +11,26 @@ interface CopyButtonProps {
 }
 
 export const CopyButton = ({ text, className }: CopyButtonProps) => {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
 
   const copyToClipboard = () => {
     writeTextToClipboard(text).then(() => {
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => {})
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => setCopied(false), 2000)
+    }).catch(() => toast.error(t('common.copyFailed')))
   }
 
   return (
     <Button
-      size="sm"
+      type="button"
+      size="icon"
       variant="ghost"
+      aria-label={t(copied ? 'common.copied' : 'ui.copy')}
+      title={t(copied ? 'common.copied' : 'ui.copy')}
       className={className}
       onClick={copyToClipboard}
     >

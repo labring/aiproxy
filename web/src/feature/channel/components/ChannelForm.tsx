@@ -1,3 +1,4 @@
+import { Textarea } from '@/components/ui/textarea'
 // src/feature/channel/components/ChannelForm.tsx
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -34,10 +35,14 @@ import { ChannelConfigEditor } from './ChannelConfigEditor'
 import { useRuntimeMetrics } from '@/feature/monitor/runtime-hooks'
 import { getChannelModelMetric } from '@/utils/runtime-metrics'
 import { DEFAULT_PRIORITY } from '@/types/channel'
+import { DEFAULT_CHANNEL_SET, MAX_CHANNEL_PRIORITY, getChannelPriority } from '@/utils/channel'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 type ComparableChannelPayload = {
     type: number
     name: string
+    remark?: string
     key: string
     base_url: string
     proxy_url: string
@@ -72,18 +77,20 @@ const normalizeChannelPayload = (
     payload: Partial<ComparableChannelPayload> & {
         type: number
         name: string
+        remark?: string
         key: string
     }
 ): ComparableChannelPayload => ({
     type: payload.type,
     name: payload.name,
+    remark: payload.remark ?? '',
     key: payload.key,
     base_url: payload.base_url ?? '',
     proxy_url: payload.proxy_url ?? '',
     models: payload.models ?? [],
     model_mapping: payload.model_mapping ?? {},
     sets: payload.sets ?? [],
-    priority: payload.priority ?? DEFAULT_PRIORITY,
+    priority: getChannelPriority(payload.priority),
     backup_only: payload.backup_only ?? false,
     skip_tls_verify: payload.skip_tls_verify ?? false,
     enabled_no_permission_ban: payload.enabled_no_permission_ban ?? false,
@@ -103,6 +110,7 @@ interface ChannelFormProps {
         type: number
         name: string
         key: string
+        remark?: string
         base_url?: string
         proxy_url?: string
         models: string[]
@@ -127,12 +135,13 @@ export function ChannelForm({
         type: 0,
         name: '',
         key: '',
+        remark: '',
         base_url: '',
         proxy_url: '',
         models: [],
         model_mapping: {},
         sets: [],
-        priority: 10,
+        priority: DEFAULT_PRIORITY,
         backup_only: false,
         skip_tls_verify: false,
         enabled_no_permission_ban: false,
@@ -213,6 +222,7 @@ export function ChannelForm({
         resolver: zodResolver(channelCreateSchema),
         defaultValues: {
             ...defaultValues,
+            priority: getChannelPriority(defaultValues.priority),
             useDefaultModels: initialUseDefault,
         },
     })
@@ -277,13 +287,14 @@ export function ChannelForm({
         const formData = {
             type: data.type,
             name: data.name,
+            remark: data.remark?.trim() || '',
             key: data.key,
             base_url: data.base_url || '',
             proxy_url: data.proxy_url || '',
             models: effectiveUseDefault ? [] : (data.models || []),
             model_mapping: effectiveUseDefault ? {} : (data.model_mapping || {}),
             sets: data.sets || [],
-            priority: data.priority,
+            priority: getChannelPriority(data.priority),
             backup_only: data.backup_only ?? false,
             skip_tls_verify: data.skip_tls_verify ?? false,
             enabled_no_permission_ban: data.enabled_no_permission_ban ?? false,
@@ -369,6 +380,7 @@ export function ChannelForm({
         const currentPayload = normalizeChannelPayload({
             type: formData.type,
             name: formData.name,
+            remark: formData.remark || '',
             key: formData.key,
             base_url: formData.base_url || '',
             proxy_url: formData.proxy_url || '',
@@ -387,6 +399,7 @@ export function ChannelForm({
         const originalPayload = normalizeChannelPayload({
             type: channel.type,
             name: channel.name,
+            remark: channel.remark || '',
             key: channel.key,
             base_url: channel.base_url || '',
             proxy_url: channel.proxy_url || '',
@@ -690,23 +703,25 @@ export function ChannelForm({
                             onKeyDown={handleKeyDown}
                             className="space-y-6"
                         >
-                            {/* API错误提示 */}
-                            {error && (
-                                <AdvancedErrorDisplay error={error} />
-                            )}
+                            {error && <AdvancedErrorDisplay error={error} />}
 
-                            {/* 厂商字段 */}
-                            <FormField
-                                control={form.control}
-                                name="type"
-                                render={({ field }) => {
+                            <section className="form-section">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground">{t('ui.identity')}</h3>
+
+                                </div>
+                                {/* 厂商字段 */}
+                                <FormField
+                                    control={form.control}
+                                    name="type"
+                                    render={({ field }) => {
 
                                     const availableChannels = Object.values(typeMetas).map(
                                         (type) => type.name
                                     )
 
                                     const initSelectedItem = field.value
-                                        ? typeMetas[String(field.value)].name
+                                        ? typeMetas[String(field.value)]?.name
                                         : undefined
 
                                     const getKeyByName = (name: string): string | undefined => {
@@ -758,8 +773,8 @@ export function ChannelForm({
                                             }}
                                         />
                                     )
-                                }}
-                            />
+                                    }}
+                                />
 
                             {/* Readme */}
                             {(() => {
@@ -767,30 +782,44 @@ export function ChannelForm({
                                 const meta = typeId ? typeMetas[String(typeId)] : null
                                 if (!meta?.readme) return null
                                 return (
-                                    <div className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground whitespace-pre-line">
-                                        {meta.readme}
-                                    </div>
+                                    <details className="border-l-2 border-primary/30 pl-3"><summary className="cursor-pointer text-sm font-medium text-primary">{t("ui.readme")}</summary><div className="markdown-content pt-3"><ReactMarkdown remarkPlugins={[remarkGfm]}>{meta.readme}</ReactMarkdown></div></details>
                                 )
                             })()}
 
-                            {/* 名称字段 */}
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t("channel.dialog.name")}</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder={t("channel.dialog.namePlaceholder")} {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <FormField
+                                        control={form.control}
+                                        name="name"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("channel.dialog.name")}</FormLabel>
+                                                <FormControl><Input placeholder={t("channel.dialog.namePlaceholder")} {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="remark"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("channel.dialog.remark")}</FormLabel>
+                                                <FormControl><Textarea maxLength={255} rows={2} className="min-h-18" placeholder={t("channel.dialog.remarkPlaceholder")} {...field} /></FormControl>
+                                                <span className="text-right text-xs tabular-nums text-muted-foreground">{field.value?.length || 0}/255</span>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </section>
 
                             {/* 模型选择字段 - with default/custom toggle */}
                             {watchedType > 0 && (
-                                <div className="space-y-3">
+                                <section className="form-section">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-foreground">{t('ui.routing')}</h3>
+
+                                    </div>
                                     <FormLabel>{t("channel.dialog.models")}</FormLabel>
                                     {renderModelModeToggle()}
 
@@ -919,7 +948,7 @@ export function ChannelForm({
                                             />
                                         </>
                                     )}
-                                </div>
+                                </section>
                             )}
 
                             {/* 分组字段 */}
@@ -931,22 +960,24 @@ export function ChannelForm({
                                         <FormItem>
                                             <FormControl>
                                                 <MultiSelectCombobox<string>
-                                                    dropdownItems={[]}
+                                                    dropdownItems={[DEFAULT_CHANNEL_SET]}
                                                     selectedItems={field.value || []}
                                                     setSelectedItems={(sets) => {
                                                         field.onChange(sets)
                                                     }}
                                                     handleFilteredDropdownItems={(dropdownItems, selectedItems, inputValue) => {
+                                                        const availableItems = dropdownItems.filter(item =>
+                                                            !selectedItems.includes(item) && item.includes(inputValue))
                                                         // 允许用户创建新的分组
                                                         if (inputValue && !selectedItems.includes(inputValue) && !dropdownItems.includes(inputValue)) {
-                                                            return [inputValue, ...dropdownItems]
+                                                            return [inputValue, ...availableItems]
                                                         }
-                                                        return dropdownItems
+                                                        return availableItems
                                                     }}
                                                     handleDropdownItemDisplay={(item) => item}
                                                     handleSelectedItemDisplay={(item) => item}
                                                     allowUserCreatedItems={true}
-                                                    placeholder={t("channel.dialog.setsPlaceholder")}
+                                                    placeholder={field.value?.length ? t("channel.dialog.setsPlaceholder") : DEFAULT_CHANNEL_SET}
                                                     label={t("channel.dialog.sets")}
                                                 />
                                             </FormControl>
@@ -956,6 +987,7 @@ export function ChannelForm({
                                 }}
                             />
 
+                            <section className="form-section"><h3>{t("ui.connection")}</h3>
                             {/* 密钥字段 */}
                             <FormField
                                 control={form.control}
@@ -1117,10 +1149,14 @@ export function ChannelForm({
                                             <Input
                                                 type="number"
                                                 min={0}
-                                                max={1000000}
+                                                max={MAX_CHANNEL_PRIORITY}
                                                 placeholder={t("channel.dialog.priorityPlaceholder")}
                                                 {...field}
                                                 value={field.value ?? ''}
+                                                onBlur={() => {
+                                                    if (!field.value) field.onChange(DEFAULT_PRIORITY)
+                                                    field.onBlur()
+                                                }}
                                                 onChange={(e) => {
                                                     const value = e.target.value
                                                     if (value === '') {
@@ -1139,7 +1175,7 @@ export function ChannelForm({
                                 )}
                             />
 
-                            <div className="grid gap-4 md:grid-cols-2 rounded-lg border bg-muted/20 p-4">
+                            <div className="grid gap-4 border-t pt-4 md:grid-cols-2">
                                 <FormField
                                     control={form.control}
                                     name="enabled_no_permission_ban"
@@ -1224,8 +1260,9 @@ export function ChannelForm({
                                 />
                             </div>
 
+                            </section>
                             {/* 提交和测试按钮 */}
-                            <div className="flex justify-between items-center gap-3">
+                            <div className="form-actions justify-between">
                                 <div className="flex items-center gap-2">
                                     <Button
                                         type="button"

@@ -97,8 +97,8 @@ export function GroupDashboardFilters({
     }
 
     return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="border-b pb-3">
+            <div className="filter-bar">
                 {/* Token Name */}
                 <div className="w-44 flex-shrink-0">
                     <Select value={tokenName} onValueChange={setTokenName} disabled={loading}>
@@ -157,7 +157,7 @@ export function GroupDashboardFilters({
                 <div className="flex-1" />
 
                 {/* Date Range */}
-                <div className="w-56 flex-shrink-0">
+                <div className="w-64 flex-shrink-0">
                     <DateRangePicker
                         value={dateRange}
                         onChange={setDateRange}

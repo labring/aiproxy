@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -77,6 +78,39 @@ func buildChannelResponses(channels []*model.Channel) []*ChannelResponse {
 	return responses
 }
 
+func parseChannelFilter(c *gin.Context) (model.ChannelFilter, error) {
+	id, _ := strconv.Atoi(c.Query("id"))
+	channelType, _ := strconv.Atoi(c.Query("channel_type"))
+	filter := model.ChannelFilter{
+		ID: id, Name: c.Query("name"), Key: c.Query("key"),
+		Type: channelType, BaseURL: c.Query("base_url"),
+	}
+
+	query := c.Request.URL.Query()
+	if values, present := query["remark"]; present {
+		if len(values) != 1 {
+			return filter, errors.New("remark must be specified once")
+		}
+
+		filter.Remark = &values[0]
+	}
+
+	if values, present := query["backup_only"]; present {
+		if len(values) != 1 {
+			return filter, errors.New("backup_only must be specified once")
+		}
+
+		value, err := strconv.ParseBool(values[0])
+		if err != nil {
+			return filter, errors.New("backup_only must be a boolean")
+		}
+
+		filter.BackupOnly = &value
+	}
+
+	return filter, nil
+}
+
 // GetChannels godoc
 //
 //	@Summary		Get channels with pagination
@@ -88,6 +122,8 @@ func buildChannelResponses(channels []*model.Channel) []*ChannelResponse {
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -96,21 +132,19 @@ func buildChannelResponses(channels []*model.Channel) []*ChannelResponse {
 //	@Router			/api/channels/ [get]
 func GetChannels(c *gin.Context) {
 	page, perPage := utils.ParsePageParams(c)
-	id, _ := strconv.Atoi(c.Query("id"))
-	name := c.Query("name")
-	key := c.Query("key")
-	channelType, _ := strconv.Atoi(c.Query("channel_type"))
-	baseURL := c.Query("base_url")
+
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	order := c.Query("order")
 
 	channels, total, err := model.GetChannels(
 		page,
 		perPage,
-		id,
-		name,
-		key,
-		channelType,
-		baseURL,
+		filter,
 		order,
 	)
 	if err != nil {
@@ -186,15 +220,17 @@ func AddChannels(c *gin.Context) {
 // SearchChannels godoc
 //
 //	@Summary		Search channels
-//	@Description	Search channels with keyword and optional filters
+//	@Description	Search channel names, remarks, keys, URLs, models and sets with a keyword, combined with optional exact filters
 //	@Tags			channels
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			keyword			query		string	true	"Search keyword"
+//	@Param			keyword			query		string	false	"Search keyword, including remark content"
 //	@Param			page			query		int		false	"Page number"
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -204,22 +240,20 @@ func AddChannels(c *gin.Context) {
 func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
 	page, perPage := utils.ParsePageParams(c)
-	id, _ := strconv.Atoi(c.Query("id"))
-	name := c.Query("name")
-	key := c.Query("key")
-	channelType, _ := strconv.Atoi(c.Query("channel_type"))
-	baseURL := c.Query("base_url")
+
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	order := c.Query("order")
 
 	channels, total, err := model.SearchChannels(
 		keyword,
 		page,
 		perPage,
-		id,
-		name,
-		key,
-		channelType,
-		baseURL,
+		filter,
 		order,
 	)
 	if err != nil {
@@ -264,6 +298,7 @@ type AddChannelRequest struct {
 	ModelMapping            map[string]string    `json:"model_mapping"`
 	Configs                 model.ChannelConfigs `json:"configs"`
 	Name                    string               `json:"name"`
+	Remark                  string               `json:"remark"`
 	Key                     string               `json:"key"`
 	BaseURL                 string               `json:"base_url"`
 	ProxyURL                string               `json:"proxy_url"`
@@ -278,6 +313,91 @@ type AddChannelRequest struct {
 	EnabledNoPermissionBan  bool                 `json:"enabled_no_permission_ban"`
 	WarnErrorRate           float64              `json:"warn_error_rate"`
 	MaxErrorRate            float64              `json:"max_error_rate"`
+}
+
+// UpdateChannelRequest treats omitted fields and null as unchanged.
+// Empty strings, false, zero and empty collections are explicit updates.
+type UpdateChannelRequest model.ChannelPatch
+
+func (r *UpdateChannelRequest) Apply(current *model.Channel) (*model.Channel, error) {
+	next := *current
+	if r.Type != nil {
+		next.Type = *r.Type
+	}
+
+	if r.Name != nil {
+		next.Name = *r.Name
+	}
+
+	if r.Remark != nil {
+		next.Remark = *r.Remark
+	}
+
+	if r.Key != nil {
+		next.Key = *r.Key
+	}
+
+	if r.BaseURL != nil {
+		next.BaseURL = *r.BaseURL
+	}
+
+	if r.ProxyURL != nil {
+		next.ProxyURL = *r.ProxyURL
+	}
+
+	if r.Models != nil {
+		next.Models = slices.Clone(*r.Models)
+	}
+
+	if r.ModelMapping != nil {
+		next.ModelMapping = maps.Clone(*r.ModelMapping)
+	}
+
+	if r.Configs != nil {
+		next.Configs = maps.Clone(*r.Configs)
+	}
+
+	if r.Priority != nil {
+		next.Priority = *r.Priority
+	}
+
+	if r.BackupOnly != nil {
+		next.BackupOnly = *r.BackupOnly
+	}
+
+	if r.Sets != nil {
+		next.Sets = slices.Clone(*r.Sets)
+	}
+
+	if r.EnabledAutoBalanceCheck != nil {
+		next.EnabledAutoBalanceCheck = *r.EnabledAutoBalanceCheck
+	}
+
+	if r.SkipTLSVerify != nil {
+		next.SkipTLSVerify = *r.SkipTLSVerify
+	}
+
+	if r.EnabledNoPermissionBan != nil {
+		next.EnabledNoPermissionBan = *r.EnabledNoPermissionBan
+	}
+
+	if r.WarnErrorRate != nil {
+		next.WarnErrorRate = *r.WarnErrorRate
+	}
+
+	if r.MaxErrorRate != nil {
+		next.MaxErrorRate = *r.MaxErrorRate
+	}
+
+	if r.BalanceThreshold != nil {
+		next.BalanceThreshold = *r.BalanceThreshold
+	}
+
+	if _, err := (&AddChannelRequest{Type: next.Type, Name: next.Name, Key: next.Key}).ToChannel(); err != nil {
+		return nil, err
+	}
+
+	return &next, nil
 }
 
 func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
@@ -315,6 +435,7 @@ func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
 	return &model.Channel{
 		Type:                    r.Type,
 		Name:                    r.Name,
+		Remark:                  r.Remark,
 		Key:                     r.Key,
 		BaseURL:                 r.BaseURL,
 		ProxyURL:                r.ProxyURL,
@@ -422,7 +543,7 @@ func DeleteChannels(c *gin.Context) {
 // GetChannelBatchInfo godoc
 //
 //	@Summary		Get basic info for multiple channels
-//	@Description	Returns id, name, type, and backup-only status for a batch of channel IDs
+//	@Description	Returns id, name, remark, type, current status, and backup-only status for a batch of channel IDs, including soft-deleted channels
 //	@Tags			channels
 //	@Accept			json
 //	@Produce		json
@@ -451,13 +572,13 @@ func GetChannelBatchInfo(c *gin.Context) {
 // UpdateChannel godoc
 //
 //	@Summary		Update a channel
-//	@Description	Updates an existing channel by its ID
+//	@Description	Updates only supplied fields. Omitted fields and null retain current values; empty strings, false, zero, empty arrays and empty objects explicitly replace values, subject to channel validation.
 //	@Tags			channel
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
 //	@Param			id		path		int					true	"Channel ID"
-//	@Param			channel	body		AddChannelRequest	true	"Updated channel information"
+//	@Param			channel	body		UpdateChannelRequest	true	"Optional channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.Channel}
 //	@Router			/api/channel/{id} [put]
 func UpdateChannel(c *gin.Context) {
@@ -473,7 +594,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	channel := AddChannelRequest{}
+	channel := UpdateChannelRequest{}
 
 	err = c.ShouldBindJSON(&channel)
 	if err != nil {
@@ -481,15 +602,19 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	ch, err := channel.ToChannel()
+	current, err := model.GetChannelByID(id)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusNotFound, err.Error())
+		return
+	}
+
+	ch, err := channel.Apply(current)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ch.ID = id
-
-	err = model.UpdateChannel(ch)
+	err = model.UpdateChannel(ch, (*model.ChannelPatch)(&channel))
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

@@ -63,7 +63,11 @@ export default function MonitorPage() {
     const hasData = (data?.chartData?.length ?? 0) > 0
 
     return (
-        <div className="flex-1 space-y-4 p-6">
+        <div className="flex-1 space-y-4 p-4 sm:p-6 max-w-[1800px] w-full mx-auto">
+            <div className="flex items-end justify-between gap-4">
+                <div><h1 className="text-lg font-semibold">{t('monitor.title')}</h1></div>
+
+            </div>
             <MonitorFilters
                 onFiltersChange={handleFiltersChange}
                 loading={isLoading}

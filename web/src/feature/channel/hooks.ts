@@ -173,6 +173,9 @@ export const useUpdateChannelStatus = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['channels'] })
+            queryClient.invalidateQueries({ queryKey: ['allChannels'] })
+            queryClient.invalidateQueries({ queryKey: ['modelSets'] })
+            queryClient.invalidateQueries({ queryKey: ['channelBasicInfo'] })
             setError(null)
             toast.success('状态更新成功')
         },
