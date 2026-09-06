@@ -47,7 +47,11 @@ func awsClientFromMeta(meta *meta.Meta) (*bedrockruntime.Client, error) {
 		return nil, err
 	}
 
-	httpClient, err := relayutils.LoadHTTPClientE(meta.RequestTimeout, meta.Channel.ProxyURL)
+	httpClient, err := relayutils.LoadHTTPClientWithTLSConfigE(
+		meta.RequestTimeout,
+		meta.Channel.ProxyURL,
+		meta.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return nil, err
 	}

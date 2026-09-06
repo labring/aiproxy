@@ -25,6 +25,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -805,10 +806,9 @@ func ImageHandler(
 	}
 
 	aliResponse, err := asyncTaskWait(
-		c,
-		meta.Channel.BaseURL,
+		c.Request.Context(),
+		meta,
 		aliTaskResponse.Output.TaskID,
-		meta.Channel.Key,
 	)
 	if err != nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
@@ -905,10 +905,10 @@ func MultimodalImageHandler(
 	}, nil
 }
 
-func asyncTask(ctx context.Context, baseURL, taskID, key string) (*TaskResponse, error) {
+func asyncTask(ctx context.Context, m *meta.Meta, taskID string) (*TaskResponse, error) {
 	var aliResponse TaskResponse
 
-	taskURL, err := url.JoinPath(baseURL, "/api/v1/tasks", taskID)
+	taskURL, err := url.JoinPath(m.Channel.BaseURL, "/api/v1/tasks", taskID)
 	if err != nil {
 		return &aliResponse, err
 	}
@@ -918,11 +918,9 @@ func asyncTask(ctx context.Context, baseURL, taskID, key string) (*TaskResponse,
 		return &aliResponse, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Authorization", "Bearer "+m.Channel.Key)
 
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
+	resp, err := utils.DoRequestWithMeta(req, m)
 	if err != nil {
 		return &aliResponse, err
 	}
@@ -938,7 +936,7 @@ func asyncTask(ctx context.Context, baseURL, taskID, key string) (*TaskResponse,
 	return &response, nil
 }
 
-func asyncTaskWait(ctx context.Context, baseURL, taskID, key string) (*TaskResponse, error) {
+func asyncTaskWait(ctx context.Context, m *meta.Meta, taskID string) (*TaskResponse, error) {
 	waitSeconds := 2
 	step := 0
 	maxStep := 20
@@ -946,7 +944,7 @@ func asyncTaskWait(ctx context.Context, baseURL, taskID, key string) (*TaskRespo
 	for {
 		step++
 
-		rsp, err := asyncTask(ctx, baseURL, taskID, key)
+		rsp, err := asyncTask(ctx, m, taskID)
 		if err != nil {
 			return nil, err
 		}

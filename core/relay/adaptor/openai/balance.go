@@ -8,13 +8,10 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 var _ adaptor.Balancer = (*Adaptor)(nil)
-
-func (a *Adaptor) GetBalance(channel *model.Channel) (float64, error) {
-	return GetBalance(channel.BaseURL, channel.Key)
-}
 
 type SubscriptionResponse struct {
 	Object             string  `json:"object"`
@@ -32,7 +29,11 @@ type UsageResponse struct {
 }
 
 func GetBalance(baseURL, key string) (float64, error) {
-	u := baseURL
+	return (&Adaptor{}).GetBalance(&model.Channel{BaseURL: baseURL, Key: key})
+}
+
+func (a *Adaptor) GetBalance(channel *model.Channel) (float64, error) {
+	u := channel.BaseURL
 	if u == "" {
 		u = baseURL
 	}
@@ -44,9 +45,14 @@ func GetBalance(baseURL, key string) (float64, error) {
 		return 0, err
 	}
 
-	req1.Header.Set("Authorization", "Bearer "+key)
+	req1.Header.Set("Authorization", "Bearer "+channel.Key)
 
-	res1, err := http.DefaultClient.Do(req1)
+	client, err := utils.LoadHTTPClientWithTLSConfigE(0, channel.ProxyURL, channel.SkipTLSVerify)
+	if err != nil {
+		return 0, err
+	}
+
+	res1, err := client.Do(req1)
 	if err != nil {
 		return 0, err
 	}
@@ -74,9 +80,9 @@ func GetBalance(baseURL, key string) (float64, error) {
 		return 0, err
 	}
 
-	req2.Header.Set("Authorization", "Bearer "+key)
+	req2.Header.Set("Authorization", "Bearer "+channel.Key)
 
-	res2, err := http.DefaultClient.Do(req2)
+	res2, err := client.Do(req2)
 	if err != nil {
 		return 0, err
 	}

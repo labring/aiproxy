@@ -19,7 +19,11 @@ import (
 
 var tokenCache = cache.New(time.Hour*23, time.Minute)
 
-func GetBearerToken(ctx context.Context, apiKey, proxyURL string) (string, error) {
+func GetBearerToken(
+	ctx context.Context,
+	apiKey, proxyURL string,
+	skipTLSVerify bool,
+) (string, error) {
 	parts := strings.Split(apiKey, "|")
 	if len(parts) != 2 {
 		return "", errors.New("invalid baidu apikey")
@@ -34,7 +38,7 @@ func GetBearerToken(ctx context.Context, apiKey, proxyURL string) (string, error
 		return token, nil
 	}
 
-	tokenResponse, err := getBaiduAccessTokenHelper(ctx, apiKey, proxyURL)
+	tokenResponse, err := getBaiduAccessTokenHelper(ctx, apiKey, proxyURL, skipTLSVerify)
 	if err != nil {
 		log.Errorf("get baiduv2 access token failed: %v", err)
 		return "", errors.New("get baiduv2 access token failed")
@@ -57,6 +61,7 @@ type TokenResponse struct {
 func getBaiduAccessTokenHelper(
 	ctx context.Context,
 	apiKey, proxyURL string,
+	skipTLSVerify bool,
 ) (*TokenResponse, error) {
 	ak, sk, err := getAKAndSK(apiKey)
 	if err != nil {
@@ -80,7 +85,7 @@ func getBaiduAccessTokenHelper(
 	req.URL.RawQuery = query.Encode()
 	req.Header.Set("Authorization", authorization)
 
-	client, err := relayutils.LoadHTTPClientE(0, proxyURL)
+	client, err := relayutils.LoadHTTPClientWithTLSConfigE(0, proxyURL, skipTLSVerify)
 	if err != nil {
 		return nil, err
 	}

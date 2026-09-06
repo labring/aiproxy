@@ -464,7 +464,11 @@ func imageURL2MdBase64(ctx context.Context, m *meta.Meta, url, altText string) (
 	retries := 0
 	maxRetries := 3
 
-	client, err := utils.LoadHTTPClientE(m.RequestTimeout, m.Channel.ProxyURL)
+	client, err := utils.LoadHTTPClientWithTLSConfigE(
+		m.RequestTimeout,
+		m.Channel.ProxyURL,
+		m.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create http client: %w", err)
 	}

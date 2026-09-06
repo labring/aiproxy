@@ -114,6 +114,39 @@ func TestChannelFilterOptionalValues(t *testing.T) {
 	}
 }
 
+func TestChannelProxyOptionalUpdates(t *testing.T) {
+	t.Parallel()
+
+	current := &model.Channel{
+		Type: model.ChannelTypeOpenAI, Key: "test-key", ProxyURL: "legacy-invalid-proxy",
+	}
+	for _, tt := range []struct {
+		body string
+		want string
+	}{
+		{body: `{}`, want: current.ProxyURL},
+		{body: `{"proxy_url":null}`, want: current.ProxyURL},
+		{body: `{"proxy_url":""}`, want: ""},
+		{body: `{"proxy_url":"socks5://proxy.example:1080"}`, want: "socks5://proxy.example:1080"},
+	} {
+		var request UpdateChannelRequest
+		require.NoError(t, sonic.UnmarshalString(tt.body, &request))
+		updated, err := request.Apply(current)
+		require.NoError(t, err)
+		require.Equal(t, tt.want, updated.ProxyURL)
+		require.Equal(t, "legacy-invalid-proxy", current.ProxyURL)
+	}
+
+	for _, proxyURL := range []string{"http://", "proxy.example:8080", "socks5://proxy.example:65536"} {
+		_, err := (&AddChannelRequest{
+			Type: model.ChannelTypeOpenAI, Key: "test-key", ProxyURL: proxyURL,
+		}).ToChannel()
+		require.Error(t, err)
+		_, err = (&UpdateChannelRequest{ProxyURL: &proxyURL}).Apply(current)
+		require.Error(t, err)
+	}
+}
+
 func TestChannelFiltersRejectInvalidBooleans(t *testing.T) {
 	t.Parallel()
 

@@ -16,6 +16,7 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptors"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -393,6 +394,12 @@ func (r *UpdateChannelRequest) Apply(current *model.Channel) (*model.Channel, er
 		next.BalanceThreshold = *r.BalanceThreshold
 	}
 
+	if r.ProxyURL != nil {
+		if err := relayutils.ValidateProxyURL(*r.ProxyURL); err != nil {
+			return nil, err
+		}
+	}
+
 	if _, err := (&AddChannelRequest{Type: next.Type, Name: next.Name, Key: next.Key}).ToChannel(); err != nil {
 		return nil, err
 	}
@@ -401,6 +408,10 @@ func (r *UpdateChannelRequest) Apply(current *model.Channel) (*model.Channel, er
 }
 
 func (r *AddChannelRequest) ToChannel() (*model.Channel, error) {
+	if err := relayutils.ValidateProxyURL(r.ProxyURL); err != nil {
+		return nil, err
+	}
+
 	a, ok := adaptors.GetAdaptor(r.Type)
 	if !ok {
 		return nil, fmt.Errorf("invalid channel type: %d", r.Type)

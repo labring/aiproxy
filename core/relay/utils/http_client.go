@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,6 +72,50 @@ func normalizeProxyURL(proxyURL string) string {
 	return strings.TrimSpace(proxyURL)
 }
 
+func parseProxyURL(proxyURL string) (*url.URL, error) {
+	proxyURL = normalizeProxyURL(proxyURL)
+	if proxyURL == "" {
+		return nil, nil
+	}
+
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, errors.New("invalid proxy URL")
+	}
+
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	switch parsed.Scheme {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return nil, errors.New("proxy scheme must be http, https, socks5 or socks5h")
+	}
+
+	if parsed.Hostname() == "" {
+		return nil, errors.New("proxy host is required")
+	}
+
+	if port := parsed.Port(); port != "" {
+		value, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || value == 0 {
+			return nil, errors.New("proxy port must be between 1 and 65535")
+		}
+	} else if strings.HasSuffix(parsed.Host, ":") {
+		return nil, errors.New("proxy port is empty")
+	}
+
+	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.ForceQuery ||
+		parsed.Fragment != "" {
+		return nil, errors.New("proxy URL cannot contain a path, query or fragment")
+	}
+
+	return parsed, nil
+}
+
+func ValidateProxyURL(proxyURL string) error {
+	_, err := parseProxyURL(proxyURL)
+	return err
+}
+
 func httpClientCacheKey(timeout time.Duration, proxyURL string, skipTLSVerify bool) string {
 	return fmt.Sprintf(
 		"%d|%s|%t",
@@ -94,14 +139,13 @@ func createTransport(
 		}
 	}
 
-	proxyURL = normalizeProxyURL(proxyURL)
-	if proxyURL == "" {
-		return transport, nil
+	parsed, err := parseProxyURL(proxyURL)
+	if err != nil {
+		return nil, err
 	}
 
-	parsed, err := url.Parse(proxyURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid proxy url: %w", err)
+	if parsed == nil {
+		return transport, nil
 	}
 
 	switch strings.ToLower(parsed.Scheme) {
@@ -114,39 +158,29 @@ func createTransport(
 		}
 
 		transport.Proxy = nil
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			type dialResult struct {
-				conn net.Conn
-				err  error
-			}
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			ctx, cancel := context.WithTimeout(ctx, defaultDialer.Timeout)
+			defer cancel()
 
-			resultCh := make(chan dialResult, 1)
-			go func() {
-				defer close(resultCh)
-
-				conn, err := dialer.Dial(network, addr)
-				resultCh <- dialResult{conn: conn, err: err}
-			}()
-
-			select {
-			case <-ctx.Done():
+			conn, err := dialer.DialContext(ctx, network, address)
+			if err != nil && ctx.Err() != nil {
 				return nil, ctx.Err()
-			case result := <-resultCh:
-				return result.conn, result.err
 			}
+
+			return conn, err
 		}
-	default:
-		return nil, fmt.Errorf("unsupported proxy scheme: %s", parsed.Scheme)
 	}
 
 	return transport, nil
 }
 
-func socks5Dialer(proxyURL *url.URL) (xproxy.Dialer, error) {
-	address := proxyURL.Host
-	if address == "" {
-		return nil, errors.New("invalid proxy url: host is required")
+func socks5Dialer(proxyURL *url.URL) (xproxy.ContextDialer, error) {
+	port := proxyURL.Port()
+	if port == "" {
+		port = "1080"
 	}
+
+	address := net.JoinHostPort(proxyURL.Hostname(), port)
 
 	var auth *xproxy.Auth
 	if proxyURL.User != nil {
@@ -164,7 +198,12 @@ func socks5Dialer(proxyURL *url.URL) (xproxy.Dialer, error) {
 		return nil, fmt.Errorf("create socks5 proxy dialer failed: %w", err)
 	}
 
-	return dialer, nil
+	contextDialer, ok := dialer.(xproxy.ContextDialer)
+	if !ok {
+		return nil, errors.New("SOCKS5 dialer does not support cancellation")
+	}
+
+	return contextDialer, nil
 }
 
 func LoadHTTPClient(timeout time.Duration, proxyURL string) *http.Client {

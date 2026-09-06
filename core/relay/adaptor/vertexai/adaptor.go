@@ -430,7 +430,12 @@ func (a *Adaptor) SetupRequestHeader(
 		return nil
 	}
 
-	token, err := getToken(context.Background(), config.ADCJSON)
+	token, err := getToken(
+		req.Context(),
+		config.ADCJSON,
+		meta.Channel.ProxyURL,
+		meta.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return err
 	}
@@ -508,7 +513,12 @@ func (a *Adaptor) FetchAsyncUsage(
 	if config.Key != "" {
 		req.Header.Set("X-Goog-Api-Key", config.Key)
 	} else {
-		token, err := getToken(ctx, config.ADCJSON)
+		token, err := getToken(
+			ctx,
+			config.ADCJSON,
+			requestMeta.Channel.ProxyURL,
+			requestMeta.Channel.SkipTLSVerify,
+		)
 		if err != nil {
 			return model.Usage{}, model.UsageContext{}, false, err
 		}
