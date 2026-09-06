@@ -57,10 +57,10 @@ export function ChannelDialog({
             <AnimatePresence mode="wait">
                 {open && (
                     <motion.div {...dialogEnterExitAnimation}>
-                        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0">
+                        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto rounded-2xl border-border/70 p-0 shadow-2xl">
                             <motion.div {...dialogContentAnimation}>
                                 <motion.div {...dialogHeaderAnimation}>
-                                    <DialogHeader className="p-6 pb-3">
+                                    <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent p-5 pb-4 sm:p-6">
                                         <DialogTitle className="text-xl">{title}</DialogTitle>
                                         <DialogDescription>{description}</DialogDescription>
                                     </DialogHeader>

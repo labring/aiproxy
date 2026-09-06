@@ -788,12 +788,18 @@ export function ChannelTable() {
 
     return (
         <>
-            <Card className="border-none shadow-none p-6 flex flex-col h-full">
-                {/* 标题和操作按钮 */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">{t("channel.management")}</h2>
-                    <div className="flex gap-2">
-                        <div className="w-48">
+            <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-card/80 p-0 shadow-sm">
+                <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent px-4 py-5 sm:px-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("channel.management")}</h2>
+                                <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">{total}</Badge>
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">{t("channel.managementDescription", { defaultValue: "管理供应商、模型与路由策略" })}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="w-full sm:w-48">
                             <Select
                                 value={selectedChannelType ? String(selectedChannelType) : ''}
                                 onValueChange={(value) => {
@@ -814,13 +820,13 @@ export function ChannelTable() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="relative">
+                        <div className="relative w-full sm:w-56">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("common.search")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
-                                className="h-9 w-48 pl-8"
+                                className="h-9 w-full pl-8"
                             />
                         </div>
                         <AnimatedButton>
@@ -909,12 +915,13 @@ export function ChannelTable() {
                                 {t("channel.add")}
                             </Button>
                         </AnimatedButton>
+                        </div>
                     </div>
                 </div>
 
                 {/* 表格容器 */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1">
+                <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5">
+                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/60 [&_table]:min-w-[1280px] [&_thead]:bg-muted/40 [&_thead_th]:h-11 [&_tbody_td]:py-3 [&_tbody_tr:hover]:bg-primary/[0.035]">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"

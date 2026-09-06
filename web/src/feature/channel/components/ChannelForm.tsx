@@ -700,16 +700,18 @@ export function ChannelForm({
                             onKeyDown={handleKeyDown}
                             className="space-y-6"
                         >
-                            {/* API错误提示 */}
-                            {error && (
-                                <AdvancedErrorDisplay error={error} />
-                            )}
+                            {error && <AdvancedErrorDisplay error={error} />}
 
-                            {/* 厂商字段 */}
-                            <FormField
-                                control={form.control}
-                                name="type"
-                                render={({ field }) => {
+                            <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground">{t('channel.dialog.providerSection', { defaultValue: '供应商与身份' })}</h3>
+                                    <p className="mt-1 text-xs text-muted-foreground">{t('channel.dialog.providerSectionHint', { defaultValue: '选择供应商并设置渠道的显示信息' })}</p>
+                                </div>
+                                {/* 厂商字段 */}
+                                <FormField
+                                    control={form.control}
+                                    name="type"
+                                    render={({ field }) => {
 
                                     const availableChannels = Object.values(typeMetas).map(
                                         (type) => type.name
@@ -768,8 +770,8 @@ export function ChannelForm({
                                             }}
                                         />
                                     )
-                                }}
-                            />
+                                    }}
+                                />
 
                             {/* Readme */}
                             {(() => {
@@ -783,38 +785,39 @@ export function ChannelForm({
                                 )
                             })()}
 
-                            {/* 名称字段 */}
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t("channel.dialog.name")}</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder={t("channel.dialog.namePlaceholder")} {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="remark"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t("channel.dialog.remark")}</FormLabel>
-                                        <FormControl>
-                                            <Input maxLength={255} placeholder={t("channel.dialog.remarkPlaceholder")} {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <FormField
+                                        control={form.control}
+                                        name="name"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("channel.dialog.name")}</FormLabel>
+                                                <FormControl><Input placeholder={t("channel.dialog.namePlaceholder")} {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="remark"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>{t("channel.dialog.remark")}</FormLabel>
+                                                <FormControl><Input maxLength={255} placeholder={t("channel.dialog.remarkPlaceholder")} {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </section>
 
                             {/* 模型选择字段 - with default/custom toggle */}
                             {watchedType > 0 && (
-                                <div className="space-y-3">
+                                <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-foreground">{t('channel.dialog.modelsSection', { defaultValue: '模型路由' })}</h3>
+                                        <p className="mt-1 text-xs text-muted-foreground">{t('channel.dialog.modelsSectionHint', { defaultValue: '选择默认模型或维护自定义模型列表' })}</p>
+                                    </div>
                                     <FormLabel>{t("channel.dialog.models")}</FormLabel>
                                     {renderModelModeToggle()}
 
@@ -943,7 +946,7 @@ export function ChannelForm({
                                             />
                                         </>
                                     )}
-                                </div>
+                                </section>
                             )}
 
                             {/* 分组字段 */}
