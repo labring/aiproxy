@@ -132,7 +132,8 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
     const hasConditional = price.conditional_prices && price.conditional_prices.length > 0
 
     return (
-        <Popover>
+        // Own the scroll lock so a parent dialog also permits scrolling this portaled panel.
+        <Popover modal>
             <PopoverTrigger asChild>
                 <button type="button" aria-label={t('group.price.title')} className="group grid min-w-40 gap-1 rounded-sm text-left text-xs leading-5 outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
                     {summary.length ? summary.map(row => <span key={row.label} className="flex items-baseline justify-between gap-3 whitespace-nowrap"><span className="text-muted-foreground">{row.label}</span><span className="font-mono tabular-nums group-hover:underline">{row.value}</span></span>) : t('group.price.conditionalPrices')}
@@ -143,7 +144,7 @@ export function PriceDisplay({ price }: PriceDisplayProps) {
                     )}
                 </button>
             </PopoverTrigger>
-            <PopoverContent className="max-h-[min(32rem,80dvh)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-4" align="start">
+            <PopoverContent aria-label={t('group.price.title')} className="max-h-[min(32rem,80dvh,var(--radix-popover-content-available-height))] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain p-4" align="start" collisionPadding={8}>
                 <div className="space-y-2">
                     <h4 className="font-medium text-sm">{t('group.price.title')}</h4>
                     <div className="space-y-1">

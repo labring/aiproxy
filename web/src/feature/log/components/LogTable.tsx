@@ -15,6 +15,8 @@ import { ExpandedLogContent } from './ExpandedLogContent'
 import { toast } from 'sonner'
 import type { LogRecord } from '@/types/log'
 import { writeTextToClipboard } from '@/lib/clipboard'
+import { ChannelLabel } from '@/components/common/ChannelLabel'
+import { useChannelInfoMap, useChannelTypeMetas } from '@/feature/channel/hooks'
 
 const columnHelper = createColumnHelper<LogRecord>()
 
@@ -45,6 +47,12 @@ export function LogTable({
 }: LogTableProps) {
     const { t } = useTranslation()
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+    const channelIds = useMemo(
+        () => [...new Set(data.map(log => log.channel).filter(id => id > 0))].sort((a, b) => a - b),
+        [data],
+    )
+    const { data: channelInfoMap } = useChannelInfoMap(channelIds)
+    const { data: typeMetas } = useChannelTypeMetas()
 
     const toggleRowExpansion = (rowId: number) => {
         const newExpanded = new Set(expandedRows)
@@ -88,6 +96,24 @@ export function LogTable({
                     </Button>
                 ),
                 size: 40,
+            }),
+            columnHelper.accessor('channel', {
+                header: t('log.channel'),
+                cell: (info) => {
+                    const id = info.getValue()
+                    if (!id) return <span className="text-muted-foreground">-</span>
+                    const channelInfo = channelInfoMap?.[id]
+                    return (
+                        <ChannelLabel
+                            id={id}
+                            info={channelInfo}
+                            typeName={channelInfo ? typeMetas?.[channelInfo.type]?.name : undefined}
+                            compact
+                            className="max-w-full flex-wrap"
+                        />
+                    )
+                },
+                size: 240,
             }),
             columnHelper.accessor('group', {
                 header: t('log.group'),
@@ -225,7 +251,7 @@ export function LogTable({
             }),
         ],
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [t, expandedRows, onOpenGroupLog, copyToClipboard]
+        [t, expandedRows, onOpenGroupLog, copyToClipboard, channelInfoMap, typeMetas]
     )
 
     const table = useReactTable({
@@ -241,7 +267,7 @@ export function LogTable({
             <div className="flex-1 min-h-0">
                 <div className="h-full overflow-hidden border-y bg-card">
                     <div className="overflow-auto h-full">
-                        <table className="w-full min-w-[1000px] table-fixed tabular-nums">
+                        <table className="w-full min-w-[1240px] table-fixed tabular-nums">
                             <thead className="sticky top-0 z-10 bg-muted">
                                 <tr className="border-b border-border">
                                     {table.getHeaderGroups().map((headerGroup) =>
@@ -315,7 +341,11 @@ export function LogTable({
                                             {expandedRows.has(row.original.id) && (
                                                 <tr>
                                                     <td colSpan={columns.length} className="p-0">
-                                                        <ExpandedLogContent log={row.original} />
+                                                        <ExpandedLogContent
+                                                            log={row.original}
+                                                            channelInfo={channelInfoMap?.[row.original.channel]}
+                                                            typeMetas={typeMetas}
+                                                        />
                                                     </td>
                                                 </tr>
                                             )}

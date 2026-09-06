@@ -62,7 +62,7 @@ describe.each([false, true])('ChannelLabel (compact: %s)', compact => {
 
     it('retains the ID fallback without guessing an unavailable status', async () => {
         await act(async () => root.render(<ChannelLabel id={7} compact={compact} />))
-        expect(container.textContent).toContain('#7')
+        expect(container.textContent).toBe('#7')
         expect(container.querySelector(disabledSelector)).toBeNull()
     })
 })
