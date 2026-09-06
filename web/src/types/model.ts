@@ -80,6 +80,7 @@ export interface ModelConfig {
     rpm?: number
     tpm?: number
     retry_times?: number
+    retry_budget?: number
     timeout_config?: TimeoutConfig
     force_save_detail?: boolean
     max_image_generation_count?: number
@@ -192,6 +193,7 @@ export interface ModelCreateRequest {
     rpm?: number
     tpm?: number
     retry_times?: number
+    retry_budget?: number
     timeout_config?: TimeoutConfig
     force_save_detail?: boolean
     max_image_generation_count?: number

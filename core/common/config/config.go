@@ -9,6 +9,8 @@ import (
 	"github.com/labring/aiproxy/core/common/env"
 )
 
+const MaxRetryBudgetSeconds = 180
+
 var (
 	disableServe                 atomic.Bool
 	logStorageHours              atomic.Int64 // default 0 means no limit
@@ -22,6 +24,7 @@ var (
 	ipGroupsThreshold            atomic.Int64
 	ipGroupsBanThreshold         atomic.Int64
 	retryTimes                   atomic.Int64
+	retryBudget                  atomic.Int64
 	defaultChannelModels         atomic.Value
 	defaultChannelModelMapping   atomic.Value
 	groupMaxTokenNum             atomic.Int64
@@ -63,6 +66,15 @@ func GetRetryTimes() int64 {
 func SetRetryTimes(times int64) {
 	times = env.Int64("RETRY_TIMES", times)
 	retryTimes.Store(times)
+}
+
+func GetRetryBudget() int64 {
+	return retryBudget.Load()
+}
+
+func SetRetryBudget(seconds int64) {
+	seconds = env.Int64("RETRY_BUDGET", seconds)
+	retryBudget.Store(min(max(seconds, 0), MaxRetryBudgetSeconds))
 }
 
 func GetLogStorageHours() int64 {

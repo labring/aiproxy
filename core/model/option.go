@@ -80,6 +80,7 @@ func initOptionMap() error {
 	)
 	optionMap["DisableServe"] = strconv.FormatBool(config.GetDisableServe())
 	optionMap["RetryTimes"] = strconv.FormatInt(config.GetRetryTimes(), 10)
+	optionMap["RetryBudget"] = strconv.FormatInt(config.GetRetryBudget(), 10)
 
 	defaultChannelModelsJSON, err := sonic.Marshal(config.GetDefaultChannelModels())
 	if err != nil {
@@ -401,6 +402,20 @@ func updateOption(key, value string, isInit bool) (err error) {
 		}
 
 		config.SetRetryTimes(retryTimes)
+	case "RetryBudget":
+		retryBudget, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if retryBudget < 0 || retryBudget > config.MaxRetryBudgetSeconds {
+			return fmt.Errorf(
+				"retry budget must be between 0 and %d seconds",
+				config.MaxRetryBudgetSeconds,
+			)
+		}
+
+		config.SetRetryBudget(retryBudget)
 	case "GroupConsumeLevelRatio":
 		var newGroupRpmRatio map[string]float64
 

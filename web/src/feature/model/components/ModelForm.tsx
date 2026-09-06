@@ -107,6 +107,7 @@ const MANAGED_MODEL_KEYS = new Set([
     'rpm',
     'tpm',
     'retry_times',
+    'retry_budget',
     'timeout_config',
     'force_save_detail',
     'max_image_generation_count',
@@ -271,6 +272,7 @@ const buildChangeSummaries = (
     addScalar('rpm', labels.rpm, next.rpm)
     addScalar('tpm', labels.tpm, next.tpm)
     addScalar('retry_times', labels.retryTimes, next.retry_times)
+    addScalar('retry_budget', labels.retryBudget, next.retry_budget)
     addScalar('force_save_detail', labels.forceSaveDetail, next.force_save_detail)
     addScalar('summary_service_tier', labels.summaryServiceTier, next.summary_service_tier)
     addScalar('summary_claude_long_context', labels.summaryClaudeLongContext, next.summary_claude_long_context)
@@ -328,6 +330,7 @@ interface ModelFormProps {
         rpm?: number
         tpm?: number
         retry_times?: number
+        retry_budget?: number
         timeout_config?: ModelConfig['timeout_config']
         timeout?: number
         stream_timeout?: number
@@ -415,6 +418,7 @@ export function ModelForm({
             rpm: defaultValues.rpm,
             tpm: defaultValues.tpm,
             retry_times: defaultValues.retry_times,
+            retry_budget: defaultValues.retry_budget,
             timeout: defaultValues.timeout,
             stream_timeout: defaultValues.stream_timeout ?? defaultValues.timeout_config?.stream_request_timeout,
             force_save_detail: defaultValues.force_save_detail ?? false,
@@ -460,6 +464,7 @@ export function ModelForm({
         rpm: t("model.dialog.rpm"),
         tpm: t("model.dialog.tpm"),
         retryTimes: t("model.dialog.retryTimes"),
+        retryBudget: t("model.dialog.retryBudget"),
         forceSaveDetail: t("model.dialog.forceSaveDetail"),
         summaryServiceTier: t("model.dialog.recordServiceTier"),
         summaryClaudeLongContext: t("model.dialog.recordClaudeLongContext"),
@@ -916,6 +921,7 @@ export function ModelForm({
             ...(data.rpm !== undefined && { rpm: Number(data.rpm) }),
             ...(data.tpm !== undefined && { tpm: Number(data.tpm) }),
             ...(data.retry_times !== undefined && { retry_times: Number(data.retry_times) }),
+            ...(data.retry_budget !== undefined && { retry_budget: Number(data.retry_budget) }),
             ...(mergedTimeoutConfig && { timeout_config: mergedTimeoutConfig }),
             ...(data.force_save_detail !== undefined && { force_save_detail: data.force_save_detail }),
             ...(supportImageGenerationCountLimit && data.max_image_generation_count !== undefined && {
@@ -1179,6 +1185,29 @@ export function ModelForm({
                                         type="number"
                                         placeholder={t("model.dialog.retryTimesPlaceholder")}
                                         {...field}
+                                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="retry_budget"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("model.dialog.retryBudget")}</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={180}
+                                        step={1}
+                                        placeholder={t("model.dialog.retryBudgetPlaceholder")}
+                                        {...field}
+                                        value={field.value ?? ''}
                                         onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
                                     />
                                 </FormControl>

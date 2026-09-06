@@ -48,7 +48,7 @@ import { PriceFormFields } from '@/components/price/PriceFormFields'
 import { PriceDisplay } from '@/components/price/PriceDisplay'
 import { Combobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
-import { priceSchema } from '@/validation/model'
+import { priceSchema, retryBudgetSchema } from '@/validation/model'
 
 interface GroupModelConfigsTabProps {
     groupId: string
@@ -70,6 +70,8 @@ const getDefaultConfig = (): Omit<GroupModelConfigSaveRequest, 'model'> => ({
     tpm: 0,
     override_retry_times: false,
     retry_times: 0,
+    override_retry_budget: false,
+    retry_budget: 0,
     override_timeout_config: false,
     timeout_config: {},
     override_force_save_detail: false,
@@ -163,6 +165,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
     const [formTpm, setFormTpm] = useState(0)
     const [formOverrideRetryTimes, setFormOverrideRetryTimes] = useState(false)
     const [formRetryTimes, setFormRetryTimes] = useState(0)
+    const [formOverrideRetryBudget, setFormOverrideRetryBudget] = useState(false)
+    const [formRetryBudget, setFormRetryBudget] = useState(0)
     const [formOverrideTimeoutConfig, setFormOverrideTimeoutConfig] = useState(false)
     const [formTimeoutConfig, setFormTimeoutConfig] = useState<TimeoutConfig>({})
     const [formOverrideForceSaveDetail, setFormOverrideForceSaveDetail] = useState(false)
@@ -231,6 +235,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormTpm(config.tpm)
             setFormOverrideRetryTimes(config.override_retry_times)
             setFormRetryTimes(config.retry_times)
+            setFormOverrideRetryBudget(config.override_retry_budget ?? false)
+            setFormRetryBudget(config.retry_budget ?? 0)
             setFormOverrideTimeoutConfig(config.override_timeout_config)
             setFormTimeoutConfig(config.timeout_config || {})
             setFormOverrideForceSaveDetail(config.override_force_save_detail)
@@ -259,6 +265,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             setFormTpm(defaults.tpm!)
             setFormOverrideRetryTimes(defaults.override_retry_times!)
             setFormRetryTimes(defaults.retry_times!)
+            setFormOverrideRetryBudget(defaults.override_retry_budget!)
+            setFormRetryBudget(defaults.retry_budget!)
             setFormOverrideTimeoutConfig(defaults.override_timeout_config!)
             setFormTimeoutConfig(defaults.timeout_config || {})
             setFormOverrideForceSaveDetail(defaults.override_force_save_detail!)
@@ -309,6 +317,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
         setFormTpm(config.tpm)
         setFormOverrideRetryTimes(config.override_retry_times)
         setFormRetryTimes(config.retry_times)
+        setFormOverrideRetryBudget(config.override_retry_budget ?? false)
+        setFormRetryBudget(config.retry_budget ?? 0)
         setFormOverrideTimeoutConfig(config.override_timeout_config)
         setFormTimeoutConfig(config.timeout_config || {})
         setFormOverrideForceSaveDetail(config.override_force_save_detail)
@@ -343,6 +353,14 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
 
         if (formOverridePrice) {
             const result = priceSchema.safeParse(formPrice)
+            if (!result.success) {
+                toast.error(result.error.issues[0]?.message || t('error.validationDescription'))
+                return
+            }
+        }
+
+        if (formOverrideRetryBudget) {
+            const result = retryBudgetSchema.safeParse(formRetryBudget)
             if (!result.success) {
                 toast.error(result.error.issues[0]?.message || t('error.validationDescription'))
                 return
@@ -419,6 +437,8 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
             tpm: formTpm,
             override_retry_times: formOverrideRetryTimes,
             retry_times: formRetryTimes,
+            override_retry_budget: formOverrideRetryBudget,
+            retry_budget: formRetryBudget,
             override_timeout_config: formOverrideTimeoutConfig,
             ...(formOverrideTimeoutConfig && { timeout_config: formTimeoutConfig }),
             override_force_save_detail: formOverrideForceSaveDetail,
@@ -606,6 +626,7 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                         ]} /></td>
                                         <td className="px-3 py-3"><ConfigValues entries={[
                                             [t('model.retryTimes'), config.override_retry_times ? config.retry_times : undefined],
+                                            [t('model.dialog.retryBudget'), config.override_retry_budget ? config.retry_budget : undefined],
                                             [t('group.modelConfig.overrideTimeoutConfig'), config.override_timeout_config ? true : undefined],
                                             [t('model.dialog.timeout'), config.override_timeout_config ? config.timeout_config?.request_timeout : undefined],
                                             [t('model.dialog.streamTimeout'), config.override_timeout_config ? config.timeout_config?.stream_request_timeout : undefined],
@@ -751,6 +772,26 @@ export function GroupModelConfigsTab({ groupId }: GroupModelConfigsTabProps) {
                                         onChange={(e) => setFormRetryTimes(Number(e.target.value))}
                                     />
                                 </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-4 border-t py-4">
+                            <Label htmlFor={`${formId}-formOverrideRetryBudget`}>{t('group.modelConfig.overrideRetryBudget')}</Label>
+                            <Switch id={`${formId}-formOverrideRetryBudget`} checked={formOverrideRetryBudget} onCheckedChange={setFormOverrideRetryBudget} />
+                        </div>
+
+                        {formOverrideRetryBudget && (
+                            <div className="space-y-2 pl-4">
+                                <Label htmlFor={`${formId}-formRetryBudget`}>{t('model.dialog.retryBudget')}</Label>
+                                <Input
+                                    id={`${formId}-formRetryBudget`}
+                                    type="number"
+                                    min={0}
+                                    max={180}
+                                    step={1}
+                                    value={formRetryBudget}
+                                    onChange={(e) => setFormRetryBudget(Number(e.target.value))}
+                                />
                             </div>
                         )}
 

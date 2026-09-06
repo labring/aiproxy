@@ -140,6 +140,11 @@ definitions:
         type: integer
       response_body_storage_max_size:
         type: integer
+      retry_budget:
+        description: Seconds; nil inherits the global budget, zero disables it.
+        maximum: 180
+        minimum: 0
+        type: integer
       retry_times:
         type: integer
       rpm:
@@ -733,6 +738,8 @@ definitions:
         type: boolean
       override_response_body_storage_max_size:
         type: boolean
+      override_retry_budget:
+        type: boolean
       override_retry_times:
         type: boolean
       override_summary_claude_long_context:
@@ -746,6 +753,10 @@ definitions:
       request_body_storage_max_size:
         type: integer
       response_body_storage_max_size:
+        type: integer
+      retry_budget:
+        maximum: 180
+        minimum: 0
         type: integer
       retry_times:
         type: integer
@@ -791,6 +802,11 @@ definitions:
       request_body_storage_max_size:
         type: integer
       response_body_storage_max_size:
+        type: integer
+      retry_budget:
+        description: Seconds; nil inherits the global budget, zero disables it.
+        maximum: 180
+        minimum: 0
         type: integer
       retry_times:
         type: integer
@@ -2242,6 +2258,8 @@ definitions:
         type: boolean
       override_response_body_storage_max_size:
         type: boolean
+      override_retry_budget:
+        type: boolean
       override_retry_times:
         type: boolean
       override_summary_claude_long_context:
@@ -2255,6 +2273,10 @@ definitions:
       request_body_storage_max_size:
         type: integer
       response_body_storage_max_size:
+        type: integer
+      retry_budget:
+        maximum: 180
+        minimum: 0
         type: integer
       retry_times:
         type: integer
@@ -2589,6 +2611,11 @@ definitions:
       request_body_storage_max_size:
         type: integer
       response_body_storage_max_size:
+        type: integer
+      retry_budget:
+        description: Seconds; nil inherits the global budget, zero disables it.
+        maximum: 180
+        minimum: 0
         type: integer
       retry_times:
         type: integer

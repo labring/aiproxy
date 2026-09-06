@@ -2,7 +2,9 @@ package model
 
 import (
 	"errors"
+	"fmt"
 
+	"github.com/labring/aiproxy/core/common/config"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -12,6 +14,10 @@ const (
 )
 
 var groupModelConfigZeroValueUpdateFields = []string{
+	"override_retry_times",
+	"retry_times",
+	"override_retry_budget",
+	"retry_budget",
 	"override_max_image_generation_count",
 	"max_image_generation_count",
 	"override_max_video_generation_seconds",
@@ -34,6 +40,9 @@ type GroupModelConfig struct {
 
 	OverrideRetryTimes bool  `json:"override_retry_times"`
 	RetryTimes         int64 `json:"retry_times"`
+
+	OverrideRetryBudget bool  `json:"override_retry_budget"`
+	RetryBudget         int64 `json:"retry_budget"          binding:"gte=0,lte=180" minimum:"0" maximum:"180"`
 
 	OverrideTimeoutConfig bool          `json:"override_timeout_config"`
 	TimeoutConfig         TimeoutConfig `json:"timeout_config,omitempty" gorm:"embedded"`
@@ -66,6 +75,13 @@ type GroupModelConfig struct {
 func (g *GroupModelConfig) BeforeSave(_ *gorm.DB) (err error) {
 	if g.Model == "" {
 		return errors.New("model is required")
+	}
+
+	if g.RetryBudget < 0 || g.RetryBudget > config.MaxRetryBudgetSeconds {
+		return fmt.Errorf(
+			"retry_budget must be between 0 and %d seconds",
+			config.MaxRetryBudgetSeconds,
+		)
 	}
 
 	if err := g.Price.ValidateConditionalPrices(); err != nil {
