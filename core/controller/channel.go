@@ -18,6 +18,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	relayutils "github.com/labring/aiproxy/core/relay/utils"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // ChannelTypeMetas godoc
@@ -287,7 +288,13 @@ func GetChannel(c *gin.Context) {
 
 	channel, err := model.GetChannelByID(id)
 	if err != nil {
-		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+
+		middleware.ErrorResponse(c, status, err.Error())
+
 		return
 	}
 

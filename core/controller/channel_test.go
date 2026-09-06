@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +17,46 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetChannelNotFound(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "channels.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelTest{}))
+
+	previousDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+	})
+
+	deleted := &model.Channel{Name: "Deleted channel", Type: model.ChannelTypeOpenAI}
+	require.NoError(t, db.Create(deleted).Error)
+	require.NoError(t, db.Delete(deleted).Error)
+
+	for _, id := range []string{strconv.Itoa(deleted.ID), "999999"} {
+		t.Run(id, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Params = gin.Params{{Key: "id", Value: id}}
+			GetChannel(c)
+			require.Equal(t, http.StatusNotFound, recorder.Code)
+			require.Contains(t, recorder.Body.String(), "channel record not found")
+		})
+	}
+
+	t.Run("database failure", func(t *testing.T) {
+		require.NoError(t, db.Migrator().DropTable(&model.Channel{}))
+
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Params = gin.Params{{Key: "id", Value: "1"}}
+		GetChannel(c)
+		require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	})
+}
 
 func TestAddChannelRequestToChannelPreservesNewlinesInKey(t *testing.T) {
 	const key = "first-key\nsecond-key"

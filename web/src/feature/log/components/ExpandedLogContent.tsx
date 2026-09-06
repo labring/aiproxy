@@ -7,10 +7,9 @@ import { JsonViewer } from './JsonViewer'
 import { useLogDetail } from '@/feature/log/hooks'
 import type { LogRecord } from '@/types/log'
 import { channelApi } from '@/api/channel'
-import { useChannelInfoMap, useChannelTypeMetas } from '@/feature/channel/hooks'
 import { ChannelLabel } from '@/components/common/ChannelLabel'
 import { ChannelDialog } from '@/feature/channel/components/ChannelDialog'
-import type { Channel } from '@/types/channel'
+import type { Channel, ChannelBasicInfo, ChannelTypeMetaMap } from '@/types/channel'
 import { toast } from 'sonner'
 import { openResourceDialog, showDeletedResourceToast } from '@/utils/resource-dialog'
 import { writeTextToClipboard } from '@/lib/clipboard'
@@ -22,11 +21,14 @@ const formatPrice = (price: number | undefined, unit: number | undefined): strin
     return price.toString()
 }
 
-export const ExpandedLogContent = ({ log }: { log: LogRecord }) => {
+interface ExpandedLogContentProps {
+    log: LogRecord
+    channelInfo?: ChannelBasicInfo
+    typeMetas?: ChannelTypeMetaMap
+}
+
+export const ExpandedLogContent = ({ log, channelInfo, typeMetas }: ExpandedLogContentProps) => {
     const { t } = useTranslation()
-    const { data: typeMetas } = useChannelTypeMetas()
-    const { data: channelInfoMap } = useChannelInfoMap(log.channel ? [log.channel] : [])
-    const channelInfo = channelInfoMap?.[log.channel]
     const [channelDialogOpen, setChannelDialogOpen] = useState(false)
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
 
