@@ -718,20 +718,22 @@ export function ModelTable() {
 
   return (
     <>
-      <Card className="border-none shadow-none p-6 flex flex-col h-full">
+      <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-card/80 p-0 shadow-sm">
         {/* Title and action buttons */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-primary">
-            {t("model.management")}
+        <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent px-4 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            {t("model.management")} <Badge variant="secondary" className="ml-2 rounded-full">{sortedModels.length}</Badge>
           </h2>
-          <div className="flex gap-2">
+          <p className="mt-1 text-sm text-muted-foreground">{t("model.managementDescription", { defaultValue: "统一管理模型、归属与调用配置" })}</p>
+          <div className="flex flex-wrap gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t("common.search")}
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="h-9 w-48 pl-8"
+                className="h-9 w-full pl-8 sm:w-56"
               />
             </div>
             <div className="w-44">
@@ -819,6 +821,7 @@ export function ModelTable() {
               </Button>
             </AnimatedButton>
           </div>
+        </div>
         </div>
 
         {/* Table container */}

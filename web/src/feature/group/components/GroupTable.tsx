@@ -328,20 +328,21 @@ export function GroupTable() {
 
     return (
         <div className="h-full flex flex-col min-h-0">
-            <Card className="border-none shadow-none p-6 flex flex-col flex-1 min-h-0">
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-border/60 bg-card/80 p-0 shadow-sm">
                 {/* Title and action buttons */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-primary dark:text-[#6A6DE6]">
+                <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent px-4 py-5 sm:px-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <h2 className="text-xl font-semibold tracking-tight text-foreground">
                         {t("group.management")}
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("common.search")}
                                 value={searchInput}
                                 onChange={(e) => handleSearchChange(e.target.value)}
-                                className="h-9 w-48 pl-8"
+                                className="h-9 w-full pl-8 sm:w-56"
                             />
                         </div>
                         <AnimatedButton>
@@ -369,10 +370,11 @@ export function GroupTable() {
                         </AnimatedButton>
                     </div>
                 </div>
+                </div>
 
                 {/* Table container */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1">
+                <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5">
+                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/60">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"

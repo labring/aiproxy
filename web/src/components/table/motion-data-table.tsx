@@ -224,7 +224,7 @@ export function DataTable<TData, TValue>({
     // 使用滚动容器
     const renderScrollableTable = () => (
         <TableScrollContainer showShadows={showScrollShadows}>
-            <table className="w-full caption-bottom text-sm">
+            <table className="w-full caption-bottom text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-primary/[0.035] [&_tbody_td]:py-3">
                 {renderTableHeader()}
                 <tbody className={cn(
                     // 只有当isLoading为true且没有行数据时才移除最后一行的边框
