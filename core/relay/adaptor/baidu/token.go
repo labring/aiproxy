@@ -22,7 +22,11 @@ type AccessToken struct {
 
 var tokenCache = cache.New(time.Hour*23, time.Minute)
 
-func GetAccessToken(ctx context.Context, apiKey string) (string, error) {
+func GetAccessToken(
+	ctx context.Context,
+	apiKey, proxyURL string,
+	skipTLSVerify bool,
+) (string, error) {
 	if val, ok := tokenCache.Get(apiKey); ok {
 		accessToken, ok := val.(string)
 		if !ok {
@@ -32,7 +36,7 @@ func GetAccessToken(ctx context.Context, apiKey string) (string, error) {
 		return accessToken, nil
 	}
 
-	accessToken, err := getBaiduAccessTokenHelper(ctx, apiKey)
+	accessToken, err := getBaiduAccessTokenHelper(ctx, apiKey, proxyURL, skipTLSVerify)
 	if err != nil {
 		log.Errorf("get baidu access token failed: %v", err)
 		return "", errors.New("get baidu access token failed")
@@ -47,7 +51,11 @@ func GetAccessToken(ctx context.Context, apiKey string) (string, error) {
 	return accessToken.AccessToken, nil
 }
 
-func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*AccessToken, error) {
+func getBaiduAccessTokenHelper(
+	ctx context.Context,
+	apiKey, proxyURL string,
+	skipTLSVerify bool,
+) (*AccessToken, error) {
 	clientID, clientSecret, err := getClientIDAndSecret(apiKey)
 	if err != nil {
 		return nil, err
@@ -70,7 +78,12 @@ func getBaiduAccessTokenHelper(ctx context.Context, apiKey string) (*AccessToken
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 
-	res, err := utils.DoRequest(req, 0)
+	client, err := utils.LoadHTTPClientWithTLSConfigE(0, proxyURL, skipTLSVerify)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

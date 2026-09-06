@@ -1,7 +1,6 @@
 package baidu
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -127,7 +126,12 @@ func (a *Adaptor) SetupRequestHeader(
 ) error {
 	req.Header.Set("Authorization", "Bearer "+meta.Channel.Key)
 
-	accessToken, err := GetAccessToken(context.Background(), meta.Channel.Key)
+	accessToken, err := GetAccessToken(
+		req.Context(),
+		meta.Channel.Key,
+		meta.Channel.ProxyURL,
+		meta.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return err
 	}

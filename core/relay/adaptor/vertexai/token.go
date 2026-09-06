@@ -9,7 +9,9 @@ import (
 	"cloud.google.com/go/iam/credentials/apiv1/credentialspb"
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/common/conv"
+	"github.com/labring/aiproxy/core/relay/utils"
 	"github.com/patrickmn/go-cache"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 )
@@ -32,7 +34,7 @@ var tokenCache = cache.New(30*time.Minute, time.Minute)
 
 const defaultScope = "https://www.googleapis.com/auth/cloud-platform"
 
-func getToken(ctx context.Context, adcJSON string) (string, error) {
+func getToken(ctx context.Context, adcJSON, proxyURL string, skipTLSVerify bool) (string, error) {
 	if tokenI, found := tokenCache.Get(adcJSON); found {
 		token, ok := tokenI.(string)
 		if !ok {
@@ -47,6 +49,13 @@ func getToken(ctx context.Context, adcJSON string) (string, error) {
 		return "", fmt.Errorf("failed to decode credentials file: %w", err)
 	}
 
+	httpClient, err := utils.LoadHTTPClientWithTLSConfigE(0, proxyURL, skipTLSVerify)
+	if err != nil {
+		return "", err
+	}
+
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
 	creds, err := google.CredentialsFromJSONWithParams( //nolint:staticcheck // credentials are from admin-configured service accounts
 		ctx,
 		conv.StringToBytes(adcJSON),
@@ -58,9 +67,9 @@ func getToken(ctx context.Context, adcJSON string) (string, error) {
 		return "", fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
-	c, err := credentials.NewIamCredentialsClient(
+	c, err := credentials.NewIamCredentialsRESTClient(
 		ctx,
-		option.WithCredentials(creds),
+		option.WithHTTPClient(oauth2.NewClient(ctx, creds.TokenSource)),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create client: %w", err)

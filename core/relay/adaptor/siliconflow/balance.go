@@ -9,6 +9,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 var _ adaptor.Balancer = (*Adaptor)(nil)
@@ -28,7 +29,12 @@ func (a *Adaptor) GetBalance(channel *model.Channel) (float64, error) {
 
 	req.Header.Set("Authorization", "Bearer "+channel.Key)
 
-	res, err := http.DefaultClient.Do(req)
+	client, err := utils.LoadHTTPClientWithTLSConfigE(0, channel.ProxyURL, channel.SkipTLSVerify)
+	if err != nil {
+		return 0, err
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}

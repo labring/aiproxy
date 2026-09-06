@@ -1,7 +1,6 @@
 package baiduv2
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -91,7 +90,12 @@ func (a *Adaptor) SetupRequestHeader(
 	_ *gin.Context,
 	req *http.Request,
 ) error {
-	token, err := GetBearerToken(context.Background(), meta.Channel.Key, meta.Channel.ProxyURL)
+	token, err := GetBearerToken(
+		req.Context(),
+		meta.Channel.Key,
+		meta.Channel.ProxyURL,
+		meta.Channel.SkipTLSVerify,
+	)
 	if err != nil {
 		return err
 	}

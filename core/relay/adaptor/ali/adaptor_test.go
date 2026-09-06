@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/internal/testutil"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -2663,7 +2664,13 @@ func TestAsyncTaskUsesBaseURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	response, err := asyncTask(context.Background(), server.URL+"/custom", "task-123", "test-key")
+	proxy, _ := testutil.NewHTTPProxy(t, server, true)
+	m := meta.NewMeta(&coremodel.Channel{
+		BaseURL: "http://upstream.invalid/custom", Key: "test-key",
+		ProxyURL: proxy.URL, SkipTLSVerify: true,
+	}, mode.ImagesGenerations, "wanx", coremodel.ModelConfig{})
+
+	response, err := asyncTask(t.Context(), m, "task-123")
 	if err != nil {
 		t.Fatalf("asyncTask returned error: %v", err)
 	}
