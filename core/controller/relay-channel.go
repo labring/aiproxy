@@ -690,23 +690,37 @@ func getRetryChannel(
 		return state.designatedChannel, nil
 	}
 
-	newChannel, err := state.selectChannel(
-		getRetryCandidates(state, errorRates),
-		state.preferChannelIDs,
+	return state.selectRetryChannel(errorRates)
+}
+
+func (s *retryState) selectRetryChannel(
+	errorRates map[int64]float64,
+) (*model.Channel, error) {
+	candidates := getRetryCandidates(s, errorRates)
+	if !s.backupOnlyEnabled && len(candidates) > 0 && len(nonBackupChannels(candidates)) == 0 {
+		// Adding eligible backups starts a fresh round while preserving cache preferences.
+		s.backupOnlyEnabled = true
+		s.failedChannelIDs = make(map[int64]struct{})
+		candidates = getRetryCandidates(s, errorRates)
+	}
+
+	newChannel, err := s.selectChannel(
+		candidates,
+		s.preferChannelIDs,
 		errorRates,
 	)
 	if err != nil {
-		if !errors.Is(err, ErrChannelsExhausted) || len(state.failedChannelIDs) == 0 {
+		if !errors.Is(err, ErrChannelsExhausted) || len(s.failedChannelIDs) == 0 {
 			return nil, err
 		}
 
 		// Start a new round so every currently eligible channel gets another attempt.
-		state.failedChannelIDs = make(map[int64]struct{})
-		state.preferChannelIDs = nil
+		s.failedChannelIDs = make(map[int64]struct{})
+		s.preferChannelIDs = nil
 
-		return state.selectChannel(
-			getRetryCandidates(state, errorRates),
-			state.preferChannelIDs,
+		return s.selectChannel(
+			getRetryCandidates(s, errorRates),
+			s.preferChannelIDs,
 			errorRates,
 		)
 	}
