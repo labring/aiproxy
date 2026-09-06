@@ -65,8 +65,8 @@ export default function LogPage() {
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6">
-            <div className="flex-shrink-0 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm sm:p-5">
-                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-shrink-0 rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm sm:p-4">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-xl font-semibold tracking-tight">日志</h1>
                         <p className="mt-1 text-sm text-muted-foreground">按时间、模型和渠道检索请求记录</p>
@@ -77,15 +77,15 @@ export default function LogPage() {
                             currentFilters={filters}
                         />
                     </div>
-
-                    <LogFilters
-                        onFiltersChange={handleFiltersChange}
-                        loading={isLoading}
-                        availableModels={logData?.models}
-                        availableTokenNames={logData?.token_names}
-                        availableChannels={logData?.channels}
-                    />
                 </div>
+
+                <LogFilters
+                    onFiltersChange={handleFiltersChange}
+                    loading={isLoading}
+                    availableModels={logData?.models}
+                    availableTokenNames={logData?.token_names}
+                    availableChannels={logData?.channels}
+                />
 
                 {error && (
                     <div className="mt-6">

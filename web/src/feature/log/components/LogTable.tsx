@@ -242,7 +242,7 @@ export function LogTable({
                                         headerGroup.headers.map((header, index) => (
                                             <th
                                                 key={header.id}
-                                                className={`px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${
+                                                className={`px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${
                                                     index === 0 ? 'rounded-tl-lg' : ''
                                                 } ${
                                                     index === headerGroup.headers.length - 1 ? 'rounded-tr-lg' : ''
