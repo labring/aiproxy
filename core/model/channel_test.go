@@ -45,7 +45,7 @@ func TestChannelMetadataPersistence(t *testing.T) {
 
 	for _, backupOnly := range []bool{true, false} {
 		channel.BackupOnly = backupOnly
-		require.NoError(t, UpdateChannel(channel))
+		require.NoError(t, UpdateChannel(channel, &ChannelPatch{BackupOnly: &backupOnly}))
 		loaded, err = GetChannelByID(channel.ID)
 		require.NoError(t, err)
 		require.Equal(t, backupOnly, loaded.BackupOnly)

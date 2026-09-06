@@ -31,35 +31,35 @@ const (
 )
 
 type Channel struct {
-	DeletedAt               gorm.DeletedAt    `gorm:"index"                              json:"-"                          yaml:"-"`
-	CreatedAt               time.Time         `gorm:"index"                              json:"created_at"                 yaml:"-"`
-	LastTestErrorAt         time.Time         `                                          json:"last_test_error_at"         yaml:"-"`
-	ChannelTests            []*ChannelTest    `gorm:"foreignKey:ChannelID;references:ID" json:"channel_tests,omitempty"    yaml:"-"`
-	BalanceUpdatedAt        time.Time         `                                          json:"balance_updated_at"         yaml:"-"`
-	ModelMapping            map[string]string `gorm:"serializer:fastjson;type:text"      json:"model_mapping"              yaml:"model_mapping,omitempty"`
-	Key                     string            `gorm:"type:text;index:,length:191"        json:"key"                        yaml:"key,omitempty"`
-	Name                    string            `gorm:"size:64;index"                      json:"name"                       yaml:"name,omitempty"`
-	Remark                  string            `gorm:"size:255;index"                    json:"remark,omitempty"             yaml:"remark,omitempty"`
-	BaseURL                 string            `gorm:"size:128;index"                     json:"base_url"                   yaml:"base_url,omitempty"`
-	ProxyURL                string            `gorm:"size:255"                           json:"proxy_url"                  yaml:"proxy_url,omitempty"`
-	Models                  []string          `gorm:"serializer:fastjson;type:text"      json:"models"                     yaml:"models,omitempty"`
-	Balance                 float64           `                                          json:"balance"                    yaml:"balance,omitempty"`
-	ID                      int               `gorm:"primaryKey"                         json:"id"                         yaml:"id,omitempty"`
-	UsedAmount              float64           `gorm:"index"                              json:"used_amount"                yaml:"-"`
-	RequestCount            int               `gorm:"index"                              json:"request_count"              yaml:"-"`
-	RetryCount              int               `gorm:"index"                              json:"retry_count"                yaml:"-"`
-	Status                  int               `gorm:"default:1;index"                    json:"status"                     yaml:"status,omitempty"`
-	Type                    ChannelType       `gorm:"default:0;index"                    json:"type"                       yaml:"type,omitempty"`
-	Priority                int32             `                                          json:"priority"                   yaml:"priority,omitempty"`
-	BackupOnly              bool              `gorm:"default:false"                      json:"backup_only"                yaml:"backup_only,omitempty"`
-	EnabledAutoBalanceCheck bool              `                                          json:"enabled_auto_balance_check" yaml:"enabled_auto_balance_check,omitempty"`
-	BalanceThreshold        float64           `                                          json:"balance_threshold"          yaml:"balance_threshold,omitempty"`
-	SkipTLSVerify           bool              `                                          json:"skip_tls_verify"            yaml:"skip_tls_verify,omitempty"`
-	EnabledNoPermissionBan  bool              `                                          json:"enabled_no_permission_ban"  yaml:"enabled_no_permission_ban,omitempty"`
-	WarnErrorRate           float64           `                                          json:"warn_error_rate"            yaml:"warn_error_rate,omitempty"`
-	MaxErrorRate            float64           `                                          json:"max_error_rate"             yaml:"max_error_rate,omitempty"`
-	Configs                 ChannelConfigs    `gorm:"serializer:fastjson;type:text"      json:"configs,omitempty"          yaml:"configs,omitempty"`
-	Sets                    []string          `gorm:"serializer:fastjson;type:text"      json:"sets,omitempty"             yaml:"sets,omitempty"`
+	DeletedAt               gorm.DeletedAt    `gorm:"index;index:idx_channels_backup_active_id,priority:2"         json:"-"                          yaml:"-"`
+	CreatedAt               time.Time         `gorm:"index"                                                        json:"created_at"                 yaml:"-"`
+	LastTestErrorAt         time.Time         `                                                                    json:"last_test_error_at"         yaml:"-"`
+	ChannelTests            []*ChannelTest    `gorm:"foreignKey:ChannelID;references:ID"                           json:"channel_tests,omitempty"    yaml:"-"`
+	BalanceUpdatedAt        time.Time         `                                                                    json:"balance_updated_at"         yaml:"-"`
+	ModelMapping            map[string]string `gorm:"serializer:fastjson;type:text"                                json:"model_mapping"              yaml:"model_mapping,omitempty"`
+	Key                     string            `gorm:"type:text;index:,length:191"                                  json:"key"                        yaml:"key,omitempty"`
+	Name                    string            `gorm:"size:64;index"                                                json:"name"                       yaml:"name,omitempty"`
+	Remark                  string            `gorm:"size:255;index"                                               json:"remark,omitempty"           yaml:"remark,omitempty"`
+	BaseURL                 string            `gorm:"size:128;index"                                               json:"base_url"                   yaml:"base_url,omitempty"`
+	ProxyURL                string            `gorm:"size:255"                                                     json:"proxy_url"                  yaml:"proxy_url,omitempty"`
+	Models                  []string          `gorm:"serializer:fastjson;type:text"                                json:"models"                     yaml:"models,omitempty"`
+	Balance                 float64           `                                                                    json:"balance"                    yaml:"balance,omitempty"`
+	ID                      int               `gorm:"primaryKey;index:idx_channels_backup_active_id,priority:3"    json:"id"                         yaml:"id,omitempty"`
+	UsedAmount              float64           `gorm:"index"                                                        json:"used_amount"                yaml:"-"`
+	RequestCount            int               `gorm:"index"                                                        json:"request_count"              yaml:"-"`
+	RetryCount              int               `gorm:"index"                                                        json:"retry_count"                yaml:"-"`
+	Status                  int               `gorm:"default:1;index"                                              json:"status"                     yaml:"status,omitempty"`
+	Type                    ChannelType       `gorm:"default:0;index"                                              json:"type"                       yaml:"type,omitempty"`
+	Priority                int32             `                                                                    json:"priority"                   yaml:"priority,omitempty"`
+	BackupOnly              bool              `gorm:"default:false;index:idx_channels_backup_active_id,priority:1" json:"backup_only"                yaml:"backup_only,omitempty"`
+	EnabledAutoBalanceCheck bool              `                                                                    json:"enabled_auto_balance_check" yaml:"enabled_auto_balance_check,omitempty"`
+	BalanceThreshold        float64           `                                                                    json:"balance_threshold"          yaml:"balance_threshold,omitempty"`
+	SkipTLSVerify           bool              `                                                                    json:"skip_tls_verify"            yaml:"skip_tls_verify,omitempty"`
+	EnabledNoPermissionBan  bool              `                                                                    json:"enabled_no_permission_ban"  yaml:"enabled_no_permission_ban,omitempty"`
+	WarnErrorRate           float64           `                                                                    json:"warn_error_rate"            yaml:"warn_error_rate,omitempty"`
+	MaxErrorRate            float64           `                                                                    json:"max_error_rate"             yaml:"max_error_rate,omitempty"`
+	Configs                 ChannelConfigs    `gorm:"serializer:fastjson;type:text"                                json:"configs,omitempty"          yaml:"configs,omitempty"`
+	Sets                    []string          `gorm:"serializer:fastjson;type:text"                                json:"sets,omitempty"             yaml:"sets,omitempty"`
 }
 
 func (c *Channel) GetSets() []string {
@@ -221,32 +221,58 @@ func GetAllChannels() (channels []*Channel, err error) {
 	return channels, err
 }
 
+type ChannelFilter struct {
+	ID         int
+	Name       string
+	Key        string
+	Type       int
+	BaseURL    string
+	Remark     *string
+	BackupOnly *bool
+}
+
+func (f ChannelFilter) apply(tx *gorm.DB) *gorm.DB {
+	if f.ID != 0 {
+		tx = tx.Where("id = ?", f.ID)
+	}
+
+	if f.Name != "" {
+		tx = tx.Where("name = ?", f.Name)
+	}
+
+	if f.Key != "" {
+		tx = tx.Where("key = ?", f.Key)
+	}
+
+	if f.Type != 0 {
+		tx = tx.Where("type = ?", f.Type)
+	}
+
+	if f.BaseURL != "" {
+		tx = tx.Where("base_url = ?", f.BaseURL)
+	}
+
+	if f.Remark != nil {
+		if *f.Remark == "" {
+			tx = tx.Where("(remark = ? OR remark IS NULL)", "")
+		} else {
+			tx = tx.Where("remark = ?", *f.Remark)
+		}
+	}
+
+	if f.BackupOnly != nil {
+		tx = tx.Where("backup_only = ?", *f.BackupOnly)
+	}
+
+	return tx
+}
+
 func GetChannels(
-	page, perPage, id int,
-	name, key string,
-	channelType int,
-	baseURL, order string,
+	page, perPage int,
+	filter ChannelFilter,
+	order string,
 ) (channels []*Channel, total int64, err error) {
-	tx := DB.Model(&Channel{})
-	if id != 0 {
-		tx = tx.Where("id = ?", id)
-	}
-
-	if name != "" {
-		tx = tx.Where("name = ?", name)
-	}
-
-	if key != "" {
-		tx = tx.Where("key = ?", key)
-	}
-
-	if channelType != 0 {
-		tx = tx.Where("type = ?", channelType)
-	}
-
-	if baseURL != "" {
-		tx = tx.Where("base_url = ?", baseURL)
-	}
+	tx := filter.apply(DB.Model(&Channel{}))
 
 	err = tx.Count(&total).Error
 	if err != nil {
@@ -265,33 +291,11 @@ func GetChannels(
 
 func SearchChannels(
 	keyword string,
-	page, perPage, id int,
-	name, key string,
-	channelType int,
-	baseURL, order string,
+	page, perPage int,
+	filter ChannelFilter,
+	order string,
 ) (channels []*Channel, total int64, err error) {
-	tx := DB.Model(&Channel{})
-
-	// Handle exact match conditions for non-zero values
-	if id != 0 {
-		tx = tx.Where("id = ?", id)
-	}
-
-	if name != "" {
-		tx = tx.Where("name = ?", name)
-	}
-
-	if key != "" {
-		tx = tx.Where("key = ?", key)
-	}
-
-	if channelType != 0 {
-		tx = tx.Where("type = ?", channelType)
-	}
-
-	if baseURL != "" {
-		tx = tx.Where("base_url = ?", baseURL)
-	}
+	tx := filter.apply(DB.Model(&Channel{}))
 
 	// Handle keyword search for zero value fields
 	if keyword != "" {
@@ -303,13 +307,13 @@ func SearchChannels(
 		keywordInt := String2Int(keyword)
 
 		if keywordInt != 0 {
-			if id == 0 {
+			if filter.ID == 0 {
 				conditions = append(conditions, "id = ?")
 				values = append(values, keywordInt)
 			}
 		}
 
-		if name == "" {
+		if filter.Name == "" {
 			if !common.UsingSQLite {
 				conditions = append(conditions, "name ILIKE ?")
 			} else {
@@ -326,7 +330,7 @@ func SearchChannels(
 		}
 		values = append(values, "%"+keyword+"%")
 
-		if key == "" {
+		if filter.Key == "" {
 			if !common.UsingSQLite {
 				conditions = append(conditions, "key ILIKE ?")
 			} else {
@@ -336,7 +340,7 @@ func SearchChannels(
 			values = append(values, "%"+keyword+"%")
 		}
 
-		if baseURL == "" {
+		if filter.BaseURL == "" {
 			if !common.UsingSQLite {
 				conditions = append(conditions, "base_url ILIKE ?")
 			} else {
@@ -406,7 +410,7 @@ func BatchInsertChannels(channels []*Channel) (err error) {
 	})
 }
 
-func UpdateChannel(channel *Channel) (err error) {
+func UpdateChannel(channel *Channel, update *ChannelPatch) (err error) {
 	defer func() {
 		if err == nil {
 			_ = InitModelConfigAndChannelCache()
@@ -414,35 +418,26 @@ func UpdateChannel(channel *Channel) (err error) {
 		}
 	}()
 
-	if err := CheckModelConfigExist(channel.Models); err != nil {
-		return err
+	if update.Models != nil {
+		if err := CheckModelConfigExist(*update.Models); err != nil {
+			return err
+		}
 	}
 
-	selects := []string{
-		"type",
-		"name",
-		"model_mapping",
-		"key",
-		"base_url",
-		"remark",
-		"proxy_url",
-		"models",
-		"priority",
-		"configs",
-		"backup_only",
-		"enabled_auto_balance_check",
-		"skip_tls_verify",
-		"enabled_no_permission_ban",
-		"warn_error_rate",
-		"max_error_rate",
-		"balance_threshold",
-		"sets",
-	}
-	result := DB.
-		Select(selects).
+	result := DB.Model(channel).
 		Clauses(clause.Returning{}).
 		Where("id = ?", channel.ID).
-		Updates(channel)
+		Updates(update)
+	if result.Error == nil && result.RowsAffected == 0 {
+		current, err := GetChannelByID(channel.ID)
+		if err != nil {
+			return err
+		}
+
+		*channel = *current
+
+		return nil
+	}
 
 	return HandleUpdateResult(result, ErrChannelNotFound)
 }

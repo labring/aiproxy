@@ -228,7 +228,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Updates an existing channel by its ID",
+                "description": "Updates only supplied fields. Omitted fields and null retain current values; empty strings, false, zero, empty arrays and empty objects explicitly replace values, subject to channel validation.",
                 "consumes": [
                     "application/json"
                 ],
@@ -248,12 +248,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Updated channel information",
+                        "description": "Optional channel fields to update",
                         "name": "channel",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/controller.AddChannelRequest"
+                            "$ref": "#/definitions/controller.UpdateChannelRequest"
                         }
                     }
                 ],
@@ -562,6 +562,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by name",
                         "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
                         "in": "query"
                     },
                     {
@@ -890,7 +902,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search channels with keyword and optional filters",
+                "description": "Search channel names, remarks, keys, URLs, models and sets with a keyword, combined with optional exact filters",
                 "produces": [
                     "application/json"
                 ],
@@ -901,10 +913,9 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Search keyword",
+                        "description": "Search keyword, including remark content",
                         "name": "keyword",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
                     },
                     {
                         "type": "integer",
@@ -928,6 +939,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by name",
                         "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
                         "in": "query"
                     },
                     {
@@ -9921,6 +9944,9 @@ const docTemplate = `{
                 "proxy_url": {
                     "type": "string"
                 },
+                "remark": {
+                    "type": "string"
+                },
                 "sets": {
                     "type": "array",
                     "items": {
@@ -11244,6 +11270,74 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.UpdateChannelRequest": {
+            "type": "object",
+            "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
+                "balance_threshold": {
+                    "type": "number"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "enabled_auto_balance_check": {
+                    "type": "boolean"
+                },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                },
+                "warn_error_rate": {
+                    "type": "number"
+                }
+            }
+        },
         "controller.UpdateChannelStatusRequest": {
             "type": "object",
             "properties": {
@@ -11765,6 +11859,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "proxy_url": {
+                    "type": "string"
+                },
+                "remark": {
                     "type": "string"
                 },
                 "request_count": {
