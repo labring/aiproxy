@@ -17,7 +17,8 @@ channels:
       "gpt-4": "gpt-4-0613"
     status: 1  # 1=Enabled, 2=Disabled
     priority: 0
-    # Enable after ordinary candidates are exhausted, then repeat preferred and weighted selection.
+    # When ordinary candidates are exhausted, add eligible backups and start a fresh round.
+    # Reset temporary failures while retaining channel preferences and health filtering.
     backup_only: false
     balance: 100.0
     balance_threshold: 10.0
