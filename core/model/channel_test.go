@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestChannelBackupOnlyPersistence(t *testing.T) {
+func TestChannelMetadataPersistence(t *testing.T) {
 	db, err := OpenSQLite(filepath.Join(t.TempDir(), "channels.db"))
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
@@ -66,11 +66,19 @@ func TestChannelBackupOnlyPersistence(t *testing.T) {
 			mc.EnabledModel2ChannelsBySet[ChannelDefaultSet]["backup-test"][0].BackupOnly,
 		)
 	}
+	for _, status := range []int{ChannelStatusEnabled, ChannelStatusDisabled, ChannelStatusEnabled, ChannelStatusDisabled} {
+		require.NoError(t, UpdateChannelStatusByID(channel.ID, status))
+		infos, err := GetChannelsBasicInfoByIDs([]int{channel.ID})
+		require.NoError(t, err)
+		require.Len(t, infos, 1)
+		require.Equal(t, status, infos[0].Status)
+	}
 	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.ID).Update("deleted_at", time.Now()).Error)
 	infos, err := GetChannelsBasicInfoByIDs([]int{channel.ID})
 	require.NoError(t, err)
 	require.Len(t, infos, 1)
 	require.Equal(t, "test-channel", infos[0].Name)
+	require.Equal(t, ChannelStatusDisabled, infos[0].Status)
 }
 
 func TestChannelBackupOnlyYAMLAndJSON(t *testing.T) {

@@ -935,6 +935,7 @@
     "refresh": "刷新",
     "noResults": "未找到渠道",
     "fetchFailed": "获取渠道信息失败",
+    "currentlyDisabled": "渠道当前已禁用",
     "deleted": "渠道已被删除或不存在",
     "sets": "分组",
     "models": "模型",

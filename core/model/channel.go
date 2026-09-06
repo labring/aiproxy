@@ -574,6 +574,7 @@ type ChannelBasicInfo struct {
 	Name       string      `json:"name"`
 	Remark     string      `json:"remark,omitempty"`
 	Type       ChannelType `json:"type"`
+	Status     int         `json:"status"`
 	BackupOnly bool        `json:"backup_only"`
 }
 
@@ -586,7 +587,7 @@ func GetChannelsBasicInfoByIDs(ids []int) ([]*ChannelBasicInfo, error) {
 
 	err := DB.Unscoped().
 		Model(&Channel{}).
-		Select("id", "name", "remark", "type", "backup_only").
+		Select("id", "name", "remark", "type", "status", "backup_only").
 		Where("id IN ?", ids).
 		Find(&result).
 		Error

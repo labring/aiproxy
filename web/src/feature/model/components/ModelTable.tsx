@@ -49,7 +49,6 @@ import { AnimatedButton } from "@/components/ui/animation/components/animated-bu
 import { AnimatedIcon } from "@/components/ui/animation/components/animated-icon";
 import ApiDocDrawer from "./api-doc/ApiDoc";
 import { Badge } from "@/components/ui/badge";
-import { BackupOnlyBadge } from "@/components/common/BackupOnlyBadge";
 import {
   Popover,
   PopoverContent,
@@ -366,7 +365,6 @@ export function ModelTable() {
                           <Badge variant="secondary" className="max-w-full text-xs">
                             <ChannelLabel id={channel.id} info={channelInfoMap[channel.id] ?? channel} compact />
                           </Badge>
-                          {channel.backup_only && <BackupOnlyBadge />}
                           <span className="text-xs text-muted-foreground">
                             ID: {channel.id}, {getChannelTypeName(channel.type)}, {t("channel.priority")}: {channel.priority}
                           </span>

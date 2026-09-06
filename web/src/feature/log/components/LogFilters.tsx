@@ -127,7 +127,7 @@ export function LogFilters({
     const channelFilter = showChannel && (
         <div className="w-64 flex-shrink-0">
             <Select value={channel} onValueChange={setChannel} disabled={loading}>
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-9 max-sm:[&_[data-slot=channel-type]]:hidden">
                     <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>

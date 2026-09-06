@@ -784,7 +784,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns id, name, type, and backup-only status for a batch of channel IDs",
+                "description": "Returns id, name, remark, type, current status, and backup-only status for a batch of channel IDs, including soft-deleted channels",
                 "consumes": [
                     "application/json"
                 ],
@@ -11807,6 +11807,12 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
                 },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"

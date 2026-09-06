@@ -28,7 +28,7 @@ export interface Channel {
 
 export const DEFAULT_PRIORITY = 10
 
-export type ChannelBasicInfo = Pick<Channel, 'id' | 'name' | 'remark' | 'type' | 'backup_only'>
+export type ChannelBasicInfo = Pick<Channel, 'id' | 'name' | 'remark' | 'type' | 'status' | 'backup_only'>
 
 export interface ChannelConfigSchema {
     type?: string

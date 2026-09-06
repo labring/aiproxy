@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useChannels, useChannelTypeMetas, useUpdateChannelStatus, useTestChannel, useTestAllChannels, useAllChannelDefaultModels } from '../hooks'
 import { channelApi } from '@/api/channel'
 import { BackupOnlyBadge } from '@/components/common/BackupOnlyBadge'
+import { ChannelDisabledBadge } from '@/components/common/ChannelDisabledBadge'
 import { Channel, ChannelCreateRequest } from '@/types/channel'
 import { Button } from '@/components/ui/button'
 import {
@@ -56,12 +57,12 @@ import { getChannelModelMetric, getTemporarilyExcludedModels } from '@/utils/run
 
 const formatTimestamp = (timestamp: number): string => {
     if (!timestamp) return '-'
-    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+    return format(timestamp, 'yyyy-MM-dd HH:mm')
 }
 
 const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
     if (!timestamp || timestamp <= 0) return neverLabel
-    return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
+    return format(timestamp, 'yyyy-MM-dd HH:mm')
 }
 
 export function ChannelTable() {
@@ -316,11 +317,11 @@ export function ChannelTable() {
     }
 
     // 获取渠道类型名称
-    const getChannelTypeName = (typeId: number): string => {
+    const getChannelTypeName = useCallback((typeId: number): string => {
         if (!typeMetas) return String(typeId)
         const meta = typeMetas[typeId]
         return meta ? meta.name : String(typeId)
-    }
+    }, [typeMetas])
 
     const providerOptions = useMemo(() => {
         if (!typeMetas) return []
@@ -377,12 +378,17 @@ export function ChannelTable() {
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.name")}</div>,
             cell: ({ row }) => (
                 <div
-                    className={cn("flex max-w-[240px] flex-wrap items-center gap-1.5 font-medium", clickableCell)}
+                    className={cn("flex min-w-[160px] max-w-[240px] flex-wrap items-center gap-1.5 font-medium", clickableCell)}
                     onClick={() => openUpdateDialog(row.original)}
                     title={row.original.name}
                 >
                     <span className="truncate" title={row.original.name}>{row.original.name}</span>
-                    {row.original.backup_only && <BackupOnlyBadge />}
+                    {(row.original.status === 2 || row.original.backup_only) && (
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                            {row.original.status === 2 && <ChannelDisabledBadge />}
+                            {row.original.backup_only && <BackupOnlyBadge />}
+                        </span>
+                    )}
                 </div>
             ),
         },
@@ -763,7 +769,7 @@ export function ChannelTable() {
                 </DropdownMenu>
             ),
         },
-    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent, getExcludedModels])
+    ], [t, isTesting, isStatusUpdating, getDisplayModels, runtimeMetrics, formatPercent, getExcludedModels, getChannelTypeName])
 
     // 初始化表格
     const table = useReactTable({

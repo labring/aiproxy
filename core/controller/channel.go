@@ -510,7 +510,7 @@ func DeleteChannels(c *gin.Context) {
 // GetChannelBatchInfo godoc
 //
 //	@Summary		Get basic info for multiple channels
-//	@Description	Returns id, name, remark, type, and backup-only status for a batch of channel IDs, including soft-deleted channels
+//	@Description	Returns id, name, remark, type, current status, and backup-only status for a batch of channel IDs, including soft-deleted channels
 //	@Tags			channels
 //	@Accept			json
 //	@Produce		json

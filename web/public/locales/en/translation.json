@@ -947,6 +947,7 @@
     "refresh": "Refresh",
     "noResults": "No channels found",
     "fetchFailed": "Failed to fetch channel",
+    "currentlyDisabled": "Channel is currently disabled",
     "deleted": "Channel has been deleted or does not exist",
     "sets": "Groups",
     "models": "Models",
