@@ -465,6 +465,9 @@ type SaveGroupModelConfigRequest struct {
 	OverrideRetryTimes bool  `json:"override_retry_times"`
 	RetryTimes         int64 `json:"retry_times"`
 
+	OverrideRetryBudget bool  `json:"override_retry_budget"`
+	RetryBudget         int64 `json:"retry_budget"          binding:"gte=0,lte=180" minimum:"0" maximum:"180"`
+
 	OverrideTimeoutConfig bool                `json:"override_timeout_config"`
 	TimeoutConfig         model.TimeoutConfig `json:"timeout_config"`
 
@@ -507,6 +510,9 @@ func (r *SaveGroupModelConfigRequest) ToGroupModelConfig(groupID string) model.G
 
 		OverrideRetryTimes: r.OverrideRetryTimes,
 		RetryTimes:         r.RetryTimes,
+
+		OverrideRetryBudget: r.OverrideRetryBudget,
+		RetryBudget:         r.RetryBudget,
 
 		OverrideTimeoutConfig: r.OverrideTimeoutConfig,
 		TimeoutConfig:         r.TimeoutConfig,

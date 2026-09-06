@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { priceSchema } from './model'
+import { priceSchema, retryBudgetSchema } from './model'
+
+describe('retry budget validation', () => {
+    it.each([0, 1, 60, 180])('accepts %s seconds', value => {
+        expect(retryBudgetSchema.safeParse(value).success).toBe(true)
+    })
+    it.each([-1, 181, 1.5, Infinity, NaN])('rejects %s seconds', value => {
+        expect(retryBudgetSchema.safeParse(value).success).toBe(false)
+    })
+})
 
 describe('daily conditional pricing validation', () => {
     it('accepts multiple non-overlapping daily peak ranges', () => {

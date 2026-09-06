@@ -174,13 +174,14 @@ func TestHandleRelayResultDecidesRetryLifecycle(t *testing.T) {
 				tt.bizErr,
 				tt.retry,
 				tt.retryTimes,
+				time.Time{},
 			))
 		})
 	}
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	assert.True(t, handleRelayResult(newContext(canceled), err, true, 2))
+	assert.True(t, handleRelayResult(newContext(canceled), err, true, 2, time.Time{}))
 }
 
 func TestInitRetryStateRecordsInitialFailure(t *testing.T) {
@@ -297,7 +298,7 @@ func TestHandleRetryResultUpdatesAutomaticRetryState(t *testing.T) {
 		assert.Empty(t, state.ignoreChannelIDs)
 	})
 
-	t.Run("permission failure is hard filtered and extends retry budget", func(t *testing.T) {
+	t.Run("permission failure is hard filtered within retry limit", func(t *testing.T) {
 		t.Parallel()
 
 		state := newState(noPermissionError)
@@ -305,7 +306,7 @@ func TestHandleRetryResultUpdatesAutomaticRetryState(t *testing.T) {
 		done := handleRetryResult(newContext(), true, channel, state)
 
 		assert.False(t, done)
-		assert.Equal(t, 3, state.retryTimes)
+		assert.Equal(t, 2, state.retryTimes)
 		assert.Contains(t, state.ignoreChannelIDs, int64(channel.ID))
 	})
 

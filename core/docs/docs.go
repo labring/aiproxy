@@ -10080,6 +10080,12 @@ const docTemplate = `{
                 "response_body_storage_max_size": {
                     "type": "integer"
                 },
+                "retry_budget": {
+                    "description": "Seconds; nil inherits the global budget, zero disables it.",
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
+                },
                 "retry_times": {
                     "type": "integer"
                 },
@@ -10988,6 +10994,9 @@ const docTemplate = `{
                 "override_response_body_storage_max_size": {
                     "type": "boolean"
                 },
+                "override_retry_budget": {
+                    "type": "boolean"
+                },
                 "override_retry_times": {
                     "type": "boolean"
                 },
@@ -11008,6 +11017,11 @@ const docTemplate = `{
                 },
                 "response_body_storage_max_size": {
                     "type": "integer"
+                },
+                "retry_budget": {
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
                 },
                 "retry_times": {
                     "type": "integer"
@@ -11075,6 +11089,12 @@ const docTemplate = `{
                 },
                 "response_body_storage_max_size": {
                     "type": "integer"
+                },
+                "retry_budget": {
+                    "description": "Seconds; nil inherits the global budget, zero disables it.",
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
                 },
                 "retry_times": {
                     "type": "integer"
@@ -13161,6 +13181,9 @@ const docTemplate = `{
                 "override_response_body_storage_max_size": {
                     "type": "boolean"
                 },
+                "override_retry_budget": {
+                    "type": "boolean"
+                },
                 "override_retry_times": {
                     "type": "boolean"
                 },
@@ -13181,6 +13204,11 @@ const docTemplate = `{
                 },
                 "response_body_storage_max_size": {
                     "type": "integer"
+                },
+                "retry_budget": {
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
                 },
                 "retry_times": {
                     "type": "integer"
@@ -13681,6 +13709,12 @@ const docTemplate = `{
                 },
                 "response_body_storage_max_size": {
                     "type": "integer"
+                },
+                "retry_budget": {
+                    "description": "Seconds; nil inherits the global budget, zero disables it.",
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
                 },
                 "retry_times": {
                     "type": "integer"

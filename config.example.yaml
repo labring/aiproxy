@@ -141,6 +141,8 @@ modelconfigs:
     rpm: 3500
     tpm: 80000
     retry_times: 3
+    # Omit to inherit the global budget; 0 disables it. Range: 0-180 seconds.
+    retry_budget: 60
     timeout_config:
       request_timeout: 300
       stream_request_timeout: 600
@@ -240,6 +242,7 @@ options:
 
   # Retry settings
   RetryTimes: "3"
+  RetryBudget: "0"  # Seconds; RETRY_BUDGET overrides this value, maximum 180.
 
   # Group settings
   GroupMaxTokenNum: "0"  # 0 means unlimited

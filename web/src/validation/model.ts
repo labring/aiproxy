@@ -223,6 +223,8 @@ const modelConfigSchema = z.object({
     support_voices: z.array(z.string()).optional(),
 }).optional()
 
+export const retryBudgetSchema = z.number().int().min(0).max(180)
+
 export const modelCreateSchema = z.object({
     model: z.string().min(1, 'Model name is required'),
     config: modelConfigSchema,
@@ -231,7 +233,8 @@ export const modelCreateSchema = z.object({
     exclude_from_tests: z.boolean().optional(),
     rpm: z.number().nonnegative('RPM must be a non-negative number').optional(),
     tpm: z.number().nonnegative('TPM must be a non-negative number').optional(),
-    retry_times: z.number().nonnegative('Retry times must be a non-negative number').optional(),
+    retry_times: z.number().int().nonnegative('Retry times must be a non-negative number').optional(),
+    retry_budget: retryBudgetSchema.optional(),
     timeout: z.number().nonnegative('Timeout must be a non-negative number').optional(),
     stream_timeout: z.number().nonnegative('Stream timeout must be a non-negative number').optional(),
     force_save_detail: z.boolean().optional(),

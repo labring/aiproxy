@@ -264,6 +264,7 @@ options:
 
   # Retry settings
   RetryTimes: "3"
+  RetryBudget: "0"  # Seconds, maximum 180; 0 disables the time limit
 
   # Error rate alerts
   DefaultWarnNotifyErrorRate: "0.5"
@@ -285,11 +286,27 @@ options:
 - `LogDetailResponseBodyMaxSize`: Max size of response body to log
 - `DisableServe`: Disable API serving (for maintenance)
 - `RetryTimes`: Number of retry attempts
+- `RetryBudget`: Time budget in seconds, from 0 to 180; 0 disables the time limit. The `RETRY_BUDGET` environment variable overrides this global default and is capped at 180 seconds.
 - `DefaultChannelModels`: Default models for new channels (JSON array)
 - `GroupMaxTokenNum`: Max tokens per group
 - `DefaultWarnNotifyErrorRate`: Default error rate warning threshold
 - `UsageAlertThreshold`: Usage alert threshold
 - `FuzzyTokenThreshold`: Fuzzy token matching threshold
+
+### Retry Limits
+
+The budget starts with the first upstream attempt and includes upstream calls and retry backoff. After it expires, no further retry starts. An in-flight call keeps its existing request or stream timeout.
+
+Models can set `retry_budget` to override the global budget, set it to `0` to disable the budget, or omit it to inherit. Group model configs use `override_retry_budget` and `retry_budget` to override the model value, including zero. Retry counts continue to use `retry_times` and `override_retry_times`.
+
+| Effective configuration | Behavior |
+| --- | --- |
+| Count only | Stop after the configured number of retries |
+| Budget only | Retry until the budget expires, with no count limit |
+| Count and budget | Stop when either limit is reached |
+| Neither | No retries |
+
+A model that explicitly sets a positive budget and has no positive retry count uses only that budget, without inheriting the global count. With no local budget, global count and budget defaults apply together. A group can clear an inherited model count with `override_retry_times: true` and `retry_times: 0`; when a budget is active, this enables retries for the remaining budget. Without a budget, a zero model count retains the existing global count fallback. Permission failures exclude the channel but do not increase the retry limit. A retry count excludes the initial attempt.
 
 ## Example: Complete Configuration
 

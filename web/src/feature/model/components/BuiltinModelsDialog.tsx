@@ -70,6 +70,7 @@ const toModelSaveRequest = (model: ModelConfig): ModelSaveRequest => {
     rpm: model.rpm,
     tpm: model.tpm,
     retry_times: model.retry_times,
+    retry_budget: model.retry_budget,
     timeout_config: model.timeout_config,
     force_save_detail: model.force_save_detail,
     max_image_generation_count: model.max_image_generation_count,

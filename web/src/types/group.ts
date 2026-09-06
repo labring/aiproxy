@@ -26,6 +26,8 @@ export interface GroupModelConfig {
     price: GroupModelConfigPrice
     override_retry_times: boolean
     retry_times: number
+    override_retry_budget: boolean
+    retry_budget: number
     override_timeout_config: boolean
     timeout_config?: TimeoutConfig
     override_force_save_detail: boolean
@@ -142,6 +144,8 @@ export interface GroupModelConfigSaveRequest {
     price?: Partial<GroupModelConfigPrice>
     override_retry_times?: boolean
     retry_times?: number
+    override_retry_budget?: boolean
+    retry_budget?: number
     override_timeout_config?: boolean
     timeout_config?: TimeoutConfig
     override_force_save_detail?: boolean

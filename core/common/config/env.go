@@ -29,6 +29,8 @@ var (
 )
 
 func ReloadEnv() {
+	SetRetryBudget(GetRetryBudget())
+
 	DebugEnabled = env.Bool("DEBUG", false)
 	DebugSQLEnabled = env.Bool("DEBUG_SQL", false)
 	DisableAutoMigrateDB = env.Bool("DISABLE_AUTO_MIGRATE_DB", false)

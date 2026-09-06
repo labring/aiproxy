@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"gorm.io/gorm"
 )
@@ -38,6 +39,7 @@ type ModelConfig struct {
 	TPM                         int64                     `                                     json:"tpm,omitempty"                            yaml:"tpm,omitempty"`
 	Price                       Price                     `gorm:"embedded"                      json:"price,omitempty"                          yaml:"price,omitempty"`
 	RetryTimes                  int64                     `                                     json:"retry_times,omitempty"                    yaml:"retry_times,omitempty"`
+	RetryBudget                 *int64                    `                                     json:"retry_budget,omitempty"                   yaml:"retry_budget,omitempty"                   binding:"omitempty,gte=0,lte=180" minimum:"0" maximum:"180"` // Seconds; nil inherits the global budget, zero disables it.
 	TimeoutConfig               TimeoutConfig             `gorm:"embedded"                      json:"timeout_config,omitempty"                 yaml:"timeout_config,omitempty"`
 	ForceSaveDetail             bool                      `                                     json:"force_save_detail,omitempty"              yaml:"force_save_detail,omitempty"`
 	MaxImageGenerationCount     int                       `                                     json:"max_image_generation_count,omitempty"     yaml:"max_image_generation_count,omitempty"`
@@ -49,11 +51,20 @@ type ModelConfig struct {
 	SummaryServiceTier          bool                      `                                     json:"summary_service_tier,omitempty"           yaml:"summary_service_tier,omitempty"`
 	SummaryClaudeLongContext    bool                      `                                     json:"summary_claude_long_context,omitempty"    yaml:"summary_claude_long_context,omitempty"`
 	DisableResolutionFuzzyMatch bool                      `                                     json:"disable_resolution_fuzzy_match,omitempty" yaml:"disable_resolution_fuzzy_match,omitempty"`
+	retryTimesOverridden        bool                      `gorm:"-"                             json:"-"                                        yaml:"-"`
 }
 
 func (c *ModelConfig) BeforeSave(_ *gorm.DB) (err error) {
 	if c.Model == "" {
 		return errors.New("model is required")
+	}
+
+	if c.RetryBudget != nil &&
+		(*c.RetryBudget < 0 || *c.RetryBudget > config.MaxRetryBudgetSeconds) {
+		return fmt.Errorf(
+			"retry_budget must be between 0 and %d seconds",
+			config.MaxRetryBudgetSeconds,
+		)
 	}
 
 	if err := c.Price.ValidateConditionalPrices(); err != nil {
@@ -71,6 +82,29 @@ func NewDefaultModelConfig(model string) ModelConfig {
 	return ModelConfig{
 		Model: model,
 	}
+}
+
+func (c *ModelConfig) RetryLimits(defaultTimes, defaultBudget int64) (int64, time.Duration) {
+	seconds := defaultBudget
+	if c.RetryBudget != nil {
+		seconds = *c.RetryBudget
+	}
+
+	seconds = min(max(seconds, 0), config.MaxRetryBudgetSeconds)
+
+	times := max(defaultTimes, 0)
+	if c.RetryTimes > 0 {
+		times = c.RetryTimes
+	} else if seconds > 0 && (c.RetryBudget != nil || c.retryTimesOverridden) {
+		// A local budget without a local count enables retries for the entire budget.
+		times = 0
+	}
+
+	if seconds > 0 && times == 0 {
+		times = -1
+	}
+
+	return times, time.Duration(seconds) * time.Second
 }
 
 func (c *ModelConfig) RequestTimeout() time.Duration {
@@ -143,6 +177,11 @@ func (c *ModelConfig) LoadFromGroupModelConfig(groupModelConfig GroupModelConfig
 
 	if groupModelConfig.OverrideRetryTimes {
 		newC.RetryTimes = groupModelConfig.RetryTimes
+		newC.retryTimesOverridden = true
+	}
+
+	if groupModelConfig.OverrideRetryBudget {
+		newC.RetryBudget = new(groupModelConfig.RetryBudget)
 	}
 
 	if groupModelConfig.OverrideTimeoutConfig {
