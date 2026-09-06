@@ -328,6 +328,7 @@ func SearchChannels(
 		} else {
 			conditions = append(conditions, "remark LIKE ?")
 		}
+
 		values = append(values, "%"+keyword+"%")
 
 		if filter.Key == "" {

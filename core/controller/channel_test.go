@@ -72,6 +72,7 @@ func TestUpdateChannelRequestPreservesOmittedValues(t *testing.T) {
 
 func TestUpdateChannelRequestAllowsExplicitZeroValues(t *testing.T) {
 	t.Parallel()
+
 	remark := ""
 	backupOnly := false
 	updated, err := (&UpdateChannelRequest{Remark: &remark, BackupOnly: &backupOnly}).Apply(

@@ -138,6 +138,7 @@ func GetChannels(c *gin.Context) {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	order := c.Query("order")
 
 	channels, total, err := model.GetChannels(
@@ -245,6 +246,7 @@ func SearchChannels(c *gin.Context) {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	order := c.Query("order")
 
 	channels, total, err := model.SearchChannels(
@@ -322,54 +324,71 @@ func (r *UpdateChannelRequest) Apply(current *model.Channel) (*model.Channel, er
 	if r.Type != nil {
 		next.Type = *r.Type
 	}
+
 	if r.Name != nil {
 		next.Name = *r.Name
 	}
+
 	if r.Remark != nil {
 		next.Remark = *r.Remark
 	}
+
 	if r.Key != nil {
 		next.Key = *r.Key
 	}
+
 	if r.BaseURL != nil {
 		next.BaseURL = *r.BaseURL
 	}
+
 	if r.ProxyURL != nil {
 		next.ProxyURL = *r.ProxyURL
 	}
+
 	if r.Models != nil {
 		next.Models = slices.Clone(*r.Models)
 	}
+
 	if r.ModelMapping != nil {
 		next.ModelMapping = maps.Clone(*r.ModelMapping)
 	}
+
 	if r.Configs != nil {
 		next.Configs = maps.Clone(*r.Configs)
 	}
+
 	if r.Priority != nil {
 		next.Priority = *r.Priority
 	}
+
 	if r.BackupOnly != nil {
 		next.BackupOnly = *r.BackupOnly
 	}
+
 	if r.Sets != nil {
 		next.Sets = slices.Clone(*r.Sets)
 	}
+
 	if r.EnabledAutoBalanceCheck != nil {
 		next.EnabledAutoBalanceCheck = *r.EnabledAutoBalanceCheck
 	}
+
 	if r.SkipTLSVerify != nil {
 		next.SkipTLSVerify = *r.SkipTLSVerify
 	}
+
 	if r.EnabledNoPermissionBan != nil {
 		next.EnabledNoPermissionBan = *r.EnabledNoPermissionBan
 	}
+
 	if r.WarnErrorRate != nil {
 		next.WarnErrorRate = *r.WarnErrorRate
 	}
+
 	if r.MaxErrorRate != nil {
 		next.MaxErrorRate = *r.MaxErrorRate
 	}
+
 	if r.BalanceThreshold != nil {
 		next.BalanceThreshold = *r.BalanceThreshold
 	}
@@ -377,6 +396,7 @@ func (r *UpdateChannelRequest) Apply(current *model.Channel) (*model.Channel, er
 	if _, err := (&AddChannelRequest{Type: next.Type, Name: next.Name, Key: next.Key}).ToChannel(); err != nil {
 		return nil, err
 	}
+
 	return &next, nil
 }
 
