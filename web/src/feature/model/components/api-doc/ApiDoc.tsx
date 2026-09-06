@@ -2,15 +2,14 @@ import React from 'react'
 import {
     Sheet,
     SheetContent,
+    SheetTitle,
 } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/common/CopyButton"
 import { Badge } from "@/components/ui/badge"
 import { ModelConfig } from '@/types/model'
 import { useTranslation } from 'react-i18next'
 import CodeBlock from './CodeHight'
-import { toast } from 'sonner'
 import { TFunction } from 'i18next'
-import { writeTextToClipboard } from '@/lib/clipboard'
 
 interface ApiDocContent {
     title: string
@@ -938,15 +937,17 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
         <Sheet open={isOpen} onOpenChange={(open) => {
             if (!open) onClose()
         }}>
-            <SheetContent 
+            <SheetContent
                 side="right"
-                className="p-0 overflow-hidden w-[400px] max-w-md"
+                aria-describedby={undefined}
+                className="w-full max-w-full overflow-hidden p-0 sm:w-[560px] sm:max-w-[560px]"
             >
-                <div className="flex flex-col gap-3 overflow-y-auto p-6 pb-3 h-[calc(100%-48px)]">
+                <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 pt-12 sm:p-6 sm:pt-12">
+                    <SheetTitle className="text-base">{modelConfig.model}</SheetTitle>
                     {/* method */}
                     <div className="flex gap-2.5 items-center">
                         <Badge className="flex px-2 py-0.5 justify-center items-center gap-0.5 rounded bg-blue-100 dark:bg-blue-900">
-                            <span className="text-blue-600 dark:text-blue-300 font-medium text-xs leading-4 tracking-wide">
+                            <span className="text-blue-600 dark:text-blue-300 font-medium text-xs leading-4">
                                 {apiDoc.method}
                             </span>
                         </Badge>
@@ -978,7 +979,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                                 className="dark:stroke-zinc-600"
                                             />
                                         </svg>
-                                        <span className="text-gray-600 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
+                                        <span className="text-gray-600 dark:text-gray-400 font-medium text-xs leading-4">
                                             {segment}
                                         </span>
                                     </React.Fragment>
@@ -990,46 +991,18 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                     <div className="flex flex-col gap-4 items-start w-full">
                         {/* request example */}
                         <div className="flex flex-col gap-2 items-start w-full">
-                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4 tracking-wide">
+                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4">
                                 {t('apiDoc.requestExample')}
                             </span>
 
                             {/* code */}
                             <div className="flex flex-col items-start justify-center w-full rounded-md overflow-hidden">
                                 <div className="flex w-full p-2.5 justify-between items-center bg-[#232833]">
-                                    <span className="text-white font-medium text-xs leading-4 tracking-wide">
+                                    <span className="text-white font-medium text-xs leading-4">
                                         {'bash'}
                                     </span>
 
-                                    <Button
-                                        onClick={() => {
-                                            writeTextToClipboard(apiDoc.requestExample).then(
-                                                () => {
-                                                    toast.success(t('common.copied'))
-                                                },
-                                                (err) => {
-                                                    toast.error(err?.message || t('common.copyFailed'))
-                                                }
-                                            )
-                                        }}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="inline-flex p-1 min-w-0 h-[22px] w-[22px] justify-center items-center rounded bg-transparent hover:bg-white/10">
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="14"
-                                            height="14"
-                                            viewBox="0 0 14 14"
-                                            fill="none">
-                                            <path
-                                                fillRule="evenodd"
-                                                clipRule="evenodd"
-                                                d="M2.86483 2.30131C2.73937 2.30131 2.61904 2.35115 2.53032 2.43987C2.44161 2.52859 2.39176 2.64891 2.39176 2.77438V7.5282C2.39176 7.65366 2.44161 7.77399 2.53032 7.86271C2.61904 7.95142 2.73937 8.00127 2.86483 8.00127H3.39304C3.7152 8.00127 3.97637 8.26243 3.97637 8.5846C3.97637 8.90676 3.7152 9.16793 3.39304 9.16793H2.86483C2.42995 9.16793 2.01288 8.99517 1.70537 8.68766C1.39786 8.38015 1.2251 7.96308 1.2251 7.5282V2.77438C1.2251 2.3395 1.39786 1.92242 1.70537 1.61491C2.01288 1.3074 2.42995 1.13464 2.86483 1.13464H7.61865C8.05354 1.13464 8.47061 1.3074 8.77812 1.61491C9.08563 1.92242 9.25839 2.33949 9.25839 2.77438V3.30258C9.25839 3.62475 8.99722 3.88592 8.67505 3.88592C8.35289 3.88592 8.09172 3.62475 8.09172 3.30258V2.77438C8.09172 2.64891 8.04188 2.52859 7.95316 2.43987C7.86444 2.35115 7.74412 2.30131 7.61865 2.30131H2.86483ZM6.56225 5.99872C6.30098 5.99872 6.08918 6.21052 6.08918 6.47179V11.2256C6.08918 11.4869 6.30098 11.6987 6.56225 11.6987H11.3161C11.5773 11.6987 11.7891 11.4869 11.7891 11.2256V6.47179C11.7891 6.21052 11.5773 5.99872 11.3161 5.99872H6.56225ZM4.92251 6.47179C4.92251 5.56619 5.65664 4.83206 6.56225 4.83206H11.3161C12.2217 4.83206 12.9558 5.56619 12.9558 6.47179V11.2256C12.9558 12.1312 12.2217 12.8653 11.3161 12.8653H6.56225C5.65664 12.8653 4.92251 12.1312 4.92251 11.2256V6.47179Z"
-                                                fill="white"
-                                                fillOpacity="0.8"
-                                            />
-                                        </svg>
-                                    </Button>
+                                    <CopyButton text={apiDoc.requestExample} className="size-8 text-white/80 hover:bg-white/10 hover:text-white" />
                                 </div>
                                 <div className="p-3 bg-[#14181E] w-full">
                                     <CodeBlock code={apiDoc.requestExample} language="bash" />
@@ -1041,7 +1014,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                 apiDoc?.requestAdditionalInfo?.voices?.length > 0 && (
                                     <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200 dark:border-gray-700">
                                         <div className="flex gap-2">
-                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4">
                                                 {'voice'}
                                             </span>
                                             <div className="flex gap-1">
@@ -1055,7 +1028,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                         </div>
 
                                         <div className="flex flex-col gap-1 items-start w-full">
-                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4">
                                                 {t('apiDoc.voiceValues')}
                                             </span>
 
@@ -1077,7 +1050,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                 apiDoc?.requestAdditionalInfo?.formats?.length > 0 && (
                                     <div className="flex flex-col p-2.5 w-full gap-2 items-start rounded-md border border-gray-200 dark:border-gray-700">
                                         <div className="flex gap-2">
-                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs leading-4">
                                                 {'response_format'}
                                             </span>
                                             <div className="flex gap-1">
@@ -1091,7 +1064,7 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
                                         </div>
 
                                         <div className="flex flex-col gap-1 items-start w-full">
-                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4 tracking-wide">
+                                            <span className="text-gray-500 dark:text-gray-400 font-medium text-xs leading-4">
                                                 {t('apiDoc.responseFormatValues')}
                                             </span>
 
@@ -1112,46 +1085,18 @@ const ApiDocDrawer: React.FC<ApiDocDrawerProps> = ({ isOpen, onClose, modelConfi
 
                         {/* response example */}
                         <div className="flex flex-col gap-2 items-start w-full">
-                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4 tracking-wide">
+                            <span className="text-gray-900 dark:text-gray-100 font-medium text-xs leading-4">
                                 {t('apiDoc.responseExample')}
                             </span>
 
                             {/* code */}
                             <div className="flex flex-col items-start justify-center w-full rounded-md overflow-hidden">
                                 <div className="flex w-full p-2.5 justify-between items-center bg-[#232833]">
-                                    <span className="text-white font-medium text-xs leading-4 tracking-wide">
+                                    <span className="text-white font-medium text-xs leading-4">
                                         {apiDoc.responseFormat}
                                     </span>
 
-                                    <Button
-                                        onClick={() => {
-                                            writeTextToClipboard(apiDoc.responseExample).then(
-                                                () => {
-                                                    toast.success(t('common.copied'))
-                                                },
-                                                (err) => {
-                                                    toast.error(err?.message || t('common.copyFailed'))
-                                                }
-                                            )
-                                        }}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="inline-flex p-1 min-w-0 h-[22px] w-[22px] justify-center items-center rounded bg-transparent hover:bg-white/10">
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="14"
-                                            height="14"
-                                            viewBox="0 0 14 14"
-                                            fill="none">
-                                            <path
-                                                fillRule="evenodd"
-                                                clipRule="evenodd"
-                                                d="M2.86483 2.30131C2.73937 2.30131 2.61904 2.35115 2.53032 2.43987C2.44161 2.52859 2.39176 2.64891 2.39176 2.77438V7.5282C2.39176 7.65366 2.44161 7.77399 2.53032 7.86271C2.61904 7.95142 2.73937 8.00127 2.86483 8.00127H3.39304C3.7152 8.00127 3.97637 8.26243 3.97637 8.5846C3.97637 8.90676 3.7152 9.16793 3.39304 9.16793H2.86483C2.42995 9.16793 2.01288 8.99517 1.70537 8.68766C1.39786 8.38015 1.2251 7.96308 1.2251 7.5282V2.77438C1.2251 2.3395 1.39786 1.92242 1.70537 1.61491C2.01288 1.3074 2.42995 1.13464 2.86483 1.13464H7.61865C8.05354 1.13464 8.47061 1.3074 8.77812 1.61491C9.08563 1.92242 9.25839 2.33949 9.25839 2.77438V3.30258C9.25839 3.62475 8.99722 3.88592 8.67505 3.88592C8.35289 3.88592 8.09172 3.62475 8.09172 3.30258V2.77438C8.09172 2.64891 8.04188 2.52859 7.95316 2.43987C7.86444 2.35115 7.74412 2.30131 7.61865 2.30131H2.86483ZM6.56225 5.99872C6.30098 5.99872 6.08918 6.21052 6.08918 6.47179V11.2256C6.08918 11.4869 6.30098 11.6987 6.56225 11.6987H11.3161C11.5773 11.6987 11.7891 11.4869 11.7891 11.2256V6.47179C11.7891 6.21052 11.5773 5.99872 11.3161 5.99872H6.56225ZM4.92251 6.47179C4.92251 5.56619 5.65664 4.83206 6.56225 4.83206H11.3161C12.2217 4.83206 12.9558 5.56619 12.9558 6.47179V11.2256C12.9558 12.1312 12.2217 12.8653 11.3161 12.8653H6.56225C5.65664 12.8653 4.92251 12.1312 4.92251 11.2256V6.47179Z"
-                                                fill="white"
-                                                fillOpacity="0.8"
-                                            />
-                                        </svg>
-                                    </Button>
+                                    <CopyButton text={apiDoc.responseExample} className="size-8 text-white/80 hover:bg-white/10 hover:text-white" />
                                 </div>
                                 <div className="p-3 bg-[#14181E] w-full">
                                     <CodeBlock code={apiDoc.responseExample} language={apiDoc.responseFormat === 'json' ? 'json' : 'text'} />

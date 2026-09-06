@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react"
+import { useState } from "react"
 import { Outlet } from "react-router"
 import { Sidebar } from "./SideBar"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { LanguageSelector } from "@/components/common/LanguageSelector"
-import { Bell, CircleHelp, Menu } from "lucide-react"
+import { BookOpen, Menu } from "lucide-react"
 import { useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,7 @@ export function RootLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-dvh bg-background">
       <Sidebar
         className="hidden lg:flex"
         displayConfig={{
@@ -38,19 +38,15 @@ export function RootLayout() {
         onToggle={() => setCollapsed(!collapsed)}
       />
 
-      <main className={cn("min-w-0 flex-1 flex flex-col overflow-hidden transition-all duration-300 bg-slate-50/80 dark:bg-slate-950")}>
-        <header className="h-16 shrink-0 border-b bg-white/80 dark:bg-slate-950/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-slate-800 flex items-center justify-between gap-3 px-4 sm:px-8">
-          <div className="flex min-w-0 items-center gap-3"><Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden shrink-0" aria-label="Open navigation"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="left" className="w-72 border-0 bg-transparent p-0"><SheetTitle className="sr-only">Navigation</SheetTitle><Sidebar collapsed={false} className="w-full border-0" onNavigate={() => setMobileNavOpen(false)} /></SheetContent></Sheet><div className="min-w-0"><p className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">AI Proxy / Workspace</p><h2 className="truncate text-lg font-semibold tracking-tight">{titles[location.pathname] || "Workspace"}</h2></div></div>
-          <div className="flex items-center gap-1"><ButtonIcon label="Help"><CircleHelp /></ButtonIcon><ButtonIcon label="Notifications"><Bell /></ButtonIcon><div className="mx-2 h-5 w-px bg-border" /><ThemeToggle /><LanguageSelector /></div>
+      <main className={cn("min-w-0 flex-1 flex flex-col overflow-hidden bg-background")}>
+        <header className="h-14 shrink-0 border-b bg-card flex items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3"><Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden shrink-0" aria-label={t("ui.navigation")}><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="left" className="w-72 border-0 bg-transparent p-0"><SheetTitle className="sr-only">{t("ui.navigation")}</SheetTitle><Sidebar collapsed={false} className="w-full border-0" onNavigate={() => setMobileNavOpen(false)} /></SheetContent></Sheet><div className="min-w-0"><h2 className="truncate text-lg font-semibold tracking-tight">{titles[location.pathname] || "Workspace"}</h2></div></div>
+          <div className="flex items-center gap-1"><a href="https://sealos.run/docs/guides/ai-proxy" target="_blank" rel="noopener noreferrer" title={t("sidebar.doc")} aria-label={t("sidebar.doc")} className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><BookOpen className="size-4" /></a><div className="mx-2 h-5 w-px bg-border" /><ThemeToggle /><LanguageSelector /></div>
         </header>
-        <div className="flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </div>
       </main>
     </div>
   )
-}
-
-function ButtonIcon({ label, children }: { label: string; children: ReactNode }) {
-  return <button aria-label={label} className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{children}</button>
 }

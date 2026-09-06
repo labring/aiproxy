@@ -61,7 +61,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
                 <FormField
                     control={form.control}
                     name="name"
@@ -169,7 +169,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                     )}
                 />
 
-                <div className="flex justify-end pt-4">
+                <div className="form-actions sm:col-span-2">
                     <AnimatedButton>
                         <Button
                             type="submit"

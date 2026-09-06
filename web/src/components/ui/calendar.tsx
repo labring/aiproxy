@@ -1,6 +1,8 @@
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { DayPicker } from "react-day-picker"
+import { zhCN, enUS } from "react-day-picker/locale"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -11,29 +13,31 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: React.ComponentProps<typeof DayPicker>) {
+  const { i18n } = useTranslation()
   return (
     <DayPicker
+      locale={i18n.language.startsWith('zh') ? zhCN : enUS}
       showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
+      className={cn("relative p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row gap-2",
-        month: "flex flex-col gap-4",
-        month_caption: "flex justify-center pt-1 relative items-center w-full",
+        months: "flex flex-col sm:flex-row gap-4",
+        month: "flex w-63 flex-col gap-2",
+        month_caption: "flex h-9 justify-center relative items-center w-full",
         caption_label: "text-sm font-medium",
-        nav: "flex items-center gap-1",
+        nav: "pointer-events-none absolute inset-x-3 top-3 z-10 flex items-center justify-between",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-1"
+          "pointer-events-auto size-9 bg-transparent p-0 text-muted-foreground hover:text-foreground"
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-1"
+          "pointer-events-auto size-9 bg-transparent p-0 text-muted-foreground hover:text-foreground"
         ),
         month_grid: "w-full border-collapse space-x-1",
         weekdays: "flex",
         weekday:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-        week: "flex w-full mt-2",
+          "text-muted-foreground w-9 font-normal text-xs",
+        week: "flex w-full mt-1",
         day: cn(
           "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].range_end)]:rounded-r-md",
           props.mode === "range"
@@ -42,7 +46,7 @@ function Calendar({
         ),
         day_button: cn(
           buttonVariants({ variant: "ghost" }),
-          "size-8 p-0 font-normal aria-selected:opacity-100"
+          "size-9 rounded-sm p-0 font-normal aria-selected:opacity-100"
         ),
         range_start:
           "range_start aria-selected:bg-primary aria-selected:text-primary-foreground",

@@ -1,5 +1,10 @@
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
+SyntaxHighlighter.registerLanguage('bash', bash)
+SyntaxHighlighter.registerLanguage('json', json)
 
 const CodeBlock = ({ code, language = 'bash' }: { code: string; language?: string }) => {
     const customizedStyle = {
@@ -13,35 +18,13 @@ const CodeBlock = ({ code, language = 'bash' }: { code: string; language?: strin
     }
 
     return (
-        <div
-            className="overflow-x-auto"
-            style={{
-                msOverflowStyle: 'none',
-                scrollbarWidth: 'none',
-            }}>
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                div::-webkit-scrollbar {
-                    width: 0;
-                    height: 0;
-                }
-                div pre::-webkit-scrollbar {
-                    width: 0;
-                    height: 0;
-                }
-                div code::-webkit-scrollbar {
-                    width: 0;
-                    height: 0;
-                }
-            `}} />
+        <div className="min-w-0 overflow-x-auto">
             <SyntaxHighlighter
                 language={language}
                 style={customizedStyle}
                 customStyle={{
                     fontSize: '12px',
-                    overflowX: 'auto',
-                    msOverflowStyle: 'none',
-                    scrollbarWidth: 'none'
+                    overflowX: 'auto'
                 }}
                 codeTagProps={{
                     style: {

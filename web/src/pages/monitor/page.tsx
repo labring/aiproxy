@@ -63,10 +63,10 @@ export default function MonitorPage() {
     const hasData = (data?.chartData?.length ?? 0) > 0
 
     return (
-        <div className="flex-1 space-y-5 p-5 sm:p-8 max-w-[1800px] w-full mx-auto">
+        <div className="flex-1 space-y-4 p-4 sm:p-6 max-w-[1800px] w-full mx-auto">
             <div className="flex items-end justify-between gap-4">
-                <div><h1 className="text-2xl font-semibold tracking-tight">{t('monitor.title')}</h1><p className="mt-1 text-sm text-muted-foreground">实时掌握请求、成本与模型性能</p></div>
-                <div className="hidden sm:flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs text-muted-foreground"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />数据每 5 分钟自动刷新</div>
+                <div><h1 className="text-lg font-semibold">{t('monitor.title')}</h1></div>
+
             </div>
             <MonitorFilters
                 onFiltersChange={handleFiltersChange}

@@ -8,6 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { EmbedMCP, getEmbedMCPs, saveEmbedMCP } from "@/api/mcp";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ChevronDown, RefreshCw, Save, Settings2 } from "lucide-react";
 
 const EmbedMCPComponent = () => {
   const [embedMCPs, setEmbedMCPs] = useState<EmbedMCP[]>([]);
@@ -17,8 +20,9 @@ const EmbedMCPComponent = () => {
     Record<string, Record<string, string>>
   >({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     fetchEmbedMCPs();
@@ -33,9 +37,9 @@ const EmbedMCPComponent = () => {
       // Initialize config values
       const initialConfigValues: Record<string, Record<string, string>> = {};
       data.forEach((mcp) => {
-        initialConfigValues[mcp.id] = {};
+        initialConfigValues[mcp.id] = { ...mcp.embed_config?.init };
         Object.entries(mcp.config_templates).forEach(([key, template]) => {
-          initialConfigValues[mcp.id][key] = template.example || "";
+          initialConfigValues[mcp.id][key] = mcp.embed_config?.init?.[key] ?? template.example ?? "";
         });
       });
       setConfigValues(initialConfigValues);
@@ -99,6 +103,7 @@ const EmbedMCPComponent = () => {
     (mcp) =>
       mcp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       mcp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      mcp.name_cn?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       mcp.tags?.some((tag) =>
         tag.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -110,14 +115,15 @@ const EmbedMCPComponent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between gap-3">
         <Input
           className="max-w-xs"
           placeholder={t("mcp.list.search")}
+          aria-label={t("mcp.list.search")}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <Button onClick={fetchEmbedMCPs}>{t("mcp.refresh")}</Button>
+        <Button variant="outline" size="icon" title={t("mcp.refresh")} aria-label={t("mcp.refresh")} onClick={fetchEmbedMCPs}><RefreshCw className="size-4" /></Button>
       </div>
 
       {filteredMCPs.length === 0 ? (
@@ -125,14 +131,14 @@ const EmbedMCPComponent = () => {
           {t("mcp.embed.noEmbeddedServers")}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           {filteredMCPs.map((mcp) => (
             <Card key={mcp.id} className="overflow-hidden">
               <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle>{mcp.name}</CardTitle>
-                    <div className="text-sm text-muted-foreground">
+                <div className="flex flex-wrap justify-between items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="break-words text-base">{i18n.language.startsWith('zh') && mcp.name_cn ? mcp.name_cn : mcp.name}</CardTitle>
+                    <div className="break-all text-xs font-mono text-muted-foreground">
                       {mcp.id}
                     </div>
                   </div>
@@ -158,16 +164,16 @@ const EmbedMCPComponent = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mcp.readme && (
-                  <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto text-sm">
-                    <pre className="whitespace-pre-wrap">{mcp.readme}</pre>
-                  </div>
-                )}
-
+                <Button variant="outline" className="w-full justify-between" aria-expanded={expandedIds.has(mcp.id)} onClick={() => setExpandedIds(prev => {
+                  const next = new Set(prev);
+                  if (next.has(mcp.id)) next.delete(mcp.id); else next.add(mcp.id);
+                  return next;
+                })}>
+                  <span className="inline-flex items-center gap-2"><Settings2 className="size-4" />{t("mcp.config.title")}</span><ChevronDown className={`size-4 transition-transform ${expandedIds.has(mcp.id) ? 'rotate-180' : ''}`} />
+                </Button>
+                {expandedIds.has(mcp.id) && <div className="space-y-4 border-t pt-4">
+                {mcp.readme && <details className="group"><summary className="cursor-pointer text-sm font-medium text-primary">README</summary><div className="markdown-content max-h-80 overflow-auto pt-3"><ReactMarkdown remarkPlugins={[remarkGfm]}>{i18n.language.startsWith('zh') && mcp.readme_cn ? mcp.readme_cn : mcp.readme}</ReactMarkdown></div></details>}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium">
-                    {t("mcp.config.title")}
-                  </h3>
                   {Object.entries(mcp.config_templates).map(
                     ([key, template]) => (
                       <div key={key} className="space-y-1">
@@ -195,12 +201,14 @@ const EmbedMCPComponent = () => {
                     )
                   )}
                 </div>
+                </div>}
 
                 <Button
                   className="w-full"
                   onClick={() => handleSave(mcp)}
                   disabled={savingId === mcp.id}
                 >
+                  <Save className="size-4" />
                   {savingId === mcp.id
                     ? t("model.dialog.submitting")
                     : t("mcp.config.submit")}

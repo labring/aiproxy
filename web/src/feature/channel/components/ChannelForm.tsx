@@ -1,3 +1,4 @@
+import { Textarea } from '@/components/ui/textarea'
 // src/feature/channel/components/ChannelForm.tsx
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -702,10 +703,10 @@ export function ChannelForm({
                         >
                             {error && <AdvancedErrorDisplay error={error} />}
 
-                            <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+                            <section className="form-section">
                                 <div>
-                                    <h3 className="text-sm font-semibold text-foreground">{t('channel.dialog.providerSection', { defaultValue: '供应商与身份' })}</h3>
-                                    <p className="mt-1 text-xs text-muted-foreground">{t('channel.dialog.providerSectionHint', { defaultValue: '选择供应商并设置渠道的显示信息' })}</p>
+                                    <h3 className="text-sm font-semibold text-foreground">{t('ui.identity')}</h3>
+
                                 </div>
                                 {/* 厂商字段 */}
                                 <FormField
@@ -718,7 +719,7 @@ export function ChannelForm({
                                     )
 
                                     const initSelectedItem = field.value
-                                        ? typeMetas[String(field.value)].name
+                                        ? typeMetas[String(field.value)]?.name
                                         : undefined
 
                                     const getKeyByName = (name: string): string | undefined => {
@@ -779,9 +780,7 @@ export function ChannelForm({
                                 const meta = typeId ? typeMetas[String(typeId)] : null
                                 if (!meta?.readme) return null
                                 return (
-                                    <div className="prose prose-sm dark:prose-invert max-w-none rounded-lg border bg-muted/50 p-3 text-muted-foreground">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{meta.readme}</ReactMarkdown>
-                                    </div>
+                                    <details className="border-l-2 border-primary/30 pl-3"><summary className="cursor-pointer text-sm font-medium text-primary">{t("ui.readme")}</summary><div className="markdown-content pt-3"><ReactMarkdown remarkPlugins={[remarkGfm]}>{meta.readme}</ReactMarkdown></div></details>
                                 )
                             })()}
 
@@ -803,7 +802,8 @@ export function ChannelForm({
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>{t("channel.dialog.remark")}</FormLabel>
-                                                <FormControl><Input maxLength={255} placeholder={t("channel.dialog.remarkPlaceholder")} {...field} /></FormControl>
+                                                <FormControl><Textarea maxLength={255} rows={2} className="min-h-18" placeholder={t("channel.dialog.remarkPlaceholder")} {...field} /></FormControl>
+                                                <span className="text-right text-xs tabular-nums text-muted-foreground">{field.value?.length || 0}/255</span>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -813,10 +813,10 @@ export function ChannelForm({
 
                             {/* 模型选择字段 - with default/custom toggle */}
                             {watchedType > 0 && (
-                                <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+                                <section className="form-section">
                                     <div>
-                                        <h3 className="text-sm font-semibold text-foreground">{t('channel.dialog.modelsSection', { defaultValue: '模型路由' })}</h3>
-                                        <p className="mt-1 text-xs text-muted-foreground">{t('channel.dialog.modelsSectionHint', { defaultValue: '选择默认模型或维护自定义模型列表' })}</p>
+                                        <h3 className="text-sm font-semibold text-foreground">{t('ui.routing')}</h3>
+
                                     </div>
                                     <FormLabel>{t("channel.dialog.models")}</FormLabel>
                                     {renderModelModeToggle()}
@@ -983,6 +983,7 @@ export function ChannelForm({
                                 }}
                             />
 
+                            <section className="form-section"><h3>{t("ui.connection")}</h3>
                             {/* 密钥字段 */}
                             <FormField
                                 control={form.control}
@@ -1166,7 +1167,7 @@ export function ChannelForm({
                                 )}
                             />
 
-                            <div className="grid gap-4 md:grid-cols-2 rounded-lg border bg-muted/20 p-4">
+                            <div className="grid gap-4 border-t pt-4 md:grid-cols-2">
                                 <FormField
                                     control={form.control}
                                     name="enabled_no_permission_ban"
@@ -1251,8 +1252,9 @@ export function ChannelForm({
                                 />
                             </div>
 
+                            </section>
                             {/* 提交和测试按钮 */}
-                            <div className="flex justify-between items-center gap-3">
+                            <div className="form-actions justify-between">
                                 <div className="flex items-center gap-2">
                                     <Button
                                         type="button"

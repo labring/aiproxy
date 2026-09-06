@@ -24,9 +24,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("node_modules/echarts")) return "charts"
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router") || id.includes("node_modules/@tanstack/react-query")) return "ui-vendor"
-          if (id.includes("node_modules/react-hook-form") || id.includes("node_modules/zod") || id.includes("node_modules/@hookform/resolvers")) return "forms"
+          if (/node_modules\/(echarts|zrender)\//.test(id)) return "charts"
+          if (/node_modules\/(react|react-dom|react-router|@tanstack\/react-query)\//.test(id)) return "ui-vendor"
+          if (/node_modules\/(react-hook-form|zod|@hookform\/resolvers)\//.test(id)) return "forms"
         },
       },
     },

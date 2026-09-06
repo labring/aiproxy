@@ -41,13 +41,13 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[90vw] w-[90vw] max-h-[90vh] h-[85vh] overflow-hidden flex flex-col">
+            <DialogContent aria-describedby={undefined} className="max-w-6xl w-[calc(100%-2rem)] h-[90dvh] overflow-hidden flex flex-col">
                 <DialogHeader className="flex-shrink-0">
                     <DialogTitle className="text-xl font-semibold">
                         {isLoading ? (
                             <Skeleton className="h-6 w-32" />
                         ) : (
-                            `Group: ${group?.id || groupId}`
+                            `${t("group.management")}: ${group?.id || groupId}`
                         )}
                     </DialogTitle>
                 </DialogHeader>
@@ -60,7 +60,7 @@ export function GroupDialog({ open, onOpenChange, groupId, initialTab = 'dashboa
                         </div>
                     ) : (
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                            <TabsList className="flex-shrink-0 w-fit">
+                            <TabsList className="shrink-0 max-w-full w-fit overflow-x-auto">
                                 <TabsTrigger value="dashboard">
                                     {t('group.tabs.dashboard')}
                                 </TabsTrigger>

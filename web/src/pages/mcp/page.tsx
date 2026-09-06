@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MCPList from "@/pages/mcp/components/MCPList";
@@ -5,20 +6,21 @@ import EmbedMCP from "@/pages/mcp/components/EmbedMCP";
 import MCPConfig from "@/pages/mcp/components/MCPConfig";
 
 const MCPPage = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("list");
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto flex min-h-full w-full max-w-[1800px] flex-col gap-4 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">MCP 管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">配置、嵌入并管理消息控制协议服务</p>
+        <h1 className="text-lg font-semibold">{t("ui.mcpTitle")}</h1>
+
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid h-auto w-full max-w-xl grid-cols-3 rounded-xl bg-muted/60 p-1">
-          <TabsTrigger value="list" className="rounded-lg py-2.5">服务列表</TabsTrigger>
-          <TabsTrigger value="embed" className="rounded-lg py-2.5">嵌入服务</TabsTrigger>
-          <TabsTrigger value="config" className="rounded-lg py-2.5">配置管理</TabsTrigger>
+        <TabsList className="grid h-10 w-full max-w-lg grid-cols-3">
+          <TabsTrigger value="list" >{t("ui.mcpList")}</TabsTrigger>
+          <TabsTrigger value="embed" >{t("ui.mcpEmbed")}</TabsTrigger>
+          <TabsTrigger value="config" >{t("ui.mcpConfig")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="list">

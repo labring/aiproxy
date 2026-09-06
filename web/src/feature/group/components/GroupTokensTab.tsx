@@ -12,6 +12,7 @@ import type { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import {
     MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, Search
 } from 'lucide-react'
@@ -202,7 +203,9 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0"
+                        className="h-8 w-8 p-0"
+                        aria-label={t("token.copyKey")}
+                        title={t("token.copyKey")}
                         onClick={() => copyToClipboard(row.original.key)}
                     >
                         <Copy className="h-3.5 w-3.5" />
@@ -251,7 +254,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                     >
                         {token.quota > 0 && (
                             <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground">Total:</span>
+                                <span className="text-muted-foreground">{t("token.quota.total")}:</span>
                                 <span className={cn(remaining.total < token.quota * 0.1 ? "text-destructive" : "text-emerald-600")}>
                                     {remaining.total.toFixed(2)}
                                 </span>
@@ -259,7 +262,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                         )}
                         {token.period_quota > 0 && (
                             <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground">Period:</span>
+                                <span className="text-muted-foreground">{t("token.quota.period")}:</span>
                                 <span className={cn(remaining.period < token.period_quota * 0.1 ? "text-destructive" : "text-emerald-600")}>
                                     {remaining.period.toFixed(2)}
                                 </span>
@@ -351,17 +354,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
             accessorKey: 'status',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.status")}</div>,
             cell: ({ row }) => (
-                <div>
-                    {row.original.status === 2 ? (
-                        <Badge variant="outline" className={cn("text-white dark:text-white/90", "bg-destructive dark:bg-red-600/90")}>
-                            {t("token.disabled")}
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className={cn("text-white dark:text-white/90", "bg-primary dark:bg-[#4A4DA0]")}>
-                            {t("token.enabled")}
-                        </Badge>
-                    )}
-                </div>
+                <StatusBadge enabled={row.original.status !== 2} />
             ),
         },
         {
@@ -369,7 +362,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
             cell: ({ row }) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>

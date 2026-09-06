@@ -177,6 +177,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
             backgroundColor: 'transparent',
             tooltip: {
                 trigger: 'axis',
+                confine: true,
                 backgroundColor: themeColors.tooltipBg,
                 borderColor: themeColors.tooltipBorder,
                 borderWidth: 1,
@@ -196,7 +197,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                 boundaryGap: false,
                 data: xLabels,
                 axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                axisLabel: { color: themeColors.textColor, fontSize: 11, hideOverlap: true, showMinLabel: false, showMaxLabel: false },
                 axisTick: { show: false },
             },
             yAxis: {
@@ -377,6 +378,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 color: colors,
                                 tooltip: {
                                     trigger: 'axis',
+                confine: true,
                                     backgroundColor: themeColors.tooltipBg,
                                     borderColor: themeColors.tooltipBorder,
                                     borderWidth: 1,
@@ -395,17 +397,20 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     }
                                 },
                                 legend: {
+                                    type: 'scroll',
+                                    pageIconColor: themeColors.textColor,
+                                    pageTextStyle: { color: themeColors.textColor },
                                     bottom: 0,
                                     textStyle: { color: themeColors.textColor, fontSize: 11 },
                                     itemWidth: 12, itemHeight: 8,
                                 },
-                                grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                                grid: { left: 10, right: 10, bottom: 38, top: 10, containLabel: true },
                                 xAxis: {
                                     type: 'category',
                                     boundaryGap: false,
                                     data: xLabels,
                                     axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                                    axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11, hideOverlap: true, showMinLabel: false, showMaxLabel: false },
                                     axisTick: { show: false },
                                 },
                                 yAxis: {
@@ -468,6 +473,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 color: statusSeries.map(s => s.color),
                                 tooltip: {
                                     trigger: 'axis',
+                confine: true,
                                     backgroundColor: themeColors.tooltipBg,
                                     borderColor: themeColors.tooltipBorder,
                                     borderWidth: 1,
@@ -488,17 +494,20 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     }
                                 },
                                 legend: {
+                                    type: 'scroll',
+                                    pageIconColor: themeColors.textColor,
+                                    pageTextStyle: { color: themeColors.textColor },
                                     bottom: 0,
                                     textStyle: { color: themeColors.textColor, fontSize: 11 },
                                     itemWidth: 12, itemHeight: 8,
                                 },
-                                grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                                grid: { left: 10, right: 10, bottom: 38, top: 10, containLabel: true },
                                 xAxis: {
                                     type: 'category',
                                     boundaryGap: false,
                                     data: xLabels,
                                     axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                                    axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11, hideOverlap: true, showMinLabel: false, showMaxLabel: false },
                                     axisTick: { show: false },
                                 },
                                 yAxis: {
@@ -566,6 +575,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 color: activeSeries.map(s => s.color),
                                 tooltip: {
                                     trigger: 'axis',
+                confine: true,
                                     backgroundColor: themeColors.tooltipBg,
                                     borderColor: themeColors.tooltipBorder,
                                     borderWidth: 1,
@@ -586,17 +596,20 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                     }
                                 },
                                 legend: {
+                                    type: 'scroll',
+                                    pageIconColor: themeColors.textColor,
+                                    pageTextStyle: { color: themeColors.textColor },
                                     bottom: 0,
                                     textStyle: { color: themeColors.textColor, fontSize: 11 },
                                     itemWidth: 12, itemHeight: 8,
                                 },
-                                grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                                grid: { left: 10, right: 10, bottom: 38, top: 10, containLabel: true },
                                 xAxis: {
                                     type: 'category',
                                     boundaryGap: false,
                                     data: xLabels,
                                     axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                                    axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                    axisLabel: { color: themeColors.textColor, fontSize: 11, hideOverlap: true, showMinLabel: false, showMaxLabel: false },
                                     axisTick: { show: false },
                                 },
                                 yAxis: {
@@ -668,6 +681,7 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                             color: activeSeries.map(s => s.color),
                             tooltip: {
                                 trigger: 'axis',
+                confine: true,
                                 backgroundColor: themeColors.tooltipBg,
                                 borderColor: themeColors.tooltipBorder,
                                 borderWidth: 1,
@@ -688,17 +702,20 @@ export function MonitorCharts({ chartData, modelRanking, detailRanking = [], has
                                 }
                             },
                             legend: {
+                                    type: 'scroll',
+                                    pageIconColor: themeColors.textColor,
+                                    pageTextStyle: { color: themeColors.textColor },
                                 bottom: 0,
                                 textStyle: { color: themeColors.textColor, fontSize: 11 },
                                 itemWidth: 12, itemHeight: 8,
                             },
-                            grid: { left: 10, right: 10, bottom: 28, top: 10, containLabel: true },
+                            grid: { left: 10, right: 10, bottom: 38, top: 10, containLabel: true },
                             xAxis: {
                                 type: 'category',
                                 boundaryGap: false,
                                 data: xLabels,
                                 axisLine: { lineStyle: { color: themeColors.axisLineColor } },
-                                axisLabel: { color: themeColors.textColor, fontSize: 11 },
+                                axisLabel: { color: themeColors.textColor, fontSize: 11, hideOverlap: true, showMinLabel: false, showMaxLabel: false },
                                 axisTick: { show: false },
                             },
                             yAxis: {

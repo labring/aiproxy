@@ -125,7 +125,7 @@ export function LogFilters({
 
     // Channel filter
     const channelFilter = showChannel && (
-        <div className="w-56 flex-shrink-0">
+        <div className="w-64 flex-shrink-0">
             <Select value={channel} onValueChange={setChannel} disabled={loading}>
                 <SelectTrigger className="h-9">
                     <SelectValue placeholder={t('log.filters.channelPlaceholder')} />
@@ -177,8 +177,8 @@ export function LogFilters({
     )
 
     return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">
+            <div className="filter-bar">
                 {/* 根据 tokenNameFirst 控制顺序 */}
                 {tokenNameFirst ? (
                     <>{tokenNameFilter}{channelFilter}{modelFilter}</>
@@ -204,10 +204,10 @@ export function LogFilters({
                     </Select>
                 </div>
 
-                <div className="flex-1" />
+                <div className="hidden xl:block xl:flex-1" />
 
                 {/* Date range */}
-                <div className="w-56 flex-shrink-0">
+                <div className="w-64 flex-shrink-0">
                     <DateRangePicker
                         value={dateRange}
                         onChange={setDateRange}
@@ -224,9 +224,9 @@ export function LogFilters({
                 />
 
                 {/* Keyword search */}
-                <div className="w-40 flex-shrink-0">
+                <div className="w-48 flex-shrink-0">
                     <Input
-                        placeholder={t('common.search')}
+                        aria-label={t("common.search")} placeholder={t('common.search')}
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
                         disabled={loading}
@@ -238,13 +238,12 @@ export function LogFilters({
                 <Button
                     type="button"
                     variant="outline"
-                    onClick={handleReset}
+                    onClick={handleReset} aria-label={t("log.filters.reset")} title={t("log.filters.reset")}
                     disabled={loading}
-                    className="h-9 px-3 flex-shrink-0"
+                    className="size-9 shrink-0 p-0"
                     size="sm"
                 >
-                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                    {t('log.filters.reset')}
+                    <RotateCcw className="size-4" />
                 </Button>
             </div>
         </div>

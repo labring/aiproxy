@@ -68,9 +68,12 @@ export interface EmbedMCP {
   id: string
   enabled: boolean
   name: string
+  name_cn?: string
   readme: string
+  readme_cn?: string
   tags: string[]
   config_templates: Record<string, EmbedMCPConfigTemplate>
+  embed_config?: MCPEmbeddingConfig | null
 }
 
 export interface SaveEmbedMCPRequest {
@@ -140,4 +143,4 @@ export const saveMCPReusingParams = (
   data: PublicMCPReusingParam
 ) => {
   return post(`/mcp/public/${mcpId}/group/${groupId}/params`, data)
-} 
+}

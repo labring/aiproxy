@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Card,
@@ -25,6 +27,8 @@ import {
   Settings,
   KeyRound,
   ShieldAlert,
+  RefreshCw,
+  X,
 } from "lucide-react";
 import {
   PublicMCP,
@@ -61,6 +65,7 @@ const initialMCP: Omit<PublicMCP, "created_at" | "update_at" | "endpoints"> = {
 };
 
 const MCPConfig = () => {
+  const { t } = useTranslation();
   const [mcps, setMCPs] = useState<PublicMCP[]>([]);
   const [newMCP, setNewMCP] =
     useState<Omit<PublicMCP, "created_at" | "update_at" | "endpoints">>(
@@ -221,7 +226,8 @@ const MCPConfig = () => {
 
   const handleReset = () => {
     if (isEditing) {
-      setEditMCP(initialMCP);
+      const original = mcps.find(mcp => mcp.id === editMCP.id);
+      if (original) setEditMCP(original);
     } else {
       setNewMCP(initialMCP);
     }
@@ -397,8 +403,8 @@ const MCPConfig = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">MCP Configuration</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">{t("mcp.config.title")}</h2>
         <Dialog
           open={showCreateForm}
           onOpenChange={(open) => {
@@ -413,19 +419,16 @@ const MCPConfig = () => {
           <DialogTrigger asChild>
             <Button onClick={handleOpenCreateForm}>
               <Plus className="mr-2 h-4 w-4" />
-              Create New MCP
+              {t("mcp.config.createTitle")}
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <Card className="border-0 shadow-none">
-              <CardHeader>
-                <CardTitle>
-                  {isEditing ? "Edit MCP" : "Create New MCP"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-6">
-                  <h3 className="text-lg font-medium">Basic Information</h3>
+          <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{t(isEditing ? "mcp.config.updateTitle" : "mcp.config.createTitle")}</DialogTitle>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+                <div className="form-section">
+                  <h3>{t("mcp.config.basicInfo")}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="id">
@@ -439,18 +442,15 @@ const MCPConfig = () => {
                             ? handleEditChange("id", e.target.value)
                             : handleCreateChange("id", e.target.value)
                         }
-                        placeholder="e.g., my-mcp-server"
+                        placeholder={t("mcp.config.idPlaceholder")}
                         disabled={isEditing}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Unique identifier for the MCP, alphanumeric with dashes
-                        only
-                      </p>
+
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="name">
-                        Name <span className="text-red-500">*</span>
+                        {t("mcp.config.name")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="name"
@@ -460,20 +460,20 @@ const MCPConfig = () => {
                             ? handleEditChange("name", e.target.value)
                             : handleCreateChange("name", e.target.value)
                         }
-                        placeholder="e.g., My MCP Server"
+                        placeholder={t("mcp.config.namePlaceholder")}
                       />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="type">
-                        Type <span className="text-red-500">*</span>
+                        {t("mcp.config.type")} <span className="text-red-500">*</span>
                       </Label>
                       <Select
                         value={currentMCP.type}
                         onValueChange={handleTypeChange}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select MCP type" />
+                        <SelectTrigger id="type">
+                          <SelectValue placeholder={t("mcp.config.selectType")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="mcp_proxy_sse">
@@ -508,21 +508,19 @@ const MCPConfig = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tags">Tags</Label>
+                    <Label htmlFor="tags">{t("mcp.config.tags")}</Label>
                     <div className="flex gap-2">
                       <Input
                         id="tags"
                         value={tagInput}
                         onChange={(e) => setTagInput(e.target.value)}
-                        placeholder="Add a tag"
+                        placeholder={t("mcp.config.tagsPlaceholder")}
                         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) =>
                           e.key === "Enter" &&
                           (e.preventDefault(), handleAddTag())
                         }
                       />
-                      <Button type="button" onClick={handleAddTag}>
-                        Add
-                      </Button>
+                      <Button type="button" variant="outline" size="icon" aria-label={t("mcp.config.addTag")} title={t("mcp.config.addTag")} onClick={handleAddTag}><Plus className="size-4" /></Button>
                     </div>
                     {currentMCP.tags && currentMCP.tags.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -534,10 +532,11 @@ const MCPConfig = () => {
                             {tag}
                             <button
                               type="button"
-                              className="ml-2 text-red-500 hover:text-red-700"
+                              className="ml-2 rounded-sm p-1 text-muted-foreground hover:text-destructive"
+                              aria-label={t("ui.removeItem", { name: tag })}
                               onClick={() => handleRemoveTag(tag)}
                             >
-                              ×
+                              <X className="size-3.5" />
                             </button>
                           </div>
                         ))}
@@ -546,7 +545,7 @@ const MCPConfig = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="readme">Readme</Label>
+                    <Label htmlFor="readme">{t("mcp.config.readme")}</Label>
                     <Textarea
                       id="readme"
                       value={currentMCP.readme}
@@ -555,18 +554,16 @@ const MCPConfig = () => {
                           ? handleEditChange("readme", e.target.value)
                           : handleCreateChange("readme", e.target.value)
                       }
-                      placeholder="Markdown supported"
-                      className="min-h-[200px]"
+                      placeholder={t("mcp.config.readmePlaceholder")}
+                      className="min-h-32"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Provide documentation for using this MCP
-                    </p>
+
                   </div>
                 </div>
 
                 {showProxyConfig && (
                   <div className="space-y-6 border-t pt-6">
-                    <h3 className="text-lg font-medium">Proxy Configuration</h3>
+                    <h3 className="text-sm font-semibold">{t("mcp.config.typeConfig.proxy.title")}</h3>
                     <ProxyConfig
                       config={currentMCP.proxy_config}
                       onChange={(config) =>
@@ -580,9 +577,7 @@ const MCPConfig = () => {
 
                 {showOpenAPIConfig && (
                   <div className="space-y-6 border-t pt-6">
-                    <h3 className="text-lg font-medium">
-                      OpenAPI Configuration
-                    </h3>
+                    <h3 className="text-sm font-semibold">{t("mcp.config.typeConfig.openapi.title")}</h3>
                     <OpenAPIConfig
                       config={currentMCP.openapi_config}
                       onChange={(config) =>
@@ -594,20 +589,15 @@ const MCPConfig = () => {
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-2 pt-4 border-t">
+            </div>
+                <div className="flex shrink-0 justify-end gap-2 border-t pt-4">
                   <Button variant="outline" onClick={handleReset}>
-                    Reset
+                    {t("ui.reset")}
                   </Button>
                   <Button onClick={handleSubmit} disabled={loading}>
-                    {loading
-                      ? "Saving..."
-                      : isEditing
-                      ? "Update MCP"
-                      : "Create MCP"}
+                    {t(loading ? "model.dialog.submitting" : "mcp.config.submit")}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
           </DialogContent>
         </Dialog>
       </div>
@@ -618,11 +608,10 @@ const MCPConfig = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
-              Delete MCP
+              {t("mcp.deleteDialog.confirmTitle")}
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the MCP "{mcpToDelete?.name}"?
-              This action cannot be undone.
+              {t("mcp.deleteDialog.confirmDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="p-4 bg-muted rounded-md mb-4">
@@ -640,7 +629,7 @@ const MCPConfig = () => {
               variant="outline"
               onClick={() => setDeleteConfirmOpen(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -648,7 +637,7 @@ const MCPConfig = () => {
               onClick={handleConfirmDelete}
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Delete
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -656,19 +645,20 @@ const MCPConfig = () => {
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">All MCPs</TabsTrigger>
-          <TabsTrigger value="enabled">Enabled</TabsTrigger>
-          <TabsTrigger value="disabled">Disabled</TabsTrigger>
+          <TabsTrigger value="all">{t("common.all")}</TabsTrigger>
+          <TabsTrigger value="enabled">{t("mcp.enabled")}</TabsTrigger>
+          <TabsTrigger value="disabled">{t("mcp.disabled")}</TabsTrigger>
         </TabsList>
 
-        <div className="mt-4 flex justify-between items-center">
+        <div className="mt-4 flex items-center justify-between gap-3">
           <Input
             className="max-w-xs"
-            placeholder="Search by name, ID, or tag..."
+            placeholder={t("mcp.list.search")}
+            aria-label={t("mcp.list.search")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <Button onClick={fetchMCPs}>Refresh</Button>
+          <Button variant="outline" size="icon" aria-label={t("mcp.refresh")} title={t("mcp.refresh")} onClick={fetchMCPs}><RefreshCw className="size-4" /></Button>
         </div>
 
         <TabsContent value="all" className="mt-4">
@@ -688,11 +678,11 @@ const MCPConfig = () => {
 
   function renderMCPList(mcpList: PublicMCP[]) {
     if (loading) {
-      return <div className="flex justify-center p-8">Loading MCPs...</div>;
+      return <div className="flex justify-center p-8">{t("common.loading")}</div>;
     }
 
     if (mcpList.length === 0) {
-      return <div className="text-center p-8">No MCPs found</div>;
+      return <div className="text-center p-8">{t("mcp.noResults")}</div>;
     }
 
     // 获取当前协议
@@ -760,22 +750,22 @@ const MCPConfig = () => {
     };
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {mcpList.map((mcp) => (
           <Card key={mcp.id} className="overflow-hidden">
             <CardHeader>
-              <div className="flex justify-between items-start">
+              <div className="flex flex-wrap justify-between items-start gap-3">
                 <div>
-                  <CardTitle className="flex items-center">
+                  <CardTitle className="flex flex-wrap items-center gap-2 break-words text-base">
                     {mcp.name}
                     <Badge
                       className="ml-2"
                       variant={mcp.status === 1 ? "default" : "secondary"}
                     >
-                      {mcp.status === 1 ? "Enabled" : "Disabled"}
+                      {t(mcp.status === 1 ? "mcp.enabled" : "mcp.disabled")}
                     </Badge>
                   </CardTitle>
-                  <div className="text-sm text-muted-foreground">{mcp.id}</div>
+                  <div className="break-all text-xs font-mono text-muted-foreground">{mcp.id}</div>
                   <div className="mt-1">
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
@@ -790,26 +780,24 @@ const MCPConfig = () => {
                   {mcp.type !== "mcp_embed" && (
                     <>
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("common.edit")}
+                        title={t("common.edit")}
                         onClick={() => handleEdit(mcp)}
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
                       <Button
-                        size="sm"
-                        variant="destructive"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("common.delete")}
+                        title={t("common.delete")}
                         onClick={() => handleDeleteClick(mcp)}
                       >
-                        Delete
+                        <Trash2 className="size-4 text-destructive" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant={mcp.status === 1 ? "destructive" : "default"}
-                        onClick={() => handleStatusToggle(mcp.id, mcp.status)}
-                      >
-                        {mcp.status === 1 ? "Disable" : "Enable"}
-                      </Button>
+                      <Switch checked={mcp.status === 1} aria-label={`${mcp.name}: ${t("mcp.status")}`} onCheckedChange={() => handleStatusToggle(mcp.id, mcp.status)} />
                     </>
                   )}
                 </div>
@@ -955,8 +943,8 @@ const MCPConfig = () => {
               )}
 
               <div className="text-sm text-muted-foreground mt-2">
-                <div>Created: {new Date(mcp.created_at).toLocaleString()}</div>
-                <div>Updated: {new Date(mcp.update_at).toLocaleString()}</div>
+                <div>{t("mcp.list.createdAt")}: {new Date(mcp.created_at).toLocaleString()}</div>
+                <div>{t("mcp.list.updatedAt")}: {new Date(mcp.update_at || mcp.created_at).toLocaleString()}</div>
               </div>
             </CardContent>
           </Card>

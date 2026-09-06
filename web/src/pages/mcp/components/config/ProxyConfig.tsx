@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Plus, Trash2 } from 'lucide-react'
 import { PublicMCPProxyConfig, PublicMCPProxyReusingParam } from '@/api/mcp'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -15,14 +17,13 @@ interface ProxyConfigProps {
 }
 
 const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
-  const [proxyConfig, setProxyConfig] = useState<PublicMCPProxyConfig>(
-    config || {
+  const { t } = useTranslation()
+  const proxyConfig: PublicMCPProxyConfig = config ?? {
       url: '',
       headers: {},
       querys: {},
       reusing: {}
     }
-  )
 
   // 添加键值对的临时状态
   const [newHeaderKey, setNewHeaderKey] = useState('')
@@ -39,24 +40,22 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
 
   const handleURLChange = (url: string) => {
     const newConfig = { ...proxyConfig, url }
-    setProxyConfig(newConfig)
     onChange(newConfig)
   }
 
   const addHeader = () => {
     if (!newHeaderKey.trim()) return
-    
-    const newHeaders = { 
-      ...proxyConfig.headers, 
-      [newHeaderKey]: newHeaderValue 
+
+    const newHeaders = {
+      ...proxyConfig.headers,
+      [newHeaderKey]: newHeaderValue
     }
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      headers: newHeaders 
+
+    const newConfig = {
+      ...proxyConfig,
+      headers: newHeaders
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
     setNewHeaderKey('')
     setNewHeaderValue('')
@@ -65,30 +64,28 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
   const removeHeader = (key: string) => {
     const newHeaders = { ...proxyConfig.headers }
     delete newHeaders[key]
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      headers: newHeaders 
+
+    const newConfig = {
+      ...proxyConfig,
+      headers: newHeaders
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
   }
 
   const addQuery = () => {
     if (!newQueryKey.trim()) return
-    
-    const newQuerys = { 
-      ...proxyConfig.querys, 
-      [newQueryKey]: newQueryValue 
+
+    const newQuerys = {
+      ...proxyConfig.querys,
+      [newQueryKey]: newQueryValue
     }
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      querys: newQuerys 
+
+    const newConfig = {
+      ...proxyConfig,
+      querys: newQuerys
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
     setNewQueryKey('')
     setNewQueryValue('')
@@ -97,30 +94,28 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
   const removeQuery = (key: string) => {
     const newQuerys = { ...proxyConfig.querys }
     delete newQuerys[key]
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      querys: newQuerys 
+
+    const newConfig = {
+      ...proxyConfig,
+      querys: newQuerys
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
   }
 
   const addReusingParam = () => {
     if (!newReusingKey.trim() || !newReusingParam.name.trim()) return
-    
-    const newReusingParams = { 
-      ...proxyConfig.reusing, 
-      [newReusingKey]: { ...newReusingParam } 
+
+    const newReusingParams = {
+      ...proxyConfig.reusing,
+      [newReusingKey]: { ...newReusingParam }
     }
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      reusing: newReusingParams 
+
+    const newConfig = {
+      ...proxyConfig,
+      reusing: newReusingParams
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
     setNewReusingKey('')
     setNewReusingParam({
@@ -134,68 +129,68 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
   const removeReusingParam = (key: string) => {
     const newReusingParams = { ...proxyConfig.reusing }
     delete newReusingParams[key]
-    
-    const newConfig = { 
-      ...proxyConfig, 
-      reusing: newReusingParams 
+
+    const newConfig = {
+      ...proxyConfig,
+      reusing: newReusingParams
     }
-    
-    setProxyConfig(newConfig)
+
     onChange(newConfig)
   }
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="url">Backend URL <span className="text-red-500">*</span></Label>
+        <Label htmlFor="url">URL <span className="text-destructive">*</span></Label>
         <Input
           id="url"
           value={proxyConfig.url}
           onChange={(e) => handleURLChange(e.target.value)}
           placeholder="https://example.com/api"
         />
-        <p className="text-xs text-muted-foreground">The backend URL to proxy requests to</p>
+
       </div>
 
       <Tabs defaultValue="headers">
         <TabsList className="grid grid-cols-3">
-          <TabsTrigger value="headers">Headers</TabsTrigger>
-          <TabsTrigger value="query">Query Parameters</TabsTrigger>
-          <TabsTrigger value="reusing">Reusing Parameters</TabsTrigger>
+          <TabsTrigger value="headers">{t("mcp.config.typeConfig.proxy.headers")}</TabsTrigger>
+          <TabsTrigger value="query">{t("mcp.config.typeConfig.proxy.queryParams")}</TabsTrigger>
+          <TabsTrigger value="reusing">{t("mcp.config.typeConfig.proxy.reuseParams")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="headers" className="space-y-4 pt-4">
           <div className="space-y-2">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Input
-                placeholder="Header Name"
+                className="col-span-2 sm:col-span-1"
+                aria-label={t("mcp.config.typeConfig.proxy.headerName")}
+                placeholder={t("mcp.config.typeConfig.proxy.headerName")}
                 value={newHeaderKey}
                 onChange={(e) => setNewHeaderKey(e.target.value)}
               />
               <Input
-                placeholder="Header Value"
+                aria-label={t("mcp.config.typeConfig.proxy.headerValue")}
+                placeholder={t("mcp.config.typeConfig.proxy.headerValue")}
                 value={newHeaderValue}
                 onChange={(e) => setNewHeaderValue(e.target.value)}
               />
-              <Button type="button" onClick={addHeader}>Add</Button>
+              <Button type="button" variant="outline" size="icon" aria-label={t("mcp.config.typeConfig.proxy.addHeader")} title={t("mcp.config.typeConfig.proxy.addHeader")} onClick={addHeader}><Plus className="size-4" /></Button>
             </div>
           </div>
 
           {Object.keys(proxyConfig.headers).length === 0 ? (
             <div className="text-center text-muted-foreground py-4">
-              No headers configured
+              {t("common.noResult")}
             </div>
           ) : (
             <div className="space-y-2">
               {Object.entries(proxyConfig.headers).map(([key, value]) => (
                 <div key={key} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1 break-all">
                     <div className="font-medium">{key}</div>
                     <div className="text-sm text-muted-foreground">{value}</div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeHeader(key)}>
-                    Remove
-                  </Button>
+                  <Button variant="ghost" size="icon" aria-label={t("ui.removeItem", { name: key })} onClick={() => removeHeader(key)}><Trash2 className="size-4" /></Button>
                 </div>
               ))}
             </div>
@@ -204,36 +199,37 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
 
         <TabsContent value="query" className="space-y-4 pt-4">
           <div className="space-y-2">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Input
-                placeholder="Parameter Name"
+                className="col-span-2 sm:col-span-1"
+                aria-label={t("mcp.config.typeConfig.proxy.paramName")}
+                placeholder={t("mcp.config.typeConfig.proxy.paramName")}
                 value={newQueryKey}
                 onChange={(e) => setNewQueryKey(e.target.value)}
               />
               <Input
-                placeholder="Parameter Value"
+                aria-label={t("mcp.config.typeConfig.proxy.paramValue")}
+                placeholder={t("mcp.config.typeConfig.proxy.paramValue")}
                 value={newQueryValue}
                 onChange={(e) => setNewQueryValue(e.target.value)}
               />
-              <Button type="button" onClick={addQuery}>Add</Button>
+              <Button type="button" variant="outline" size="icon" aria-label={t("mcp.config.typeConfig.proxy.addQueryParam")} title={t("mcp.config.typeConfig.proxy.addQueryParam")} onClick={addQuery}><Plus className="size-4" /></Button>
             </div>
           </div>
 
           {Object.keys(proxyConfig.querys).length === 0 ? (
             <div className="text-center text-muted-foreground py-4">
-              No query parameters configured
+              {t("common.noResult")}
             </div>
           ) : (
             <div className="space-y-2">
               {Object.entries(proxyConfig.querys).map(([key, value]) => (
                 <div key={key} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1 break-all">
                     <div className="font-medium">{key}</div>
                     <div className="text-sm text-muted-foreground">{value}</div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeQuery(key)}>
-                    Remove
-                  </Button>
+                  <Button variant="ghost" size="icon" aria-label={t("ui.removeItem", { name: key })} onClick={() => removeQuery(key)}><Trash2 className="size-4" /></Button>
                 </div>
               ))}
             </div>
@@ -243,7 +239,7 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
         <TabsContent value="reusing" className="space-y-4 pt-4">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="reusingKey">Parameter Key</Label>
+              <Label htmlFor="reusingKey">{t("mcp.config.id")}</Label>
               <Input
                 id="reusingKey"
                 placeholder="e.g., api_key"
@@ -251,9 +247,9 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
                 onChange={(e) => setNewReusingKey(e.target.value)}
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="reusingName">Display Name</Label>
+              <Label htmlFor="reusingName">{t("mcp.config.name")}</Label>
               <Input
                 id="reusingName"
                 placeholder="e.g., API Key"
@@ -261,9 +257,9 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
                 onChange={(e) => setNewReusingParam({...newReusingParam, name: e.target.value})}
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="reusingDescription">Description</Label>
+              <Label htmlFor="reusingDescription">{t("mcp.description")}</Label>
               <Textarea
                 id="reusingDescription"
                 placeholder="Describe what this parameter is for"
@@ -271,14 +267,14 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
                 onChange={(e) => setNewReusingParam({...newReusingParam, description: e.target.value})}
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="reusingType">Parameter Type</Label>
+              <Label htmlFor="reusingType">{t("mcp.config.type")}</Label>
               <Select
                 value={newReusingParam.type}
                 onValueChange={(value: 'header' | 'query') => setNewReusingParam({...newReusingParam, type: value})}
               >
-                <SelectTrigger>
+                <SelectTrigger id="reusingType">
                   <SelectValue placeholder="Select parameter type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -287,24 +283,24 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="flex items-center space-x-2">
               <Switch
                 id="required"
                 checked={newReusingParam.required}
                 onCheckedChange={(checked) => setNewReusingParam({...newReusingParam, required: checked})}
               />
-              <Label htmlFor="required">Required</Label>
+              <Label htmlFor="required">{t("ui.required")}</Label>
             </div>
-            
+
             <Button type="button" onClick={addReusingParam}>
-              Add Reusing Parameter
+              {t("mcp.config.typeConfig.proxy.addQueryParam")}
             </Button>
           </div>
 
           {Object.keys(proxyConfig.reusing).length === 0 ? (
             <div className="text-center text-muted-foreground py-4">
-              No reusing parameters configured
+              {t("common.noResult")}
             </div>
           ) : (
             <div className="space-y-2">
@@ -313,9 +309,7 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
                   <CardHeader>
                     <CardTitle className="text-base flex justify-between">
                       <span>{key}</span>
-                      <Button variant="ghost" size="sm" onClick={() => removeReusingParam(key)}>
-                        Remove
-                      </Button>
+                      <Button variant="ghost" size="icon" aria-label={t("ui.removeItem", { name: key })} onClick={() => removeReusingParam(key)}><Trash2 className="size-4" /></Button>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -346,4 +340,4 @@ const ProxyConfig = ({ config, onChange }: ProxyConfigProps) => {
   )
 }
 
-export default ProxyConfig 
+export default ProxyConfig

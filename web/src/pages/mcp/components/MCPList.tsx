@@ -17,7 +17,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { KeyRound, ShieldAlert } from "lucide-react";
+import { KeyRound, ShieldAlert, RefreshCw } from "lucide-react";
 
 const MCPList = () => {
   const [mcps, setMcps] = useState<PublicMCP[]>([]);
@@ -137,33 +137,33 @@ const MCPList = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between gap-3">
         <Input
           className="max-w-xs"
           placeholder={t("mcp.list.search")}
+          aria-label={t("mcp.list.search")}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <Button onClick={fetchMCPs}>{t("mcp.refresh")}</Button>
+        <Button variant="outline" size="icon" onClick={fetchMCPs} aria-label={t("mcp.refresh")} title={t("mcp.refresh")}><RefreshCw className="size-4" /></Button>
       </div>
 
       {filteredMCPs.length === 0 ? (
         <div className="text-center p-8">{t("mcp.list.noResults")}</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
           {filteredMCPs.map((mcp) => (
             <Dialog
               key={mcp.id}
             >
-              <DialogTrigger asChild>
-                <Card className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow">
+                <Card className="overflow-hidden">
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle className="flex items-center">
-                          {mcp.name}
+                        <CardTitle className="flex flex-wrap items-center gap-2 break-words text-base">
+                          <DialogTrigger className="text-left text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring">{mcp.name}</DialogTrigger>
                         </CardTitle>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="break-all text-xs font-mono text-muted-foreground">
                           {mcp.id}
                         </div>
                       </div>
@@ -178,7 +178,7 @@ const MCPList = () => {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {mcp.readme && (
-                      <div className="p-3 bg-muted rounded-md text-sm mb-2">
+                      <div className="text-sm mb-2">
                         <div className="font-medium mb-1">
                           {t("mcp.description")}:
                         </div>
@@ -211,6 +211,7 @@ const MCPList = () => {
                               <TabsList className="h-6 p-0.5">
                                 <TabsTrigger
                                   value="query"
+                                  aria-label="Query"
                                   className="h-5 text-xs px-1.5 py-0 flex items-center gap-1"
                                 >
                                   <KeyRound className="h-3 w-3" />
@@ -220,6 +221,7 @@ const MCPList = () => {
                                 </TabsTrigger>
                                 <TabsTrigger
                                   value="header"
+                                  aria-label="Header"
                                   className="h-5 text-xs px-1.5 py-0 flex items-center gap-1"
                                 >
                                   <ShieldAlert className="h-3 w-3" />
@@ -340,10 +342,9 @@ const MCPList = () => {
                     )}
                   </CardContent>
                 </Card>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogContent className="sm:max-w-3xl max-h-[85dvh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="flex items-center">
+                  <DialogTitle className="flex flex-wrap items-center gap-2 break-words text-base">
                     {mcp.name}
                   </DialogTitle>
                 </DialogHeader>
@@ -372,7 +373,7 @@ const MCPList = () => {
                         {t("mcp.description")}:
                       </div>
                       <div className="p-4 bg-muted rounded-md max-h-[300px] overflow-y-auto">
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <div className="markdown-content">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {mcp.readme}
                           </ReactMarkdown>
@@ -501,7 +502,7 @@ const MCPList = () => {
                     <span className="font-medium">
                       {t("mcp.list.updatedAt")}:
                     </span>
-                    <span>{new Date(mcp.update_at).toLocaleString()}</span>
+                    <span>{new Date(mcp.update_at || mcp.created_at).toLocaleString()}</span>
                   </div>
                 </div>
               </DialogContent>

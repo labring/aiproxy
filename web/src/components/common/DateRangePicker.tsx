@@ -23,6 +23,13 @@ interface DateRangePickerProps {
     disabled?: boolean
 }
 
+const subscribeToViewport = (onChange: () => void) => {
+    const query = window.matchMedia('(max-width: 639px)')
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+}
+const isNarrowViewport = () => window.matchMedia('(max-width: 639px)').matches
+
 export function DateRangePicker({
     value,
     onChange,
@@ -31,6 +38,7 @@ export function DateRangePicker({
     disabled = false,
 }: DateRangePickerProps) {
     const { t } = useTranslation()
+    const narrow = React.useSyncExternalStore(subscribeToViewport, isNarrowViewport, () => true)
     const [date, setDate] = React.useState<DateRange | undefined>(value)
 
     // 当外部 value 变化时更新内部状态
@@ -47,7 +55,7 @@ export function DateRangePicker({
         <Popover>
             <PopoverTrigger asChild>
                 <Button
-                    id="date"
+                    type="button"
                     variant={"outline"}
                     disabled={disabled}
                     className={cn(
@@ -56,7 +64,8 @@ export function DateRangePicker({
                         className
                     )}
                 >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    <CalendarIcon className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 truncate">
                     {date?.from ? (
                         date.to ? (
                             <>
@@ -67,20 +76,21 @@ export function DateRangePicker({
                             format(date.from, "yyyy-MM-dd")
                         )
                     ) : (
-                        <span>{placeholder || t('common.selectDateRange')}</span>
+                        placeholder || t('common.selectDateRange')
                     )}
+                    </span>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
+            <PopoverContent className="max-h-[calc(100dvh-2rem)] w-auto max-w-[calc(100vw-2rem)] overflow-y-auto p-0" align="start">
                 <Calendar
                     autoFocus
                     mode="range"
                     defaultMonth={date?.from}
                     selected={date}
                     onSelect={handleDateChange}
-                    numberOfMonths={2}
+                    numberOfMonths={narrow ? 1 : 2}
                 />
             </PopoverContent>
         </Popover>
     )
-} 
+}

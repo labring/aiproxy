@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import { Check, ChevronsUpDown, X } from 'lucide-react'
+import { useCombobox } from 'downshift'
+import { Check, ChevronDown, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
 
 interface ComboboxOption {
     value: string
@@ -21,70 +19,122 @@ interface ComboboxProps {
     emptyText?: string
     disabled?: boolean
     className?: string
+    id?: string
 }
 
 export function Combobox({
     options,
     value,
     onValueChange,
-    placeholder = 'Select...',
-    emptyText = 'No results',
+    placeholder,
+    emptyText,
     disabled = false,
     className,
+    id,
 }: ComboboxProps) {
-    const [open, setOpen] = useState(false)
-
-    const selectedLabel = options.find(o => o.value === value)?.label
+    const { t } = useTranslation()
+    const [query, setQuery] = useState('')
+    const items = options.filter((option) =>
+        option.label.toLowerCase().includes(query.toLowerCase()),
+    )
+    const {
+        isOpen,
+        highlightedIndex,
+        getInputProps,
+        getToggleButtonProps,
+        getMenuProps,
+        getItemProps,
+        reset,
+    } = useCombobox({
+        items,
+        selectedItem: options.find((option) => option.value === value) ?? null,
+        itemToString: (item) => item?.label ?? '',
+        onInputValueChange: ({ inputValue }) => setQuery(inputValue ?? ''),
+        onSelectedItemChange: ({ selectedItem }) => {
+            onValueChange(selectedItem?.value ?? '')
+            setQuery('')
+        },
+    })
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    disabled={disabled}
-                    className={cn('w-full justify-between font-normal', !value && 'text-muted-foreground', className)}
-                >
-                    <span className="truncate">{selectedLabel || placeholder}</span>
-                    <div className="flex items-center gap-1 ml-2 shrink-0">
-                        {value && (
-                            <X
-                                className="h-3.5 w-3.5 opacity-50 hover:opacity-100"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    onValueChange('')
-                                }}
-                            />
-                        )}
-                        <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </div>
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <div className="max-h-60 overflow-auto p-1">
-                    {options.length === 0 ? (
-                        <div className="py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
-                    ) : (
-                        options.map((option) => (
-                            <div
-                                key={option.value}
-                                className={cn(
-                                    'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground',
-                                    value === option.value && 'bg-accent'
-                                )}
-                                onClick={() => {
-                                    onValueChange(option.value === value ? '' : option.value)
-                                    setOpen(false)
-                                }}
-                            >
-                                <Check className={cn('mr-2 h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />
-                                {option.label}
-                            </div>
-                        ))
+        <div className={cn('relative min-w-0', className)}>
+            <div className="relative flex items-center">
+                <Input
+                    {...getInputProps({
+                        id,
+                        disabled,
+                        'aria-label': placeholder,
+                        placeholder,
+                    })}
+                    className="pr-18"
+                />
+                <div className="absolute right-1 flex items-center">
+                    {value && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            disabled={disabled}
+                            aria-label={t('ui.removeItem', { name: value })}
+                            onClick={() => {
+                                reset()
+                                onValueChange('')
+                                setQuery('')
+                            }}
+                        >
+                            <X className="size-3.5" />
+                        </Button>
                     )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        {...getToggleButtonProps({
+                            disabled,
+                            'aria-label': placeholder,
+                        })}
+                    >
+                        <ChevronDown className="size-4" />
+                    </Button>
                 </div>
-            </PopoverContent>
-        </Popover>
+            </div>
+            <ul
+                {...getMenuProps()}
+                className={cn(
+                    'absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md',
+                    !isOpen && 'hidden',
+                )}
+            >
+                {isOpen &&
+                    (items.length ? (
+                        items.map((option, index) => (
+                            <li
+                                key={option.value}
+                                {...getItemProps({ item: option, index })}
+                                className={cn(
+                                    'flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm',
+                                    highlightedIndex === index && 'bg-accent',
+                                )}
+                            >
+                                <Check
+                                    className={cn(
+                                        'size-4 shrink-0 text-primary',
+                                        value !== option.value && 'invisible',
+                                    )}
+                                />
+                                <span className="min-w-0 break-all">
+                                    {option.label}
+                                </span>
+                            </li>
+                        ))
+                    ) : (
+                        <li className="px-3 py-5 text-center text-sm text-muted-foreground">
+                            {emptyText ?? t('common.noResult')}
+                        </li>
+                    ))}
+            </ul>
+        </div>
     )
 }

@@ -129,14 +129,14 @@ export const MultiSelectCombobox = function <T>({
                 </Label>
 
                 <div
-                    className="w-full bg-accent/30 rounded-md border border-input p-2"
+                    className="w-full bg-card rounded-md border border-input p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20"
                 >
                     <div className="flex flex-wrap gap-2 items-center">
                         {selectedItems.map((selectedItemForRender, index) => (
                             <div
                                 key={`selected-item-${index}`}
                                 className={cn(
-                                    "bg-accent/50 rounded-md px-1.5 py-1",
+                                    "max-w-full bg-secondary rounded px-2 py-1 text-sm",
                                     "focus:bg-primary/20"
                                 )}
                                 {...getSelectedItemProps({
@@ -144,11 +144,12 @@ export const MultiSelectCombobox = function <T>({
                                     index: index
                                 })}
                             >
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 items-center gap-1.5 [&>span]:break-all">
                                     {handleSelectedItemDisplay(selectedItemForRender)}
                                     <button
                                         type="button"
-                                        className="h-4 w-4 rounded flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground"
+                                        aria-label={t("ui.removeItem", { name: String(selectedItemForRender) })}
+                                        className="size-5 shrink-0 rounded flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground"
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             removeSelectedItem(selectedItemForRender)
@@ -160,9 +161,9 @@ export const MultiSelectCombobox = function <T>({
                             </div>
                         ))}
 
-                        <div className="flex flex-1 gap-1">
+                        <div className="flex min-w-36 flex-1 gap-1">
                             <Input
-                                className="border-none shadow-none h-auto p-0 text-xs font-normal leading-4 tracking-[0.048px] bg-transparent"
+                                className="border-none shadow-none h-8 p-0 text-sm bg-transparent focus-visible:ring-0"
                                 placeholder={placeholder || t('channel.dialog.selectModels')}
                                 {...getInputProps(getDropdownProps({ preventKeyAction: isOpen }))}
                             />
@@ -188,18 +189,19 @@ export const MultiSelectCombobox = function <T>({
             <ul
                 className={cn(
                     "absolute mt-1 w-full py-1.5 px-1.5 bg-popover",
-                    "border border-input max-h-60 overflow-y-auto z-10 rounded-md",
-                    isOpen && items.length ? "block" : "hidden"
+                    "border border-input max-h-60 overflow-y-auto z-30 rounded-md shadow-lg",
+                    isOpen ? "block" : "hidden"
                 )}
                 {...getMenuProps()}
             >
+                {isOpen && items.length === 0 && <li className="p-3 text-sm text-muted-foreground">{t("common.noResult")}</li>}
                 {isOpen &&
                     items.map((item, index) => (
                         <li
                             key={index}
                             className={cn(
                                 "flex p-2 items-center gap-2 self-stretch rounded",
-                                "text-xs font-normal leading-4 tracking-[0.5px] cursor-pointer",
+                                "text-sm leading-5 cursor-pointer",
                                 highlightedIndex === index ? "bg-accent" : "bg-transparent",
                                 selectedItem === item ? "font-bold" : "font-normal",
                                 "hover:bg-accent text-foreground"

@@ -6,10 +6,11 @@ import {
     getCoreRowModel,
     useReactTable,
 } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ServerPagination } from '@/components/table/server-pagination'
 import { ExpandedLogContent } from './ExpandedLogContent'
 import { toast } from 'sonner'
 import type { LogRecord } from '@/types/log'
@@ -63,7 +64,7 @@ export function LogTable({
         })
     }, [t])
 
-    const clickableCell = 'cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
+    const clickableCell = 'block max-w-48 truncate text-left cursor-pointer hover:text-primary hover:underline underline-offset-4 transition-colors'
 
     const columns = useMemo(
         () => [
@@ -76,6 +77,8 @@ export function LogTable({
                         size="sm"
                         onClick={() => toggleRowExpansion(row.original.id)}
                         className="h-8 w-8 p-0"
+                        aria-label={t('log.basicInfo')}
+                        aria-expanded={expandedRows.has(row.original.id)}
                     >
                         {expandedRows.has(row.original.id) ? (
                             <ChevronDown className="h-4 w-4" />
@@ -94,13 +97,14 @@ export function LogTable({
                     return (
                         <div
                             className={`text-sm font-medium ${clickableCell}`}
+                            title={value}
                             onClick={() => onOpenGroupLog?.(value)}
                         >
                             {value}
                         </div>
                     )
                 },
-                size: 100,
+                size: 160,
             }),
             columnHelper.accessor('token_name', {
                 header: t('log.keyName'),
@@ -111,6 +115,7 @@ export function LogTable({
                     return (
                         <div
                             className={`font-medium ${clickableCell}`}
+                            title={value}
                             onClick={() => group && onOpenGroupLog?.(group, value)}
                         >
                             {value}
@@ -127,17 +132,18 @@ export function LogTable({
                     return (
                         <div
                             className={`font-mono text-sm ${clickableCell}`}
+                            title={value}
                             onClick={() => copyToClipboard(value)}
                         >
                             {value}
                         </div>
                     )
                 },
-                size: 120,
+                size: 180,
             }),
             columnHelper.display({
                 id: 'input_tokens',
-                header: t('log.inputTokens'),
+                header: () => <span title={t('log.inputTokens')}>{t('ui.inputTokens')}</span>,
                 cell: ({ row }) => (
                     <div className="text-right font-mono">
                         {row.original.usage?.input_tokens?.toLocaleString() || 0}
@@ -147,7 +153,7 @@ export function LogTable({
             }),
             columnHelper.display({
                 id: 'output_tokens',
-                header: t('log.outputTokens'),
+                header: () => <span title={t('log.outputTokens')}>{t('ui.outputTokens')}</span>,
                 cell: ({ row }) => (
                     <div className="text-right font-mono">
                         {row.original.usage?.output_tokens?.toLocaleString() || 0}
@@ -233,16 +239,16 @@ export function LogTable({
     return (
         <div className="h-full flex flex-col">
             <div className="flex-1 min-h-0">
-                <div className="rounded-lg border border-border bg-card shadow-none h-full overflow-hidden">
+                <div className="h-full overflow-hidden border-y bg-card">
                     <div className="overflow-auto h-full">
-                        <table className="w-full table-fixed">
-                            <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm">
+                        <table className="w-full min-w-[1000px] table-fixed tabular-nums">
+                            <thead className="sticky top-0 z-10 bg-muted">
                                 <tr className="border-b border-border">
                                     {table.getHeaderGroups().map((headerGroup) =>
                                         headerGroup.headers.map((header, index) => (
                                             <th
                                                 key={header.id}
-                                                className={`px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${
+                                                className={`px-4 py-2 text-left text-xs font-medium text-muted-foreground ${
                                                     index === 0 ? 'rounded-tl-lg' : ''
                                                 } ${
                                                     index === headerGroup.headers.length - 1 ? 'rounded-tr-lg' : ''
@@ -296,7 +302,7 @@ export function LogTable({
                                                 {row.getVisibleCells().map((cell) => (
                                                     <td
                                                         key={cell.id}
-                                                        className="px-4 py-3 text-sm"
+                                                        className="px-4 py-2.5 text-sm"
                                                         style={{ width: cell.column.getSize() }}
                                                     >
                                                         {flexRender(
@@ -322,67 +328,7 @@ export function LogTable({
                 </div>
             </div>
 
-            {/* 分页控制 - 固定在底部 */}
-            <div className="flex-shrink-0 pt-4">
-                <div className="flex items-center justify-between px-2">
-                    <div className="flex-1 text-sm text-muted-foreground">
-                        {t('table.pageInfo', {
-                            current: page,
-                            total: Math.ceil(total / pageSize) || 1
-                        })}
-                    </div>
-                    <div className="flex items-center space-x-6 lg:space-x-8">
-                        <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium">{t('table.rowsPerPage')}</p>
-                            <select
-                                value={pageSize}
-                                onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                                className="h-8 max-w-[80px] rounded border border-input bg-background px-2 text-sm"
-                            >
-                                {[10, 20, 30, 40, 50].map((size) => (
-                                    <option key={size} value={size}>
-                                        {size}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Button
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                onClick={() => onPageChange(1)}
-                                disabled={page <= 1}
-                            >
-                                <ChevronsLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                onClick={() => onPageChange(Math.max(1, page - 1))}
-                                disabled={page <= 1}
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                onClick={() => onPageChange(Math.min(Math.ceil(total / pageSize), page + 1))}
-                                disabled={page >= Math.ceil(total / pageSize)}
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                onClick={() => onPageChange(Math.ceil(total / pageSize))}
-                                disabled={page >= Math.ceil(total / pageSize)}
-                            >
-                                <ChevronsRight className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <ServerPagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizes={[10, 20, 30, 40, 50]} />
         </div>
     )
 }

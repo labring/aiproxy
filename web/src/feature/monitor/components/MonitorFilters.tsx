@@ -104,11 +104,11 @@ export function MonitorFilters({
     const getTypeName = (type: number) => typeMetas?.[type]?.name || ''
 
     return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-none">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="border-b pb-4">
+            <div className="filter-bar">
                 {/* Channel */}
                 {availableChannels.length > 0 && (
-                    <div className="w-56 flex-shrink-0">
+                    <div className="w-64 flex-shrink-0">
                         <Select value={channel} onValueChange={setChannel} disabled={loading}>
                             <SelectTrigger className="h-9">
                                 <SelectValue placeholder={t('monitor.filters.channelPlaceholder')} />
@@ -168,7 +168,7 @@ export function MonitorFilters({
                 <div className="flex-1" />
 
                 {/* Date range */}
-                <div className="w-56 flex-shrink-0">
+                <div className="w-64 flex-shrink-0">
                     <DateRangePicker
                         value={dateRange}
                         onChange={setDateRange}

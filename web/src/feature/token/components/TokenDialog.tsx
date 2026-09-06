@@ -7,14 +7,7 @@ import {
     DialogTitle
 } from '@/components/ui/dialog'
 import { TokenForm } from './TokenForm'
-import { AnimatePresence, motion } from "motion/react"
 import { useTranslation } from 'react-i18next'
-import {
-    dialogEnterExitAnimation,
-    dialogContentAnimation,
-    dialogHeaderAnimation,
-    dialogContentItemAnimation
-} from '@/components/ui/animation/dialog-animation'
 
 interface TokenDialogProps {
     open: boolean
@@ -33,31 +26,17 @@ export function TokenDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <AnimatePresence mode="wait">
-                {open && (
-                    <motion.div {...dialogEnterExitAnimation}>
-                        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-0">
-                            <motion.div {...dialogContentAnimation}>
-                                <motion.div {...dialogHeaderAnimation}>
-                                    <DialogHeader className="p-6 pb-3">
-                                        <DialogTitle className="text-xl">{title}</DialogTitle>
-                                        <DialogDescription>{description}</DialogDescription>
-                                    </DialogHeader>
-                                </motion.div>
-
-                                <motion.div
-                                    {...dialogContentItemAnimation}
-                                    className="px-6 pb-6"
-                                >
-                                    <TokenForm
+            {open && <DialogContent className="max-w-xl gap-0 p-0">
+                <DialogHeader className="border-b px-5 py-4">
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
+                </DialogHeader>
+                <div className="px-5 pt-5">
+                    <TokenForm
                                         onSuccess={() => onOpenChange(false)}
                                     />
-                                </motion.div>
-                            </motion.div>
-                        </DialogContent>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                </div>
+            </DialogContent>}
         </Dialog>
     )
 }

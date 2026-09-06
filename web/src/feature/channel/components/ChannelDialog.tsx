@@ -8,16 +8,9 @@ import {
 } from '@/components/ui/dialog'
 import { ChannelForm } from './ChannelForm'
 import { Channel } from '@/types/channel'
-import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getChannelFormDefaults } from './channel-form-defaults'
-import {
-    dialogEnterExitAnimation,
-    dialogContentAnimation,
-    dialogHeaderAnimation,
-    dialogContentItemAnimation
-} from '@/components/ui/animation/dialog-animation'
 
 interface ChannelDialogProps {
     open: boolean
@@ -54,35 +47,21 @@ export function ChannelDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <AnimatePresence mode="wait">
-                {open && (
-                    <motion.div {...dialogEnterExitAnimation}>
-                        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto rounded-2xl border-border/70 p-0 shadow-2xl">
-                            <motion.div {...dialogContentAnimation}>
-                                <motion.div {...dialogHeaderAnimation}>
-                                    <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent p-5 pb-4 sm:p-6">
-                                        <DialogTitle className="text-xl">{title}</DialogTitle>
-                                        <DialogDescription>{description}</DialogDescription>
-                                    </DialogHeader>
-                                </motion.div>
-
-                                <motion.div
-                                    {...dialogContentItemAnimation}
-                                    className="px-6 pb-6"
-                                >
-                                    <ChannelForm
+            {open && <DialogContent className="max-w-3xl gap-0 p-0">
+                <DialogHeader className="border-b px-5 py-4">
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
+                </DialogHeader>
+                <div className="px-5 pt-5">
+                    <ChannelForm
                                         mode={mode}
                                         channelId={channel?.id}
                                         channel={channel}
                                         defaultValues={defaultValues}
                                         onSuccess={handleSuccess}
                                     />
-                                </motion.div>
-                            </motion.div>
-                        </DialogContent>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                </div>
+            </DialogContent>}
         </Dialog>
     )
 }

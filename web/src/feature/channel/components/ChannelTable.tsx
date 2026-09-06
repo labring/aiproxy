@@ -1,5 +1,6 @@
+import { StatusBadge } from '@/components/common/StatusBadge'
 // src/feature/channel/components/ChannelTable.tsx
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import {
     useReactTable,
     getCoreRowModel,
@@ -20,7 +21,6 @@ import {
     DropdownMenu, DropdownMenuContent,
     DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ChannelDialog } from './ChannelDialog'
 import { Loader2 } from 'lucide-react'
@@ -97,6 +97,8 @@ export function ChannelTable() {
         }, 300)
     }, [])
 
+    useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }, [])
+
     // 获取渠道类型元数据
     const { data: typeMetas } = useChannelTypeMetas()
     const { data: allDefaultModels } = useAllChannelDefaultModels()
@@ -127,7 +129,7 @@ export function ChannelTable() {
         [data?.channels]
     )
     const total = data?.total || 0
-    const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics()
+    const { data: runtimeMetrics } = useRuntimeMetrics()
 
     // 打开创建渠道对话框
     const openCreateDialog = () => {
@@ -438,7 +440,7 @@ export function ChannelTable() {
                     className={clickableCell}
                     onClick={() => openUpdateDialog(row.original)}
                 >
-                    {row.original.priority || 10}
+                    {row.original.priority ?? 10}
                 </div>
             ),
         },
@@ -692,23 +694,7 @@ export function ChannelTable() {
             accessorKey: 'status',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("channel.status")}</div>,
             cell: ({ row }) => (
-                <div>
-                    {row.original.status === 2 ? (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-destructive dark:bg-red-600/90"
-                        )}>
-                            {t("token.disabled")}
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className={cn(
-                            "text-white dark:text-white/90",
-                            "bg-primary dark:bg-[#4A4DA0]"
-                        )}>
-                            {t("token.enabled")}
-                        </Badge>
-                    )}
-                </div>
+                <StatusBadge enabled={row.original.status !== 2} />
             ),
         },
         {
@@ -716,7 +702,7 @@ export function ChannelTable() {
             cell: ({ row }) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
@@ -788,17 +774,17 @@ export function ChannelTable() {
 
     return (
         <>
-            <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-card/80 p-0 shadow-sm">
-                <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent px-4 py-5 sm:px-6">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <section className="resource-page">
+                <div className="contents">
+                    <div className="resource-header">
                         <div>
                             <div className="flex items-center gap-2">
-                                <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("channel.management")}</h2>
+                                <h2 className="text-lg font-semibold text-foreground">{t("channel.management")}</h2>
                                 <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">{total}</Badge>
                             </div>
-                            <p className="mt-1 text-sm text-muted-foreground">{t("channel.managementDescription", { defaultValue: "管理供应商、模型与路由策略" })}</p>
+
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="resource-actions">
                         <div className="w-full sm:w-48">
                             <Select
                                 value={selectedChannelType ? String(selectedChannelType) : ''}
@@ -909,7 +895,7 @@ export function ChannelTable() {
                             <Button
                                 size="sm"
                                 onClick={openCreateDialog}
-                                className="flex items-center gap-1 bg-primary hover:bg-primary/90 dark:bg-[#4A4DA0] dark:hover:bg-[#5155A5]"
+                                className="flex items-center gap-1 bg-primary hover:bg-primary/90"
                             >
                                 <Plus className="h-3.5 w-3.5" />
                                 {t("channel.add")}
@@ -920,13 +906,13 @@ export function ChannelTable() {
                 </div>
 
                 {/* 表格容器 */}
-                <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5">
-                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/60 [&_table]:min-w-[1280px] [&_thead]:bg-muted/40 [&_thead_th]:h-11 [&_tbody_td]:py-3 [&_tbody_tr:hover]:bg-primary/[0.035]">
+                <div className="resource-table">
+                    <div className="resource-table-body">
                         <DataTable
                             table={table}
                             loadingStyle="skeleton"
                             columns={columns}
-                            isLoading={isLoading || isLoadingRuntimeMetrics}
+                            isLoading={isLoading}
                             fixedHeader={true}
                             animatedRows={true}
                             showScrollShadows={true}
@@ -942,7 +928,7 @@ export function ChannelTable() {
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />
                 </div>
-            </Card>
+            </section>
 
             {/* 默认模型管理对话框 */}
             <DefaultModelsDialog

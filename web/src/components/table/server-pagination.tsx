@@ -12,6 +12,7 @@ interface ServerPaginationProps {
     page: number
     pageSize: number
     total: number
+    pageSizes?: number[]
     onPageChange: (page: number) => void
     onPageSizeChange: (pageSize: number) => void
 }
@@ -20,6 +21,7 @@ export function ServerPagination({
     page,
     pageSize,
     total,
+    pageSizes = [10, 20, 30, 50],
     onPageChange,
     onPageSizeChange,
 }: ServerPaginationProps) {
@@ -27,22 +29,23 @@ export function ServerPagination({
     const totalPages = Math.ceil(total / pageSize) || 1
 
     return (
-        <div className="flex items-center justify-between px-2 py-3">
-            <div className="flex-1 text-sm text-muted-foreground">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 py-3 text-xs">
+            <div className="text-xs tabular-nums text-muted-foreground">
                 {t('table.pageInfo', {
                     current: page,
                     total: totalPages
                 })}
             </div>
-            <div className="flex items-center space-x-6 lg:space-x-8">
+            <div className="flex items-center gap-3">
                 <div className="flex items-center space-x-2">
-                    <p className="text-sm font-medium whitespace-nowrap">{t('table.rowsPerPage')}</p>
+                    <p className="hidden text-xs text-muted-foreground sm:block">{t('table.rowsPerPage')}</p>
                     <select
+                        aria-label={t('table.rowsPerPage')}
                         value={pageSize}
                         onChange={(e) => onPageSizeChange(Number(e.target.value))}
                         className="h-8 max-w-[80px] rounded border border-input bg-background px-2 text-sm"
                     >
-                        {[10, 20, 30, 50].map((size) => (
+                        {pageSizes.map((size) => (
                             <option key={size} value={size}>
                                 {size}
                             </option>
@@ -53,6 +56,7 @@ export function ServerPagination({
                     <Button
                         variant="outline"
                         className="hidden h-8 w-8 p-0 lg:flex"
+                        aria-label={t('ui.firstPage')}
                         onClick={() => onPageChange(1)}
                         disabled={page <= 1}
                     >
@@ -61,6 +65,7 @@ export function ServerPagination({
                     <Button
                         variant="outline"
                         className="h-8 w-8 p-0"
+                        aria-label={t('ui.previousPage')}
                         onClick={() => onPageChange(Math.max(1, page - 1))}
                         disabled={page <= 1}
                     >
@@ -69,6 +74,7 @@ export function ServerPagination({
                     <Button
                         variant="outline"
                         className="h-8 w-8 p-0"
+                        aria-label={t('ui.nextPage')}
                         onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                         disabled={page >= totalPages}
                     >
@@ -77,6 +83,7 @@ export function ServerPagination({
                     <Button
                         variant="outline"
                         className="hidden h-8 w-8 p-0 lg:flex"
+                        aria-label={t('ui.lastPage')}
                         onClick={() => onPageChange(totalPages)}
                         disabled={page >= totalPages}
                     >

@@ -33,7 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Card } from "@/components/ui/card";
 import { ModelDialog } from "./ModelDialog";
 import { BuiltinModelsDialog } from "./BuiltinModelsDialog";
 import { DeleteModelDialog } from "./DeleteModelDialog";
@@ -106,7 +105,7 @@ export function ModelTable() {
     return [...ids];
   }, [modelSets]);
   const { data: channelInfoMap = {} } = useChannelInfoMap(modelSetChannelIds, !isLoadingModelSets);
-  const { data: runtimeMetrics, isLoading: isLoadingRuntimeMetrics } = useRuntimeMetrics();
+  const { data: runtimeMetrics } = useRuntimeMetrics();
 
   // Get channel type metadata
   const { data: channelTypeMetas, isLoading: isLoadingTypeMetas } = useChannelTypeMetas();
@@ -451,20 +450,15 @@ export function ModelTable() {
         }
 
         return (
-          <div
-            className="flex flex-wrap gap-1 cursor-pointer"
+          <button
+            type="button"
+            className="flex max-w-44 flex-col items-start gap-1 text-left text-xs leading-5 hover:text-primary focus-visible:outline-ring"
+            title={enabledPlugins.join(', ')}
             onClick={() => openUpdateDialog(row.original)}
           >
-            {enabledPlugins.map((pluginName) => (
-              <Badge
-                key={pluginName}
-                variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
-              >
-                {pluginName}
-              </Badge>
-            ))}
-          </div>
+            {enabledPlugins.slice(0, 2).map((pluginName) => <span key={pluginName} className="flex items-center gap-1.5 whitespace-nowrap"><span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />{pluginName}</span>)}
+            {enabledPlugins.length > 2 && <span className="text-muted-foreground">+{enabledPlugins.length - 2}</span>}
+          </button>
         );
       },
     },
@@ -489,25 +483,15 @@ export function ModelTable() {
         }
 
         return (
-          <div
-            className="flex flex-wrap gap-1 cursor-pointer"
+          <button
+            type="button"
+            className="grid min-w-32 gap-1 text-left text-xs leading-5 hover:text-primary focus-visible:outline-ring"
+            title={summary.join(', ')}
             onClick={() => openUpdateDialog(row.original)}
           >
-            {summary.slice(0, 6).map((item) => (
-              <Badge
-                key={item}
-                variant="outline"
-                className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
-              >
-                {item}
-              </Badge>
-            ))}
-            {summary.length > 6 && (
-              <Badge variant="outline" className="text-xs">
-                +{summary.length - 6}
-              </Badge>
-            )}
-          </div>
+            <span className="whitespace-nowrap font-medium">{summary[0]}</span>
+            <span className="whitespace-nowrap text-muted-foreground">{summary[1]}{summary.length > 2 && <span className="ml-2">+{summary.length - 2}</span>}</span>
+          </button>
         );
       },
     },
@@ -523,7 +507,7 @@ export function ModelTable() {
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label={t("ui.actions")}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -554,7 +538,7 @@ export function ModelTable() {
         </DropdownMenu>
       ),
     },
-  ], [t, modelSets, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
+  ], [t, modelSets, channelInfoMap, channelTypeMetas, isLoadingModelSets, isLoadingTypeMetas, runtimeMetrics]);
 
   // Initialize table
   const table = useReactTable({
@@ -718,15 +702,15 @@ export function ModelTable() {
 
   return (
     <>
-      <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-card/80 p-0 shadow-sm">
+      <section className="resource-page">
         {/* Title and action buttons */}
-        <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent px-4 py-5 sm:px-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+        <div className="contents">
+        <div className="resource-header">
+          <h2 className="text-lg font-semibold text-foreground">
             {t("model.management")} <Badge variant="secondary" className="ml-2 rounded-full">{sortedModels.length}</Badge>
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t("model.managementDescription", { defaultValue: "统一管理模型、归属与调用配置" })}</p>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="resource-actions">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -825,15 +809,15 @@ export function ModelTable() {
         </div>
 
         {/* Table container */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="overflow-auto h-full">
+        <div className="resource-table">
+          <div className="resource-table-body">
             {isError ? (
               <AdvancedErrorDisplay error={error} onRetry={refetch} />
             ) : (
               <DataTable
                 table={table}
                 columns={columns}
-                isLoading={isLoading || isLoadingModelSets || isLoadingTypeMetas || isLoadingRuntimeMetrics}
+                isLoading={isLoading}
                 loadingStyle="skeleton"
                 fixedHeader={true}
                 animatedRows={true}
@@ -842,7 +826,7 @@ export function ModelTable() {
             )}
           </div>
         </div>
-      </Card>
+      </section>
 
       <BuiltinModelsDialog
         open={builtinModelsDialogOpen}
