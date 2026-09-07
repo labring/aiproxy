@@ -118,6 +118,7 @@ func TestRetryLoopBudgetAndCount(t *testing.T) {
 				}
 
 				if tt.initialBackoff {
+					state.preferChannelIDs = []int{1}
 					state.recordChannelFailure(1, time.Now())
 				}
 

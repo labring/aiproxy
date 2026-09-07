@@ -14,7 +14,8 @@ type Config struct {
 
 func (c Config) GetFollowedChannelTTL() time.Duration {
 	if c.FollowedChannelTTLSeconds > 0 {
-		return time.Duration(c.FollowedChannelTTLSeconds) * time.Second
+		seconds := min(c.FollowedChannelTTLSeconds, int64(maxFollowedChannelTTL/time.Second))
+		return time.Duration(seconds) * time.Second
 	}
 
 	return defaultFollowedChannelTTL

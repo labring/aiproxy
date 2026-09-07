@@ -553,9 +553,9 @@
         "enableGenericFollowDescription": "Enables generic cache-follow for the group + token + model scope when no prompt_cache_key or user-scoped mapping is available. Recommended when each user or tenant has an isolated group/token. Do not enable it when many users share the same group/token or a global admin key, otherwise requests in that shared scope may converge on one remembered channel and reduce load balancing.",
         "followedChannelTTLSeconds": "Followed Channel TTL (seconds)",
         "followedChannelTTLSecondsPlaceholder": "Leave empty to use the default value 180",
-        "followedChannelTTLSecondsDescription": "Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped entries, applies to generic entries only when generic follow is enabled, and also applies to prompt_cache_key entries when the upstream does not return a more specific retention.",
+        "followedChannelTTLSecondsDescription": "Controls how long a remembered cache-effective channel stays valid. Applies to user entries, enabled generic entries, and prompt_cache_key entries without upstream retention. All new entries are capped at 300 seconds, including upstream retention.",
         "recentChannelUpdateDebounceSeconds": "Recent Channel Update Debounce (seconds)",
-        "recentChannelUpdateDebounceSecondsPlaceholder": "Leave empty to use the default value 30",
+        "recentChannelUpdateDebounceSecondsPlaceholder": "Leave empty to use the default value 45",
         "recentChannelUpdateDebounceSecondsDescription": "Controls the minimum refresh interval for the recent channel mapping in the same scope, reducing noisy recent writes while still following upstream routing changes."
       },
       "webSearchPlugin": {

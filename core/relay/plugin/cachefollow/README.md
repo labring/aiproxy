@@ -25,7 +25,7 @@ Default behavior, with only `prompt_cache_key` and `user` scopes enabled:
     "cachefollow": {
       "enable": true,
       "followed_channel_ttl_seconds": 180,
-      "recent_channel_update_debounce_seconds": 30
+      "recent_channel_update_debounce_seconds": 45
     }
   }
 }
@@ -42,7 +42,7 @@ If you also want generic cache-follow:
       "enable": true,
       "enable_generic_follow": true,
       "followed_channel_ttl_seconds": 180,
-      "recent_channel_update_debounce_seconds": 30
+      "recent_channel_update_debounce_seconds": 45
     }
   }
 }
@@ -55,7 +55,9 @@ If you also want generic cache-follow:
 | `enable` | `bool` | `false` | Supports `prompt_cache_key`-based targeted channel follow and user-scoped cache-follow by default, helping improve upstream cache hit rate. Disabled by default. |
 | `enable_generic_follow` | `bool` | `false` | Enables generic cache-follow for the model-level scope. This is only used when no `prompt_cache_key` mapping or user-scoped mapping is available. Recommended when each user effectively has an isolated `group` and `token`; not recommended when many users share the same `group` and `token` scope. |
 | `followed_channel_ttl_seconds` | `integer` | `180` | Controls how long a remembered cache-effective channel stays valid. It always applies to user-scoped entries, applies to generic entries only when generic follow is enabled, and also applies to `prompt_cache_key` entries when the upstream does not return a more specific retention. |
-| `recent_channel_update_debounce_seconds` | `integer` | `30` | Controls the minimum refresh interval for the `recent` channel mapping in the same scope, reducing noisy `recent` updates while still following recent upstream routing changes. |
+| `recent_channel_update_debounce_seconds` | `integer` | `45` | Controls the minimum refresh interval for the `recent` channel mapping in the same scope, reducing noisy `recent` updates while still following recent upstream routing changes. |
+
+Every new mapping has a maximum TTL of `300s`, including configured TTLs and upstream retention such as `24h`. Further successful cache usage can refresh `recent` after the debounce interval, starting a new bounded TTL.
 
 ## Scopes and Priority
 
@@ -102,6 +104,7 @@ They are written differently:
 
 - `stable` is only written when that scope does not already have a stable mapping
 - `recent` can be refreshed continuously, but is rate-limited by `recent_channel_update_debounce_seconds`
+- backup-only channels only write `recent` mappings
 
 In practice:
 
@@ -160,7 +163,7 @@ When the request includes `prompt_cache_key` and the request has cache-related u
 
 TTL rules for this scope:
 
-- if the upstream returns a valid `prompt_cache_retention`, that value is used first
+- if the upstream returns a valid `prompt_cache_retention`, it is capped at 5 minutes
 - otherwise `followed_channel_ttl_seconds` is used
 - if `followed_channel_ttl_seconds` is not configured, the built-in default `180s` is used
 
@@ -248,13 +251,15 @@ This means:
 
 Remembered channels are only preferences. They still go through normal availability checks.
 
+A preferred `backup_only` channel is eligible immediately, in preference order. Selecting it does not unlock other backup channels. Channels that failed in the current retry round remain excluded until the round resets.
+
 A preferred channel is skipped if any of the following is true:
 
 - it no longer exists in the model's currently available channel set
 - it is disabled
 - it does not support the current request mode
 - it is currently banned by monitor
-- its error rate is higher than `0.75`
+- its error rate is higher than `0.85`
 
 If a preferred channel is skipped, the system moves to the next preferred channel. If no preferred channel survives filtering, selection falls back to the normal channel selection flow.
 
@@ -271,3 +276,4 @@ This also means:
 - generic mappings are only read and written when `enable_generic_follow = true`
 - the plugin only affects channel preference; it does not modify the request body
 - `recent_channel_update_debounce_seconds` only affects `recent` refresh frequency and does not affect `stable`
+- newly written cache mappings never exceed 5 minutes, regardless of upstream retention
