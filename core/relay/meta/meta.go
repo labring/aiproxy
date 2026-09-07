@@ -15,6 +15,7 @@ type ChannelMeta struct {
 	Key                     string
 	ID                      int
 	Type                    model.ChannelType
+	BackupOnly              bool
 	ModelMapping            map[string]string
 	EnabledAutoBalanceCheck bool
 	SkipTLSVerify           bool
@@ -196,6 +197,7 @@ func (m *Meta) SetChannel(channel *model.Channel) {
 	m.Channel.Key = channel.Key
 	m.Channel.ID = channel.ID
 	m.Channel.Type = channel.Type
+	m.Channel.BackupOnly = channel.BackupOnly
 	m.Channel.EnabledAutoBalanceCheck = channel.EnabledAutoBalanceCheck
 	m.Channel.SkipTLSVerify = channel.SkipTLSVerify
 	m.Channel.EnabledNoPermissionBan = channel.EnabledNoPermissionBan

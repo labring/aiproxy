@@ -19,8 +19,9 @@ import (
 )
 
 const (
+	maxFollowedChannelTTL              = 5 * time.Minute
 	defaultFollowedChannelTTL          = 3 * time.Minute
-	defaultRecentChannelUpdateDebounce = 30 * time.Second
+	defaultRecentChannelUpdateDebounce = 45 * time.Second
 )
 
 var _ plugin.Plugin = (*Plugin)(nil)
@@ -44,6 +45,7 @@ func (p *Plugin) getConfig(meta *meta.Meta) (*Config, error) {
 }
 
 func getFollowedChannelTTL(retention string, defaultTTL time.Duration) time.Duration {
+	defaultTTL = min(defaultTTL, maxFollowedChannelTTL)
 	retention = strings.TrimSpace(strings.ToLower(retention))
 	if retention == "" || retention == "in-memory" || retention == "in_memory" {
 		return defaultTTL
@@ -54,7 +56,7 @@ func getFollowedChannelTTL(retention string, defaultTTL time.Duration) time.Dura
 		return defaultTTL
 	}
 
-	return ttl
+	return min(ttl, maxFollowedChannelTTL)
 }
 
 func getNodeStringField(node *ast.Node, key string) (string, bool) {
@@ -154,7 +156,7 @@ func saveStableStoreMapping(
 	meta *meta.Meta,
 	expiresAt time.Time,
 ) error {
-	if id == "" {
+	if id == "" || meta.Channel.BackupOnly {
 		return nil
 	}
 

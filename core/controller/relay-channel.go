@@ -357,21 +357,20 @@ type channelSelectionState struct {
 	backupOnlyEnabled bool // Remains enabled across retry rounds for this request.
 }
 
-// Channels have already passed health and failure filtering. Both selection
-// passes reuse that snapshot and restart from the same preference order.
+// Preferences bypass backup-only gating, while health and failure filters still apply.
 func (s *channelSelectionState) selectChannel(
 	channels []*model.Channel,
 	preferChannelIDs []int,
 	errorRates map[int64]float64,
 ) (*model.Channel, error) {
+	if channel := pickPreferredChannel(channels, preferChannelIDs); channel != nil {
+		return channel, nil
+	}
+
 	for {
 		candidates := channels
 		if !s.backupOnlyEnabled {
 			candidates = nonBackupChannels(channels)
-		}
-
-		if channel := pickPreferredChannel(candidates, preferChannelIDs); channel != nil {
-			return channel, nil
 		}
 
 		channel, err := pickChannel(candidates, errorRates)
@@ -697,6 +696,10 @@ func (s *retryState) selectRetryChannel(
 	errorRates map[int64]float64,
 ) (*model.Channel, error) {
 	candidates := getRetryCandidates(s, errorRates)
+	if channel := pickPreferredChannel(candidates, s.preferChannelIDs); channel != nil {
+		return channel, nil
+	}
+
 	if !s.backupOnlyEnabled && len(candidates) > 0 && len(nonBackupChannels(candidates)) == 0 {
 		// Adding eligible backups starts a fresh round while preserving cache preferences.
 		s.backupOnlyEnabled = true

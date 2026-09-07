@@ -2,6 +2,7 @@
 package cachefollow
 
 import (
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -164,10 +165,10 @@ func TestDoResponseRecordsPromptAndGenericMappingsForResponses(t *testing.T) {
 		model.CacheFollowStoreID("gpt-5", model.CacheKeyTypeRecent),
 		store.saved[1].ID,
 	)
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.After(start.Add(24*time.Hour-time.Second)))
-	assert.True(t, store.savedIfNotExist[0].ExpiresAt.Before(end.Add(24*time.Hour+time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(24*time.Hour-time.Second)))
-	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(24*time.Hour+time.Second)))
+	assert.True(t, store.savedIfNotExist[0].ExpiresAt.After(start.Add(5*time.Minute-time.Second)))
+	assert.True(t, store.savedIfNotExist[0].ExpiresAt.Before(end.Add(5*time.Minute+time.Second)))
+	assert.True(t, store.saved[0].ExpiresAt.After(start.Add(5*time.Minute-time.Second)))
+	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(5*time.Minute+time.Second)))
 }
 
 func TestDoResponseRecordsPromptAndGenericMappingsForResponsesCompact(t *testing.T) {
@@ -864,14 +865,95 @@ func TestConfigFollowedChannelTiming(t *testing.T) {
 	)
 
 	assert.Equal(t, defaultRecentChannelUpdateDebounce, Config{}.GetRecentChannelUpdateDebounce())
+	assert.Equal(t, 45*time.Second, Config{}.GetRecentChannelUpdateDebounce())
+	for _, seconds := range []int64{301, 86400, math.MaxInt64} {
+		assert.Equal(t, 5*time.Minute, Config{FollowedChannelTTLSeconds: seconds}.GetFollowedChannelTTL())
+	}
 	assert.Equal(
 		t,
-		45*time.Second,
-		Config{RecentChannelUpdateDebounceSeconds: 45}.GetRecentChannelUpdateDebounce(),
+		30*time.Second,
+		Config{RecentChannelUpdateDebounceSeconds: 30}.GetRecentChannelUpdateDebounce(),
 	)
 	assert.Equal(
 		t,
 		defaultRecentChannelUpdateDebounce,
 		Config{RecentChannelUpdateDebounceSeconds: -1}.GetRecentChannelUpdateDebounce(),
 	)
+}
+
+func TestFollowedChannelTTLCap(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		retention string
+		fallback  time.Duration
+		want      time.Duration
+	}{
+		{"24h", 3 * time.Minute, 5 * time.Minute},
+		{"5m", 3 * time.Minute, 5 * time.Minute},
+		{"30s", 3 * time.Minute, 30 * time.Second},
+		{"", 3 * time.Minute, 3 * time.Minute},
+		{"in-memory", time.Hour, 5 * time.Minute},
+		{"in_memory", time.Hour, 5 * time.Minute},
+		{"invalid", time.Hour, 5 * time.Minute},
+		{"0s", time.Hour, 5 * time.Minute},
+		{"-1s", time.Hour, 5 * time.Minute},
+	} {
+		assert.Equal(t, tt.want, getFollowedChannelTTL(tt.retention, tt.fallback), tt.retention)
+	}
+}
+
+func TestRecentMappingDefaultDebounce(t *testing.T) {
+	t.Parallel()
+	requestMeta := meta.NewMeta(&model.Channel{ID: 9, BackupOnly: true}, mode.Responses, "gpt-5", model.ModelConfig{})
+	for _, age := range []time.Duration{30 * time.Second, 46 * time.Second} {
+		store := &recordingStore{stores: map[string]adaptor.StoreCache{
+			"recent": {ID: "recent", ChannelID: 1, UpdatedAt: time.Now().Add(-age)},
+		}}
+		require.NoError(t, saveRecentStoreMapping(store, "recent", requestMeta, time.Now().Add(time.Minute), Config{}.GetRecentChannelUpdateDebounce()))
+		if age < 45*time.Second {
+			assert.Empty(t, store.saved)
+			assert.Equal(t, 1, store.stores["recent"].ChannelID)
+		} else {
+			require.Len(t, store.saved, 1)
+			assert.Equal(t, 9, store.stores["recent"].ChannelID)
+		}
+	}
+}
+
+func TestBackupOnlyRecordsRecentMappings(t *testing.T) {
+	t.Parallel()
+	for _, backupOnly := range []bool{false, true} {
+		requestMeta := meta.NewMeta(&model.Channel{ID: 9, BackupOnly: backupOnly}, mode.Responses, "gpt-5", model.ModelConfig{
+			Plugin: map[string]map[string]any{PluginName: {
+				"enable": true, "enable_generic_follow": true, "followed_channel_ttl_seconds": 86400,
+			}},
+		})
+		requestMeta.PromptCacheKey = "cache-key"
+		requestMeta.User = "user-1"
+		store := &recordingStore{}
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/responses", nil)
+		start := time.Now()
+		_, relayErr := (&Plugin{}).DoResponse(requestMeta, store, c, &http.Response{StatusCode: http.StatusOK}, doResponseFunc{
+			fn: func(_ *meta.Meta, _ adaptor.Store, c *gin.Context, _ *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+				c.Status(http.StatusOK)
+				_, _ = c.Writer.Write([]byte(`{"prompt_cache_retention":"24h"}`))
+				return adaptor.DoResponseResult{Usage: model.Usage{CachedTokens: 4}}, nil
+			},
+		})
+		require.Nil(t, relayErr)
+		if backupOnly {
+			assert.Empty(t, store.savedIfNotExist)
+		} else {
+			require.Len(t, store.savedIfNotExist, 3)
+		}
+		require.Len(t, store.saved, 3)
+		for _, mapping := range store.stores {
+			assert.Equal(t, 9, mapping.ChannelID)
+			assert.False(t, mapping.ExpiresAt.Before(start.Add(5*time.Minute)))
+			assert.False(t, mapping.ExpiresAt.After(time.Now().Add(5*time.Minute)))
+		}
+		requestMeta.SetChannel(&model.Channel{ID: 1})
+		assert.False(t, requestMeta.Channel.BackupOnly)
+	}
 }
