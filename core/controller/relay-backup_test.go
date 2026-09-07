@@ -561,14 +561,18 @@ func TestBackupOnlyUnlocksAfterPrimaryFailuresAndSurvivesRounds(t *testing.T) {
 	for i := range 4 {
 		channel, err = getRetryChannel(context.Background(), state)
 		require.NoError(t, err)
+
 		if i == 0 {
 			assert.Equal(t, 2, channel.ID)
 		}
+
 		ids = append(ids, channel.ID)
+
 		assert.True(t, state.backupOnlyEnabled)
 		assert.Equal(t, []int{2}, state.preferChannelIDs)
 		state.failedChannelIDs[int64(channel.ID)] = struct{}{}
 	}
+
 	assert.ElementsMatch(t, []int{1, 2, 3, 4}, ids)
 
 	channel, err = getRetryChannel(context.Background(), state)

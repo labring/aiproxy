@@ -46,6 +46,7 @@ func (p *Plugin) getConfig(meta *meta.Meta) (*Config, error) {
 
 func getFollowedChannelTTL(retention string, defaultTTL time.Duration) time.Duration {
 	defaultTTL = min(defaultTTL, maxFollowedChannelTTL)
+
 	retention = strings.TrimSpace(strings.ToLower(retention))
 	if retention == "" || retention == "in-memory" || retention == "in_memory" {
 		return defaultTTL
