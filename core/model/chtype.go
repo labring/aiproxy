@@ -55,6 +55,9 @@ const (
 	ChannelTypeFake                    ChannelType = 53
 	ChannelTypeAntLing                 ChannelType = 54
 	ChannelTypeFakeError               ChannelType = 55
+	ChannelTypeQwenCloud               ChannelType = 56
+	ChannelTypeAIProxyHZH              ChannelType = 57
+	ChannelTypeAIProxyUSW1             ChannelType = 58
 )
 
 var channelTypeNames = map[ChannelType]string{
@@ -101,4 +104,7 @@ var channelTypeNames = map[ChannelType]string{
 	ChannelTypeFake:                    "fake",
 	ChannelTypeAntLing:                 "antling",
 	ChannelTypeFakeError:               "fake-error",
+	ChannelTypeQwenCloud:               "QwenCloud",
+	ChannelTypeAIProxyHZH:              "AIProxy HZH",
+	ChannelTypeAIProxyUSW1:             "AIProxy USW-1",
 }
