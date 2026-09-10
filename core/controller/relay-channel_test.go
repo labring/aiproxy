@@ -4,11 +4,13 @@ package controller
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -16,6 +18,79 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetInitialChannelAllowsAdminToBypassChannelModelCheck(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	restoreEnv := func(key string) func() {
+		value, exists := os.LookupEnv(key)
+
+		return func() {
+			if exists {
+				require.NoError(t, os.Setenv(key, value))
+			} else {
+				require.NoError(t, os.Unsetenv(key))
+			}
+		}
+	}
+
+	restoreAdminKey := restoreEnv("ADMIN_KEY")
+	restoreFeature := restoreEnv("ENABLE_ADMIN_BYPASS_CHANNEL_MODEL_CHECK")
+	require.NoError(t, os.Setenv("ADMIN_KEY", "admin-key"))
+	t.Cleanup(func() {
+		restoreFeature()
+		restoreAdminKey()
+		config.ReloadEnv()
+	})
+
+	tests := []struct {
+		name       string
+		feature    string
+		tokenKey   string
+		wantBypass bool
+	}{
+		{name: "enabled for admin", feature: "true", tokenKey: "admin-key", wantBypass: true},
+		{name: "disabled feature", feature: "false", tokenKey: "admin-key"},
+		{name: "non-admin token", feature: "true", tokenKey: "regular-key"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, os.Setenv("ENABLE_ADMIN_BYPASS_CHANNEL_MODEL_CHECK", tt.feature))
+			config.ReloadEnv()
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+			c.Request.Header.Set(AIProxyChannelHeader, "42")
+			c.Set(middleware.Group, model.GroupCache{Status: model.GroupStatusInternal})
+			c.Set(middleware.Token, model.TokenCache{Key: tt.tokenKey})
+			c.Set(middleware.ModelCaches, &model.ModelCaches{
+				EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
+					model.ChannelDefaultSet: {
+						"configured-model": {
+							{
+								ID:     42,
+								Type:   model.ChannelTypeOpenAI,
+								Models: []string{"configured-model"},
+							},
+						},
+					},
+				},
+			})
+
+			initial, err := getInitialChannel(c, "unsaved-model", mode.ChatCompletions)
+			if !tt.wantBypass {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.True(t, initial.designatedChannel)
+			assert.Equal(t, 42, initial.channel.ID)
+		})
+	}
+}
 
 func TestGetChannelWithFallbackPreferred(t *testing.T) {
 	t.Parallel()

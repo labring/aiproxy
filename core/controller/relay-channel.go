@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/monitor"
@@ -59,10 +60,11 @@ func adaptorSupportsMode(
 }
 
 func GetChannelFromHeader(
+	c *gin.Context,
 	header string,
 	mc *model.ModelCaches,
 	availableSet []string,
-	model string,
+	modelName string,
 	m mode.Mode,
 ) (*model.Channel, error) {
 	channelIDInt, err := strconv.ParseInt(header, 10, 64)
@@ -71,7 +73,7 @@ func GetChannelFromHeader(
 	}
 
 	for _, set := range availableSet {
-		enabledChannels := mc.EnabledModel2ChannelsBySet[set][model]
+		enabledChannels := mc.EnabledModel2ChannelsBySet[set][modelName]
 		if len(enabledChannels) > 0 {
 			for _, channel := range enabledChannels {
 				if int64(channel.ID) == channelIDInt {
@@ -80,7 +82,7 @@ func GetChannelFromHeader(
 						return nil, fmt.Errorf("adaptor not found for channel %d", channel.ID)
 					}
 
-					if !adaptorSupportsMode(a, mc, channel, model, m) {
+					if !adaptorSupportsMode(a, mc, channel, modelName, m) {
 						return nil, fmt.Errorf("channel %d not supported by adaptor", channel.ID)
 					}
 
@@ -89,7 +91,7 @@ func GetChannelFromHeader(
 			}
 		}
 
-		disabledChannels := mc.DisabledModel2ChannelsBySet[set][model]
+		disabledChannels := mc.DisabledModel2ChannelsBySet[set][modelName]
 		if len(disabledChannels) > 0 {
 			for _, channel := range disabledChannels {
 				if int64(channel.ID) == channelIDInt {
@@ -98,7 +100,7 @@ func GetChannelFromHeader(
 						return nil, fmt.Errorf("adaptor not found for channel %d", channel.ID)
 					}
 
-					if !adaptorSupportsMode(a, mc, channel, model, m) {
+					if !adaptorSupportsMode(a, mc, channel, modelName, m) {
 						return nil, fmt.Errorf("channel %d not supported by adaptor", channel.ID)
 					}
 
@@ -108,7 +110,41 @@ func GetChannelFromHeader(
 		}
 	}
 
-	return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, model)
+	if canAdminBypassChannelModelCheck(c) {
+		for _, set := range availableSet {
+			for _, channelsByModel := range []map[string][]*model.Channel{
+				mc.EnabledModel2ChannelsBySet[set],
+				mc.DisabledModel2ChannelsBySet[set],
+			} {
+				for _, channels := range channelsByModel {
+					for _, channel := range channels {
+						if int64(channel.ID) != channelIDInt {
+							continue
+						}
+
+						a, ok := adaptors.GetAdaptor(channel.Type)
+						if !ok {
+							return nil, fmt.Errorf("adaptor not found for channel %d", channel.ID)
+						}
+
+						if !adaptorSupportsMode(a, mc, channel, modelName, m) {
+							return nil, fmt.Errorf("channel %d not supported by adaptor", channel.ID)
+						}
+
+						return channel, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, modelName)
+}
+
+func canAdminBypassChannelModelCheck(c *gin.Context) bool {
+	return config.EnableAdminBypassChannelModelCheck &&
+		config.AdminKey != "" &&
+		middleware.GetToken(c).Key == config.AdminKey
 }
 
 func needPinChannel(m mode.Mode) bool {
@@ -454,6 +490,7 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		}
 
 		channel, err := GetChannelFromHeader(
+			c,
 			channelHeader,
 			middleware.GetModelCaches(c),
 			availableSet,
