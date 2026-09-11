@@ -75,6 +75,7 @@ func GetChannelFromHeader(
 	if !ok {
 		return nil, fmt.Errorf("channel %d not found", channelIDInt)
 	}
+
 	if !config.EnableAdminBypassChannelModelCheck && !slices.Contains(channel.Models, modelName) {
 		return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, modelName)
 	}
