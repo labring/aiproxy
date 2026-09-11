@@ -22,6 +22,8 @@ type ModelConfigCache interface {
 }
 
 type ModelCaches struct {
+	ChannelsByID map[int]*Channel
+
 	ModelConfig ModelConfigCache
 
 	EnabledModelsBySet       map[string][]string
@@ -70,7 +72,16 @@ func InitModelConfigAndChannelCache() error {
 
 	disabledModel2ChannelsBySet := buildModelToChannelsBySetMap(disabledChannels)
 
+	channelsByID := make(map[int]*Channel, len(enabledChannels)+len(disabledChannels))
+	for _, channels := range [][]*Channel{enabledChannels, disabledChannels} {
+		for _, channel := range channels {
+			channelsByID[channel.ID] = channel
+		}
+	}
+
 	modelCaches.Store(&ModelCaches{
+		ChannelsByID: channelsByID,
+
 		ModelConfig: modelConfig,
 
 		EnabledModelsBySet:       enabledModelsBySet,

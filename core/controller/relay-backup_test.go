@@ -426,6 +426,7 @@ func TestInitialGeneralBackupStaysUnlockedAfterPrimaryRecovery(t *testing.T) {
 	}
 	channels := []*model.Channel{primary, backup, otherBackup}
 	mc := &model.ModelCaches{
+		ChannelsByID: map[int]*model.Channel{1: backup},
 		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
 			model.ChannelDefaultSet: {"backup-test": channels},
 		},
@@ -686,14 +687,16 @@ func TestDesignatedBackupOnlyChannelRemainsPinned(t *testing.T) {
 
 	backup := &model.Channel{
 		ID: 1, Type: model.ChannelTypeOpenAI, Status: model.ChannelStatusEnabled, BackupOnly: true,
+		Models: []string{"backup-test"},
 	}
 	mc := &model.ModelCaches{
+		ChannelsByID: map[int]*model.Channel{1: backup},
 		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
 			model.ChannelDefaultSet: {"backup-test": {backup}},
 		},
 	}
 	channel, err := GetChannelFromHeader(
-		"1", mc, []string{model.ChannelDefaultSet}, "backup-test", mode.Responses,
+		"1", mc, "backup-test", mode.Responses,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, backup, channel)
