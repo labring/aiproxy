@@ -90,9 +90,11 @@ func (r *TestChannelRequest) optionsForModel(modelName string) testOptions {
 	if !ok {
 		return options
 	}
+
 	if len(override.RequestBody) > 0 {
 		options.RequestBody = override.RequestBody
 	}
+
 	if override.Mode != nil {
 		options.Mode = override.Mode
 	}
@@ -118,6 +120,7 @@ func testSingleModelWithOptions(
 			modelConfig = newModelConfig
 		}
 	}
+
 	if options.Mode != nil {
 		modelConfig.Type = *options.Mode
 	}
@@ -332,7 +335,15 @@ func processTestResult(
 	saveToDB bool,
 	returnSuccess, successResponseBody bool,
 ) *TestResult {
-	return processTestResultWithOptions(mc, channel, modelName, saveToDB, returnSuccess, successResponseBody, testOptions{})
+	return processTestResultWithOptions(
+		mc,
+		channel,
+		modelName,
+		saveToDB,
+		returnSuccess,
+		successResponseBody,
+		testOptions{},
+	)
 }
 
 func processTestResultWithOptions(

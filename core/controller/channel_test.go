@@ -47,6 +47,7 @@ func TestChannelRequestOptionsForModel(t *testing.T) {
 	bodyOnly := request.optionsForModel("body-only")
 	require.Equal(t, json.RawMessage(`{"input":"hello"}`), bodyOnly.RequestBody)
 	require.Equal(t, &defaultMode, bodyOnly.Mode)
+
 	modeOnly := request.optionsForModel("mode-only")
 	require.Equal(t, request.RequestBody, modeOnly.RequestBody)
 	require.Equal(t, &overrideMode, modeOnly.Mode)
