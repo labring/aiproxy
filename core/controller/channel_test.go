@@ -3,6 +3,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,9 +15,44 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/mode"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelRequestOptionsForModel(t *testing.T) {
+	defaultMode := mode.ChatCompletions
+	overrideMode := mode.Completions
+	request := &TestChannelRequest{
+		RequestBody: json.RawMessage(`{"model":"default"}`),
+		Mode:        &defaultMode,
+		ModelOverrides: map[string]TestModelOverride{
+			"special": {
+				RequestBody: json.RawMessage(`{"model":"special"}`),
+				Mode:        &overrideMode,
+			},
+			"body-only": {RequestBody: json.RawMessage(`{"input":"hello"}`)},
+			"mode-only": {Mode: &overrideMode},
+		},
+	}
+
+	defaultOptions := request.optionsForModel("default")
+	require.Equal(t, request.RequestBody, defaultOptions.RequestBody)
+	require.Same(t, request.Mode, defaultOptions.Mode)
+
+	overrideOptions := request.optionsForModel("special")
+	require.Equal(t, json.RawMessage(`{"model":"special"}`), overrideOptions.RequestBody)
+	require.Same(t, &overrideMode, overrideOptions.Mode)
+
+	bodyOnly := request.optionsForModel("body-only")
+	require.Equal(t, json.RawMessage(`{"input":"hello"}`), bodyOnly.RequestBody)
+	require.Equal(t, &defaultMode, bodyOnly.Mode)
+
+	modeOnly := request.optionsForModel("mode-only")
+	require.Equal(t, request.RequestBody, modeOnly.RequestBody)
+	require.Equal(t, &overrideMode, modeOnly.Mode)
+	require.Equal(t, testOptions{}, (&TestChannelRequest{}).optionsForModel("default"))
+}
 
 func TestGetChannelNotFound(t *testing.T) {
 	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "channels.db"))
