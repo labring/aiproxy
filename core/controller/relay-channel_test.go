@@ -112,6 +112,9 @@ func TestGetChannelFromHeaderModelCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config.EnableAdminBypassChannelModelCheck = tt.feature
 			channel := &model.Channel{ID: 42, Type: model.ChannelTypeOpenAI, Status: tt.status}
+			if !tt.feature {
+				channel.Models = []string{"configured-model"}
+			}
 
 			mc := &model.ModelCaches{
 				ChannelsByID: map[int]*model.Channel{42: channel},
@@ -140,7 +143,6 @@ func TestGetChannelFromHeaderModelCheck(t *testing.T) {
 			got, err := GetChannelFromHeader(
 				header,
 				mc,
-				[]string{model.ChannelDefaultSet},
 				modelName,
 				m,
 			)
