@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -64,6 +66,47 @@ func testSingleModel(
 	modelName string,
 	saveToDB bool,
 ) (*model.ChannelTest, error) {
+	return testSingleModelWithOptions(mc, channel, modelName, saveToDB, testOptions{})
+}
+
+type testOptions struct {
+	RequestBody json.RawMessage
+	Mode        *mode.Mode
+}
+
+// TestModelOverride contains optional test settings for one model in a batch request.
+type TestModelOverride struct {
+	RequestBody json.RawMessage `json:"request_body"`
+	Mode        *mode.Mode      `json:"mode"`
+}
+
+func (r *TestChannelRequest) optionsForModel(modelName string) testOptions {
+	options := testOptions{
+		RequestBody: r.RequestBody,
+		Mode:        r.Mode,
+	}
+
+	override, ok := r.ModelOverrides[modelName]
+	if !ok {
+		return options
+	}
+	if len(override.RequestBody) > 0 {
+		options.RequestBody = override.RequestBody
+	}
+	if override.Mode != nil {
+		options.Mode = override.Mode
+	}
+
+	return options
+}
+
+func testSingleModelWithOptions(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	saveToDB bool,
+	options testOptions,
+) (*model.ChannelTest, error) {
 	modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
 	if !ok {
 		return nil, errors.New(modelName + " model config not found")
@@ -74,6 +117,9 @@ func testSingleModel(
 		if newModelConfig.Type != mode.Unknown {
 			modelConfig = newModelConfig
 		}
+	}
+	if options.Mode != nil {
+		modelConfig.Type = *options.Mode
 	}
 
 	if modelConfig.Type != mode.Unknown {
@@ -101,9 +147,19 @@ func testSingleModel(
 		}, nil
 	}
 
-	body, m, err := utils.BuildRequest(modelConfig)
-	if err != nil {
-		return nil, err
+	var (
+		body io.Reader
+		m    mode.Mode
+		err  error
+	)
+	if len(options.RequestBody) > 0 {
+		body = bytes.NewReader(options.RequestBody)
+		m = modelConfig.Type
+	} else {
+		body, m, err = utils.BuildRequest(modelConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	w := httptest.NewRecorder()
@@ -276,7 +332,18 @@ func processTestResult(
 	saveToDB bool,
 	returnSuccess, successResponseBody bool,
 ) *TestResult {
-	ct, err := testSingleModel(mc, channel, modelName, saveToDB)
+	return processTestResultWithOptions(mc, channel, modelName, saveToDB, returnSuccess, successResponseBody, testOptions{})
+}
+
+func processTestResultWithOptions(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	saveToDB bool,
+	returnSuccess, successResponseBody bool,
+	options testOptions,
+) *TestResult {
+	ct, err := testSingleModelWithOptions(mc, channel, modelName, saveToDB, options)
 
 	e := &utils.UnsupportedModelTypeError{}
 	if errors.As(err, &e) {
@@ -748,15 +815,18 @@ func AutoTestBannedModels() {
 // TestChannelRequest 用于测试未保存的渠道配置
 // 尽可能接近 Channel 结构
 type TestChannelRequest struct {
-	Type          int               `json:"type"            binding:"required"`
-	Key           string            `json:"key"             binding:"required"`
-	BaseURL       string            `json:"base_url"`
-	ProxyURL      string            `json:"proxy_url"`
-	Name          string            `json:"name"`
-	Models        []string          `json:"models"`
-	ModelMapping  map[string]string `json:"model_mapping"`
-	SkipTLSVerify bool              `json:"skip_tls_verify"`
-	Configs       map[string]any    `json:"configs"`
+	Type           int                          `json:"type"            binding:"required"`
+	Key            string                       `json:"key"             binding:"required"`
+	BaseURL        string                       `json:"base_url"`
+	ProxyURL       string                       `json:"proxy_url"`
+	Name           string                       `json:"name"`
+	Models         []string                     `json:"models"`
+	ModelMapping   map[string]string            `json:"model_mapping"`
+	SkipTLSVerify  bool                         `json:"skip_tls_verify"`
+	Configs        map[string]any               `json:"configs"`
+	RequestBody    json.RawMessage              `json:"request_body"`
+	Mode           *mode.Mode                   `json:"mode"`
+	ModelOverrides map[string]TestModelOverride `json:"model_overrides"`
 }
 
 // TestSingleModelRequest 测试单个模型的请求
@@ -770,6 +840,8 @@ type TestSingleModelRequest struct {
 	ModelMapping  map[string]string `json:"model_mapping"`
 	SkipTLSVerify bool              `json:"skip_tls_verify"`
 	Configs       map[string]any    `json:"configs"`
+	RequestBody   json.RawMessage   `json:"request_body"`
+	Mode          *mode.Mode        `json:"mode"`
 }
 
 // createTempChannel 创建临时 Channel 对象
@@ -826,7 +898,10 @@ func TestChannelPreview(c *gin.Context) {
 	mc := model.LoadModelCaches()
 
 	// 测试单个模型 (不保存到数据库)
-	ct, err := testSingleModel(mc, channel, req.Model, false)
+	ct, err := testSingleModelWithOptions(mc, channel, req.Model, false, testOptions{
+		RequestBody: req.RequestBody,
+		Mode:        req.Mode,
+	})
 	if err != nil {
 		log.Errorf("failed to test channel preview: %s", err.Error())
 		c.JSON(http.StatusOK, middleware.APIResponse{
@@ -916,13 +991,14 @@ func TestChannelPreviewAll(c *gin.Context) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			result := processTestResult(
+			result := processTestResultWithOptions(
 				mc,
 				channel,
 				model,
 				false,
 				returnSuccess,
 				successResponseBody,
+				req.optionsForModel(model),
 			)
 			if result == nil {
 				return
