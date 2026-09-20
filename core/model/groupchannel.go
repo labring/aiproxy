@@ -58,6 +58,9 @@ func GroupChannelMonitorPrefix(group string) string {
 }
 
 type GroupChannel struct {
+	Remark                 string              `gorm:"size:255;index"                          json:"remark,omitempty"              yaml:"remark,omitempty"`
+	BackupOnly             bool                `gorm:"default:false;index"                     json:"backup_only"                   yaml:"backup_only,omitempty"`
+	WarnErrorRate          float64             `                                               json:"warn_error_rate"               yaml:"warn_error_rate,omitempty"`
 	DeletedAt              gorm.DeletedAt      `gorm:"index"                                   json:"-"                             yaml:"-"`
 	CreatedAt              time.Time           `gorm:"index"                                   json:"created_at"                    yaml:"-"`
 	LastTestErrorAt        time.Time           `                                               json:"last_test_error_at"            yaml:"-"`
@@ -165,6 +168,9 @@ func (c *GroupChannel) ToChannel() *Channel {
 		ModelMapping:           cloneStringStringMap(c.ModelMapping),
 		Key:                    c.Key,
 		Name:                   c.Name,
+		Remark:                 c.Remark,
+		BackupOnly:             c.BackupOnly,
+		WarnErrorRate:          c.WarnErrorRate,
 		BaseURL:                c.BaseURL,
 		ProxyURL:               c.ProxyURL,
 		Models:                 cloneStringSlice(c.Models),
@@ -635,6 +641,9 @@ func UpdateGroupChannel(channel *GroupChannel) (err error) {
 
 	selects := []string{
 		"model_mapping",
+		"remark",
+		"backup_only",
+		"warn_error_rate",
 		"key",
 		"base_url",
 		"proxy_url",
@@ -663,6 +672,42 @@ func UpdateGroupChannel(channel *GroupChannel) (err error) {
 		Clauses(clause.Returning{}).
 		Where("group_id = ? AND id = ?", channel.GroupID, channel.ID).
 		Updates(channel)
+
+	return HandleUpdateResult(result, ErrGroupChannelNotFound)
+}
+
+func UpdateGroupChannelPatch(channel *GroupChannel, patch *GroupChannelPatch) (err error) {
+	if channel == nil || patch == nil {
+		return errors.New("group channel and patch are required")
+	}
+
+	defer func() {
+		if err == nil {
+			if cacheErr := CacheDeleteGroupChannels(channel.GroupID); cacheErr != nil {
+				log.Error("cache delete group channels failed: " + cacheErr.Error())
+			}
+
+			_ = monitor.ClearGroupChannelAllModelErrorsByKey(
+				context.Background(),
+				GroupChannelMonitorKey(channel.GroupID, channel.ID),
+			)
+		}
+	}()
+
+	result := DB.Model(&GroupChannel{}).
+		Clauses(clause.Returning{}).
+		Where("group_id = ? AND id = ?", channel.GroupID, channel.ID).
+		Updates(patch)
+	if result.Error == nil && result.RowsAffected == 0 {
+		current, getErr := GetGroupChannelByID(channel.GroupID, channel.ID)
+		if getErr != nil {
+			return getErr
+		}
+
+		*channel = *current
+
+		return nil
+	}
 
 	return HandleUpdateResult(result, ErrGroupChannelNotFound)
 }

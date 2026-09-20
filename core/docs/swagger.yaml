@@ -67,6 +67,8 @@ definitions:
     type: object
   controller.AddGroupChannelRequest:
     properties:
+      backup_only:
+        type: boolean
       base_url:
         type: string
       configs:
@@ -93,6 +95,8 @@ definitions:
         type: integer
       proxy_url:
         type: string
+      remark:
+        type: string
       sets:
         items:
           type: string
@@ -103,6 +107,8 @@ definitions:
         type: integer
       type:
         $ref: '#/definitions/model.ChannelType'
+      warn_error_rate:
+        type: number
     type: object
   controller.AddTokenRequest:
     properties:
@@ -885,6 +891,11 @@ definitions:
         type: integer
       response_body_storage_max_size:
         type: integer
+      retry_budget:
+        description: Seconds; nil inherits the global budget, zero disables it.
+        maximum: 180
+        minimum: 0
+        type: integer
       retry_times:
         type: integer
       rpm:
@@ -976,9 +987,15 @@ definitions:
         type: object
       key:
         type: string
+      mode:
+        $ref: '#/definitions/mode.Mode'
       model_mapping:
         additionalProperties:
           type: string
+        type: object
+      model_overrides:
+        additionalProperties:
+          $ref: '#/definitions/controller.TestModelOverride'
         type: object
       models:
         items:
@@ -988,6 +1005,10 @@ definitions:
         type: string
       proxy_url:
         type: string
+      request_body:
+        items:
+          type: integer
+        type: array
       skip_tls_verify:
         type: boolean
       type:
@@ -998,6 +1019,8 @@ definitions:
     type: object
   controller.TestGroupChannelRequest:
     properties:
+      backup_only:
+        type: boolean
       base_url:
         type: string
       configs:
@@ -1010,9 +1033,15 @@ definitions:
         type: string
       max_error_rate:
         type: number
+      mode:
+        $ref: '#/definitions/mode.Mode'
       model_mapping:
         additionalProperties:
           type: string
+        type: object
+      model_overrides:
+        additionalProperties:
+          $ref: '#/definitions/controller.TestModelOverride'
         type: object
       models:
         items:
@@ -1024,6 +1053,12 @@ definitions:
         type: integer
       proxy_url:
         type: string
+      remark:
+        type: string
+      request_body:
+        items:
+          type: integer
+        type: array
       sets:
         items:
           type: string
@@ -1034,6 +1069,17 @@ definitions:
         type: integer
       type:
         $ref: '#/definitions/model.ChannelType'
+      warn_error_rate:
+        type: number
+    type: object
+  controller.TestModelOverride:
+    properties:
+      mode:
+        $ref: '#/definitions/mode.Mode'
+      request_body:
+        items:
+          type: integer
+        type: array
     type: object
   controller.TestResult:
     properties:
@@ -1054,6 +1100,8 @@ definitions:
         type: string
       key:
         type: string
+      mode:
+        $ref: '#/definitions/mode.Mode'
       model:
         type: string
       model_mapping:
@@ -1064,6 +1112,10 @@ definitions:
         type: string
       proxy_url:
         type: string
+      request_body:
+        items:
+          type: integer
+        type: array
       sets:
         items:
           type: string
@@ -1086,6 +1138,8 @@ definitions:
         type: object
       key:
         type: string
+      mode:
+        $ref: '#/definitions/mode.Mode'
       model:
         type: string
       model_mapping:
@@ -1096,6 +1150,10 @@ definitions:
         type: string
       proxy_url:
         type: string
+      request_body:
+        items:
+          type: integer
+        type: array
       skip_tls_verify:
         type: boolean
       type:
@@ -1465,6 +1523,8 @@ definitions:
     - 36
     - 37
     - 38
+    - 39
+    - 40
     type: integer
     x-enum-varnames:
     - Unknown
@@ -1506,6 +1566,8 @@ definitions:
     - DoubaoVideo
     - DoubaoVideoTasks
     - DoubaoVideoTasksDelete
+    - ResponsesCompact
+    - AlphaSearch
   model.Amount:
     properties:
       audio_input_amount:
@@ -1829,15 +1891,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
-        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
+        type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -1860,6 +1922,21 @@ definitions:
       web_search_count:
         type: integer
     type: object
+  model.ChatCompletionTokenLogprob:
+    properties:
+      bytes:
+        items:
+          type: integer
+        type: array
+      logprob:
+        type: number
+      token:
+        type: string
+      top_logprobs:
+        items:
+          $ref: '#/definitions/model.TopLogprob'
+        type: array
+    type: object
   model.ChatUsage:
     properties:
       completion_tokens:
@@ -1874,6 +1951,17 @@ definitions:
         type: integer
       web_search_count:
         type: integer
+    type: object
+  model.ChoiceLogprobs:
+    properties:
+      content:
+        items:
+          $ref: '#/definitions/model.ChatCompletionTokenLogprob'
+        type: array
+      refusal:
+        items:
+          $ref: '#/definitions/model.ChatCompletionTokenLogprob'
+        type: array
     type: object
   model.ClaudeThinkingType:
     enum:
@@ -1927,12 +2015,15 @@ definitions:
         type: object
       model:
         type: string
+      moderation: {}
       parallel_tool_calls:
         type: boolean
       previous_response_id:
         type: string
       prompt_cache_key:
         type: string
+      prompt_cache_options:
+        $ref: '#/definitions/model.PromptCacheOptions'
       prompt_cache_retention:
         type: string
       reasoning:
@@ -1945,6 +2036,8 @@ definitions:
         type: boolean
       stream:
         type: boolean
+      stream_options:
+        $ref: '#/definitions/model.ResponseStreamOptions'
       temperature:
         type: number
       text:
@@ -2036,15 +2129,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_400_count:
+        type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_400_count:
-        type: integer
-      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -2175,6 +2268,8 @@ definitions:
       name:
         type: string
       parameters: {}
+      strict:
+        type: boolean
     type: object
   model.GeneralOpenAIRequest:
     properties:
@@ -2205,6 +2300,7 @@ definitions:
         type: array
       model:
         type: string
+      moderation: {}
       "n":
         type: integer
       num_ctx:
@@ -2216,12 +2312,16 @@ definitions:
       prompt: {}
       prompt_cache_key:
         type: string
+      prompt_cache_options:
+        $ref: '#/definitions/model.PromptCacheOptions'
       prompt_cache_retention:
         type: string
       reasoning_effort:
         type: string
       response_format:
         $ref: '#/definitions/model.ResponseFormat'
+      safety_identifier:
+        type: string
       seed:
         type: number
       service_tier:
@@ -2253,6 +2353,8 @@ definitions:
       top_p:
         type: number
       user:
+        type: string
+      verbosity:
         type: string
     type: object
   model.GeneralThinking:
@@ -2354,6 +2456,8 @@ definitions:
     type: object
   model.GroupChannel:
     properties:
+      backup_only:
+        type: boolean
       base_url:
         type: string
       configs:
@@ -2390,6 +2494,8 @@ definitions:
         type: integer
       proxy_url:
         type: string
+      remark:
+        type: string
       request_count:
         type: integer
       retry_count:
@@ -2405,6 +2511,8 @@ definitions:
       type:
         $ref: '#/definitions/model.ChannelType'
       used_amount:
+        type: number
+      warn_error_rate:
         type: number
     type: object
   model.GroupChannelBasicInfo:
@@ -2591,15 +2699,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
         type: integer
-      status_4xx_count:
-        type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -2786,6 +2894,11 @@ definitions:
         type: integer
       response_body_storage_max_size:
         type: integer
+      retry_budget:
+        description: Seconds; nil inherits the global budget, zero disables it.
+        maximum: 180
+        minimum: 0
+        type: integer
       retry_times:
         type: integer
       rpm:
@@ -2927,6 +3040,9 @@ definitions:
       name:
         type: string
       output:
+        type: string
+      prompt_cache_breakpoint: {}
+      refusal:
         type: string
       text:
         type: string
@@ -3079,12 +3195,17 @@ definitions:
     type: object
   model.Message:
     properties:
+      annotations:
+        items: {}
+        type: array
       audio:
         $ref: '#/definitions/model.OutputAudio'
       content: {}
       name:
         type: string
       reasoning_content:
+        type: string
+      refusal:
         type: string
       role:
         type: string
@@ -3250,6 +3371,12 @@ definitions:
       annotations:
         items: {}
         type: array
+      logprobs:
+        items:
+          $ref: '#/definitions/model.ChatCompletionTokenLogprob'
+        type: array
+      refusal:
+        type: string
       text:
         type: string
       type:
@@ -3390,11 +3517,20 @@ definitions:
         description: IANA timezone for the daily time range
         type: string
     type: object
+  model.PromptCacheOptions:
+    properties:
+      mode:
+        type: string
+      ttl:
+        type: string
+    type: object
   model.PromptTokensDetails:
     properties:
       audio_tokens:
         type: integer
       cache_creation_tokens:
+        type: integer
+      cache_write_tokens:
         type: integer
       cached_tokens:
         type: integer
@@ -3622,6 +3758,7 @@ definitions:
         type: object
       model:
         type: string
+      moderation: {}
       object:
         type: string
       output:
@@ -3699,10 +3836,17 @@ definitions:
     - ResponseStatusFailed
     - ResponseStatusIncomplete
     - ResponseStatusCancelled
+  model.ResponseStreamOptions:
+    properties:
+      include_obfuscation:
+        type: boolean
+    type: object
   model.ResponseText:
     properties:
       format:
         $ref: '#/definitions/model.ResponseTextFormat'
+      verbosity:
+        type: string
     type: object
   model.ResponseTextFormat:
     properties:
@@ -3720,11 +3864,17 @@ definitions:
     type: object
   model.ResponseTool:
     properties:
+      defer_loading:
+        type: boolean
       description:
+        type: string
+      execution:
         type: string
       name:
         type: string
       parameters: {}
+      strict:
+        type: boolean
       type:
         type: string
     type: object
@@ -3777,6 +3927,8 @@ definitions:
     properties:
       audio_tokens:
         type: integer
+      cache_write_tokens:
+        type: integer
       cached_tokens:
         type: integer
       image_tokens:
@@ -3797,6 +3949,8 @@ definitions:
     type: object
   model.StreamOptions:
     properties:
+      include_obfuscation:
+        type: boolean
       include_usage:
         type: boolean
     type: object
@@ -3853,15 +4007,15 @@ definitions:
         type: integer
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
-        type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -4000,7 +4154,10 @@ definitions:
         type: string
       model:
         type: string
+      moderation: {}
       object:
+        type: string
+      service_tier:
         type: string
       usage:
         $ref: '#/definitions/model.ChatUsage'
@@ -4011,6 +4168,8 @@ definitions:
         $ref: '#/definitions/model.FinishReason'
       index:
         type: integer
+      logprobs:
+        $ref: '#/definitions/model.ChoiceLogprobs'
       message:
         $ref: '#/definitions/model.Message'
       text:
@@ -4053,8 +4212,19 @@ definitions:
     type: object
   model.Tool:
     properties:
+      defer_loading:
+        type: boolean
+      description:
+        type: string
+      execution:
+        type: string
       function:
         $ref: '#/definitions/model.Function'
+      name:
+        type: string
+      parameters: {}
+      strict:
+        type: boolean
       type:
         type: string
     type: object
@@ -4069,6 +4239,17 @@ definitions:
       index:
         type: integer
       type:
+        type: string
+    type: object
+  model.TopLogprob:
+    properties:
+      bytes:
+        items:
+          type: integer
+        type: array
+      logprob:
+        type: number
+      token:
         type: string
     type: object
   model.UpdateGroupRequest:
@@ -4603,6 +4784,37 @@ paths:
       summary: Update a channel
       tags:
       - channel
+  /api/channel/{id}/{model}:
+    get:
+      description: Tests a single model in the channel
+      parameters:
+      - description: Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Model name
+        in: path
+        name: model
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.ChannelTest'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test channel model
+      tags:
+      - channel
   /api/channel/{id}/status:
     post:
       consumes:
@@ -4672,37 +4884,6 @@ paths:
       summary: Test channel models
       tags:
       - channel
-  /api/channel/{id}/test/{model}:
-    get:
-      description: Tests a single model in the channel
-      parameters:
-      - description: Channel ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Model name
-        in: path
-        name: model
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/middleware.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/model.ChannelTest'
-              type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Test channel model
-      tags:
-      - channel
   /api/channel/{id}/update_balance:
     get:
       description: Updates the balance for a single channel
@@ -4730,7 +4911,7 @@ paths:
       summary: Update channel balance
       tags:
       - channel
-  /api/channel/test-preview:
+  /api/channel/test:
     post:
       consumes:
       - application/json
@@ -4759,7 +4940,7 @@ paths:
       summary: Test channel preview (single model)
       tags:
       - channel
-  /api/channel/test-preview-all:
+  /api/channel/test-all:
     post:
       consumes:
       - application/json
@@ -4951,7 +5132,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Returns id, name, remark, type, current status, and backup-only status for a batch of channel IDs, including soft-deleted channels
+      description: Returns id, name, remark, type, current status, and backup-only
+        status for a batch of channel IDs, including soft-deleted channels
       parameters:
       - description: Channel IDs
         in: body

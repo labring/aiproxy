@@ -50,7 +50,8 @@ func ListModels(c *gin.Context) {
 			}
 
 			return true
-		})
+		},
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",

@@ -105,6 +105,42 @@ func TestBatchInsertGroupChannelsEnsuresGroups(t *testing.T) {
 	})
 }
 
+func TestUpdateGroupChannelPatchPreservesOmittedValuesAndClearsExplicitValues(t *testing.T) {
+	const groupID = "group-patch"
+	withGroupChannelInsertDB(t, []string{groupID}, func() {
+		require.NoError(t, DB.Create(&GroupChannel{
+			ID:         1,
+			GroupID:    groupID,
+			Name:       "original",
+			Remark:     "keep until cleared",
+			Key:        "key",
+			Models:     []string{"gpt-5"},
+			BackupOnly: true,
+			Status:     ChannelStatusEnabled,
+			Type:       ChannelTypeOpenAI,
+		}).Error)
+
+		current, err := GetGroupChannelByID(groupID, 1)
+		require.NoError(t, err)
+
+		newRemark := ""
+		backupOnly := false
+		emptyModels := []string{}
+		require.NoError(t, UpdateGroupChannelPatch(current, &GroupChannelPatch{
+			Remark:     &newRemark,
+			BackupOnly: &backupOnly,
+			Models:     &emptyModels,
+		}))
+
+		loaded, err := GetGroupChannelByID(groupID, 1)
+		require.NoError(t, err)
+		require.Equal(t, "original", loaded.Name)
+		require.Empty(t, loaded.Remark)
+		require.False(t, loaded.BackupOnly)
+		require.Empty(t, loaded.Models)
+	})
+}
+
 func TestBatchInsertGroupChannelsRollsBackEnsuredGroup(t *testing.T) {
 	groupIDs := []string{"group-existing", "group-rollback"}
 	withGroupChannelInsertDB(t, groupIDs, func() {

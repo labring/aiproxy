@@ -96,16 +96,16 @@ func TestRetryLoopBudgetAndCount(t *testing.T) {
 					{ID: 4, Status: model.ChannelStatusEnabled, BackupOnly: true},
 				}
 				initial := &initialChannel{
-					channel:          channels[0],
-					migratedChannels: channels,
-					preferChannelIDs: []int{1, 2, 3, 4},
+					channel:           newGlobalScopedChannel(channels[0]),
+					migratedChannels:  globalScopedChannels(channels),
+					preferChannelKeys: channelIDsToKeys([]int{1, 2, 3, 4}),
 				}
 				initialError := relaymodel.NewOpenAIError(
 					http.StatusBadGateway,
 					relaymodel.OpenAIError{Message: "initial failure"},
 				)
 
-				state := initRetryState(
+				state := initGlobalRetryState(
 					tt.times,
 					initial,
 					NewMetaByContext(c, channels[0], mode.Responses),
@@ -118,8 +118,8 @@ func TestRetryLoopBudgetAndCount(t *testing.T) {
 				}
 
 				if tt.initialBackoff {
-					state.preferChannelIDs = []int{1}
-					state.recordChannelFailure(1, time.Now())
+					state.preferChannelKeys = channelIDsToKeys([]int{1})
+					state.recordChannelFailure("1", time.Now())
 				}
 
 				if tt.cancelDuringBackoff {

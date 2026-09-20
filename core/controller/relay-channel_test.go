@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	relaycontroller "github.com/labring/aiproxy/core/relay/controller"
@@ -21,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getChannelWithFallback(
+func getTestChannelWithFallback(
 	cache *model.ModelCaches,
 	preferChannelIDs []int,
 	errorRates map[int64]float64,
@@ -32,7 +33,7 @@ func getChannelWithFallback(
 		errorRateKeys[strconv.FormatInt(id, 10)] = rate
 	}
 
-	scoped, scopedChannels, err := getScopedChannelWithFallback(
+	initial, err := getScopedChannelWithFallback(
 		cache,
 		[]string{model.ChannelDefaultSet},
 		nil,
@@ -47,12 +48,14 @@ func getChannelWithFallback(
 		return nil, nil, err
 	}
 
+	scopedChannels := initial.migratedChannels
+
 	channels := make([]*model.Channel, len(scopedChannels))
 	for i, channel := range scopedChannels {
 		channels[i] = channel.channel
 	}
 
-	return scoped.channel, channels, nil
+	return initial.channel.channel, channels, nil
 }
 
 func getPreferChannelIDs(c *gin.Context) []int {
@@ -105,7 +108,7 @@ func TestGetChannelWithFallbackPreferred(t *testing.T) {
 
 		mc := newModelCaches(10, 10)
 
-		channel, migratedChannels, err := getChannelWithFallback(
+		channel, migratedChannels, err := getTestChannelWithFallback(
 			mc,
 			[]int{2},
 			map[int64]float64{},
@@ -121,7 +124,7 @@ func TestGetChannelWithFallbackPreferred(t *testing.T) {
 
 		mc := newModelCaches(100, 1)
 
-		channel, _, err := getChannelWithFallback(
+		channel, _, err := getTestChannelWithFallback(
 			mc,
 			[]int{2, 1},
 			map[int64]float64{},
@@ -136,7 +139,7 @@ func TestGetChannelWithFallbackPreferred(t *testing.T) {
 
 		mc := newModelCaches(10, 10)
 
-		channel, _, err := getChannelWithFallback(
+		channel, _, err := getTestChannelWithFallback(
 			mc,
 			[]int{2},
 			map[int64]float64{2: 0.9, 1: 0.1},
@@ -151,7 +154,7 @@ func TestGetChannelWithFallbackPreferred(t *testing.T) {
 
 		mc := newModelCaches(10, 10)
 
-		channel, _, err := getChannelWithFallback(
+		channel, _, err := getTestChannelWithFallback(
 			mc,
 			[]int{2},
 			map[int64]float64{2: 0.9},
@@ -203,7 +206,7 @@ func TestGetScopedChannelWithFallbackUsesScopedPreferredKey(t *testing.T) {
 		},
 	}
 
-	selected, _, err := getScopedChannelWithFallback(
+	selected, err := getScopedChannelWithFallback(
 		mc,
 		[]string{model.ChannelDefaultSet},
 		[]*model.GroupChannel{groupChannel},
@@ -216,8 +219,8 @@ func TestGetScopedChannelWithFallbackUsesScopedPreferredKey(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, selected)
-	require.Equal(t, model.ChannelScopeGroup, selected.scope)
-	require.Equal(t, 22, selected.channel.ID)
+	require.Equal(t, model.ChannelScopeGroup, selected.channel.scope)
+	require.Equal(t, 22, selected.channel.channel.ID)
 }
 
 func TestGetChannelFromHeaderUsesModelCacheChannel(t *testing.T) {
@@ -230,6 +233,7 @@ func TestGetChannelFromHeaderUsesModelCacheChannel(t *testing.T) {
 		Models: []string{"gpt-5"},
 	}
 	mc := &model.ModelCaches{
+		ChannelsByID: map[int]*model.Channel{901: channel},
 		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
 			model.ChannelDefaultSet: {
 				"gpt-5": {channel},
@@ -255,6 +259,7 @@ func TestGetChannelFromHeaderAllowsDisabledModelCacheChannel(t *testing.T) {
 		Models: []string{"gpt-5"},
 	}
 	mc := &model.ModelCaches{
+		ChannelsByID: map[int]*model.Channel{902: channel},
 		DisabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
 			model.ChannelDefaultSet: {
 				"gpt-5": {channel},
@@ -809,7 +814,7 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 	})
 
 	t.Run(
-		"returns exhausted when failed channels consume all retry candidates",
+		"starts a new round when all retry candidates failed",
 		func(t *testing.T) {
 			t.Parallel()
 
@@ -826,8 +831,9 @@ func TestGetRetryChannelPrefersPreferredChannels(t *testing.T) {
 			)
 
 			channel, err := getRetryChannel(context.Background(), state)
-			require.ErrorIs(t, err, ErrChannelsExhausted)
-			assert.Nil(t, channel)
+			require.NoError(t, err)
+			assert.NotNil(t, channel)
+			assert.Empty(t, state.failedChannelIDs)
 		},
 	)
 }
@@ -876,45 +882,6 @@ func TestPickMinErrorRateHasPermissionChannel(t *testing.T) {
 		require.NotNil(t, picked)
 		assert.Equal(t, 2, picked.channel.ID)
 	})
-}
-
-func TestGetRetryChannelFallsBackToLowestErrorRateHasPermissionChannel(t *testing.T) {
-	t.Parallel()
-
-	ch1 := &model.Channel{
-		ID:       1,
-		Type:     model.ChannelTypeOpenAI,
-		Status:   model.ChannelStatusEnabled,
-		Priority: 10,
-	}
-	ch2 := &model.Channel{
-		ID:       2,
-		Type:     model.ChannelTypeOpenAI,
-		Status:   model.ChannelStatusEnabled,
-		Priority: 10,
-	}
-
-	state := &retryState{
-		meta: meta.NewMeta(
-			ch1,
-			mode.Responses,
-			"gpt-5",
-			model.ModelConfig{},
-		),
-		migratedChannels: []*scopedChannel{
-			newGlobalScopedChannel(ch1),
-			newGlobalScopedChannel(ch2),
-		},
-		failedChannelIDs:                     map[string]struct{}{},
-		ignoreChannelIDs:                     map[string]struct{}{"1": {}, "2": {}},
-		lastMinErrorRateHasPermissionChannel: newGlobalScopedChannel(ch2),
-	}
-
-	channel, err := getRetryChannel(context.Background(), state)
-	require.NoError(t, err)
-	require.NotNil(t, channel)
-	assert.Equal(t, 2, channel.channel.ID)
-	assert.True(t, state.exhausted)
 }
 
 func TestInitRetryStateKeepsGroupOnlyRetryScope(t *testing.T) {
@@ -1028,7 +995,7 @@ func TestGetChannelWithFallbackHandlesNilInputs(t *testing.T) {
 		},
 	}
 
-	channel, migratedChannels, err := getChannelWithFallback(
+	channel, migratedChannels, err := getTestChannelWithFallback(
 		mc,
 		nil,
 		nil,
@@ -1464,4 +1431,398 @@ func withTestStoreDB(t *testing.T, fn func()) {
 	})
 
 	fn()
+}
+
+func TestGetInitialChannelBypassChannelModelCheck(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	original := config.EnableAdminBypassChannelModelCheck
+	t.Cleanup(func() { config.EnableAdminBypassChannelModelCheck = original })
+
+	channel := &model.Channel{ID: 42, Type: model.ChannelTypeOpenAI}
+
+	tests := []struct {
+		name      string
+		feature   bool
+		status    int
+		wantError string
+	}{
+		{
+			name:    "internal bypasses model and set checks",
+			feature: true,
+			status:  model.GroupStatusInternal,
+		},
+		{name: "feature off", status: model.GroupStatusInternal, wantError: "not found for model"},
+		{
+			name:      "regular group denied",
+			feature:   true,
+			status:    model.GroupStatusEnabled,
+			wantError: "channel header is not allowed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config.EnableAdminBypassChannelModelCheck = tt.feature
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequestWithContext(
+				t.Context(),
+				"POST",
+				"/v1/chat/completions",
+				nil,
+			)
+			c.Request.Header.Set(AIProxyChannelHeader, "42")
+			c.Set(middleware.Group, model.GroupCache{Status: tt.status})
+			c.Set(middleware.AvailableSets, []string{model.ChannelDefaultSet})
+			c.Set(
+				middleware.AvailableModels,
+				map[string][]string{model.ChannelDefaultSet: {"unsaved-model"}},
+			)
+			c.Set(middleware.ModelCaches, &model.ModelCaches{
+				ChannelsByID: map[int]*model.Channel{42: channel},
+			})
+
+			initial, err := getInitialChannel(c, "unsaved-model", mode.ChatCompletions)
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				return
+			}
+
+			require.NoError(t, err)
+			require.True(t, initial.designatedChannel)
+			assert.Same(t, channel, initial.channel.channel)
+		})
+	}
+}
+
+func TestGetChannelFromHeaderModelCheck(t *testing.T) {
+	original := config.EnableAdminBypassChannelModelCheck
+	t.Cleanup(func() { config.EnableAdminBypassChannelModelCheck = original })
+
+	tests := []struct {
+		name      string
+		feature   bool
+		status    int
+		header    string
+		modelName string
+		mode      mode.Mode
+		wantError string
+	}{
+		{
+			name:    "enabled channel with no configured models",
+			feature: true,
+			status:  model.ChannelStatusEnabled,
+		},
+		{
+			name:    "disabled channel with no configured models",
+			feature: true,
+			status:  model.ChannelStatusDisabled,
+		},
+		{name: "feature off", wantError: "not found for model"},
+		{name: "configured model without feature", modelName: "configured-model"},
+		{name: "unknown channel", feature: true, header: "43", wantError: "channel 43 not found"},
+		{name: "invalid channel ID", feature: true, header: "invalid", wantError: "invalid syntax"},
+		{
+			name:      "unsupported mode",
+			feature:   true,
+			mode:      mode.Mode(-1),
+			wantError: "not supported by adaptor",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config.EnableAdminBypassChannelModelCheck = tt.feature
+
+			channel := &model.Channel{ID: 42, Type: model.ChannelTypeOpenAI, Status: tt.status}
+			if !tt.feature {
+				channel.Models = []string{"configured-model"}
+			}
+
+			mc := &model.ModelCaches{
+				ChannelsByID: map[int]*model.Channel{42: channel},
+			}
+			if !tt.feature {
+				mc.EnabledModel2ChannelsBySet = map[string]map[string][]*model.Channel{
+					model.ChannelDefaultSet: {"configured-model": {channel}},
+				}
+			}
+
+			header := tt.header
+			if header == "" {
+				header = "42"
+			}
+
+			modelName := tt.modelName
+			if modelName == "" {
+				modelName = "unsaved-model"
+			}
+
+			m := tt.mode
+			if m == 0 {
+				m = mode.ChatCompletions
+			}
+
+			got, err := GetChannelFromHeader(
+				header,
+				mc,
+				modelName,
+				m,
+			)
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Same(t, channel, got)
+		})
+	}
+}
+
+func TestGetRetryChannelStartsNewRoundAfterCandidatesAreExhausted(t *testing.T) {
+	t.Parallel()
+
+	ch1 := &model.Channel{
+		ID:       1,
+		Type:     model.ChannelTypeOpenAI,
+		Status:   model.ChannelStatusEnabled,
+		Priority: 10,
+	}
+	ch2 := &model.Channel{
+		ID:       2,
+		Type:     model.ChannelTypeOpenAI,
+		Status:   model.ChannelStatusEnabled,
+		Priority: 10,
+	}
+
+	state := &retryState{
+		meta:              meta.NewMeta(ch1, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels:  globalScopedChannels([]*model.Channel{ch1, ch2}),
+		failedChannelIDs:  map[string]struct{}{"1": {}, "2": {}},
+		ignoreChannelIDs:  nil,
+		preferChannelKeys: channelIDsToKeys([]int{1}),
+	}
+
+	channel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Contains(t, []int{1, 2}, channel.channel.ID)
+	assert.Empty(t, state.failedChannelIDs)
+	assert.Empty(t, state.preferChannelKeys)
+
+	state.failedChannelIDs[channel.monitorKey()] = struct{}{}
+	nextChannel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, nextChannel)
+	assert.NotEqual(t, channel.channel.ID, nextChannel.channel.ID)
+}
+
+func TestGetRetryChannelKeepsPermissionFailuresIgnoredAcrossRounds(t *testing.T) {
+	t.Parallel()
+
+	ch1 := &model.Channel{ID: 1, Type: model.ChannelTypeOpenAI, Status: model.ChannelStatusEnabled}
+	ch2 := &model.Channel{ID: 2, Type: model.ChannelTypeOpenAI, Status: model.ChannelStatusEnabled}
+	state := &retryState{
+		meta:             meta.NewMeta(ch1, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels: globalScopedChannels([]*model.Channel{ch1, ch2}),
+		failedChannelIDs: map[string]struct{}{"1": {}},
+		ignoreChannelIDs: map[string]struct{}{"2": {}},
+	}
+
+	channel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 1, channel.channel.ID)
+	assert.Empty(t, state.failedChannelIDs)
+}
+
+func TestGetRetryChannelKeepsDesignatedChannelPinned(t *testing.T) {
+	t.Parallel()
+
+	ch1 := &model.Channel{ID: 1, Type: model.ChannelTypeOpenAI, Status: model.ChannelStatusEnabled}
+	ch2 := &model.Channel{ID: 2, Type: model.ChannelTypeOpenAI, Status: model.ChannelStatusEnabled}
+	state := &retryState{
+		designatedChannel: newGlobalScopedChannel(ch1),
+		meta:              meta.NewMeta(ch1, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels:  globalScopedChannels([]*model.Channel{ch2}),
+		failedChannelIDs:  map[string]struct{}{"1": {}, "2": {}},
+	}
+
+	channel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	assert.Equal(t, ch1.ID, channel.channel.ID)
+
+	state.ignoreChannelIDs = map[string]struct{}{"1": {}}
+	channel, err = getRetryChannel(context.Background(), state)
+	require.ErrorIs(t, err, ErrChannelsExhausted)
+	assert.Nil(t, channel)
+}
+
+func TestFilterChannelsAppliesRetryEligibilityRules(t *testing.T) {
+	t.Parallel()
+
+	enabled := &model.Channel{
+		ID:     1,
+		Status: model.ChannelStatusEnabled,
+	}
+	disabled := &model.Channel{
+		ID:     2,
+		Status: model.ChannelStatusDisabled,
+	}
+	highError := &model.Channel{
+		ID:     3,
+		Status: model.ChannelStatusEnabled,
+	}
+	exactThreshold := &model.Channel{
+		ID:     6,
+		Status: model.ChannelStatusEnabled,
+	}
+	ignored := &model.Channel{
+		ID:     4,
+		Status: model.ChannelStatusEnabled,
+	}
+	multiIgnored := &model.Channel{
+		ID:     5,
+		Status: model.ChannelStatusEnabled,
+	}
+
+	filtered := filterChannels(
+		globalScopedChannels(
+			[]*model.Channel{
+				nil,
+				enabled,
+				disabled,
+				highError,
+				ignored,
+				multiIgnored,
+				exactThreshold,
+			},
+		),
+		map[string]float64{"3": maxRetryErrorRate + 0.01, "6": maxRetryErrorRate},
+		maxRetryErrorRate,
+		map[string]struct{}{"4": {}},
+		map[string]struct{}{"5": {}},
+	)
+
+	gotIDs := make([]int, len(filtered))
+	for i, channel := range filtered {
+		gotIDs[i] = channel.channel.ID
+	}
+
+	assert.Equal(t, []int{enabled.ID, exactThreshold.ID}, gotIDs)
+}
+
+func TestGetRetryChannelVisitsEveryEligibleChannelBeforeNextRound(t *testing.T) {
+	t.Parallel()
+
+	channels := []*model.Channel{
+		{ID: 1, Status: model.ChannelStatusEnabled},
+		{ID: 2, Status: model.ChannelStatusEnabled},
+		{ID: 3, Status: model.ChannelStatusEnabled},
+	}
+	state := &retryState{
+		meta:             meta.NewMeta(channels[0], mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels: globalScopedChannels(channels),
+		failedChannelIDs: map[string]struct{}{"1": {}, "2": {}, "3": {}},
+	}
+	seen := make(map[int]struct{}, len(channels))
+
+	for len(seen) < len(channels) {
+		channel, err := getRetryChannel(context.Background(), state)
+		require.NoError(t, err)
+		require.NotNil(t, channel)
+		_, alreadySeen := seen[channel.channel.ID]
+		assert.False(
+			t,
+			alreadySeen,
+			"channel %d was selected twice in one round",
+			channel.channel.ID,
+		)
+		seen[channel.channel.ID] = struct{}{}
+		state.failedChannelIDs[channel.monitorKey()] = struct{}{}
+	}
+
+	channel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Empty(t, state.failedChannelIDs)
+}
+
+func TestFilterChannelsDisablesErrorRateFilterAtZero(t *testing.T) {
+	t.Parallel()
+
+	channels := []*model.Channel{
+		{ID: 1, Status: model.ChannelStatusEnabled},
+		{ID: 2, Status: model.ChannelStatusDisabled},
+	}
+
+	filtered := filterChannels(
+		globalScopedChannels(channels),
+		map[string]float64{"1": 1},
+		0,
+	)
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, 1, filtered[0].channel.ID)
+}
+
+func TestGetRetryChannelReturnsExhaustedWhenNoRoundCanBeReset(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{
+		ID:     1,
+		Status: model.ChannelStatusDisabled,
+	}
+	state := &retryState{
+		meta:             meta.NewMeta(channel, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels: globalScopedChannels([]*model.Channel{channel}),
+		failedChannelIDs: map[string]struct{}{},
+	}
+
+	got, err := getRetryChannel(context.Background(), state)
+	require.ErrorIs(t, err, ErrChannelsExhausted)
+	assert.Nil(t, got)
+	assert.Empty(t, state.failedChannelIDs)
+}
+
+func TestGetRetryChannelReturnsExhaustedWhenRoundResetHasNoEligibleChannel(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{
+		ID:     1,
+		Status: model.ChannelStatusEnabled,
+	}
+	state := &retryState{
+		meta:             meta.NewMeta(channel, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels: globalScopedChannels([]*model.Channel{channel}),
+		failedChannelIDs: map[string]struct{}{"1": {}},
+		ignoreChannelIDs: map[string]struct{}{"1": {}},
+	}
+
+	got, err := getRetryChannel(context.Background(), state)
+	require.ErrorIs(t, err, ErrChannelsExhausted)
+	assert.Nil(t, got)
+	assert.Empty(t, state.failedChannelIDs)
+}
+
+func TestGetRetryChannelRoundResetPreservesBackoffState(t *testing.T) {
+	t.Parallel()
+
+	ch1 := &model.Channel{ID: 1, Status: model.ChannelStatusEnabled}
+	ch2 := &model.Channel{ID: 2, Status: model.ChannelStatusEnabled}
+	base := time.Unix(100, 0)
+	state := &retryState{
+		meta:             meta.NewMeta(ch1, mode.Responses, "gpt-5", model.ModelConfig{}),
+		migratedChannels: globalScopedChannels([]*model.Channel{ch1, ch2}),
+		failedChannelIDs: map[string]struct{}{"1": {}, "2": {}},
+		channelRetryInfo: map[string]channelRetryInfo{
+			"1": {failures: 2, lastEndAt: base},
+		},
+	}
+
+	channel, err := getRetryChannel(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Empty(t, state.failedChannelIDs)
+	assert.Equal(t, channelRetryInfo{failures: 2, lastEndAt: base}, state.channelRetryInfo["1"])
 }

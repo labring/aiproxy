@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,12 +40,6 @@ var (
 	modelConfigCacheOnce sync.Once
 )
 
-type testSingleModelOptions struct {
-	AllowMissingModelConfig bool
-	ModelConfig             *model.ModelConfig
-	SaveResult              func(*meta.Meta, bool, string, int) (*model.ChannelTest, error)
-}
-
 func guessModelConfig(modelName string) model.ModelConfig {
 	modelConfigCacheOnce.Do(func() {
 		for _, c := range adaptors.ChannelAdaptor {
@@ -62,47 +58,6 @@ func guessModelConfig(modelName string) model.ModelConfig {
 	return model.ModelConfig{}
 }
 
-func resolveTestModelConfig(
-	mc *model.ModelCaches,
-	modelName string,
-	opts testSingleModelOptions,
-) (model.ModelConfig, bool, error) {
-	if opts.ModelConfig != nil {
-		return *opts.ModelConfig, true, nil
-	}
-
-	if mc != nil && mc.ModelConfig != nil {
-		modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
-		if ok {
-			return modelConfig, true, nil
-		}
-	}
-
-	if !opts.AllowMissingModelConfig {
-		return model.ModelConfig{}, false, errors.New(modelName + " model config not found")
-	}
-
-	return model.NewDefaultModelConfig(modelName), false, nil
-}
-
-func testRequestModelConfig(modelConfig model.ModelConfig) model.ModelConfig {
-	if modelConfig.Type != mode.Unknown {
-		return modelConfig
-	}
-
-	guessedModelConfig := guessModelConfig(modelConfig.Model)
-	if guessedModelConfig.Type == mode.Unknown {
-		return modelConfig
-	}
-
-	modelConfig.Type = guessedModelConfig.Type
-	if len(modelConfig.Config) == 0 {
-		modelConfig.Config = guessedModelConfig.Config
-	}
-
-	return modelConfig
-}
-
 // testSingleModel tests a single model in the channel
 // If saveToDB is true, the test result will be saved to database
 func testSingleModel(
@@ -111,134 +66,61 @@ func testSingleModel(
 	modelName string,
 	saveToDB bool,
 ) (*model.ChannelTest, error) {
-	return testSingleModelWithOptions(
-		mc,
-		channel,
-		modelName,
-		testSingleModelOptions{
-			SaveResult: func(testMeta *meta.Meta, success bool, response string, code int) (*model.ChannelTest, error) {
-				return channel.UpdateModelTest(
-					testMeta.RequestAt,
-					testMeta.OriginModel,
-					testMeta.ActualModel,
-					testMeta.Mode,
-					time.Since(testMeta.RequestAt).Seconds(),
-					success,
-					response,
-					code,
-				)
-			},
-		},
-		saveToDB,
-	)
+	return testSingleModelWithOptions(mc, channel, modelName, saveToDB, testOptions{})
+}
+
+type testOptions struct {
+	RequestBody json.RawMessage
+	Mode        *mode.Mode
+}
+
+// TestModelOverride contains optional test settings for one model in a batch request.
+type TestModelOverride struct {
+	RequestBody json.RawMessage `json:"request_body"`
+	Mode        *mode.Mode      `json:"mode"`
+}
+
+func (r *TestChannelRequest) optionsForModel(modelName string) testOptions {
+	options := testOptions{
+		RequestBody: r.RequestBody,
+		Mode:        r.Mode,
+	}
+
+	override, ok := r.ModelOverrides[modelName]
+	if !ok {
+		return options
+	}
+
+	if len(override.RequestBody) > 0 {
+		options.RequestBody = override.RequestBody
+	}
+
+	if override.Mode != nil {
+		options.Mode = override.Mode
+	}
+
+	return options
 }
 
 func testSingleModelWithOptions(
-	mc *model.ModelCaches,
-	channel *model.Channel,
-	modelName string,
-	opts testSingleModelOptions,
-	saveToDB bool,
+	mc *model.ModelCaches, channel *model.Channel, modelName string,
+	saveToDB bool, options testOptions,
 ) (*model.ChannelTest, error) {
-	modelConfig, _, err := resolveTestModelConfig(mc, modelName, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	requestModelConfig := testRequestModelConfig(modelConfig)
-
-	if requestModelConfig.Type != mode.Unknown {
-		a, ok := adaptors.GetAdaptor(channel.Type)
-		if !ok {
-			return nil, errors.New("adaptor not found")
-		}
-
-		if !a.SupportMode(meta.NewMeta(channel, requestModelConfig.Type, modelName, modelConfig)) {
-			return nil, fmt.Errorf("%s not supported by adaptor", requestModelConfig.Type)
-		}
-	}
-
-	if modelConfig.ExcludeFromTests {
-		return &model.ChannelTest{
-			TestAt:      time.Now(),
-			Model:       modelName,
-			ActualModel: modelName,
-			Success:     true,
-			Code:        http.StatusOK,
-			Mode:        requestModelConfig.Type,
-			ChannelName: channel.Name,
-			ChannelType: channel.Type,
-			ChannelID:   channel.ID,
-		}, nil
-	}
-
-	body, m, err := utils.BuildRequest(requestModelConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	w := httptest.NewRecorder()
-	newc, _ := gin.CreateTestContext(w)
-	newc.Request = &http.Request{
-		URL:    &url.URL{},
-		Body:   io.NopCloser(body),
-		Header: make(http.Header),
-	}
-	middleware.SetRequestID(newc, channelTestRequestID)
-
-	testMeta := meta.NewMeta(
-		channel,
-		m,
-		modelName,
-		modelConfig,
-		meta.WithRequestID(channelTestRequestID),
-	)
-	result := relayHandler(newc, testMeta, mc)
-	success := result.Error == nil
-
-	var (
-		respStr string
-		code    int
-	)
-
-	if success {
-		switch testMeta.Mode {
-		case mode.AudioSpeech,
-			mode.ImagesGenerations:
-			respStr = ""
-		default:
-			respStr = w.Body.String()
-		}
-
-		code = w.Code
-	} else {
-		respBody, _ := result.Error.MarshalJSON()
-		respStr = conv.BytesToString(respBody)
-		code = result.Error.StatusCode()
-	}
-
-	ct := &model.ChannelTest{
-		TestAt:      testMeta.RequestAt,
-		Model:       testMeta.OriginModel,
-		ActualModel: testMeta.ActualModel,
-		Mode:        testMeta.Mode,
-		Took:        time.Since(testMeta.RequestAt).Seconds(),
-		Success:     success,
-		Response:    respStr,
-		Code:        code,
-		ChannelName: channel.Name,
-		ChannelType: channel.Type,
-		ChannelID:   channel.ID,
-	}
-
-	// Only save to database for saved channels (not preview tests)
-	if saveToDB && channel.ID != 0 {
-		if opts.SaveResult != nil {
-			return opts.SaveResult(testMeta, success, respStr, code)
-		}
-	}
-
-	return ct, nil
+	return executeModelTest(mc, channel, modelName, testSingleModelOptions{
+		testOptions: options,
+		SaveResult: func(testMeta *meta.Meta, success bool, response string, code int) (*model.ChannelTest, error) {
+			return channel.UpdateModelTest(
+				testMeta.RequestAt,
+				testMeta.OriginModel,
+				testMeta.ActualModel,
+				testMeta.Mode,
+				time.Since(testMeta.RequestAt).Seconds(),
+				success,
+				response,
+				code,
+			)
+		},
+	}, saveToDB)
 }
 
 // TestChannel godoc
@@ -251,7 +133,7 @@ func testSingleModelWithOptions(
 //	@Param			id		path		int		true	"Channel ID"
 //	@Param			model	path		string	true	"Model name"
 //	@Success		200		{object}	middleware.APIResponse{data=model.ChannelTest}
-//	@Router			/api/channel/{id}/test/{model} [get]
+//	@Router			/api/channel/{id}/{model} [get]
 //
 //nolint:goconst
 func TestChannel(c *gin.Context) {
@@ -340,7 +222,26 @@ func processTestResult(
 	saveToDB bool,
 	returnSuccess, successResponseBody bool,
 ) *TestResult {
-	ct, err := testSingleModel(mc, channel, modelName, saveToDB)
+	return processTestResultWithOptions(
+		mc,
+		channel,
+		modelName,
+		saveToDB,
+		returnSuccess,
+		successResponseBody,
+		testOptions{},
+	)
+}
+
+func processTestResultWithOptions(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	saveToDB bool,
+	returnSuccess, successResponseBody bool,
+	options testOptions,
+) *TestResult {
+	ct, err := testSingleModelWithOptions(mc, channel, modelName, saveToDB, options)
 
 	e := &utils.UnsupportedModelTypeError{}
 	if errors.As(err, &e) {
@@ -812,15 +713,18 @@ func AutoTestBannedModels() {
 // TestChannelRequest 用于测试未保存的渠道配置
 // 尽可能接近 Channel 结构
 type TestChannelRequest struct {
-	Type          int               `json:"type"            binding:"required"`
-	Key           string            `json:"key"             binding:"required"`
-	BaseURL       string            `json:"base_url"`
-	ProxyURL      string            `json:"proxy_url"`
-	Name          string            `json:"name"`
-	Models        []string          `json:"models"`
-	ModelMapping  map[string]string `json:"model_mapping"`
-	SkipTLSVerify bool              `json:"skip_tls_verify"`
-	Configs       map[string]any    `json:"configs"`
+	Type           int                          `json:"type"            binding:"required"`
+	Key            string                       `json:"key"             binding:"required"`
+	BaseURL        string                       `json:"base_url"`
+	ProxyURL       string                       `json:"proxy_url"`
+	Name           string                       `json:"name"`
+	Models         []string                     `json:"models"`
+	ModelMapping   map[string]string            `json:"model_mapping"`
+	SkipTLSVerify  bool                         `json:"skip_tls_verify"`
+	Configs        map[string]any               `json:"configs"`
+	RequestBody    json.RawMessage              `json:"request_body"`
+	Mode           *mode.Mode                   `json:"mode"`
+	ModelOverrides map[string]TestModelOverride `json:"model_overrides"`
 }
 
 // TestSingleModelRequest 测试单个模型的请求
@@ -834,6 +738,8 @@ type TestSingleModelRequest struct {
 	ModelMapping  map[string]string `json:"model_mapping"`
 	SkipTLSVerify bool              `json:"skip_tls_verify"`
 	Configs       map[string]any    `json:"configs"`
+	RequestBody   json.RawMessage   `json:"request_body"`
+	Mode          *mode.Mode        `json:"mode"`
 }
 
 // createTempChannel 创建临时 Channel 对象
@@ -861,7 +767,7 @@ func createTempChannel(req *TestChannelRequest) *model.Channel {
 //	@Security		ApiKeyAuth
 //	@Param			request	body		TestSingleModelRequest	true	"Channel test request"
 //	@Success		200		{object}	middleware.APIResponse{data=model.ChannelTest}
-//	@Router			/api/channel/test-preview [post]
+//	@Router			/api/channel/test [post]
 func TestChannelPreview(c *gin.Context) {
 	var req TestSingleModelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -890,7 +796,10 @@ func TestChannelPreview(c *gin.Context) {
 	mc := model.LoadModelCaches()
 
 	// 测试单个模型 (不保存到数据库)
-	ct, err := testSingleModel(mc, channel, req.Model, false)
+	ct, err := testSingleModelWithOptions(mc, channel, req.Model, false, testOptions{
+		RequestBody: req.RequestBody,
+		Mode:        req.Mode,
+	})
 	if err != nil {
 		log.Errorf("failed to test channel preview: %s", err.Error())
 		c.JSON(http.StatusOK, middleware.APIResponse{
@@ -925,7 +834,7 @@ func TestChannelPreview(c *gin.Context) {
 //	@Param			stream			query		bool				false	"Stream mode (SSE)"
 //	@Param			request			body		TestChannelRequest	true	"Channel test request"
 //	@Success		200				{object}	middleware.APIResponse{data=[]TestResult}
-//	@Router			/api/channel/test-preview-all [post]
+//	@Router			/api/channel/test-all [post]
 func TestChannelPreviewAll(c *gin.Context) {
 	var req TestChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -980,13 +889,14 @@ func TestChannelPreviewAll(c *gin.Context) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			result := processTestResult(
+			result := processTestResultWithOptions(
 				mc,
 				channel,
 				model,
 				false,
 				returnSuccess,
 				successResponseBody,
+				req.optionsForModel(model),
 			)
 			if result == nil {
 				return
@@ -1017,4 +927,173 @@ func TestChannelPreviewAll(c *gin.Context) {
 			Data:    results,
 		})
 	}
+}
+
+type testSingleModelOptions struct {
+	testOptions
+	Scope                   model.ChannelScope
+	GroupID                 string
+	AllowMissingModelConfig bool
+	ModelConfig             *model.ModelConfig
+	SaveResult              func(*meta.Meta, bool, string, int) (*model.ChannelTest, error)
+}
+
+func resolveTestModelConfig(
+	mc *model.ModelCaches,
+	modelName string,
+	opts testSingleModelOptions,
+) (model.ModelConfig, bool, error) {
+	if opts.ModelConfig != nil {
+		return *opts.ModelConfig, true, nil
+	}
+
+	if mc != nil && mc.ModelConfig != nil {
+		modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
+		if ok {
+			return modelConfig, true, nil
+		}
+	}
+
+	if !opts.AllowMissingModelConfig {
+		return model.ModelConfig{}, false, errors.New(modelName + " model config not found")
+	}
+
+	return model.NewDefaultModelConfig(modelName), false, nil
+}
+
+func testRequestModelConfig(modelConfig model.ModelConfig) model.ModelConfig {
+	if modelConfig.Type != mode.Unknown {
+		return modelConfig
+	}
+
+	guessedModelConfig := guessModelConfig(modelConfig.Model)
+	if guessedModelConfig.Type == mode.Unknown {
+		return modelConfig
+	}
+
+	modelConfig.Type = guessedModelConfig.Type
+	if len(modelConfig.Config) == 0 {
+		modelConfig.Config = guessedModelConfig.Config
+	}
+
+	return modelConfig
+}
+
+func executeModelTest(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	opts testSingleModelOptions,
+	saveToDB bool,
+) (*model.ChannelTest, error) {
+	modelConfig, _, err := resolveTestModelConfig(mc, modelName, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	requestModelConfig := testRequestModelConfig(modelConfig)
+	if opts.Mode != nil {
+		requestModelConfig.Type = *opts.Mode
+	}
+
+	if requestModelConfig.Type != mode.Unknown {
+		a, ok := adaptors.GetAdaptor(channel.Type)
+		if !ok {
+			return nil, errors.New("adaptor not found")
+		}
+
+		if !a.SupportMode(meta.NewMeta(channel, requestModelConfig.Type, modelName, modelConfig)) {
+			return nil, fmt.Errorf("%s not supported by adaptor", requestModelConfig.Type)
+		}
+	}
+
+	if modelConfig.ExcludeFromTests {
+		return &model.ChannelTest{
+			TestAt:      time.Now(),
+			Model:       modelName,
+			ActualModel: modelName,
+			Success:     true,
+			Code:        http.StatusOK,
+			Mode:        requestModelConfig.Type,
+			ChannelName: channel.Name,
+			ChannelType: channel.Type,
+			ChannelID:   channel.ID,
+		}, nil
+	}
+
+	var body io.Reader
+
+	m := requestModelConfig.Type
+	if len(opts.RequestBody) > 0 {
+		body = bytes.NewReader(opts.RequestBody)
+	} else {
+		body, m, err = utils.BuildRequest(requestModelConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	w := httptest.NewRecorder()
+	newc, _ := gin.CreateTestContext(w)
+	newc.Request = &http.Request{
+		URL:    &url.URL{},
+		Body:   io.NopCloser(body),
+		Header: make(http.Header),
+	}
+	middleware.SetRequestID(newc, channelTestRequestID)
+
+	testMeta := meta.NewMeta(
+		channel,
+		m,
+		modelName,
+		modelConfig,
+		meta.WithRequestID(channelTestRequestID),
+		meta.WithChannelScope(opts.Scope, opts.GroupID),
+	)
+	result := relayHandler(newc, testMeta, mc)
+	success := result.Error == nil
+
+	var (
+		respStr string
+		code    int
+	)
+
+	if success {
+		switch testMeta.Mode {
+		case mode.AudioSpeech,
+			mode.ImagesGenerations:
+			respStr = ""
+		default:
+			respStr = w.Body.String()
+		}
+
+		code = w.Code
+	} else {
+		respBody, _ := result.Error.MarshalJSON()
+		respStr = conv.BytesToString(respBody)
+		code = result.Error.StatusCode()
+	}
+
+	ct := &model.ChannelTest{
+		TestAt:      testMeta.RequestAt,
+		Model:       testMeta.OriginModel,
+		ActualModel: testMeta.ActualModel,
+		Mode:        testMeta.Mode,
+		Took:        time.Since(testMeta.RequestAt).Seconds(),
+		Success:     success,
+		Response:    respStr,
+		Code:        code,
+		ChannelName: channel.Name,
+		ChannelType: channel.Type,
+		ChannelID:   channel.ID,
+	}
+
+	// Only save to database for saved channels (not preview tests)
+	if saveToDB && channel.ID != 0 {
+		if opts.SaveResult != nil {
+			return opts.SaveResult(testMeta, success, respStr, code)
+		}
+	}
+
+	return ct, nil
 }

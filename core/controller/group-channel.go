@@ -2,6 +2,7 @@ package controller
 
 import (
 	cryptorand "crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -22,7 +23,9 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptors"
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/labring/aiproxy/core/relay/render"
+	relayutils "github.com/labring/aiproxy/core/relay/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -125,21 +128,25 @@ func groupParam(c *gin.Context) string {
 }
 
 type GroupChannelEnabledModelChannel struct {
-	ID       int               `json:"id"`
-	GroupID  string            `json:"group_id"`
-	Type     model.ChannelType `json:"type"`
-	Name     string            `json:"name"`
-	Priority int32             `json:"priority"`
-	Weight   float64           `json:"weight"`
+	Remark     string            `json:"remark,omitempty"`
+	BackupOnly bool              `json:"backup_only"`
+	ID         int               `json:"id"`
+	GroupID    string            `json:"group_id"`
+	Type       model.ChannelType `json:"type"`
+	Name       string            `json:"name"`
+	Priority   int32             `json:"priority"`
+	Weight     float64           `json:"weight"`
 }
 
 func newGroupChannelEnabledModelChannel(ch *model.GroupChannel) GroupChannelEnabledModelChannel {
 	return GroupChannelEnabledModelChannel{
-		ID:       ch.ID,
-		GroupID:  ch.GroupID,
-		Type:     ch.Type,
-		Name:     ch.Name,
-		Priority: ch.GetPriority(),
+		ID:         ch.ID,
+		GroupID:    ch.GroupID,
+		Type:       ch.Type,
+		Name:       ch.Name,
+		Remark:     ch.Remark,
+		BackupOnly: ch.BackupOnly,
+		Priority:   ch.GetPriority(),
 	}
 }
 
@@ -150,7 +157,7 @@ func calculateGroupChannelWeights(channels []GroupChannelEnabledModelChannel) {
 
 	totalWeight := 0.0
 	for _, ch := range channels {
-		if ch.Priority > 0 {
+		if ch.Priority > 0 && !ch.BackupOnly {
 			totalWeight += float64(ch.Priority)
 		}
 	}
@@ -160,7 +167,7 @@ func calculateGroupChannelWeights(channels []GroupChannelEnabledModelChannel) {
 	}
 
 	for i := range channels {
-		if channels[i].Priority > 0 {
+		if channels[i].Priority > 0 && !channels[i].BackupOnly {
 			channels[i].Weight = float64(channels[i].Priority) / totalWeight * 100
 		}
 	}
@@ -541,6 +548,9 @@ func GetGroupChannelBatchInfo(c *gin.Context) {
 }
 
 type AddGroupChannelRequest struct {
+	Remark                 string               `json:"remark"`
+	BackupOnly             bool                 `json:"backup_only"`
+	WarnErrorRate          float64              `json:"warn_error_rate"`
 	ModelMapping           map[string]string    `json:"model_mapping"`
 	Configs                model.ChannelConfigs `json:"configs"`
 	GroupID                string               `json:"group_id"`
@@ -558,7 +568,98 @@ type AddGroupChannelRequest struct {
 	MaxErrorRate           float64              `json:"max_error_rate"`
 }
 
+type UpdateGroupChannelRequest model.GroupChannelPatch
+
+func (r *UpdateGroupChannelRequest) Apply(
+	current *model.GroupChannel,
+) (*model.GroupChannel, error) {
+	if current == nil {
+		return nil, errors.New("group channel is required")
+	}
+
+	next := *current
+	if r.Type != nil {
+		next.Type = *r.Type
+	}
+
+	if r.Name != nil {
+		next.Name = *r.Name
+	}
+
+	if r.Remark != nil {
+		next.Remark = *r.Remark
+	}
+
+	if r.Key != nil {
+		next.Key = *r.Key
+	}
+
+	if r.BaseURL != nil {
+		next.BaseURL = *r.BaseURL
+	}
+
+	if r.ProxyURL != nil {
+		next.ProxyURL = *r.ProxyURL
+	}
+
+	if r.Models != nil {
+		next.Models = slices.Clone(*r.Models)
+	}
+
+	if r.ModelMapping != nil {
+		next.ModelMapping = maps.Clone(*r.ModelMapping)
+	}
+
+	if r.Configs != nil {
+		next.Configs = maps.Clone(*r.Configs)
+	}
+
+	if r.Priority != nil {
+		next.Priority = *r.Priority
+	}
+
+	if r.BackupOnly != nil {
+		next.BackupOnly = *r.BackupOnly
+	}
+
+	if r.Sets != nil {
+		next.Sets = slices.Clone(*r.Sets)
+	}
+
+	if r.SkipTLSVerify != nil {
+		next.SkipTLSVerify = *r.SkipTLSVerify
+	}
+
+	if r.EnabledNoPermissionBan != nil {
+		next.EnabledNoPermissionBan = *r.EnabledNoPermissionBan
+	}
+
+	if r.WarnErrorRate != nil {
+		next.WarnErrorRate = *r.WarnErrorRate
+	}
+
+	if r.MaxErrorRate != nil {
+		next.MaxErrorRate = *r.MaxErrorRate
+	}
+
+	validation := &AddGroupChannelRequest{
+		Type:     next.Type,
+		Name:     next.Name,
+		Key:      next.Key,
+		ProxyURL: next.ProxyURL,
+	}
+	if _, err := validation.toGroupChannel(next.GroupID); err != nil {
+		return nil, err
+	}
+
+	return &next, nil
+}
+
 func (r *AddGroupChannelRequest) toGroupChannel(group string) (*model.GroupChannel, error) {
+	if err := relayutils.ValidateProxyURL(r.ProxyURL); err != nil {
+		return nil, err
+	}
+
 	a, ok := adaptors.GetAdaptor(r.Type)
 	if !ok {
 		return nil, fmt.Errorf("invalid channel type: %d", r.Type)
@@ -592,6 +693,9 @@ func (r *AddGroupChannelRequest) toGroupChannel(group string) (*model.GroupChann
 		GroupID:                group,
 		Type:                   r.Type,
 		Name:                   r.Name,
+		Remark:                 r.Remark,
+		BackupOnly:             r.BackupOnly,
+		WarnErrorRate:          r.WarnErrorRate,
 		Key:                    r.Key,
 		BaseURL:                r.BaseURL,
 		ProxyURL:               r.ProxyURL,
@@ -830,20 +934,25 @@ func UpdateGroupChannel(c *gin.Context) {
 		return
 	}
 
-	req := AddGroupChannelRequest{}
+	req := UpdateGroupChannelRequest{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ch, err := req.toGroupChannel(groupParam(c))
+	current, err := model.GetGroupChannelByID(groupParam(c), id)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	ch, err := req.Apply(current)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ch.ID = id
-	if err := model.UpdateGroupChannel(ch); err != nil {
+	if err := model.UpdateGroupChannelPatch(ch, (*model.GroupChannelPatch)(&req)); err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -870,20 +979,25 @@ func UpdateGlobalGroupChannel(c *gin.Context) {
 		return
 	}
 
-	req := AddGroupChannelRequest{}
+	req := UpdateGroupChannelRequest{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ch, err := req.toGroupChannel(req.GroupID)
+	ch, err := model.GetGlobalGroupChannelByID(id)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	updated, err := req.Apply(ch)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ch.ID = id
-	if err := model.UpdateGlobalGroupChannel(ch); err != nil {
+	if err := model.UpdateGroupChannelPatch(updated, (*model.GroupChannelPatch)(&req)); err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -1129,15 +1243,33 @@ func channelTestToGroupChannelTest(
 	}
 }
 
-type TestGroupChannelRequest AddGroupChannelRequest
+type TestGroupChannelRequest struct {
+	AddGroupChannelRequest
+	RequestBody    json.RawMessage              `json:"request_body"`
+	Mode           *mode.Mode                   `json:"mode"`
+	ModelOverrides map[string]TestModelOverride `json:"model_overrides"`
+}
+
+func (r *TestGroupChannelRequest) optionsForModel(modelName string) testOptions {
+	req := TestChannelRequest{
+		RequestBody:    r.RequestBody,
+		Mode:           r.Mode,
+		ModelOverrides: r.ModelOverrides,
+	}
+
+	return req.optionsForModel(modelName)
+}
 
 func (r *TestGroupChannelRequest) toGroupChannel(group string) *model.GroupChannel {
-	req := (*AddGroupChannelRequest)(r)
+	req := &r.AddGroupChannelRequest
 
 	return &model.GroupChannel{
 		GroupID:                group,
 		Type:                   req.Type,
 		Name:                   req.Name,
+		Remark:                 req.Remark,
+		BackupOnly:             req.BackupOnly,
+		WarnErrorRate:          req.WarnErrorRate,
 		Key:                    req.Key,
 		BaseURL:                req.BaseURL,
 		ProxyURL:               req.ProxyURL,
@@ -1152,6 +1284,8 @@ func (r *TestGroupChannelRequest) toGroupChannel(group string) *model.GroupChann
 }
 
 type TestSingleGroupChannelRequest struct {
+	RequestBody   json.RawMessage      `json:"request_body"`
+	Mode          *mode.Mode           `json:"mode"`
 	Type          int                  `json:"type"            binding:"required"`
 	Key           string               `json:"key"             binding:"required"`
 	BaseURL       string               `json:"base_url"`
@@ -1186,6 +1320,7 @@ func testSingleGroupChannelModel(
 	groupChannel *model.GroupChannel,
 	modelName string,
 	saveToDB bool,
+	options ...testOptions,
 ) (*model.GroupChannelTest, error) {
 	group, err := model.CacheGetGroup(groupChannel.GroupID)
 	if err != nil {
@@ -1197,13 +1332,21 @@ func testSingleGroupChannelModel(
 		return nil, err
 	}
 
+	var overrides testOptions
+	if len(options) > 0 {
+		overrides = options[0]
+	}
+
 	channel := groupChannel.ToChannel()
 
-	test, err := testSingleModelWithOptions(
+	test, err := executeModelTest(
 		mc,
 		channel,
 		modelName,
 		testSingleModelOptions{
+			testOptions:             overrides,
+			Scope:                   model.ChannelScopeGroup,
+			GroupID:                 groupChannel.GroupID,
 			AllowMissingModelConfig: true,
 			ModelConfig:             &modelConfig,
 			SaveResult:              groupChannelTestSaveFunc(groupChannel),
@@ -1274,8 +1417,9 @@ func processGroupChannelTestResult(
 	modelName string,
 	saveToDB bool,
 	returnSuccess, successResponseBody bool,
+	options ...testOptions,
 ) *GroupChannelTestResult {
-	ct, err := testSingleGroupChannelModel(mc, channel, modelName, saveToDB)
+	ct, err := testSingleGroupChannelModel(mc, channel, modelName, saveToDB, options...)
 
 	result := &GroupChannelTestResult{
 		Success: err == nil,
@@ -1878,7 +2022,13 @@ func TestGroupChannelPreview(c *gin.Context) {
 
 	channel := req.toGroupChannel(groupParam(c))
 
-	ct, err := testSingleGroupChannelModel(model.LoadModelCaches(), channel, req.Model, false)
+	ct, err := testSingleGroupChannelModel(
+		model.LoadModelCaches(),
+		channel,
+		req.Model,
+		false,
+		testOptions{RequestBody: req.RequestBody, Mode: req.Mode},
+	)
 	if err != nil {
 		log.Errorf("failed to test group channel preview: %s", err.Error())
 		c.JSON(http.StatusOK, middleware.APIResponse{
@@ -1924,7 +2074,13 @@ func TestGlobalGroupChannelPreview(c *gin.Context) {
 
 	channel := req.toGroupChannel(req.GroupID)
 
-	ct, err := testSingleGroupChannelModel(model.LoadModelCaches(), channel, req.Model, false)
+	ct, err := testSingleGroupChannelModel(
+		model.LoadModelCaches(),
+		channel,
+		req.Model,
+		false,
+		testOptions{RequestBody: req.RequestBody, Mode: req.Mode},
+	)
 	if err != nil {
 		log.Errorf("failed to test group channel preview: %s", err.Error())
 		c.JSON(http.StatusOK, middleware.APIResponse{
@@ -2023,6 +2179,7 @@ func TestGroupChannelPreviewAll(c *gin.Context) {
 				false,
 				returnSuccess,
 				successResponseBody,
+				req.optionsForModel(modelName),
 			)
 			if result == nil {
 				return
@@ -2129,6 +2286,7 @@ func TestGlobalGroupChannelPreviewAll(c *gin.Context) {
 				false,
 				returnSuccess,
 				successResponseBody,
+				req.optionsForModel(modelName),
 			)
 			if result == nil {
 				return

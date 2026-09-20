@@ -1046,3 +1046,192 @@ func UpdateGroupChannelTokenUsedAmount(id int, amount float64, requestCount int)
 // calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
 // This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
 // This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.
+func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNullString) time.Time {
+	if lastUpdateTime.IsZero() {
+		// If never initialized, return current time
+		return time.Now()
+	}
+
+	now := time.Now()
+
+	// If we haven't passed the period yet, no reset needed
+	if !now.After(lastUpdateTime) {
+		return lastUpdateTime
+	}
+
+	switch periodType {
+	case "", PeriodTypeMonthly:
+		// Start from lastUpdateTime and keep adding months until we find the most recent period start
+		nextPeriod := lastUpdateTime
+		for {
+			// Calculate next month period
+			candidate := time.Date(
+				nextPeriod.Year(),
+				nextPeriod.Month()+1,
+				nextPeriod.Day(),
+				nextPeriod.Hour(),
+				nextPeriod.Minute(),
+				nextPeriod.Second(),
+				nextPeriod.Nanosecond(),
+				nextPeriod.Location(),
+			)
+
+			// If candidate is in the future, the current nextPeriod is the one we want
+			if candidate.After(now) {
+				return nextPeriod
+			}
+
+			nextPeriod = candidate
+		}
+
+	case PeriodTypeWeekly:
+		// Calculate how many complete weeks have passed since lastUpdateTime
+		daysSinceLastUpdate := now.Sub(lastUpdateTime).Hours() / 24
+		weeksPassed := int(daysSinceLastUpdate / 7)
+
+		if weeksPassed == 0 {
+			// Still in the same week period, no reset needed
+			return lastUpdateTime
+		}
+
+		// Return the start of the most recent week period
+		// This is lastUpdateTime + (weeksPassed * 7 days)
+		return lastUpdateTime.Add(time.Duration(weeksPassed*7*24) * time.Hour)
+
+	case PeriodTypeDaily:
+		currentDayStart := utcDayStart(now)
+		if !utcDayStart(lastUpdateTime).Before(currentDayStart) {
+			return lastUpdateTime
+		}
+
+		return currentDayStart
+
+	default:
+		// Fallback to current time for unknown period types
+		return now
+	}
+}
+
+// ResetTokenPeriodUsage resets the period usage for a token with concurrency safety
+// This updates PeriodLastUpdateTime and PeriodLastUpdateAmount to current values
+func ResetTokenPeriodUsage(id int) error {
+	token := &Token{}
+
+	var newPeriodStartTime time.Time
+
+	// Use database transaction with optimistic locking to prevent concurrent resets
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// First, read the current state with FOR UPDATE lock
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", id).
+			First(token).Error; err != nil {
+			return err
+		}
+
+		// Check if period still needs reset (another concurrent request might have already reset it)
+		needsReset, err := token.NeedsPeriodReset()
+		if err != nil {
+			return err
+		}
+
+		// If period no longer needs reset, skip the update
+		if !needsReset {
+			return nil
+		}
+
+		// Calculate the correct next period start time based on period type
+		newPeriodStartTime = calculateNextPeriodStartTime(
+			token.PeriodLastUpdateTime,
+			token.PeriodType,
+		)
+
+		if newPeriodStartTime.IsZero() {
+			return errors.New("next period start time is zero")
+		}
+
+		// Perform the reset with the lock held - update period last update time and amount
+		result := tx.
+			Model(token).
+			Clauses(clause.Returning{
+				Columns: []clause.Column{
+					{Name: "key"},
+				},
+			}).
+			Where("id = ?", id).
+			Updates(
+				map[string]any{
+					"period_last_update_time": newPeriodStartTime,
+					"period_last_update_amount": gorm.Expr(
+						"used_amount",
+					), // Set to current total usage
+				},
+			)
+
+		return HandleUpdateResult(result, ErrTokenNotFound)
+	})
+
+	// Update cache only if database update succeeded
+	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
+		if cacheErr := CacheResetTokenPeriodUsage(
+			token.Key,
+			newPeriodStartTime,
+			token.UsedAmount,
+		); cacheErr != nil {
+			log.Error("reset token period usage in cache failed: " + cacheErr.Error())
+		}
+	}
+
+	return err
+}
+
+func UpdateTokenName(id int, name string) (err error) {
+	token := &Token{ID: id}
+	defer func() {
+		if err == nil {
+			if err := CacheUpdateTokenName(token.Key, name); err != nil {
+				log.Error("update token name in cache failed: " + err.Error())
+			}
+		}
+	}()
+
+	result := DB.
+		Model(token).
+		Clauses(clause.Returning{
+			Columns: []clause.Column{
+				{Name: "key"},
+			},
+		}).
+		Where("id = ?", id).
+		Update("name", name)
+	if result.Error != nil && errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+		return errors.New("token name already exists in this group")
+	}
+
+	return HandleUpdateResult(result, ErrTokenNotFound)
+}
+
+func UpdateGroupTokenName(group string, id int, name string) (err error) {
+	token := &Token{ID: id, GroupID: group}
+	defer func() {
+		if err == nil {
+			if err := CacheUpdateTokenName(token.Key, name); err != nil {
+				log.Error("update token name in cache failed: " + err.Error())
+			}
+		}
+	}()
+
+	result := DB.
+		Model(token).
+		Clauses(clause.Returning{
+			Columns: []clause.Column{
+				{Name: "key"},
+			},
+		}).
+		Where("id = ? and group_id = ?", id, group).
+		Update("name", name)
+	if result.Error != nil && errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+		return errors.New("token name already exists in this group")
+	}
+
+	return HandleUpdateResult(result, ErrTokenNotFound)
+}

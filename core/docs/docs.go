@@ -54,7 +54,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test-preview": {
+        "/api/channel/test": {
             "post": {
                 "security": [
                     {
@@ -105,7 +105,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test-preview-all": {
+        "/api/channel/test-all": {
             "post": {
                 "security": [
                     {
@@ -424,7 +424,54 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/{id}/test/{model}": {
+        "/api/channel/{id}/update_balance": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates the balance for a single channel",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Update channel balance",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "number",
+                                            "format": "float64"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/channel/{id}/{model}": {
             "get": {
                 "security": [
                     {
@@ -468,53 +515,6 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/model.ChannelTest"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
-        "/api/channel/{id}/update_balance": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Updates the balance for a single channel",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "channel"
-                ],
-                "summary": "Update channel balance",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Channel ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/middleware.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "number",
-                                            "format": "float64"
                                         }
                                     }
                                 }
@@ -15292,6 +15292,9 @@ const docTemplate = `{
         "controller.AddGroupChannelRequest": {
             "type": "object",
             "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
                 "base_url": {
                     "type": "string"
                 },
@@ -15331,6 +15334,9 @@ const docTemplate = `{
                 "proxy_url": {
                     "type": "string"
                 },
+                "remark": {
+                    "type": "string"
+                },
                 "sets": {
                     "type": "array",
                     "items": {
@@ -15345,6 +15351,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"
+                },
+                "warn_error_rate": {
+                    "type": "number"
                 }
             }
         },
@@ -16536,6 +16545,12 @@ const docTemplate = `{
                 "response_body_storage_max_size": {
                     "type": "integer"
                 },
+                "retry_budget": {
+                    "description": "Seconds; nil inherits the global budget, zero disables it.",
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
+                },
                 "retry_times": {
                     "type": "integer"
                 },
@@ -16675,10 +16690,19 @@ const docTemplate = `{
                 "key": {
                     "type": "string"
                 },
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
                 "model_mapping": {
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
+                    }
+                },
+                "model_overrides": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.TestModelOverride"
                     }
                 },
                 "models": {
@@ -16693,6 +16717,12 @@ const docTemplate = `{
                 "proxy_url": {
                     "type": "string"
                 },
+                "request_body": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "skip_tls_verify": {
                     "type": "boolean"
                 },
@@ -16704,6 +16734,9 @@ const docTemplate = `{
         "controller.TestGroupChannelRequest": {
             "type": "object",
             "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
                 "base_url": {
                     "type": "string"
                 },
@@ -16722,10 +16755,19 @@ const docTemplate = `{
                 "max_error_rate": {
                     "type": "number"
                 },
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
                 "model_mapping": {
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
+                    }
+                },
+                "model_overrides": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/controller.TestModelOverride"
                     }
                 },
                 "models": {
@@ -16743,6 +16785,15 @@ const docTemplate = `{
                 "proxy_url": {
                     "type": "string"
                 },
+                "remark": {
+                    "type": "string"
+                },
+                "request_body": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "sets": {
                     "type": "array",
                     "items": {
@@ -16757,6 +16808,23 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"
+                },
+                "warn_error_rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "controller.TestModelOverride": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
+                "request_body": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -16794,6 +16862,9 @@ const docTemplate = `{
                 "key": {
                     "type": "string"
                 },
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
                 "model": {
                     "type": "string"
                 },
@@ -16808,6 +16879,12 @@ const docTemplate = `{
                 },
                 "proxy_url": {
                     "type": "string"
+                },
+                "request_body": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "sets": {
                     "type": "array",
@@ -16841,6 +16918,9 @@ const docTemplate = `{
                 "key": {
                     "type": "string"
                 },
+                "mode": {
+                    "$ref": "#/definitions/mode.Mode"
+                },
                 "model": {
                     "type": "string"
                 },
@@ -16855,6 +16935,12 @@ const docTemplate = `{
                 },
                 "proxy_url": {
                     "type": "string"
+                },
+                "request_body": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "skip_tls_verify": {
                     "type": "boolean"
@@ -17369,7 +17455,9 @@ const docTemplate = `{
                 35,
                 36,
                 37,
-                38
+                38,
+                39,
+                40
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -17410,7 +17498,9 @@ const docTemplate = `{
                 "AliVideoTasks",
                 "DoubaoVideo",
                 "DoubaoVideoTasks",
-                "DoubaoVideoTasksDelete"
+                "DoubaoVideoTasksDelete",
+                "ResponsesCompact",
+                "AlphaSearch"
             ]
         },
         "model.Amount": {
@@ -17897,6 +17987,29 @@ const docTemplate = `{
                 }
             }
         },
+        "model.ChatCompletionTokenLogprob": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "logprob": {
+                    "type": "number"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "top_logprobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TopLogprob"
+                    }
+                }
+            }
+        },
         "model.ChatUsage": {
             "type": "object",
             "properties": {
@@ -17917,6 +18030,23 @@ const docTemplate = `{
                 },
                 "web_search_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.ChoiceLogprobs": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ChatCompletionTokenLogprob"
+                    }
+                },
+                "refusal": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ChatCompletionTokenLogprob"
+                    }
                 }
             }
         },
@@ -17996,6 +18126,7 @@ const docTemplate = `{
                 "model": {
                     "type": "string"
                 },
+                "moderation": {},
                 "parallel_tool_calls": {
                     "type": "boolean"
                 },
@@ -18004,6 +18135,9 @@ const docTemplate = `{
                 },
                 "prompt_cache_key": {
                     "type": "string"
+                },
+                "prompt_cache_options": {
+                    "$ref": "#/definitions/model.PromptCacheOptions"
                 },
                 "prompt_cache_retention": {
                     "type": "string"
@@ -18022,6 +18156,9 @@ const docTemplate = `{
                 },
                 "stream": {
                     "type": "boolean"
+                },
+                "stream_options": {
+                    "$ref": "#/definitions/model.ResponseStreamOptions"
                 },
                 "temperature": {
                     "type": "number"
@@ -18366,7 +18503,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "parameters": {}
+                "parameters": {},
+                "strict": {
+                    "type": "boolean"
+                }
             }
         },
         "model.GeneralOpenAIRequest": {
@@ -18410,6 +18550,7 @@ const docTemplate = `{
                 "model": {
                     "type": "string"
                 },
+                "moderation": {},
                 "n": {
                     "type": "integer"
                 },
@@ -18426,6 +18567,9 @@ const docTemplate = `{
                 "prompt_cache_key": {
                     "type": "string"
                 },
+                "prompt_cache_options": {
+                    "$ref": "#/definitions/model.PromptCacheOptions"
+                },
                 "prompt_cache_retention": {
                     "type": "string"
                 },
@@ -18434,6 +18578,9 @@ const docTemplate = `{
                 },
                 "response_format": {
                     "$ref": "#/definitions/model.ResponseFormat"
+                },
+                "safety_identifier": {
+                    "type": "string"
                 },
                 "seed": {
                     "type": "number"
@@ -18482,6 +18629,9 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "user": {
+                    "type": "string"
+                },
+                "verbosity": {
                     "type": "string"
                 }
             }
@@ -18637,6 +18787,9 @@ const docTemplate = `{
         "model.GroupChannel": {
             "type": "object",
             "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
                 "base_url": {
                     "type": "string"
                 },
@@ -18691,6 +18844,9 @@ const docTemplate = `{
                 "proxy_url": {
                     "type": "string"
                 },
+                "remark": {
+                    "type": "string"
+                },
                 "request_count": {
                     "type": "integer"
                 },
@@ -18713,6 +18869,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/model.ChannelType"
                 },
                 "used_amount": {
+                    "type": "number"
+                },
+                "warn_error_rate": {
                     "type": "number"
                 }
             }
@@ -19284,6 +19443,12 @@ const docTemplate = `{
                 "response_body_storage_max_size": {
                     "type": "integer"
                 },
+                "retry_budget": {
+                    "description": "Seconds; nil inherits the global budget, zero disables it.",
+                    "type": "integer",
+                    "maximum": 180,
+                    "minimum": 0
+                },
                 "retry_times": {
                     "type": "integer"
                 },
@@ -19493,6 +19658,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "output": {
+                    "type": "string"
+                },
+                "prompt_cache_breakpoint": {},
+                "refusal": {
                     "type": "string"
                 },
                 "text": {
@@ -19723,6 +19892,10 @@ const docTemplate = `{
         "model.Message": {
             "type": "object",
             "properties": {
+                "annotations": {
+                    "type": "array",
+                    "items": {}
+                },
                 "audio": {
                     "$ref": "#/definitions/model.OutputAudio"
                 },
@@ -19731,6 +19904,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "reasoning_content": {
+                    "type": "string"
+                },
+                "refusal": {
                     "type": "string"
                 },
                 "role": {
@@ -19946,6 +20122,15 @@ const docTemplate = `{
                     "type": "array",
                     "items": {}
                 },
+                "logprobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ChatCompletionTokenLogprob"
+                    }
+                },
+                "refusal": {
+                    "type": "string"
+                },
                 "text": {
                     "type": "string"
                 },
@@ -20151,6 +20336,17 @@ const docTemplate = `{
                 }
             }
         },
+        "model.PromptCacheOptions": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string"
+                },
+                "ttl": {
+                    "type": "string"
+                }
+            }
+        },
         "model.PromptTokensDetails": {
             "type": "object",
             "properties": {
@@ -20158,6 +20354,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "cache_creation_tokens": {
+                    "type": "integer"
+                },
+                "cache_write_tokens": {
                     "type": "integer"
                 },
                 "cached_tokens": {
@@ -20497,6 +20696,7 @@ const docTemplate = `{
                 "model": {
                     "type": "string"
                 },
+                "moderation": {},
                 "object": {
                     "type": "string"
                 },
@@ -20609,11 +20809,22 @@ const docTemplate = `{
                 "ResponseStatusCancelled"
             ]
         },
+        "model.ResponseStreamOptions": {
+            "type": "object",
+            "properties": {
+                "include_obfuscation": {
+                    "type": "boolean"
+                }
+            }
+        },
         "model.ResponseText": {
             "type": "object",
             "properties": {
                 "format": {
                     "$ref": "#/definitions/model.ResponseTextFormat"
+                },
+                "verbosity": {
+                    "type": "string"
                 }
             }
         },
@@ -20641,13 +20852,22 @@ const docTemplate = `{
         "model.ResponseTool": {
             "type": "object",
             "properties": {
+                "defer_loading": {
+                    "type": "boolean"
+                },
                 "description": {
+                    "type": "string"
+                },
+                "execution": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "parameters": {},
+                "strict": {
+                    "type": "boolean"
+                },
                 "type": {
                     "type": "string"
                 }
@@ -20729,6 +20949,9 @@ const docTemplate = `{
                 "audio_tokens": {
                     "type": "integer"
                 },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
                 "cached_tokens": {
                     "type": "integer"
                 },
@@ -20760,6 +20983,9 @@ const docTemplate = `{
         "model.StreamOptions": {
             "type": "object",
             "properties": {
+                "include_obfuscation": {
+                    "type": "boolean"
+                },
                 "include_usage": {
                     "type": "boolean"
                 }
@@ -21067,7 +21293,11 @@ const docTemplate = `{
                 "model": {
                     "type": "string"
                 },
+                "moderation": {},
                 "object": {
+                    "type": "string"
+                },
+                "service_tier": {
                     "type": "string"
                 },
                 "usage": {
@@ -21083,6 +21313,9 @@ const docTemplate = `{
                 },
                 "index": {
                     "type": "integer"
+                },
+                "logprobs": {
+                    "$ref": "#/definitions/model.ChoiceLogprobs"
                 },
                 "message": {
                     "$ref": "#/definitions/model.Message"
@@ -21148,8 +21381,24 @@ const docTemplate = `{
         "model.Tool": {
             "type": "object",
             "properties": {
+                "defer_loading": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "execution": {
+                    "type": "string"
+                },
                 "function": {
                     "$ref": "#/definitions/model.Function"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parameters": {},
+                "strict": {
+                    "type": "boolean"
                 },
                 "type": {
                     "type": "string"
@@ -21172,6 +21421,23 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.TopLogprob": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "logprob": {
+                    "type": "number"
+                },
+                "token": {
                     "type": "string"
                 }
             }

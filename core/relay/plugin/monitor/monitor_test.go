@@ -2,6 +2,7 @@
 package monitor
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	modelmonitor "github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	relaymeta "github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/require"
 )
@@ -429,4 +431,92 @@ func TestChannelMonitorReadsGroupChannelRetryCounter(t *testing.T) {
 		modelName,
 	)
 	require.Equal(t, int64(1), groupChannelRPM)
+}
+
+func TestChannelMonitorDoResponseRecordsResponseCost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
+	entry := common.NewLogger()
+	common.SetLogger(c.Request, entry)
+
+	requestMeta := relaymeta.NewMeta(
+		&model.Channel{ID: 901, Type: model.ChannelTypeOpenAI},
+		mode.ChatCompletions,
+		"resp-cost-test",
+		model.ModelConfig{},
+	)
+	requestMeta.Channel.MaxErrorRate = 0
+
+	result, relayErr := (&ChannelMonitor{}).DoResponse(
+		requestMeta,
+		nil,
+		c,
+		&http.Response{StatusCode: http.StatusOK},
+		doResponseFunc(func(
+			*relaymeta.Meta,
+			adaptor.Store,
+			*gin.Context,
+			*http.Response,
+		) (adaptor.DoResponseResult, adaptor.Error) {
+			time.Sleep(2 * time.Millisecond)
+			return adaptor.DoResponseResult{}, nil
+		}),
+	)
+
+	require.NoError(t, relayErr)
+	require.Empty(t, result.UpstreamID)
+	require.Contains(t, entry.Data, "resp_cost")
+	cost, ok := entry.Data["resp_cost"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, cost)
+	parsedCost, err := time.ParseDuration(cost)
+	require.NoError(t, err)
+	require.Greater(t, parsedCost, time.Duration(0))
+}
+
+func TestChannelMonitorDoResponseRecordsResponseCostOnError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
+	entry := common.NewLogger()
+	common.SetLogger(c.Request, entry)
+
+	requestMeta := relaymeta.NewMeta(
+		&model.Channel{ID: 902, Type: model.ChannelTypeOpenAI},
+		mode.ChatCompletions,
+		"resp-cost-error-test",
+		model.ModelConfig{},
+	)
+	relayErrExpected := relaymodel.NewOpenAIError(http.StatusBadGateway, relaymodel.OpenAIError{
+		Message: "upstream error",
+	})
+
+	_, relayErr := (&ChannelMonitor{}).DoResponse(
+		requestMeta,
+		nil,
+		c,
+		&http.Response{StatusCode: http.StatusBadGateway},
+		doResponseFunc(func(
+			*relaymeta.Meta,
+			adaptor.Store,
+			*gin.Context,
+			*http.Response,
+		) (adaptor.DoResponseResult, adaptor.Error) {
+			return adaptor.DoResponseResult{}, relayErrExpected
+		}),
+	)
+
+	require.ErrorIs(t, relayErr, relayErrExpected)
+	require.Contains(t, entry.Data, "resp_cost")
+	cost, ok := entry.Data["resp_cost"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, cost)
+	parsedCost, err := time.ParseDuration(cost)
+	require.NoError(t, err)
+	require.Greater(t, parsedCost, time.Duration(0))
 }
