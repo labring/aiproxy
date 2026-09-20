@@ -935,6 +935,7 @@ func supportsPromptCacheKeyMode(m mode.Mode) bool {
 func supportsCacheFollowMode(m mode.Mode) bool {
 	switch m {
 	case mode.Responses,
+		mode.ResponsesCompact,
 		mode.ChatCompletions,
 		mode.Gemini,
 		mode.GeminiVideo,

@@ -54,7 +54,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test": {
+        "/api/channel/test-preview": {
             "post": {
                 "security": [
                     {
@@ -105,7 +105,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/channel/test-all": {
+        "/api/channel/test-preview-all": {
             "post": {
                 "security": [
                     {
@@ -2928,12 +2928,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Updated group channel information",
+                        "description": "Optional group channel fields to update",
                         "name": "channel",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                            "$ref": "#/definitions/controller.UpdateGroupChannelRequest"
                         }
                     }
                 ],
@@ -3302,6 +3302,18 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Filter by key",
                         "name": "key",
                         "in": "query"
@@ -3633,6 +3645,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by name",
                         "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
                         "in": "query"
                     },
                     {
@@ -5153,12 +5177,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Updated group channel information",
+                        "description": "Optional group channel fields to update",
                         "name": "channel",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/controller.AddGroupChannelRequest"
+                            "$ref": "#/definitions/controller.UpdateGroupChannelRequest"
                         }
                     }
                 ],
@@ -5491,6 +5515,18 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Filter by key",
                         "name": "key",
                         "in": "query"
@@ -5793,6 +5829,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by name",
                         "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact remark filter; empty matches channels without remarks",
+                        "name": "remark",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter backup-only channels; omit for all channels",
+                        "name": "backup_only",
                         "in": "query"
                     },
                     {
@@ -17115,6 +17163,68 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.UpdateGroupChannelRequest": {
+            "type": "object",
+            "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "configs": {
+                    "$ref": "#/definitions/model.ChannelConfigs"
+                },
+                "enabled_no_permission_ban": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max_error_rate": {
+                    "type": "number"
+                },
+                "model_mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "proxy_url": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_tls_verify": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "$ref": "#/definitions/model.ChannelType"
+                },
+                "warn_error_rate": {
+                    "type": "number"
+                }
+            }
+        },
         "controller.UpdateGroupMCPStatusRequest": {
             "type": "object",
             "properties": {
@@ -18879,6 +18989,9 @@ const docTemplate = `{
         "model.GroupChannelBasicInfo": {
             "type": "object",
             "properties": {
+                "backup_only": {
+                    "type": "boolean"
+                },
                 "group_id": {
                     "type": "string"
                 },
@@ -18887,6 +19000,12 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
                 },
                 "type": {
                     "$ref": "#/definitions/model.ChannelType"

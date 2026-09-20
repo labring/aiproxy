@@ -767,7 +767,7 @@ func createTempChannel(req *TestChannelRequest) *model.Channel {
 //	@Security		ApiKeyAuth
 //	@Param			request	body		TestSingleModelRequest	true	"Channel test request"
 //	@Success		200		{object}	middleware.APIResponse{data=model.ChannelTest}
-//	@Router			/api/channel/test [post]
+//	@Router			/api/channel/test-preview [post]
 func TestChannelPreview(c *gin.Context) {
 	var req TestSingleModelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -834,7 +834,7 @@ func TestChannelPreview(c *gin.Context) {
 //	@Param			stream			query		bool				false	"Stream mode (SSE)"
 //	@Param			request			body		TestChannelRequest	true	"Channel test request"
 //	@Success		200				{object}	middleware.APIResponse{data=[]TestResult}
-//	@Router			/api/channel/test-all [post]
+//	@Router			/api/channel/test-preview-all [post]
 func TestChannelPreviewAll(c *gin.Context) {
 	var req TestChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -123,6 +123,12 @@ func TestUpdateGroupChannelPatchPreservesOmittedValuesAndClearsExplicitValues(t 
 		current, err := GetGroupChannelByID(groupID, 1)
 		require.NoError(t, err)
 
+		// Another writer changes a field after this snapshot was loaded.
+		require.NoError(
+			t,
+			DB.Model(&GroupChannel{}).Where("id = ?", 1).Update("name", "concurrent update").Error,
+		)
+
 		newRemark := ""
 		backupOnly := false
 		emptyModels := []string{}
@@ -134,7 +140,11 @@ func TestUpdateGroupChannelPatchPreservesOmittedValuesAndClearsExplicitValues(t 
 
 		loaded, err := GetGroupChannelByID(groupID, 1)
 		require.NoError(t, err)
-		require.Equal(t, "original", loaded.Name)
+		require.Equal(t, "concurrent update", loaded.Name)
+		require.Equal(t, loaded.Name, current.Name)
+		require.Equal(t, loaded.Remark, current.Remark)
+		require.Equal(t, loaded.BackupOnly, current.BackupOnly)
+		require.Equal(t, loaded.Models, current.Models)
 		require.Empty(t, loaded.Remark)
 		require.False(t, loaded.BackupOnly)
 		require.Empty(t, loaded.Models)
@@ -1207,4 +1217,165 @@ func TestGroupChannelTokenSummaryReadsRequireGroup(t *testing.T) {
 		nil,
 	)
 	require.Error(t, err)
+}
+
+func TestGroupChannelFiltersAndMetadataPreserveScope(t *testing.T) {
+	withGroupChannelInsertDB(t, []string{"filter-a", "filter-b"}, func() {
+		require.NoError(t, DB.AutoMigrate(&GroupChannelTest{}))
+
+		oldSQLite := common.UsingSQLite
+		common.UsingSQLite = true
+		t.Cleanup(func() { common.UsingSQLite = oldSQLite })
+
+		channels := []GroupChannel{
+			{
+				ID:      1,
+				GroupID: "filter-a",
+				Name:    "primary",
+				Remark:  "Production",
+				Status:  ChannelStatusEnabled,
+			},
+			{
+				ID:         2,
+				GroupID:    "filter-a",
+				Name:       "backup",
+				Remark:     "Production",
+				BackupOnly: true,
+				Status:     ChannelStatusDisabled,
+			},
+			{ID: 3, GroupID: "filter-a", Name: "empty"},
+			{ID: 4, GroupID: "filter-a", Name: "legacy null"},
+			{
+				ID:         5,
+				GroupID:    "filter-b",
+				Name:       "other group",
+				Remark:     "Production",
+				BackupOnly: true,
+			},
+		}
+		require.NoError(t, DB.Create(&channels).Error)
+		require.NoError(t, DB.Model(&GroupChannel{}).Where("id = ?", 4).Update("remark", nil).Error)
+
+		for _, tt := range []struct {
+			name   string
+			filter GroupChannelFilter
+			ids    []int
+		}{
+			{name: "omitted", ids: []int{1, 2, 3, 4}},
+			{name: "empty includes null", filter: GroupChannelFilter{Remark: new("")}, ids: []int{3, 4}},
+			{name: "exact remark", filter: GroupChannelFilter{Remark: new("Production")}, ids: []int{1, 2}},
+			{name: "exact does not match substring", filter: GroupChannelFilter{Remark: new("Product")}},
+			{name: "primary only", filter: GroupChannelFilter{BackupOnly: new(false)}, ids: []int{1, 3, 4}},
+			{name: "combined", filter: GroupChannelFilter{Remark: new("Production"), BackupOnly: new(true)}, ids: []int{2}},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				got, total, err := GetGroupChannels(
+					"filter-a",
+					1,
+					20,
+					0,
+					"",
+					"",
+					0,
+					"",
+					"",
+					tt.filter,
+				)
+				require.NoError(t, err)
+				require.EqualValues(t, len(tt.ids), total)
+
+				ids := make([]int, 0, len(got))
+				for _, channel := range got {
+					ids = append(ids, channel.ID)
+				}
+
+				require.ElementsMatch(t, tt.ids, ids)
+			})
+		}
+
+		got, total, err := SearchGroupChannels(
+			"filter-a",
+			"duct",
+			1,
+			1,
+			0,
+			"",
+			"",
+			0,
+			"",
+			"",
+			GroupChannelFilter{BackupOnly: new(true)},
+		)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Len(t, got, 1)
+		require.Equal(t, 2, got[0].ID)
+
+		got, total, err = GetGlobalGroupChannels(
+			"",
+			1,
+			1,
+			0,
+			"",
+			"",
+			0,
+			"",
+			"",
+			GroupChannelFilter{BackupOnly: new(true)},
+		)
+		require.NoError(t, err)
+		require.EqualValues(t, 2, total)
+		require.Len(t, got, 1)
+
+		require.NoError(t, DB.Delete(&channels[1]).Error)
+
+		infos, err := GetGroupChannelsBasicInfoByIDs("filter-a", []int{2, 5})
+		require.NoError(t, err)
+		require.Len(t, infos, 1)
+		require.Equal(
+			t,
+			GroupChannelBasicInfo{
+				ID:         2,
+				GroupID:    "filter-a",
+				Name:       "backup",
+				Remark:     "Production",
+				BackupOnly: true,
+				Status:     ChannelStatusDisabled,
+			},
+			infos[0],
+		)
+
+		globalInfos, err := GetGlobalGroupChannelsBasicInfoByIDs([]int{2, 5})
+		require.NoError(t, err)
+		require.Len(t, globalInfos, 2)
+
+		got, total, err = SearchGroupChannels("filter-a", "Production", 1, 20, 0, "", "", 0, "", "")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Len(t, got, 1)
+		require.Equal(t, 1, got[0].ID)
+	})
+}
+
+func TestGroupChannelPatchEmptyAndWrongGroup(t *testing.T) {
+	withGroupChannelInsertDB(t, []string{"patch-owner", "patch-other"}, func() {
+		channel := &GroupChannel{GroupID: "patch-owner", Name: "original"}
+		require.NoError(t, DB.Create(channel).Error)
+		stale := *channel
+		require.NoError(
+			t,
+			UpdateGroupChannelPatch(channel, &GroupChannelPatch{Name: new("current")}),
+		)
+		require.NoError(t, UpdateGroupChannelPatch(&stale, &GroupChannelPatch{}))
+		require.Equal(t, "current", stale.Name)
+		stale.GroupID = "patch-other"
+		require.Error(
+			t,
+			UpdateGroupChannelPatch(&stale, &GroupChannelPatch{Name: new("wrong group")}),
+		)
+
+		loaded, err := GetGroupChannelByID("patch-owner", channel.ID)
+		require.NoError(t, err)
+		require.Equal(t, "current", loaded.Name)
+	})
 }

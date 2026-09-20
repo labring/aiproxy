@@ -336,7 +336,7 @@ func relayController(m mode.Mode) RelayController {
 		c.ValidateRequest = controller.ValidateDoubaoVideoRequest
 		c.GetRequestPrice = controller.GetDoubaoVideoRequestPrice
 		c.GetRequestUsage = controller.GetDoubaoVideoRequestUsage
-	case mode.Responses:
+	case mode.Responses, mode.ResponsesCompact:
 		c.GetRequestUsage = controller.GetResponsesRequestUsage
 	}
 
@@ -470,17 +470,8 @@ func prepareRelayAttempt(
 			channel.scope,
 			channel.channel.ID,
 		); err != nil {
-			consume.Summary(
-				http.StatusTooManyRequests,
-				time.Time{},
-				attemptMeta,
-				model.Usage{},
-				model.UsageContext{ServiceTier: attemptMeta.RequestServiceTier},
-				model.Price{},
-				true,
-			)
-
-			return nil, err
+			// Let the caller record a rejected initial request or retain the last retry result.
+			return &relayAttempt{meta: attemptMeta}, err
 		}
 	}
 
@@ -561,7 +552,20 @@ func relay(c *gin.Context, mode mode.Mode, relayController RelayController) {
 		true,
 	)
 	if err != nil {
+		if attempt != nil {
+			consume.Summary(
+				http.StatusTooManyRequests,
+				time.Time{},
+				attempt.meta,
+				model.Usage{},
+				model.UsageContext{ServiceTier: attempt.meta.RequestServiceTier},
+				model.Price{},
+				true,
+			)
+		}
+
 		abortRelayPreparationError(c, mode, err)
+
 		return
 	}
 
@@ -1073,7 +1077,21 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 		if !state.canRetry(i, time.Now()) || ctx.Err() != nil {
 			break
 		}
-		// when the last request has not recorded the result, record the result
+
+		attempt, err := prepareRelayAttempt(
+			c, mode, state.relayController, newChannel, state.modelCaches,
+			state.modelName, state.shouldCheckGroupModelLimit(newChannel),
+		)
+		if err != nil {
+			log.Warnf("prepare relay retry failed: %v", err)
+			break
+		}
+
+		if !state.canRetry(i, time.Now()) || ctx.Err() != nil {
+			break
+		}
+
+		// A prepared retry makes the previous attempt an intermediate result.
 		if state.meta != nil && state.result != nil {
 			recordResult(
 				c,
@@ -1094,15 +1112,6 @@ func retryLoop(c *gin.Context, mode mode.Mode, state *retryState, relayControlle
 			newChannel.channel.ID,
 			i+1,
 		)
-
-		attempt, err := prepareRelayAttempt(
-			c, mode, state.relayController, newChannel, state.modelCaches,
-			state.modelName, state.shouldCheckGroupModelLimit(newChannel),
-		)
-		if err != nil {
-			abortRelayPreparationError(c, mode, err)
-			return
-		}
 
 		state.markGroupModelLimitChecked(newChannel)
 		state.meta = attempt.meta

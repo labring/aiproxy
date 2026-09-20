@@ -312,6 +312,8 @@ func GetGroupChannelEnabledModelsSet(c *gin.Context) {
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -323,6 +325,12 @@ func GetGlobalGroupChannels(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
 
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	channels, total, err := model.GetGlobalGroupChannels(
 		c.Query("group"),
 		page,
@@ -333,6 +341,7 @@ func GetGlobalGroupChannels(c *gin.Context) {
 		channelType,
 		c.Query("base_url"),
 		c.Query("order"),
+		model.GroupChannelFilter{Remark: filter.Remark, BackupOnly: filter.BackupOnly},
 	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -357,6 +366,8 @@ func GetGlobalGroupChannels(c *gin.Context) {
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -368,6 +379,12 @@ func GetGroupChannels(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
 
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	channels, total, err := model.GetGroupChannels(
 		groupParam(c),
 		page,
@@ -378,6 +395,7 @@ func GetGroupChannels(c *gin.Context) {
 		channelType,
 		c.Query("base_url"),
 		c.Query("order"),
+		model.GroupChannelFilter{Remark: filter.Remark, BackupOnly: filter.BackupOnly},
 	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -403,6 +421,8 @@ func GetGroupChannels(c *gin.Context) {
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -413,6 +433,12 @@ func SearchGlobalGroupChannels(c *gin.Context) {
 	page, perPage := utils.ParsePageParams(c)
 	id, _ := strconv.Atoi(c.Query("id"))
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
+
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	channels, total, err := model.SearchGlobalGroupChannels(
 		c.Query("group"),
@@ -425,6 +451,7 @@ func SearchGlobalGroupChannels(c *gin.Context) {
 		channelType,
 		c.Query("base_url"),
 		c.Query("order"),
+		model.GroupChannelFilter{Remark: filter.Remark, BackupOnly: filter.BackupOnly},
 	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -450,6 +477,8 @@ func SearchGlobalGroupChannels(c *gin.Context) {
 //	@Param			per_page		query		int		false	"Items per page"
 //	@Param			id				query		int		false	"Filter by id"
 //	@Param			name			query		string	false	"Filter by name"
+//	@Param			remark			query		string	false	"Exact remark filter; empty matches channels without remarks"
+//	@Param			backup_only		query		bool	false	"Filter backup-only channels; omit for all channels"
 //	@Param			key				query		string	false	"Filter by key"
 //	@Param			channel_type	query		int		false	"Filter by channel type"
 //	@Param			base_url		query		string	false	"Filter by base URL"
@@ -460,6 +489,12 @@ func SearchGroupChannels(c *gin.Context) {
 	page, perPage := utils.ParsePageParams(c)
 	id, _ := strconv.Atoi(c.Query("id"))
 	channelType, _ := strconv.Atoi(c.Query("channel_type"))
+
+	filter, err := parseChannelFilter(c)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	channels, total, err := model.SearchGroupChannels(
 		groupParam(c),
@@ -472,6 +507,7 @@ func SearchGroupChannels(c *gin.Context) {
 		channelType,
 		c.Query("base_url"),
 		c.Query("order"),
+		model.GroupChannelFilter{Remark: filter.Remark, BackupOnly: filter.BackupOnly},
 	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -924,7 +960,7 @@ func GetGlobalGroupChannel(c *gin.Context) {
 //	@Security		ApiKeyAuth
 //	@Param			group	path		string					true	"Group ID"
 //	@Param			id		path		int						true	"Group channel ID"
-//	@Param			channel	body		AddGroupChannelRequest	true	"Updated group channel information"
+//	@Param			channel	body		UpdateGroupChannelRequest	true	"Optional group channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.GroupChannel}
 //	@Router			/api/group/{group}/channel/{id} [put]
 func UpdateGroupChannel(c *gin.Context) {
@@ -969,7 +1005,7 @@ func UpdateGroupChannel(c *gin.Context) {
 //	@Produce		json
 //	@Security		ApiKeyAuth
 //	@Param			id		path		int						true	"Group channel ID"
-//	@Param			channel	body		AddGroupChannelRequest	true	"Updated group channel information"
+//	@Param			channel	body		UpdateGroupChannelRequest	true	"Optional group channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.GroupChannel}
 //	@Router			/api/group_channel/{id} [put]
 func UpdateGlobalGroupChannel(c *gin.Context) {
@@ -1002,7 +1038,7 @@ func UpdateGlobalGroupChannel(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, ch)
+	middleware.SuccessResponse(c, updated)
 }
 
 // DeleteGroupChannel godoc

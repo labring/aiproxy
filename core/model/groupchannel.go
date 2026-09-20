@@ -226,12 +226,22 @@ func getGroupChannelOrder(order string) string {
 	}
 }
 
+type GroupChannelFilter struct {
+	Remark     *string
+	BackupOnly *bool
+}
+
+func applyGroupChannelFilter(tx *gorm.DB, filter GroupChannelFilter) *gorm.DB {
+	return (ChannelFilter{Remark: filter.Remark, BackupOnly: filter.BackupOnly}).apply(tx)
+}
+
 func buildGroupChannelsQuery(
 	group string,
 	id int,
 	name, key string,
 	channelType int,
 	baseURL string,
+	filter ...GroupChannelFilter,
 ) *gorm.DB {
 	tx := DB.Model(&GroupChannel{})
 	if group != "" {
@@ -258,6 +268,10 @@ func buildGroupChannelsQuery(
 		tx = tx.Where("base_url = ?", baseURL)
 	}
 
+	if len(filter) > 0 {
+		tx = applyGroupChannelFilter(tx, filter[0])
+	}
+
 	return tx
 }
 
@@ -267,8 +281,9 @@ func GetGlobalGroupChannels(
 	name, key string,
 	channelType int,
 	baseURL, order string,
+	filter ...GroupChannelFilter,
 ) (channels []*GroupChannel, total int64, err error) {
-	tx := buildGroupChannelsQuery(group, id, name, key, channelType, baseURL)
+	tx := buildGroupChannelsQuery(group, id, name, key, channelType, baseURL, filter...)
 
 	err = tx.Count(&total).Error
 	if err != nil || total <= 0 {
@@ -287,6 +302,7 @@ func GetGroupChannels(
 	name, key string,
 	channelType int,
 	baseURL, order string,
+	filter ...GroupChannelFilter,
 ) (channels []*GroupChannel, total int64, err error) {
 	if group == "" {
 		return nil, 0, errors.New("group id is required")
@@ -302,6 +318,7 @@ func GetGroupChannels(
 		channelType,
 		baseURL,
 		order,
+		filter...,
 	)
 }
 
@@ -311,8 +328,9 @@ func SearchGlobalGroupChannels(
 	name, key string,
 	channelType int,
 	baseURL, order string,
+	filter ...GroupChannelFilter,
 ) (channels []*GroupChannel, total int64, err error) {
-	tx := buildGroupChannelsQuery(group, id, name, key, channelType, baseURL)
+	tx := buildGroupChannelsQuery(group, id, name, key, channelType, baseURL, filter...)
 	if keyword != "" {
 		var (
 			conditions []string
@@ -334,6 +352,13 @@ func SearchGlobalGroupChannels(
 
 			values = append(values, "%"+keyword+"%")
 		}
+
+		conditions = append(conditions, "remark LIKE ?")
+		if !common.UsingSQLite {
+			conditions[len(conditions)-1] = "remark ILIKE ?"
+		}
+
+		values = append(values, "%"+keyword+"%")
 
 		if key == "" {
 			if !common.UsingSQLite {
@@ -384,6 +409,7 @@ func SearchGroupChannels(
 	name, key string,
 	channelType int,
 	baseURL, order string,
+	filter ...GroupChannelFilter,
 ) (channels []*GroupChannel, total int64, err error) {
 	if group == "" {
 		return nil, 0, errors.New("group id is required")
@@ -400,6 +426,7 @@ func SearchGroupChannels(
 		channelType,
 		baseURL,
 		order,
+		filter...,
 	)
 }
 
@@ -518,10 +545,13 @@ func LoadGlobalGroupChannelByID(id int) (*GroupChannel, error) {
 }
 
 type GroupChannelBasicInfo struct {
-	GroupID string      `json:"group_id"`
-	Name    string      `json:"name"`
-	ID      int         `json:"id"`
-	Type    ChannelType `json:"type"`
+	GroupID    string      `json:"group_id"`
+	Name       string      `json:"name"`
+	Remark     string      `json:"remark,omitempty"`
+	BackupOnly bool        `json:"backup_only"`
+	Status     int         `json:"status"`
+	ID         int         `json:"id"`
+	Type       ChannelType `json:"type"`
 }
 
 func GetGlobalGroupChannelsBasicInfoByIDs(ids []int) ([]GroupChannelBasicInfo, error) {
@@ -531,9 +561,9 @@ func GetGlobalGroupChannelsBasicInfoByIDs(ids []int) ([]GroupChannelBasicInfo, e
 
 	var channels []GroupChannelBasicInfo
 
-	err := DB.Model(&GroupChannel{}).
+	err := DB.Unscoped().Model(&GroupChannel{}).
 		Where("id IN ?", ids).
-		Select("id", "group_id", "name", "type").
+		Select("id", "group_id", "name", "remark", "backup_only", "status", "type").
 		Order("id desc").
 		Find(&channels).
 		Error
@@ -555,9 +585,9 @@ func GetGroupChannelsBasicInfoByIDs(
 
 	var channels []GroupChannelBasicInfo
 
-	err := DB.Model(&GroupChannel{}).
+	err := DB.Unscoped().Model(&GroupChannel{}).
 		Where("group_id = ? AND id IN ?", group, ids).
-		Select("id", "group_id", "name", "type").
+		Select("id", "group_id", "name", "remark", "backup_only", "status", "type").
 		Order("id desc").
 		Find(&channels).
 		Error
@@ -694,7 +724,7 @@ func UpdateGroupChannelPatch(channel *GroupChannel, patch *GroupChannelPatch) (e
 		}
 	}()
 
-	result := DB.Model(&GroupChannel{}).
+	result := DB.Model(channel).
 		Clauses(clause.Returning{}).
 		Where("group_id = ? AND id = ?", channel.GroupID, channel.ID).
 		Updates(patch)

@@ -1043,9 +1043,9 @@ func UpdateGroupChannelTokenUsedAmount(id int, amount float64, requestCount int)
 	return HandleUpdateResult(result, ErrTokenNotFound)
 }
 
-// calculateNextPeriodStartTime calculates the next period start time based on the last update time and period type
-// This finds the most recent period boundary by incrementing from lastUpdateTime until we reach the current time
-// This maintains period continuity - e.g., if reset was on Jan 15, next periods are Feb 15, Mar 15, etc.
+// calculateNextPeriodStartTime finds the current period boundary. Daily quotas
+// align to UTC midnight; weekly and monthly quotas retain their original
+// cadence from lastUpdateTime.
 func calculateNextPeriodStartTime(lastUpdateTime time.Time, periodType EmptyNullString) time.Time {
 	if lastUpdateTime.IsZero() {
 		// If never initialized, return current time
