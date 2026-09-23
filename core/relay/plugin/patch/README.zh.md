@@ -5,7 +5,7 @@ Patch 插件提供了强大的 JSON 请求修改功能，使用 sonic 库实现�
 ## 功能特性
 
 - **高性能**: 使用字节跳动的 sonic 库进行快速 JSON 解析和操作
-- **预定义补丁**: 内置常见场景的补丁（DeepSeek max_tokens 限制、GPT-5 兼容性等）
+- **预定义补丁**: 内置常见场景的补丁（DeepSeek max_tokens 限制、GPT-5/GPT-6 兼容性等）
 - **用户自定义补丁**: 灵活的配置系统支持自定义补丁
 - **条件逻辑**: 基于模型类型、字段值或复杂条件应用补丁
 - **多种操作**: 支持设置、删除、添加和限制 JSON 字段的操作
@@ -21,9 +21,9 @@ Patch 插件提供了强大的 JSON 请求修改功能，使用 sonic 库实现�
 - **条件**: 模型名称包含 "deepseek"
 - **操作**: 将 `max_tokens` 字段限制为最大 16000
 
-### 2. GPT-5 Max Tokens 转换
-- **目的**: 为 GPT-5 模型将 `max_tokens` 转换为 `max_completion_tokens`
-- **条件**: 模型名称包含 "gpt-5" 且存在 `max_tokens` 字段
+### 2. GPT-5/GPT-6 Max Tokens 转换
+- **目的**: 为 GPT-5 和 GPT-6 模型将 `max_tokens` 转换为 `max_completion_tokens`
+- **条件**: 模型名称以 `gpt-5` 或 `gpt-6` 开头且存在 `max_tokens` 字段
 - **操作**: 
   - 将 `max_completion_tokens` 设置为 `max_tokens` 的值
   - 删除 `max_tokens` 字段
@@ -95,7 +95,7 @@ patch插件从数据库中模型的插件配置中加载配置。配置应存储
 插件包含内置的预定义补丁，这些补丁始终启用：
 
 - **DeepSeek max_tokens限制**: 自动将DeepSeek模型的`max_tokens`限制为16000
-- **GPT-5兼容性**: 为GPT-5模型将`max_tokens`转换为`max_completion_tokens`
+- **GPT-5/GPT-6兼容性**: 为GPT-5和GPT-6模型将`max_tokens`转换为`max_completion_tokens`
 - **O1模型兼容性**: 为o1、o1-preview和o1-mini模型进行相同转换
 - **Claude max_tokens限制**: 将Claude模型的`max_tokens`限制为8192
 - **Stream选项清理**: 为较旧的GPT模型移除不支持的`stream_options`

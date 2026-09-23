@@ -5,7 +5,7 @@ The Patch Plugin provides powerful JSON request modification capabilities using 
 ## Features
 
 - **High Performance**: Uses ByteDance's sonic library for fast JSON parsing and manipulation
-- **Predefined Patches**: Built-in patches for common scenarios (DeepSeek max_tokens limits, GPT-5 compatibility, etc.)
+- **Predefined Patches**: Built-in patches for common scenarios (DeepSeek max_tokens limits, GPT-5/GPT-6 compatibility, etc.)
 - **User-Defined Patches**: Flexible configuration system for custom patches
 - **Conditional Logic**: Apply patches based on model types, field values, or complex conditions
 - **Multiple Operations**: Set, delete, add, and limit operations on JSON fields
@@ -21,9 +21,9 @@ The plugin comes with several built-in patches:
 - **Condition**: Model name contains "deepseek"
 - **Operation**: Limits `max_tokens` field to maximum 16000
 
-### 2. GPT-5 Max Tokens Conversion
-- **Purpose**: Converts `max_tokens` to `max_completion_tokens` for GPT-5 models
-- **Condition**: Model name contains "gpt-5" and `max_tokens` field exists
+### 2. GPT-5/GPT-6 Max Tokens Conversion
+- **Purpose**: Converts `max_tokens` to `max_completion_tokens` for GPT-5 and GPT-6 models
+- **Condition**: Model name starts with `gpt-5` or `gpt-6` and `max_tokens` field exists
 - **Operation**: 
   - Sets `max_completion_tokens` to the value of `max_tokens`
   - Removes the `max_tokens` field
@@ -95,7 +95,7 @@ Example model config plugin configuration:
 The plugin comes with built-in predefined patches that are always enabled:
 
 - **DeepSeek max_tokens limit**: Automatically limits `max_tokens` to 16000 for DeepSeek models
-- **GPT-5 compatibility**: Converts `max_tokens` to `max_completion_tokens` for GPT-5 models
+- **GPT-5/GPT-6 compatibility**: Converts `max_tokens` to `max_completion_tokens` for GPT-5 and GPT-6 models
 - **O1 models compatibility**: Same conversion for o1, o1-preview, and o1-mini models
 - **Claude max_tokens limit**: Limits `max_tokens` to 8192 for Claude models
 - **Stream options cleanup**: Removes unsupported `stream_options` for older GPT models

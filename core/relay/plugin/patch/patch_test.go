@@ -93,7 +93,7 @@ func TestApplyPatches_DeepSeekMaxTokensLimit(t *testing.T) {
 	}
 }
 
-func TestApplyPatches_GPT5MaxTokensConversion(t *testing.T) {
+func TestApplyPatches_GPTReasoningMaxTokensConversion(t *testing.T) {
 	plugin := patch.NewPatchPlugin()
 	config := &patch.Config{}
 
@@ -114,6 +114,18 @@ func TestApplyPatches_GPT5MaxTokensConversion(t *testing.T) {
 				"temperature": 0.7,
 			},
 			actualModel:                   "gpt-5",
+			expectedMaxCompletionTokens:   4000,
+			shouldHaveMaxTokens:           false,
+			shouldModify:                  true,
+			shouldHaveMaxCompletionTokens: true,
+		},
+		{
+			name: "gpt-6 model with max_tokens",
+			input: map[string]any{
+				"model":      "gpt-6-luna",
+				"max_tokens": 4000,
+			},
+			actualModel:                   "gpt-6-luna",
 			expectedMaxCompletionTokens:   4000,
 			shouldHaveMaxTokens:           false,
 			shouldModify:                  true,

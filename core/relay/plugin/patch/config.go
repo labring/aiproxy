@@ -159,13 +159,13 @@ var DefaultPredefinedPatches = []PatchRule{
 		},
 	},
 	{
-		Name:        "gpt5_max_tokens_to_max_completion_tokens",
-		Description: "Convert max_tokens to max_completion_tokens for GPT-5 models",
+		Name:        "gpt_reasoning_max_tokens_to_max_completion_tokens",
+		Description: "Convert max_tokens to max_completion_tokens for GPT-5 and GPT-6 models",
 		Conditions: []PatchCondition{
 			{
 				Key:      "model",
-				Operator: OperatorContains,
-				Value:    "gpt-5",
+				Operator: OperatorRegex,
+				Value:    `gpt-[56](?:[.-]|$)`,
 			},
 			{
 				Key:      "max_tokens",
