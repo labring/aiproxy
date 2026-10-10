@@ -1,6 +1,7 @@
 package env
 
 import (
+	"math"
 	"os"
 	"strconv"
 
@@ -95,4 +96,15 @@ func JSON[T any](env string, defaultValue T) T {
 	}
 
 	return t
+}
+
+// PositiveInt64 reads a positive decimal integer, retaining the default for invalid limits.
+func PositiveInt64(name string, defaultValue int64) int64 {
+	value := Int64(name, defaultValue)
+	if value <= 0 || value == math.MaxInt64 {
+		log.Errorf("invalid %s: expected a positive integer below MaxInt64", name)
+		return defaultValue
+	}
+
+	return value
 }

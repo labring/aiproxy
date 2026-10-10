@@ -20,6 +20,7 @@ import (
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/image"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -890,13 +891,13 @@ func multipartAliVideoFileToDataURL(
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(common.LimitReader(file, common.MaxRequestBodySize+1))
+	data, err := io.ReadAll(common.LimitReader(file, config.MaxRequestBodySize+1))
 	if err != nil {
 		return "", err
 	}
 
-	if len(data) > common.MaxRequestBodySize {
-		return "", fmt.Errorf("video too large: max: %d", common.MaxRequestBodySize)
+	if int64(len(data)) > config.MaxRequestBodySize {
+		return "", fmt.Errorf("video too large: max: %d", config.MaxRequestBodySize)
 	}
 
 	contentType := fileHeader.Header.Get("Content-Type")
@@ -918,13 +919,13 @@ func multipartVideoReferenceFileToDataURL(fileHeader *multipart.FileHeader) (str
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(common.LimitReader(file, image.MaxImageSize+1))
+	data, err := io.ReadAll(common.LimitReader(file, config.MaxImageSize+1))
 	if err != nil {
 		return "", err
 	}
 
-	if len(data) > image.MaxImageSize {
-		return "", fmt.Errorf("input_reference too large: max: %d", image.MaxImageSize)
+	if int64(len(data)) > config.MaxImageSize {
+		return "", fmt.Errorf("input_reference too large: max: %d", config.MaxImageSize)
 	}
 
 	contentType := fileHeader.Header.Get("Content-Type")

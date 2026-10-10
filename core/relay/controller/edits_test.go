@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/stretchr/testify/require"
 )
@@ -100,7 +100,7 @@ func TestValidateImagesEditsRequestWrapsParseError(t *testing.T) {
 		strings.NewReader("--test\r\n"),
 	)
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=test")
-	req.ContentLength = common.MaxRequestBodySize + 1
+	req.ContentLength = config.MaxRequestBodySize + 1
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = req

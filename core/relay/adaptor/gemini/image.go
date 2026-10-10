@@ -17,6 +17,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	commonimage "github.com/labring/aiproxy/core/common/image"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -295,15 +296,15 @@ func geminiImagePartFromFile(
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(common.LimitReader(file, commonimage.MaxImageSize+1))
+	data, err := io.ReadAll(common.LimitReader(file, config.MaxImageSize+1))
 	if err != nil {
 		return nil, err
 	}
 
-	if len(data) > commonimage.MaxImageSize {
+	if int64(len(data)) > config.MaxImageSize {
 		return nil, convertRequestError(
 			meta,
-			fmt.Sprintf("image too large: max: %d", commonimage.MaxImageSize),
+			fmt.Sprintf("image too large: max: %d", config.MaxImageSize),
 		)
 	}
 
