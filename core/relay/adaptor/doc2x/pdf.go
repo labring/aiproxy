@@ -68,6 +68,11 @@ const (
 	StatusResponseDataStatusFailed     = "failed"
 )
 
+const (
+	statusPollInterval = time.Second
+	statusPollTimeout  = 10 * time.Minute
+)
+
 func isSuccessfulResponseCode(code string) bool {
 	return code == "success" || code == "ok"
 }
@@ -106,17 +111,30 @@ func HandleParsePdfResponse(
 
 	// The accepted job can incur charges even after the client disconnects.
 	// Keep polling independently, with a bounded lifetime for stalled upstream jobs.
-	ctx, cancel := context.WithTimeout(context.Background(), config.Doc2XStatusTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), statusPollTimeout)
 	defer cancel()
 
+	result, pollErr := waitForParsePdf(ctx, meta, response.Data.UID)
+	if pollErr != nil {
+		return adaptor.DoResponseResult{}, pollErr
+	}
+
+	return handleParsePdfResponse(meta, c, result)
+}
+
+func waitForParsePdf(
+	ctx context.Context,
+	meta *meta.Meta,
+	uid string,
+) (*StatusResponseDataResult, adaptor.Error) {
 	for ctx.Err() == nil {
-		status, err := GetStatus(ctx, meta, response.Data.UID)
+		status, err := GetStatus(ctx, meta, uid)
 		if err != nil {
 			if ctx.Err() != nil {
 				break
 			}
 
-			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			return nil, relaymodel.WrapperOpenAIErrorWithMessage(
 				"get status failed: "+err.Error(),
 				"get_status_failed",
 				http.StatusInternalServerError,
@@ -126,27 +144,27 @@ func HandleParsePdfResponse(
 		switch status.Status {
 		case StatusResponseDataStatusSuccess:
 			if status.Result == nil {
-				return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+				return nil, relaymodel.WrapperOpenAIErrorWithMessage(
 					"parse pdf failed: result is empty",
 					"parse_pdf_failed",
 					http.StatusBadGateway,
 				)
 			}
 
-			return handleParsePdfResponse(meta, c, status.Result)
+			return status.Result, nil
 		case StatusResponseDataStatusReady, StatusResponseDataStatusProcessing:
 			select {
 			case <-ctx.Done():
-			case <-time.After(config.Doc2XStatusPollInterval):
+			case <-time.After(statusPollInterval):
 			}
 		case StatusResponseDataStatusFailed:
-			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			return nil, relaymodel.WrapperOpenAIErrorWithMessage(
 				"parse pdf failed: "+status.Detail,
 				"parse_pdf_failed",
 				http.StatusBadRequest,
 			)
 		default:
-			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			return nil, relaymodel.WrapperOpenAIErrorWithMessage(
 				"get status failed: unknown status "+status.Status,
 				"get_status_failed",
 				http.StatusBadGateway,
@@ -154,7 +172,7 @@ func HandleParsePdfResponse(
 		}
 	}
 
-	return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+	return nil, relaymodel.WrapperOpenAIErrorWithMessage(
 		"get status failed: process timeout",
 		"get_status_timeout",
 		http.StatusGatewayTimeout,

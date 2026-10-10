@@ -4,7 +4,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/bytedance/sonic"
 	log "github.com/sirupsen/logrus"
@@ -104,22 +103,6 @@ func PositiveInt64(name string, defaultValue int64) int64 {
 	value := Int64(name, defaultValue)
 	if value <= 0 || value == math.MaxInt64 {
 		log.Errorf("invalid %s: expected a positive integer below MaxInt64", name)
-		return defaultValue
-	}
-
-	return value
-}
-
-// PositiveDuration reads a Go duration such as 500ms or 10m.
-func PositiveDuration(name string, defaultValue time.Duration) time.Duration {
-	raw := os.Getenv(name)
-	if raw == "" {
-		return defaultValue
-	}
-
-	value, err := time.ParseDuration(raw)
-	if err != nil || value <= 0 {
-		log.Errorf("invalid %s: expected a positive duration", name)
 		return defaultValue
 	}
 

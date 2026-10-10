@@ -144,20 +144,18 @@ ADMIN_KEY=your-admin-key        # Admin API key
 DISABLE_WEB_ROOT=true           # Redirect only `/` to GitHub, keep other web routes available
 ```
 
-#### **Body limits and Doc2X polling**
+#### **Body limits**
 
-These values are read at startup. Size limits use positive decimal byte counts; durations use Go syntax (`500ms`, `10m`). Unset or invalid values retain the defaults below. Restart after changing them.
+These values are read at startup. Size limits use positive decimal byte counts. Unset or invalid values retain the defaults below. Restart after changing them.
 
 ```bash
 MAX_REQUEST_BODY_SIZE=52428800       # 50 MiB; also caps decompressed requests
 MAX_RESPONSE_BODY_SIZE=209715200     # 200 MiB for buffered upstream responses
 MULTIPART_FORM_MEMORY_LIMIT=4194304   # 4 MiB; larger file parts spill to disk
 MAX_IMAGE_SIZE=10485760              # 10 MiB for image reads using the image limit
-DOC2X_STATUS_POLL_INTERVAL=1s
-DOC2X_STATUS_TIMEOUT=10m             # Total status polling time after receiving a task UID
 ```
 
-Doc2X polling continues after client disconnection so completed jobs retain page usage for billing. Each status request still respects the model request timeout. Failed or timed-out jobs do not report successful usage.
+Doc2X polling continues after client disconnection so completed jobs retain page usage for billing. Polling uses a fixed 1-second interval and a 10-minute total timeout after receiving the task UID. Each status request still respects the model request timeout. Failed or timed-out jobs do not report successful usage.
 
 #### **Database Configuration**
 

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/consume"
 	"github.com/labring/aiproxy/core/model"
 	relaycontroller "github.com/labring/aiproxy/core/relay/controller"
@@ -50,10 +49,6 @@ func TestJoinMarkdownPagesPreservesPageBoundary(t *testing.T) {
 }
 
 func TestHandleParsePdfResponsePollsReadyUntilSuccess(t *testing.T) {
-	oldInterval := config.Doc2XStatusPollInterval
-	config.Doc2XStatusPollInterval = 0
-	t.Cleanup(func() { config.Doc2XStatusPollInterval = oldInterval })
-
 	var calls int
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,10 +96,6 @@ func TestHandleParsePdfResponsePollsReadyUntilSuccess(t *testing.T) {
 }
 
 func TestDisconnectedPDFJobRetainsBillableUsage(t *testing.T) {
-	oldInterval := config.Doc2XStatusPollInterval
-	config.Doc2XStatusPollInterval = time.Millisecond
-	t.Cleanup(func() { config.Doc2XStatusPollInterval = oldInterval })
-
 	for _, phase := range []string{"submission", "polling"} {
 		t.Run(phase, func(t *testing.T) {
 			clientCtx, disconnect := context.WithCancel(t.Context())
@@ -215,12 +206,6 @@ func TestDisconnectedPDFJobRetainsBillableUsage(t *testing.T) {
 }
 
 func TestStatusPollingHasIndependentTimeout(t *testing.T) {
-	oldTimeout, oldInterval := config.Doc2XStatusTimeout, config.Doc2XStatusPollInterval
-	config.Doc2XStatusTimeout, config.Doc2XStatusPollInterval = 30*time.Millisecond, time.Second
-	t.Cleanup(
-		func() { config.Doc2XStatusTimeout, config.Doc2XStatusPollInterval = oldTimeout, oldInterval },
-	)
-
 	for _, stalledRequest := range []bool{false, true} {
 		t.Run(strconv.FormatBool(stalledRequest), func(t *testing.T) {
 			server := httptest.NewServer(
@@ -235,22 +220,17 @@ func TestStatusPollingHasIndependentTimeout(t *testing.T) {
 			)
 			defer server.Close()
 
-			c, _ := gin.CreateTestContext(httptest.NewRecorder())
-			clientCtx, cancel := context.WithCancel(t.Context())
-			cancel()
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
+			defer cancel()
 
-			c.Request = httptest.NewRequestWithContext(clientCtx, http.MethodPost, "/", nil)
 			m := &meta.Meta{
 				Channel:        meta.ChannelMeta{BaseURL: server.URL},
 				RequestTimeout: time.Second,
 			}
-			resp := &http.Response{
-				Body: io.NopCloser(strings.NewReader(`{"code":"ok","data":{"uid":"timeout-job"}}`)),
-			}
-			result, relayErr := HandleParsePdfResponse(m, c, resp)
+			result, relayErr := waitForParsePdf(ctx, m, "timeout-job")
 			require.NotNil(t, relayErr)
 			require.Equal(t, http.StatusGatewayTimeout, relayErr.StatusCode())
-			require.Zero(t, result.Usage.TotalTokens)
+			require.Nil(t, result)
 		})
 	}
 }
