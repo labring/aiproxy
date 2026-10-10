@@ -145,6 +145,21 @@ ADMIN_KEY=your-admin-key        # 管理员 API 密钥
 DISABLE_WEB_ROOT=true           # 仅将 `/` 重定向到 GitHub，其他 Web 路径保持可访问
 ```
 
+#### **请求大小限制与 Doc2X 轮询**
+
+以下配置在启动时读取。大小填写正整数，单位为字节；时长使用 Go 格式（如 `500ms`、`10m`）。未设置或无效值使用下列默认值，修改后需重启。
+
+```bash
+MAX_REQUEST_BODY_SIZE=52428800       # 50 MiB，同时限制解压后的请求体
+MAX_RESPONSE_BODY_SIZE=209715200     # 200 MiB，限制缓冲读取的上游响应
+MULTIPART_FORM_MEMORY_LIMIT=4194304   # 4 MiB，超出的上传文件内容写入临时文件
+MAX_IMAGE_SIZE=10485760              # 10 MiB，限制使用图片大小检查的读取
+DOC2X_STATUS_POLL_INTERVAL=1s
+DOC2X_STATUS_TIMEOUT=10m             # 收到任务 UID 后状态查询的总超时
+```
+
+Doc2X 在客户端断开后继续查询任务结果，保留成功任务的页数用量用于计费。单次状态请求仍受模型请求超时限制。任务失败或查询超时不会上报成功用量。
+
 #### **数据库配置**
 
 ```bash

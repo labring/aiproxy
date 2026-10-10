@@ -16,6 +16,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	commonimage "github.com/labring/aiproxy/core/common/image"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
@@ -65,10 +66,7 @@ const (
 	StatusResponseDataStatusReady      = "ready"
 	StatusResponseDataStatusProcessing = "processing"
 	StatusResponseDataStatusFailed     = "failed"
-	statusPollMaxAttempts              = 600
 )
-
-var statusPollInterval = time.Second
 
 func isSuccessfulResponseCode(code string) bool {
 	return code == "success" || code == "ok"
@@ -106,10 +104,18 @@ func HandleParsePdfResponse(
 		)
 	}
 
-	ctx := c.Request.Context()
-	for attempt := range statusPollMaxAttempts {
+	// The accepted job can incur charges even after the client disconnects.
+	// Keep polling independently, with a bounded lifetime for stalled upstream jobs.
+	ctx, cancel := context.WithTimeout(context.Background(), config.Doc2XStatusTimeout)
+	defer cancel()
+
+	for ctx.Err() == nil {
 		status, err := GetStatus(ctx, meta, response.Data.UID)
 		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+
 			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 				"get status failed: "+err.Error(),
 				"get_status_failed",
@@ -129,18 +135,9 @@ func HandleParsePdfResponse(
 
 			return handleParsePdfResponse(meta, c, status.Result)
 		case StatusResponseDataStatusReady, StatusResponseDataStatusProcessing:
-			if attempt == statusPollMaxAttempts-1 {
-				break
-			}
-
 			select {
 			case <-ctx.Done():
-				return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
-					"get status canceled: "+ctx.Err().Error(),
-					"get_status_canceled",
-					http.StatusRequestTimeout,
-				)
-			case <-time.After(statusPollInterval):
+			case <-time.After(config.Doc2XStatusPollInterval):
 			}
 		case StatusResponseDataStatusFailed:
 			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
@@ -507,7 +504,7 @@ func imageURL2MdBase64(ctx context.Context, m *meta.Meta, url, altText string) (
 
 	defer resp.Body.Close()
 
-	data, err := common.GetResponseBodyLimit(resp, commonimage.MaxImageSize)
+	data, err := common.GetResponseBodyLimit(resp, config.MaxImageSize)
 	if err != nil {
 		return "", fmt.Errorf("failed to read image data: %w", err)
 	}
@@ -569,6 +566,14 @@ func handleParsePdfResponse(
 	c *gin.Context,
 	response *StatusResponseDataResult,
 ) (adaptor.DoResponseResult, adaptor.Error) {
+	usage := model.Usage{
+		InputTokens: model.ZeroNullInt64(len(response.Pages)),
+		TotalTokens: model.ZeroNullInt64(len(response.Pages)),
+	}
+	if c.Request.Context().Err() != nil {
+		return adaptor.DoResponseResult{Usage: usage}, nil
+	}
+
 	mds := make([]string, 0, len(response.Pages))
 
 	totalLength := 0
@@ -601,10 +606,7 @@ func handleParsePdfResponse(
 		})
 	}
 
-	return adaptor.DoResponseResult{Usage: model.Usage{
-		InputTokens: model.ZeroNullInt64(pages),
-		TotalTokens: model.ZeroNullInt64(pages),
-	}}, nil
+	return adaptor.DoResponseResult{Usage: usage}, nil
 }
 
 type StatusResponse struct {

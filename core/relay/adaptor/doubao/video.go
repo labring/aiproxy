@@ -18,6 +18,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	coremodel "github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -911,13 +912,13 @@ func multipartMediaDataURL(fileHeader *multipart.FileHeader, mediaType string) (
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(common.LimitReader(file, common.MaxRequestBodySize+1))
+	data, err := io.ReadAll(common.LimitReader(file, config.MaxRequestBodySize+1))
 	if err != nil {
 		return "", err
 	}
 
-	if len(data) > common.MaxRequestBodySize {
-		return "", fmt.Errorf("%s too large: max: %d", mediaType, common.MaxRequestBodySize)
+	if int64(len(data)) > config.MaxRequestBodySize {
+		return "", fmt.Errorf("%s too large: max: %d", mediaType, config.MaxRequestBodySize)
 	}
 
 	contentType := fileHeader.Header.Get("Content-Type")

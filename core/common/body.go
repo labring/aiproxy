@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/klauspost/compress/zstd"
+	"github.com/labring/aiproxy/core/common/config"
 )
 
 type reusableRequestBody struct {
@@ -33,13 +34,6 @@ func (b *reusableRequestBody) Bytes() []byte {
 	return b.body
 }
 
-const (
-	MaxRequestBodySize  = 1024 * 1024 * 50  // 50MB
-	MaxResponseBodySize = 1024 * 1024 * 200 // 200MB
-
-	multipartFormMemoryLimit = 4 * 1024 * 1024
-)
-
 func LimitReader(r io.Reader, n int64) io.Reader { return &LimitedReader{r, n} }
 
 func ParseMultipartFormWithLimit(req *http.Request) error {
@@ -47,23 +41,23 @@ func ParseMultipartFormWithLimit(req *http.Request) error {
 		return err
 	}
 
-	if req.ContentLength > 0 && req.ContentLength > MaxRequestBodySize {
+	if req.ContentLength > 0 && req.ContentLength > config.MaxRequestBodySize {
 		return fmt.Errorf(
 			"request body too large: %d, max: %d",
 			req.ContentLength,
-			MaxRequestBodySize,
+			config.MaxRequestBodySize,
 		)
 	}
 
 	originalBody := req.Body
 
-	req.Body = http.MaxBytesReader(nil, req.Body, MaxRequestBodySize)
+	req.Body = http.MaxBytesReader(nil, req.Body, config.MaxRequestBodySize)
 	defer func() {
 		req.Body = originalBody
 	}()
 
 	// #nosec G120 -- ContentLength is checked above and Body is capped by MaxBytesReader.
-	return req.ParseMultipartForm(multipartFormMemoryLimit)
+	return req.ParseMultipartForm(config.MultipartFormMemoryLimit)
 }
 
 func ParseFormWithLimit(req *http.Request) error {
@@ -71,17 +65,17 @@ func ParseFormWithLimit(req *http.Request) error {
 		return err
 	}
 
-	if req.ContentLength > 0 && req.ContentLength > MaxRequestBodySize {
+	if req.ContentLength > 0 && req.ContentLength > config.MaxRequestBodySize {
 		return fmt.Errorf(
 			"request body too large: %d, max: %d",
 			req.ContentLength,
-			MaxRequestBodySize,
+			config.MaxRequestBodySize,
 		)
 	}
 
 	originalBody := req.Body
 
-	req.Body = http.MaxBytesReader(nil, req.Body, MaxRequestBodySize)
+	req.Body = http.MaxBytesReader(nil, req.Body, config.MaxRequestBodySize)
 	defer func() {
 		req.Body = originalBody
 	}()
@@ -146,7 +140,7 @@ func GetRequestBodyLimit(req *http.Request, n int64) ([]byte, error) {
 }
 
 func GetRequestBody(req *http.Request) ([]byte, error) {
-	return GetRequestBodyLimit(req, MaxRequestBodySize)
+	return GetRequestBodyLimit(req, config.MaxRequestBodySize)
 }
 
 func SetRequestBody(req *http.Request, body []byte) {
@@ -198,7 +192,7 @@ func GetRequestBodyReusable(req *http.Request) ([]byte, error) {
 		}
 	}()
 
-	buf, err := GetBodyLimit(req.Body, req.ContentLength, MaxRequestBodySize)
+	buf, err := GetBodyLimit(req.Body, req.ContentLength, config.MaxRequestBodySize)
 	if err != nil {
 		return nil, fmt.Errorf("request body read failed: %w", err)
 	}
@@ -226,7 +220,7 @@ func decodeZstdRequest(req *http.Request) error {
 		defer originalBody.Close()
 	}
 
-	compressed, err := GetBodyLimit(req.Body, req.ContentLength, MaxRequestBodySize)
+	compressed, err := GetBodyLimit(req.Body, req.ContentLength, config.MaxRequestBodySize)
 	if err != nil {
 		return fmt.Errorf("request body read failed: %w", err)
 	}
@@ -245,8 +239,8 @@ func decodeZstdRequest(req *http.Request) error {
 func decodeZstdRequestBody(compressed []byte) ([]byte, error) {
 	decoder, err := zstd.NewReader(
 		nil,
-		zstd.WithDecoderMaxMemory(MaxRequestBodySize),
-		zstd.WithDecoderMaxWindow(MaxRequestBodySize),
+		zstd.WithDecoderMaxMemory(uint64(max(config.MaxRequestBodySize, 0))),
+		zstd.WithDecoderMaxWindow(uint64(max(config.MaxRequestBodySize, 0))),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("zstd decoder initialization failed: %w", err)
@@ -258,18 +252,18 @@ func decodeZstdRequestBody(compressed []byte) ([]byte, error) {
 		if errors.Is(err, zstd.ErrDecoderSizeExceeded) {
 			return nil, fmt.Errorf(
 				"decompressed request body too large, max: %d",
-				MaxRequestBodySize,
+				config.MaxRequestBodySize,
 			)
 		}
 
 		return nil, fmt.Errorf("zstd request body decode failed: %w", err)
 	}
 
-	if int64(len(decoded)) > MaxRequestBodySize {
+	if int64(len(decoded)) > config.MaxRequestBodySize {
 		return nil, fmt.Errorf(
 			"decompressed request body too large: %d, max: %d",
 			len(decoded),
-			MaxRequestBodySize,
+			config.MaxRequestBodySize,
 		)
 	}
 
@@ -329,7 +323,7 @@ func GetResponseBodyLimit(resp *http.Response, n int64) ([]byte, error) {
 }
 
 func GetResponseBody(resp *http.Response) ([]byte, error) {
-	return GetResponseBodyLimit(resp, MaxResponseBodySize)
+	return GetResponseBodyLimit(resp, config.MaxResponseBodySize)
 }
 
 func UnmarshalResponse(resp *http.Response, v any) error {

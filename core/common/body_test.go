@@ -12,6 +12,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 )
 
 func TestGetRequestBodyReusableJSONWithContentLength(t *testing.T) {
@@ -113,7 +114,10 @@ func TestGetRequestBodyReusableRejectsOversizedZstdOutput(t *testing.T) {
 	}
 	defer encoder.Close()
 
-	compressed := encoder.EncodeAll(bytes.Repeat([]byte{'a'}, common.MaxRequestBodySize+1), nil)
+	compressed := encoder.EncodeAll(
+		bytes.Repeat([]byte{'a'}, int(config.MaxRequestBodySize)+1),
+		nil,
+	)
 	req := httptest.NewRequestWithContext(
 		context.Background(),
 		"POST",
@@ -261,7 +265,7 @@ func TestParseFormWithLimitRejectsTooLargeContentLength(t *testing.T) {
 		strings.NewReader("n=1"),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.ContentLength = common.MaxRequestBodySize + 1
+	req.ContentLength = config.MaxRequestBodySize + 1
 
 	err := common.ParseFormWithLimit(req)
 	if err == nil {

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/labring/aiproxy/core/common"
+	"github.com/labring/aiproxy/core/common/config"
 	// import webp decoder
 	_ "golang.org/x/image/webp"
 )
@@ -52,17 +53,17 @@ func GetImageSizeFromURL(url string) (width, height int, err error) {
 		return 0, 0, fmt.Errorf("download image error: status code: %d", resp.StatusCode)
 	}
 
-	if resp.ContentLength > MaxImageSize {
+	if resp.ContentLength > config.MaxImageSize {
 		return 0, 0, fmt.Errorf(
 			"download image error: image too large: %d, max: %d",
 			resp.ContentLength,
-			MaxImageSize,
+			config.MaxImageSize,
 		)
 	}
 
 	var reader io.Reader
 	if resp.ContentLength <= 0 {
-		reader = common.LimitReader(resp.Body, MaxImageSize)
+		reader = common.LimitReader(resp.Body, config.MaxImageSize)
 	} else {
 		reader = resp.Body
 	}
@@ -74,10 +75,6 @@ func GetImageSizeFromURL(url string) (width, height int, err error) {
 
 	return img.Width, img.Height, nil
 }
-
-const (
-	MaxImageSize = 1024 * 1024 * 10 // 10MB
-)
 
 func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 	// Check if the URL is a data URL
@@ -106,7 +103,7 @@ func GetImageFromURL(ctx context.Context, url string) (string, string, error) {
 		return "", "", fmt.Errorf("download image error: status code: %d", resp.StatusCode)
 	}
 
-	buf, err := common.GetResponseBodyLimit(resp, MaxImageSize)
+	buf, err := common.GetResponseBodyLimit(resp, config.MaxImageSize)
 	if err != nil {
 		return "", "", err
 	}
