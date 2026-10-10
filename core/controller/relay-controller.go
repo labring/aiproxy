@@ -437,7 +437,7 @@ func prepareRelayAttempt(
 	modelConfig, ok := resolveScopedModelConfig(group, modelCaches, channel, modelName)
 	if !ok {
 		if config.EnableAdminBypassChannelModelCheck && group.Status == model.GroupStatusInternal &&
-			c.GetHeader(AIProxyChannelHeader) != "" && !channel.isGroupChannel() {
+			c.GetHeader(AIProxyChannelHeader) != "" {
 			modelConfig = model.NewDefaultModelConfig(modelName)
 			modelConfig.Type = m
 		} else {

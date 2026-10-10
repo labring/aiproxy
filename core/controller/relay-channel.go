@@ -226,6 +226,7 @@ func GetGroupChannelFromHeader(
 		groupChannel,
 		availableSet,
 		ignoreSetLimit,
+		config.EnableAdminBypassChannelModelCheck && group.Status == model.GroupStatusInternal,
 		modelName,
 		m,
 	) {
@@ -243,6 +244,7 @@ func groupChannelSupportsRequest(
 	groupChannel *model.GroupChannel,
 	availableSet []string,
 	ignoreSetLimit bool,
+	bypassModelCheck bool,
 	modelName string,
 	m mode.Mode,
 ) bool {
@@ -250,7 +252,7 @@ func groupChannelSupportsRequest(
 		return false
 	}
 
-	if !model.GroupChannelSupportsModel(groupChannel, modelName) {
+	if !bypassModelCheck && !model.GroupChannelSupportsModel(groupChannel, modelName) {
 		return false
 	}
 
@@ -274,7 +276,12 @@ func groupChannelSupportsRequest(
 
 	modelConfig, ok := groupChannelSupportModeModelConfig(groupChannel.GroupID, modelName)
 	if !ok {
-		return false
+		if !bypassModelCheck {
+			return false
+		}
+
+		modelConfig = model.NewDefaultModelConfig(modelName)
+		modelConfig.Type = m
 	}
 
 	return adaptorSupportsModeWithConfig(
@@ -378,6 +385,7 @@ func GetScopedChannelFromRequest(
 			groupChannel,
 			availableSet,
 			ignoreGroupChannelSetLimit,
+			false,
 			modelName,
 			m,
 		) {
