@@ -155,8 +155,6 @@ MULTIPART_FORM_MEMORY_LIMIT=4194304   # 4 MiB; larger file parts spill to disk
 MAX_IMAGE_SIZE=10485760              # 10 MiB for image reads using the image limit
 ```
 
-Doc2X polling continues after client disconnection so completed jobs retain page usage for billing. Polling uses a fixed 1-second interval and a 10-minute total timeout after receiving the task UID. Each status request still respects the model request timeout. Failed or timed-out jobs do not report successful usage.
-
 #### **Database Configuration**
 
 ```bash
