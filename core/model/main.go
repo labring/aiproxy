@@ -142,9 +142,12 @@ func migrateDB() error {
 	err := DB.AutoMigrate(
 		&Channel{},
 		&ChannelTest{},
+		&GroupChannel{},
+		&GroupChannelTest{},
 		&Token{},
 		&PublicMCP{},
 		&GroupModelConfig{},
+		&GroupScopeModelConfig{},
 		&PublicMCPReusingParam{},
 		&GroupMCP{},
 		&Group{},
@@ -222,15 +225,23 @@ func migrateLogDB(batchSize int) error {
 
 	err = LogDB.AutoMigrate(
 		&Log{},
+		&GroupChannelLog{},
 		&RequestDetail{},
+		&GroupChannelRequestDetail{},
 		&RetryLog{},
+		&GroupChannelRetryLog{},
 		&GroupSummary{},
+		&GroupChannelSummary{},
+		&GroupChannelTokenSummary{},
 		&Summary{},
 		&ConsumeError{},
 		&AsyncUsageInfo{},
 		&StoreV2{},
+		&GroupChannelStoreV2{},
 		&SummaryMinute{},
 		&GroupSummaryMinute{},
+		&GroupChannelSummaryMinute{},
+		&GroupChannelTokenSummaryMinute{},
 	)
 	if err != nil {
 		return err
@@ -267,6 +278,26 @@ func migrateLogDB(batchSize int) error {
 			)
 		}
 
+		err = CreateGroupChannelSummaryIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createGroupChannelSummaryIndexs",
+				time.Minute*10,
+				"failed to create group channel summary indexs",
+				err.Error(),
+			)
+		}
+
+		err = CreateGroupChannelTokenSummaryIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createGroupChannelTokenSummaryIndexs",
+				time.Minute*10,
+				"failed to create group channel token summary indexs",
+				err.Error(),
+			)
+		}
+
 		err = CreateSummaryMinuteIndexs(LogDB)
 		if err != nil {
 			notify.ErrorThrottle(
@@ -283,6 +314,36 @@ func migrateLogDB(batchSize int) error {
 				"createSummaryMinuteIndexs",
 				time.Minute*10,
 				"failed to create group summary minute indexs",
+				err.Error(),
+			)
+		}
+
+		err = CreateGroupChannelSummaryMinuteIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createGroupChannelSummaryMinuteIndexs",
+				time.Minute*10,
+				"failed to create group channel summary minute indexs",
+				err.Error(),
+			)
+		}
+
+		err = CreateGroupChannelTokenSummaryMinuteIndexs(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createGroupChannelTokenSummaryMinuteIndexs",
+				time.Minute*10,
+				"failed to create group channel token summary minute indexs",
+				err.Error(),
+			)
+		}
+
+		err = CreateGroupChannelLogIndexes(LogDB)
+		if err != nil {
+			notify.ErrorThrottle(
+				"createGroupChannelLogIndexes",
+				time.Minute*10,
+				"failed to create group channel log indexs",
 				err.Error(),
 			)
 		}
@@ -344,36 +405,49 @@ func preMigrationCleanup(batchSize int) error {
 	err := preMigrationCleanupLogs(batchSize)
 	if err != nil {
 		if ignoreNoSuchTable(err) {
-			return nil
+			log.Warn("skip pre-migration logs cleanup: ", err.Error())
+		} else {
+			return fmt.Errorf("failed to cleanup logs: %w", err)
 		}
-		return fmt.Errorf("failed to cleanup logs: %w", err)
+	}
+
+	err = preMigrationCleanupGroupChannelLogs(batchSize)
+	if err != nil {
+		if ignoreNoSuchTable(err) {
+			log.Warn("skip pre-migration group channel logs cleanup: ", err.Error())
+		} else {
+			return fmt.Errorf("failed to cleanup group channel logs: %w", err)
+		}
 	}
 
 	// Clean up retry logs
 	err = preMigrationCleanupRetryLogs(batchSize)
 	if err != nil {
 		if ignoreNoSuchTable(err) {
-			return nil
+			log.Warn("skip pre-migration retry logs cleanup: ", err.Error())
+		} else {
+			return fmt.Errorf("failed to cleanup retry logs: %w", err)
 		}
-		return fmt.Errorf("failed to cleanup retry logs: %w", err)
 	}
 
 	// Clean up request details
 	err = preMigrationCleanupRequestDetails(batchSize)
 	if err != nil {
 		if ignoreNoSuchTable(err) {
-			return nil
+			log.Warn("skip pre-migration request details cleanup: ", err.Error())
+		} else {
+			return fmt.Errorf("failed to cleanup request details: %w", err)
 		}
-		return fmt.Errorf("failed to cleanup request details: %w", err)
 	}
 
 	// Clean up expired stores
 	err = preMigrationCleanupStores()
 	if err != nil {
 		if ignoreNoSuchTable(err) {
-			return nil
+			log.Warn("skip pre-migration stores cleanup: ", err.Error())
+		} else {
+			return fmt.Errorf("failed to cleanup stores: %w", err)
 		}
-		return fmt.Errorf("failed to cleanup stores: %w", err)
 	}
 
 	log.Info("pre-migration cleanup completed")
@@ -394,13 +468,31 @@ func preMigrationCleanupLogs(batchSize int) error {
 
 	cutoffTime := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
 
-	// First, get the IDs to delete
+	return preMigrationCleanupLogTable[Log](cutoffTime, batchSize, "log")
+}
+
+func preMigrationCleanupGroupChannelLogs(batchSize int) error {
+	logStorageHours := config.GetLogStorageHours()
+	if logStorageHours == 0 {
+		return nil
+	}
+
+	if batchSize <= 0 {
+		batchSize = defaultCleanLogBatchSize
+	}
+
+	cutoffTime := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
+
+	return preMigrationCleanupLogTable[GroupChannelLog](cutoffTime, batchSize, "group channel log")
+}
+
+func preMigrationCleanupLogTable[T any](cutoffTime time.Time, batchSize int, name string) error {
 	ids := make([]int, 0, batchSize)
 
 	for {
 		ids = ids[:0]
 
-		err := LogDB.Model(&Log{}).
+		err := LogDB.Model(new(T)).
 			Select("id").
 			Where("created_at < ?", cutoffTime).
 			Limit(batchSize).
@@ -417,12 +509,12 @@ func preMigrationCleanupLogs(batchSize int) error {
 		// Delete by IDs
 		err = LogDB.Where("id IN (?)", ids).
 			Session(&gorm.Session{SkipDefaultTransaction: true}).
-			Delete(&Log{}).Error
+			Delete(new(T)).Error
 		if err != nil {
 			return err
 		}
 
-		log.Infof("deleted %d expired log records", len(ids))
+		log.Infof("deleted %d expired %s records", len(ids), name)
 
 		// If we got less than batchSize, we're done
 		if len(ids) < batchSize {
@@ -450,40 +542,20 @@ func preMigrationCleanupRetryLogs(batchSize int) error {
 
 	cutoffTime := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
 
-	// First, get the IDs to delete
-	ids := make([]int, 0, batchSize)
+	if err := preMigrationCleanupLogTable[RetryLog](
+		cutoffTime,
+		batchSize,
+		"retry log",
+	); err != nil {
+		return err
+	}
 
-	for {
-		ids = ids[:0]
-
-		err := LogDB.Model(&RetryLog{}).
-			Select("id").
-			Where("created_at < ?", cutoffTime).
-			Limit(batchSize).
-			Find(&ids).Error
-		if err != nil {
-			return err
-		}
-
-		// If no IDs found, we're done
-		if len(ids) == 0 {
-			break
-		}
-
-		// Delete by IDs
-		err = LogDB.Where("id IN (?)", ids).
-			Session(&gorm.Session{SkipDefaultTransaction: true}).
-			Delete(&Log{}).Error
-		if err != nil {
-			return err
-		}
-
-		log.Infof("deleted %d expired retry log records", len(ids))
-
-		// If we got less than batchSize, we're done
-		if len(ids) < batchSize {
-			break
-		}
+	if err := preMigrationCleanupLogTable[GroupChannelRetryLog](
+		cutoffTime,
+		batchSize,
+		"group channel retry log",
+	); err != nil {
+		return err
 	}
 
 	return nil
@@ -506,13 +578,32 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 
 	cutoffTime := time.Now().Add(-time.Duration(detailStorageHours) * time.Hour)
 
-	// First, get the IDs to delete
+	if err := preMigrationCleanupRequestDetailTable[RequestDetail](
+		cutoffTime,
+		batchSize,
+		"request detail",
+	); err != nil {
+		return err
+	}
+
+	return preMigrationCleanupRequestDetailTable[GroupChannelRequestDetail](
+		cutoffTime,
+		batchSize,
+		"group channel request detail",
+	)
+}
+
+func preMigrationCleanupRequestDetailTable[T any](
+	cutoffTime time.Time,
+	batchSize int,
+	name string,
+) error {
 	ids := make([]int, 0, batchSize)
 
 	for {
 		ids = ids[:0]
 
-		err := LogDB.Model(&RequestDetail{}).
+		err := LogDB.Model(new(T)).
 			Select("id").
 			Where("created_at < ?", cutoffTime).
 			Limit(batchSize).
@@ -521,22 +612,19 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 			return err
 		}
 
-		// If no IDs found, we're done
 		if len(ids) == 0 {
 			break
 		}
 
-		// Delete by IDs
 		err = LogDB.Where("id IN (?)", ids).
 			Session(&gorm.Session{SkipDefaultTransaction: true}).
-			Delete(&RequestDetail{}).Error
+			Delete(new(T)).Error
 		if err != nil {
 			return err
 		}
 
-		log.Infof("deleted %d expired request detail records", len(ids))
+		log.Infof("deleted %d expired %s records", len(ids), name)
 
-		// If we got less than batchSize, we're done
 		if len(ids) < batchSize {
 			break
 		}
@@ -546,9 +634,17 @@ func preMigrationCleanupRequestDetails(batchSize int) error {
 }
 
 func preMigrationCleanupStores() error {
-	return LogDB.
+	if err := LogDB.
 		Session(&gorm.Session{SkipDefaultTransaction: true}).
 		Where("expires_at < ?", time.Now()).
 		Delete(&StoreV2{}).
+		Error; err != nil {
+		return err
+	}
+
+	return LogDB.
+		Session(&gorm.Session{SkipDefaultTransaction: true}).
+		Where("expires_at < ?", time.Now()).
+		Delete(&GroupChannelStoreV2{}).
 		Error
 }

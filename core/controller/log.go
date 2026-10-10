@@ -142,6 +142,7 @@ func GetGroupLogs(c *gin.Context) {
 		params.upstreamID,
 		params.tokenID,
 		params.tokenName,
+		params.channelID,
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
@@ -269,6 +270,257 @@ func SearchGroupLogs(c *gin.Context) {
 		params.modelName,
 		startTime,
 		endTime,
+		params.channelID,
+		params.order,
+		model.CodeType(params.codeType),
+		params.code,
+		params.includeDetail,
+		params.ip,
+		params.user,
+		page,
+		perPage,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetGroupChannelLogs godoc
+//
+//	@Summary		Get group channel logs
+//	@Description	Get group-channel logs for a specific group
+//	@Tags			log
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			path		string	true	"Group name"
+//	@Param			page			query		int		false	"Page number"
+//	@Param			per_page		query		int		false	"Items per page"
+//	@Param			start_timestamp	query		int		false	"Start timestamp (milliseconds)"
+//	@Param			end_timestamp	query		int		false	"End timestamp (milliseconds)"
+//	@Param			token_name		query		string	false	"Token name"
+//	@Param			model_name		query		string	false	"Model name"
+//	@Param			channel			query		int		false	"Group channel ID"
+//	@Param			token_id		query		int		false	"Token ID"
+//	@Param			order			query		string	false	"Order"
+//	@Param			request_id		query		string	false	"Request ID"
+//	@Param			upstream_id		query		string	false	"Upstream ID"
+//	@Param			code_type		query		string	false	"Status code type"
+//	@Param			code			query		int		false	"Status code"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
+//	@Param			ip				query		string	false	"IP"
+//	@Param			user			query		string	false	"User"
+//	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupChannelLogsResult}
+//	@Router			/api/log/{group}/group_channel [get]
+func GetGroupChannelLogs(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	page, perPage := utils.ParsePageParams(c)
+	startTime, endTime := utils.ParseTimeRange(c, 0)
+	params := parseCommonParams(c)
+
+	result, err := model.GetGroupChannelLogs(
+		group,
+		startTime,
+		endTime,
+		params.modelName,
+		params.requestID,
+		params.upstreamID,
+		params.tokenID,
+		params.tokenName,
+		params.channelID,
+		params.order,
+		model.CodeType(params.codeType),
+		params.code,
+		params.includeDetail,
+		params.ip,
+		params.user,
+		page,
+		perPage,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// SearchGroupChannelLogs godoc
+//
+//	@Summary		Search group channel logs
+//	@Description	Search group-channel logs for a specific group
+//	@Tags			log
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			path		string	true	"Group name"
+//	@Param			keyword			query		string	false	"Keyword"
+//	@Param			page			query		int		false	"Page number"
+//	@Param			per_page		query		int		false	"Items per page"
+//	@Param			start_timestamp	query		int		false	"Start timestamp (milliseconds)"
+//	@Param			end_timestamp	query		int		false	"End timestamp (milliseconds)"
+//	@Param			token_name		query		string	false	"Filter by token name"
+//	@Param			model_name		query		string	false	"Filter by model name"
+//	@Param			token_id		query		int		false	"Filter by token id"
+//	@Param			channel			query		int		false	"Filter by group channel"
+//	@Param			order			query		string	false	"Order"
+//	@Param			request_id		query		string	false	"Request ID"
+//	@Param			upstream_id		query		string	false	"Upstream ID"
+//	@Param			code_type		query		string	false	"Status code type"
+//	@Param			code			query		int		false	"Status code"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
+//	@Param			ip				query		string	false	"IP"
+//	@Param			user			query		string	false	"User"
+//	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupChannelLogsResult}
+//	@Router			/api/log/{group}/group_channel/search [get]
+func SearchGroupChannelLogs(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	page, perPage := utils.ParsePageParams(c)
+	startTime, endTime := utils.ParseTimeRange(c, 0)
+	params := parseCommonParams(c)
+	keyword := c.Query("keyword")
+
+	result, err := model.SearchGroupChannelLogs(
+		group,
+		keyword,
+		params.requestID,
+		params.upstreamID,
+		params.tokenID,
+		params.tokenName,
+		params.modelName,
+		startTime,
+		endTime,
+		params.channelID,
+		params.order,
+		model.CodeType(params.codeType),
+		params.code,
+		params.includeDetail,
+		params.ip,
+		params.user,
+		page,
+		perPage,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetGlobalGroupChannelLogs godoc
+//
+//	@Summary		Get global group channel logs
+//	@Description	Get group-channel logs across groups with optional filters
+//	@Tags			logs
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			query		string	false	"Filter by group"
+//	@Param			page			query		int		false	"Page number"
+//	@Param			per_page		query		int		false	"Items per page"
+//	@Param			start_timestamp	query		int		false	"Start timestamp (milliseconds)"
+//	@Param			end_timestamp	query		int		false	"End timestamp (milliseconds)"
+//	@Param			token_name		query		string	false	"Token name"
+//	@Param			model_name		query		string	false	"Model name"
+//	@Param			channel			query		int		false	"Group channel ID"
+//	@Param			token_id		query		int		false	"Token ID"
+//	@Param			order			query		string	false	"Order"
+//	@Param			request_id		query		string	false	"Request ID"
+//	@Param			upstream_id		query		string	false	"Upstream ID"
+//	@Param			code_type		query		string	false	"Status code type"
+//	@Param			code			query		int		false	"Status code"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
+//	@Param			ip				query		string	false	"IP"
+//	@Param			user			query		string	false	"User"
+//	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupChannelLogsResult}
+//	@Router			/api/logs/group_channel [get]
+func GetGlobalGroupChannelLogs(c *gin.Context) {
+	page, perPage := utils.ParsePageParams(c)
+	startTime, endTime := utils.ParseTimeRange(c, 0)
+	params := parseCommonParams(c)
+
+	result, err := model.GetGlobalGroupChannelLogs(
+		params.group,
+		startTime,
+		endTime,
+		params.modelName,
+		params.requestID,
+		params.upstreamID,
+		params.tokenID,
+		params.tokenName,
+		params.channelID,
+		params.order,
+		model.CodeType(params.codeType),
+		params.code,
+		params.includeDetail,
+		params.ip,
+		params.user,
+		page,
+		perPage,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// SearchGlobalGroupChannelLogs godoc
+//
+//	@Summary		Search global group channel logs
+//	@Description	Search group-channel logs across groups with optional filters
+//	@Tags			logs
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			query		string	false	"Filter by group"
+//	@Param			keyword			query		string	false	"Keyword"
+//	@Param			page			query		int		false	"Page number"
+//	@Param			per_page		query		int		false	"Items per page"
+//	@Param			start_timestamp	query		int		false	"Start timestamp (milliseconds)"
+//	@Param			end_timestamp	query		int		false	"End timestamp (milliseconds)"
+//	@Param			token_name		query		string	false	"Filter by token name"
+//	@Param			model_name		query		string	false	"Filter by model name"
+//	@Param			token_id		query		int		false	"Filter by token id"
+//	@Param			channel			query		int		false	"Filter by group channel"
+//	@Param			order			query		string	false	"Order"
+//	@Param			request_id		query		string	false	"Request ID"
+//	@Param			upstream_id		query		string	false	"Upstream ID"
+//	@Param			code_type		query		string	false	"Status code type"
+//	@Param			code			query		int		false	"Status code"
+//	@Param			include_detail	query		bool	false	"Include request and response detail"
+//	@Param			ip				query		string	false	"IP"
+//	@Param			user			query		string	false	"User"
+//	@Success		200				{object}	middleware.APIResponse{data=model.GetGroupChannelLogsResult}
+//	@Router			/api/logs/group_channel/search [get]
+func SearchGlobalGroupChannelLogs(c *gin.Context) {
+	page, perPage := utils.ParsePageParams(c)
+	startTime, endTime := utils.ParseTimeRange(c, 0)
+	params := parseCommonParams(c)
+	keyword := c.Query("keyword")
+
+	result, err := model.SearchGlobalGroupChannelLogs(
+		params.group,
+		keyword,
+		params.requestID,
+		params.upstreamID,
+		params.tokenID,
+		params.tokenName,
+		params.modelName,
+		startTime,
+		endTime,
+		params.channelID,
 		params.order,
 		model.CodeType(params.codeType),
 		params.code,
@@ -337,6 +589,57 @@ func GetGroupLogDetail(c *gin.Context) {
 	middleware.SuccessResponse(c, log)
 }
 
+// GetGroupChannelLogDetailForGroup godoc
+//
+//	@Summary		Get group channel log detail for a group
+//	@Description	Get detailed information about a group channel log entry in a group
+//	@Tags			log
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group	path		string	true	"Group name"
+//	@Param			log_id	path		string	true	"Log ID"
+//	@Success		200		{object}	middleware.APIResponse{data=model.RequestDetail}
+//	@Router			/api/log/{group}/group_channel/detail/{log_id} [get]
+func GetGroupChannelLogDetailForGroup(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	logID, _ := strconv.Atoi(c.Param("log_id"))
+
+	log, err := model.GetGroupChannelLogDetailForGroup(logID, group)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, log)
+}
+
+// GetGlobalGroupChannelLogDetail godoc
+//
+//	@Summary		Get global group channel log detail
+//	@Description	Get detailed information about a group channel log entry across groups
+//	@Tags			logs
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			log_id	path		string	true	"Log ID"
+//	@Success		200		{object}	middleware.APIResponse{data=model.RequestDetail}
+//	@Router			/api/logs/group_channel/detail/{log_id} [get]
+func GetGlobalGroupChannelLogDetail(c *gin.Context) {
+	logID, _ := strconv.Atoi(c.Param("log_id"))
+
+	log, err := model.GetGroupChannelLogDetail(logID)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, log)
+}
+
 // DeleteHistoryLogs godoc
 //
 //	@Summary		Delete historical logs
@@ -355,6 +658,76 @@ func DeleteHistoryLogs(c *gin.Context) {
 	}
 
 	count, err := model.DeleteOldLog(time.UnixMilli(timestamp))
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, count)
+}
+
+// DeleteGroupChannelHistoryLogs godoc
+//
+//	@Summary		Delete historical group channel logs
+//	@Description	Deletes group-channel logs older than the specified retention period
+//	@Tags			log
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			timestamp	query		int	true	"Timestamp (milliseconds)"
+//	@Success		200			{object}	middleware.APIResponse{data=int}
+//	@Router			/api/log/{group}/group_channel [delete]
+func DeleteGroupChannelHistoryLogs(c *gin.Context) {
+	timestamp, _ := strconv.ParseInt(c.Query("timestamp"), 10, 64)
+	if timestamp == 0 {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "timestamp is required")
+		return
+	}
+
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	count, err := model.DeleteOldGroupChannelLogForGroup(group, time.UnixMilli(timestamp))
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, count)
+}
+
+// DeleteGlobalGroupChannelHistoryLogs godoc
+//
+//	@Summary		Delete historical group channel logs
+//	@Description	Deletes group-channel logs older than the specified retention period, optionally filtered by group
+//	@Tags			logs
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group		query		string	false	"Filter by group"
+//	@Param			timestamp	query		int		true	"Timestamp (milliseconds)"
+//	@Success		200			{object}	middleware.APIResponse{data=int}
+//	@Router			/api/logs/group_channel [delete]
+func DeleteGlobalGroupChannelHistoryLogs(c *gin.Context) {
+	timestamp, _ := strconv.ParseInt(c.Query("timestamp"), 10, 64)
+	if timestamp == 0 {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "timestamp is required")
+		return
+	}
+
+	group := c.Query("group")
+
+	var (
+		count int64
+		err   error
+	)
+	if group != "" {
+		count, err = model.DeleteOldGroupChannelLogForGroup(group, time.UnixMilli(timestamp))
+	} else {
+		count, err = model.DeleteOldGroupChannelLog(time.UnixMilli(timestamp))
+	}
+
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common/config"
+	"github.com/labring/aiproxy/core/common/consume"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	relaycontroller "github.com/labring/aiproxy/core/relay/controller"
@@ -96,16 +97,16 @@ func TestRetryLoopBudgetAndCount(t *testing.T) {
 					{ID: 4, Status: model.ChannelStatusEnabled, BackupOnly: true},
 				}
 				initial := &initialChannel{
-					channel:          channels[0],
-					migratedChannels: channels,
-					preferChannelIDs: []int{1, 2, 3, 4},
+					channel:           newGlobalScopedChannel(channels[0]),
+					migratedChannels:  globalScopedChannels(channels),
+					preferChannelKeys: channelIDsToKeys([]int{1, 2, 3, 4}),
 				}
 				initialError := relaymodel.NewOpenAIError(
 					http.StatusBadGateway,
 					relaymodel.OpenAIError{Message: "initial failure"},
 				)
 
-				state := initRetryState(
+				state := initGlobalRetryState(
 					tt.times,
 					initial,
 					NewMetaByContext(c, channels[0], mode.Responses),
@@ -118,8 +119,8 @@ func TestRetryLoopBudgetAndCount(t *testing.T) {
 				}
 
 				if tt.initialBackoff {
-					state.preferChannelIDs = []int{1}
-					state.recordChannelFailure(1, time.Now())
+					state.preferChannelKeys = channelIDsToKeys([]int{1})
+					state.recordChannelFailure("1", time.Now())
 				}
 
 				if tt.cancelDuringBackoff {
@@ -210,4 +211,55 @@ func TestRetryBudgetRequestBinding(t *testing.T) {
 	group := request.ToGroupModelConfig("test")
 	require.True(t, group.OverrideRetryBudget)
 	require.Equal(t, int64(60), group.RetryBudget)
+}
+
+func TestRetryPreparationFailurePreservesLastUpstreamResult(t *testing.T) {
+	defer consume.Wait()
+
+	t.Setenv("LOG_STORAGE_HOURS", "")
+
+	previous := config.GetLogStorageHours()
+
+	config.SetLogStorageHours(-1)
+	t.Cleanup(func() { config.SetLogStorageHours(previous) })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/",
+		strings.NewReader(`{}`),
+	)
+	c.Set(middleware.Group, model.GroupCache{})
+	c.Set(middleware.Token, model.TokenCache{})
+	c.Set(middleware.ModelConfig, model.ModelConfig{})
+	c.Set(middleware.RequestModel, "missing-retry-model")
+	c.Set(middleware.GroupBalance, &middleware.GroupBalanceConsumer{})
+	middleware.SetRequestAt(c, time.Now())
+
+	channel := &model.Channel{ID: 91, Status: model.ChannelStatusEnabled}
+	upstreamError := relaymodel.NewOpenAIError(
+		http.StatusBadGateway,
+		relaymodel.OpenAIError{Message: "last upstream failure"},
+	)
+	state := initGlobalRetryState(2,
+		&initialChannel{channel: newGlobalScopedChannel(channel), designatedChannel: true},
+		NewMetaByContext(c, channel, mode.Responses),
+		&relaycontroller.HandleResult{Error: upstreamError}, model.Price{}, time.Now(),
+	)
+	// The catalog can change while a request is backing off.
+	state.modelCaches = &model.ModelCaches{ModelConfig: testModelConfigCache{}}
+	retryLoop(
+		c,
+		mode.Responses,
+		state,
+		func(*gin.Context, *meta.Meta) *relaycontroller.HandleResult {
+			t.Error("relay must not run after preparation failed")
+			return &relaycontroller.HandleResult{}
+		},
+	)
+	require.Equal(t, upstreamError, state.result.Error)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "last upstream failure")
 }

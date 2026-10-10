@@ -36,6 +36,7 @@ func SetAPIRouter(router *gin.Engine) {
 		dashboardRoute := apiRouter.Group("/dashboard")
 		{
 			dashboardRoute.GET("/", controller.GetDashboard)
+			dashboardRoute.GET("/group_channel", controller.GetGlobalGroupChannelDashboard)
 			dashboardRoute.GET("/:group", controller.GetGroupDashboard)
 			dashboardRoute.GET("/:group/models", controller.GetGroupDashboardModels)
 		}
@@ -43,12 +44,20 @@ func SetAPIRouter(router *gin.Engine) {
 		dashboardV2Route := apiRouter.Group("/dashboardv2")
 		{
 			dashboardV2Route.GET("/", controller.GetTimeSeriesModelData)
+			dashboardV2Route.GET(
+				"/group_channel",
+				controller.GetGlobalGroupChannelTimeSeriesModelData,
+			)
 			dashboardV2Route.GET("/:group", controller.GetGroupTimeSeriesModelData)
 		}
 
 		dashboardV3Route := apiRouter.Group("/dashboardv3")
 		{
 			dashboardV3Route.GET("/", controller.GetTimeSeriesModelDataV3)
+			dashboardV3Route.GET(
+				"/group_channel",
+				controller.GetGlobalGroupChannelTimeSeriesModelDataV3,
+			)
 			dashboardV3Route.GET("/:group", controller.GetGroupTimeSeriesModelDataV3)
 		}
 
@@ -72,6 +81,55 @@ func SetAPIRouter(router *gin.Engine) {
 			groupRoute.POST("/:group/status", controller.UpdateGroupStatus)
 			groupRoute.POST("/:group/rpm_ratio", controller.UpdateGroupRPMRatio)
 			groupRoute.POST("/:group/tpm_ratio", controller.UpdateGroupTPMRatio)
+			groupRoute.GET("/:group/channel-dashboard", controller.GetGroupChannelDashboard)
+			groupRoute.GET(
+				"/:group/channel-dashboardv2",
+				controller.GetGroupChannelTimeSeriesModelData,
+			)
+			groupRoute.GET(
+				"/:group/channel-dashboardv3",
+				controller.GetGroupChannelTimeSeriesModelDataV3,
+			)
+			groupRoute.GET(
+				"/:group/channel-dashboard/models",
+				controller.GetGroupChannelDashboardModels,
+			)
+			groupRoute.GET(
+				"/:group/channel-models/enabled",
+				controller.GetGroupChannelEnabledModels,
+			)
+			groupRoute.GET(
+				"/:group/channel-models/enabled/:set",
+				controller.GetGroupChannelEnabledModelsSet,
+			)
+			groupChannelsRoute := groupRoute.Group("/:group/channels")
+			{
+				groupChannelsRoute.GET("/", controller.GetGroupChannels)
+				groupChannelsRoute.GET("/search", controller.SearchGroupChannels)
+				groupChannelsRoute.GET("/type_metas", controller.ChannelTypeMetas)
+				groupChannelsRoute.POST("/", controller.AddGroupChannels)
+				groupChannelsRoute.POST("/batch_delete", controller.DeleteGroupChannels)
+				groupChannelsRoute.POST("/batch_info", controller.GetGroupChannelBatchInfo)
+
+				importRoute := groupChannelsRoute.Group("/import")
+				{
+					importRoute.POST("/oneapi", controller.ImportGroupChannelFromOneAPI)
+				}
+			}
+
+			groupChannelRoute := groupRoute.Group("/:group/channel")
+			{
+				groupChannelRoute.GET("/:id", controller.GetGroupChannel)
+				groupChannelRoute.POST("/", controller.AddGroupChannel)
+				groupChannelRoute.PUT("/:id", controller.UpdateGroupChannel)
+				groupChannelRoute.DELETE("/:id", controller.DeleteGroupChannel)
+				groupChannelRoute.POST("/:id/status", controller.UpdateGroupChannelStatus)
+				groupChannelRoute.POST("/test-preview", controller.TestGroupChannelPreview)
+				groupChannelRoute.POST("/test-preview-all", controller.TestGroupChannelPreviewAll)
+				groupChannelRoute.GET("/:id/tests", controller.GetGroupChannelTests)
+				groupChannelRoute.GET("/:id/test", controller.TestGroupChannelModels)
+				groupChannelRoute.GET("/:id/test/*model", controller.TestGroupChannel)
+			}
 
 			groupModelConfigsRoute := groupRoute.Group("/:group/model_configs")
 			{
@@ -87,6 +145,29 @@ func SetAPIRouter(router *gin.Engine) {
 				groupModelConfigRoute.PUT("/*model", controller.UpdateGroupModelConfig)
 				groupModelConfigRoute.DELETE("/*model", controller.DeleteGroupModelConfig)
 				groupModelConfigRoute.GET("/*model", controller.GetGroupModelConfig)
+			}
+
+			groupScopeModelConfigsRoute := groupRoute.Group("/:group/scope_model_configs")
+			{
+				groupScopeModelConfigsRoute.GET("/", controller.GetGroupScopeModelConfigs)
+				groupScopeModelConfigsRoute.GET("/search", controller.SearchGroupScopeModelConfigs)
+				groupScopeModelConfigsRoute.GET("/all", controller.GetAllGroupScopeModelConfigs)
+				groupScopeModelConfigsRoute.POST(
+					"/contains",
+					controller.GetGroupScopeModelConfigsByModelsContains,
+				)
+				groupScopeModelConfigsRoute.POST("/", controller.SaveGroupScopeModelConfigs)
+				groupScopeModelConfigsRoute.POST(
+					"/batch_delete",
+					controller.DeleteGroupScopeModelConfigs,
+				)
+			}
+
+			groupScopeModelConfigRoute := groupRoute.Group("/:group/scope_model_config")
+			{
+				groupScopeModelConfigRoute.GET("/*model", controller.GetGroupScopeModelConfig)
+				groupScopeModelConfigRoute.POST("/*model", controller.SaveGroupScopeModelConfig)
+				groupScopeModelConfigRoute.DELETE("/*model", controller.DeleteGroupScopeModelConfig)
 			}
 
 			groupMcpRoute := groupRoute.Group("/:group/mcp")
@@ -122,6 +203,35 @@ func SetAPIRouter(router *gin.Engine) {
 			{
 				importRoute.POST("/oneapi", controller.ImportChannelFromOneAPI)
 			}
+		}
+
+		groupChannelsRoute := apiRouter.Group("/group_channels")
+		{
+			groupChannelsRoute.GET("/", controller.GetGlobalGroupChannels)
+			groupChannelsRoute.GET("/search", controller.SearchGlobalGroupChannels)
+			groupChannelsRoute.GET("/type_metas", controller.ChannelTypeMetas)
+			groupChannelsRoute.POST("/", controller.AddGlobalGroupChannels)
+			groupChannelsRoute.POST("/batch_delete", controller.DeleteGlobalGroupChannels)
+			groupChannelsRoute.POST("/batch_info", controller.GetGlobalGroupChannelBatchInfo)
+
+			importRoute := groupChannelsRoute.Group("/import")
+			{
+				importRoute.POST("/oneapi", controller.ImportGlobalGroupChannelFromOneAPI)
+			}
+		}
+
+		groupChannelRoute := apiRouter.Group("/group_channel")
+		{
+			groupChannelRoute.POST("/", controller.AddGlobalGroupChannel)
+			groupChannelRoute.POST("/test-preview", controller.TestGlobalGroupChannelPreview)
+			groupChannelRoute.POST("/test-preview-all", controller.TestGlobalGroupChannelPreviewAll)
+			groupChannelRoute.GET("/:id", controller.GetGlobalGroupChannel)
+			groupChannelRoute.PUT("/:id", controller.UpdateGlobalGroupChannel)
+			groupChannelRoute.DELETE("/:id", controller.DeleteGlobalGroupChannel)
+			groupChannelRoute.POST("/:id/status", controller.UpdateGlobalGroupChannelStatus)
+			groupChannelRoute.GET("/:id/tests", controller.GetGlobalGroupChannelTests)
+			groupChannelRoute.GET("/:id/test", controller.TestGlobalGroupChannelModels)
+			groupChannelRoute.GET("/:id/test/*model", controller.TestGlobalGroupChannel)
 		}
 
 		channelRoute := apiRouter.Group("/channel")
@@ -172,6 +282,14 @@ func SetAPIRouter(router *gin.Engine) {
 		logsRoute := apiRouter.Group("/logs")
 		{
 			logsRoute.GET("/export", controller.ExportLogs)
+			logsRoute.GET("/group_channel/export", controller.ExportGlobalGroupChannelLogs)
+			logsRoute.GET("/group_channel/search", controller.SearchGlobalGroupChannelLogs)
+			logsRoute.GET(
+				"/group_channel/detail/:log_id",
+				controller.GetGlobalGroupChannelLogDetail,
+			)
+			logsRoute.GET("/group_channel", controller.GetGlobalGroupChannelLogs)
+			logsRoute.DELETE("/group_channel", controller.DeleteGlobalGroupChannelHistoryLogs)
 			logsRoute.GET("/", controller.GetLogs)
 			logsRoute.DELETE("/", controller.DeleteHistoryLogs)
 			logsRoute.GET("/search", controller.SearchLogs)
@@ -182,6 +300,14 @@ func SetAPIRouter(router *gin.Engine) {
 		logRoute := apiRouter.Group("/log")
 		{
 			logRoute.GET("/:group/export", controller.ExportGroupLogs)
+			logRoute.GET("/:group/group_channel/export", controller.ExportGroupChannelLogs)
+			logRoute.GET("/:group/group_channel/search", controller.SearchGroupChannelLogs)
+			logRoute.GET(
+				"/:group/group_channel/detail/:log_id",
+				controller.GetGroupChannelLogDetailForGroup,
+			)
+			logRoute.GET("/:group/group_channel", controller.GetGroupChannelLogs)
+			logRoute.DELETE("/:group/group_channel", controller.DeleteGroupChannelHistoryLogs)
 			logRoute.GET("/:group", controller.GetGroupLogs)
 			logRoute.GET("/:group/search", controller.SearchGroupLogs)
 			logRoute.GET("/:group/detail/:log_id", controller.GetGroupLogDetail)

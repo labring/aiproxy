@@ -129,7 +129,8 @@ var OneAPIChannelType2AIProxyMap = map[int]model.ChannelType{
 }
 
 type ImportChannelFromOneAPIRequest struct {
-	DSN string `json:"dsn"`
+	DSN     string `json:"dsn"`
+	GroupID string `json:"group_id"`
 }
 
 func AddOneAPIChannel(ch OneAPIChannel) error {
@@ -162,6 +163,42 @@ func AddOneAPIChannel(ch OneAPIChannel) error {
 	return model.BatchInsertChannels([]*model.Channel{channel})
 }
 
+func oneAPIChannelToGroupChannelRequest(ch OneAPIChannel) AddGroupChannelRequest {
+	add := AddGroupChannelRequest{
+		Type:         model.ChannelType(ch.Type),
+		Name:         ch.Name,
+		Key:          ch.Key,
+		BaseURL:      ch.BaseURL,
+		ProxyURL:     ch.ProxyURL,
+		Models:       strings.Split(ch.Models, ","),
+		ModelMapping: ch.ModelMapping,
+		Priority:     ch.Priority,
+		Status:       ch.Status,
+	}
+	if t, ok := OneAPIChannelType2AIProxyMap[ch.Type]; ok {
+		add.Type = t
+	} else {
+		add.Type = 1
+	}
+
+	if add.Type == 1 && add.BaseURL != "" {
+		add.BaseURL += "/v1"
+	}
+
+	return add
+}
+
+func AddOneAPIGroupChannel(group string, ch OneAPIChannel) error {
+	add := oneAPIChannelToGroupChannelRequest(ch)
+
+	channel, err := add.toGroupChannel(group)
+	if err != nil {
+		return err
+	}
+
+	return model.BatchInsertGroupChannels([]*model.GroupChannel{channel})
+}
+
 // ImportChannelFromOneAPI godoc
 //
 //	@Summary		Import channel from OneAPI
@@ -179,9 +216,29 @@ func ImportChannelFromOneAPI(c *gin.Context) {
 		return
 	}
 
+	allChannels, ok := loadOneAPIChannels(c, req)
+	if !ok {
+		return
+	}
+
+	errs := make([]error, 0)
+	for _, ch := range allChannels {
+		err := AddOneAPIChannel(*ch)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	middleware.SuccessResponse(c, errs)
+}
+
+func loadOneAPIChannels(
+	c *gin.Context,
+	req ImportChannelFromOneAPIRequest,
+) ([]*OneAPIChannel, bool) {
 	if req.DSN == "" {
 		middleware.ErrorResponse(c, http.StatusBadRequest, "sql dsn is required")
-		return
+		return nil, false
 	}
 
 	var (
@@ -201,36 +258,92 @@ func ImportChannelFromOneAPI(c *gin.Context) {
 			"invalid dsn, only mysql and postgres are supported",
 		)
 
-		return
+		return nil, false
 	}
 
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
-		return
+		return nil, false
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
-		return
+		return nil, false
 	}
 	defer sqlDB.Close()
 
 	allChannels := make([]*OneAPIChannel, 0)
-
-	err = db.Model(&OneAPIChannel{}).Find(&allChannels).Error
-	if err != nil {
+	if err := db.Model(&OneAPIChannel{}).Find(&allChannels).Error; err != nil {
 		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+
+	return allChannels, true
+}
+
+func importGroupChannelsFromOneAPI(
+	c *gin.Context,
+	group string,
+	req ImportChannelFromOneAPIRequest,
+) {
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "group id is required")
+		return
+	}
+
+	allChannels, ok := loadOneAPIChannels(c, req)
+	if !ok {
 		return
 	}
 
 	errs := make([]error, 0)
 	for _, ch := range allChannels {
-		err := AddOneAPIChannel(*ch)
-		if err != nil {
+		if err := AddOneAPIGroupChannel(group, *ch); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	middleware.SuccessResponse(c, errs)
+}
+
+// ImportGlobalGroupChannelFromOneAPI godoc
+//
+//	@Summary		Import group channel from OneAPI
+//	@Description	Imports group channels from OneAPI from the global management view and atomically creates the group when it does not exist. Existing group configuration is preserved. The request body must include group_id.
+//	@Tags			group_channels
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request	body		ImportChannelFromOneAPIRequest	true	"Import group channel from OneAPI request"
+//	@Success		200		{object}	middleware.APIResponse{data=[]error}
+//	@Router			/api/group_channels/import/oneapi [post]
+func ImportGlobalGroupChannelFromOneAPI(c *gin.Context) {
+	var req ImportChannelFromOneAPIRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	importGroupChannelsFromOneAPI(c, req.GroupID, req)
+}
+
+// ImportGroupChannelFromOneAPI godoc
+//
+//	@Summary		Import group channel from OneAPI
+//	@Description	Imports group channels from OneAPI into a group and atomically creates the group when it does not exist. Existing group configuration is preserved.
+//	@Tags			group-channel
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group	path		string							true	"Group ID"
+//	@Param			request	body		ImportChannelFromOneAPIRequest	true	"Import group channel from OneAPI request"
+//	@Success		200		{object}	middleware.APIResponse{data=[]error}
+//	@Router			/api/group/{group}/channels/import/oneapi [post]
+func ImportGroupChannelFromOneAPI(c *gin.Context) {
+	var req ImportChannelFromOneAPIRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	importGroupChannelsFromOneAPI(c, c.Param("group"), req)
 }

@@ -22,8 +22,8 @@ func TestStoreIDNamespaces(t *testing.T) {
 	assert.Contains(t, CacheFollowStoreID("gpt-5", CacheKeyTypeStable), "cachefollow:")
 	assert.Contains(
 		t,
-		getStoreCacheNotFoundKey("group-1", 7, ResponseStoreID("resp_123")),
-		"storev2notfound:group-1:7:response:resp_123",
+		getStoreCacheNotFoundKey("group-1", 7, ResponseStoreID("resp_123"), ChannelScopeGlobal),
+		"storev2notfound:group-1:7:global:response:resp_123",
 	)
 	assert.Equal(t, "", StoreID(StorePrefixResponse, ""))
 }
@@ -104,6 +104,36 @@ func TestSaveIfNotExistStoreReplacesExpiredStore(t *testing.T) {
 	})
 }
 
+func TestSaveIfNotExistStoreLoadsExistingGroupScopedStore(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := PromptCacheStoreID("gpt-5", "cache-key", CacheKeyTypeStable)
+
+		existing, err := SaveIfNotExistStoreByScope(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 10,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}, ChannelScopeGroup)
+		require.NoError(t, err)
+
+		storeLocalCache.Flush()
+
+		saved, err := SaveIfNotExistStoreByScope(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 20,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(2 * time.Minute),
+		}, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, existing.ChannelID, saved.ChannelID)
+		assert.Equal(t, storeID, saved.ID)
+	})
+}
+
 func TestCacheGetStoreUsesLocalCache(t *testing.T) {
 	withTestStoreDB(t, func() {
 		storeID := ResponseStoreID("resp_local_hit")
@@ -139,6 +169,154 @@ func TestCacheGetStoreUsesLocalCache(t *testing.T) {
 	})
 }
 
+func TestSaveStorePersistsChannelScope(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := ResponseStoreID("resp_group_scope")
+
+		_, err := SaveStoreByScope(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 10,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}, ChannelScopeGroup)
+		require.NoError(t, err)
+
+		store, err := GetStoreByScope("group-1", 1, storeID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, 10, store.ChannelID)
+
+		storeLocalCache.Flush()
+
+		cached, err := CacheGetStoreByScope("group-1", 1, storeID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, storeID, cached.ID)
+		assert.Equal(t, 10, cached.ChannelID)
+	})
+}
+
+func TestSaveStoreByScopePreservesGeneratedID(t *testing.T) {
+	withTestStoreDB(t, func() {
+		input := &StoreV2{
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 20,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}
+
+		saved, err := SaveStoreByScope(input, ChannelScopeGroup)
+		require.NoError(t, err)
+		require.NotEmpty(t, saved.ID)
+		assert.Equal(t, saved.ID, input.ID)
+
+		current, err := GetStoreByScope("group-1", 1, saved.ID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, saved.ID, current.ID)
+		assert.Equal(t, 20, current.ChannelID)
+
+		cached, err := CacheGetStoreByScope("group-1", 1, saved.ID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, saved.ID, cached.ID)
+		assert.Equal(t, 20, cached.ChannelID)
+	})
+}
+
+func TestSaveIfNotExistStoreByScopePreservesGeneratedID(t *testing.T) {
+	withTestStoreDB(t, func() {
+		input := &StoreV2{
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 20,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}
+
+		saved, err := SaveIfNotExistStoreByScope(input, ChannelScopeGroup)
+		require.NoError(t, err)
+		require.NotEmpty(t, saved.ID)
+		assert.Equal(t, saved.ID, input.ID)
+
+		current, err := GetStoreByScope("group-1", 1, saved.ID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, saved.ID, current.ID)
+		assert.Equal(t, 20, current.ChannelID)
+
+		cached, err := CacheGetStoreByScope("group-1", 1, saved.ID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, saved.ID, cached.ID)
+		assert.Equal(t, 20, cached.ChannelID)
+	})
+}
+
+func TestSaveStoreDefaultsChannelScopeToGlobal(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := ResponseStoreID("resp_global_scope")
+
+		_, err := SaveStore(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 10,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		})
+		require.NoError(t, err)
+
+		store, err := GetStore("group-1", 1, storeID)
+		require.NoError(t, err)
+		assert.Equal(t, 10, store.ChannelID)
+
+		cached, err := CacheGetStore("group-1", 1, storeID)
+		require.NoError(t, err)
+		assert.Equal(t, storeID, cached.ID)
+	})
+}
+
+func TestStoreScopesUseIndependentIdentities(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := CacheFollowStoreID("gpt-5", CacheKeyTypeStable)
+
+		_, err := SaveStore(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 10,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		})
+		require.NoError(t, err)
+
+		_, err = SaveStoreByScope(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 20,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}, ChannelScopeGroup)
+		require.NoError(t, err)
+
+		globalStore, err := CacheGetStoreByScope("group-1", 1, storeID, ChannelScopeGlobal)
+		require.NoError(t, err)
+		assert.Equal(t, storeID, globalStore.ID)
+		assert.Equal(t, 10, globalStore.ChannelID)
+
+		groupStore, err := CacheGetStoreByScope("group-1", 1, storeID, ChannelScopeGroup)
+		require.NoError(t, err)
+		assert.Equal(t, storeID, groupStore.ID)
+		assert.Equal(t, 20, groupStore.ChannelID)
+
+		var count int64
+		require.NoError(t, LogDB.Model(&StoreV2{}).Count(&count).Error)
+		assert.Equal(t, int64(1), count)
+
+		require.NoError(t, LogDB.Model(&GroupChannelStoreV2{}).Count(&count).Error)
+		assert.Equal(t, int64(1), count)
+	})
+}
+
 func TestCacheGetStoreCachesNotFoundLocally(t *testing.T) {
 	withTestStoreDB(t, func() {
 		storeID := ResponseStoreID("resp_local_miss")
@@ -163,6 +341,29 @@ func TestCacheGetStoreCachesNotFoundLocally(t *testing.T) {
 
 		store, err := CacheGetStore("group-1", 1, storeID)
 		require.NoError(t, err)
+		assert.Equal(t, 10, store.ChannelID)
+	})
+}
+
+func TestCacheGetStoreIgnoresInvalidLocalCache(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := ResponseStoreID("resp_invalid_local_cache")
+		cacheKey := getStoreCacheKey("group-1", 1, storeID, ChannelScopeGlobal)
+
+		require.NoError(t, LogDB.Create(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 10,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		}).Error)
+
+		storeLocalCache.Set(cacheKey, localStoreCacheItem{}, storeLocalTTL)
+
+		store, err := CacheGetStore("group-1", 1, storeID)
+		require.NoError(t, err)
+		assert.Equal(t, storeID, store.ID)
 		assert.Equal(t, 10, store.ChannelID)
 	})
 }
@@ -241,6 +442,31 @@ func TestSaveIfNotExistStoreUsesCachedExistingFastPath(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Equal(t, existing.ChannelID, saved.ChannelID)
+	})
+}
+
+func TestSaveIfNotExistStoreIgnoresInvalidLocalCache(t *testing.T) {
+	withTestStoreDB(t, func() {
+		storeID := PromptCacheStoreID("gpt-5", "invalid-cache", CacheKeyTypeStable)
+		cacheKey := getStoreCacheKey("group-1", 1, storeID, ChannelScopeGlobal)
+
+		storeLocalCache.Set(cacheKey, localStoreCacheItem{}, storeLocalTTL)
+
+		saved, err := SaveIfNotExistStore(&StoreV2{
+			ID:        storeID,
+			GroupID:   "group-1",
+			TokenID:   1,
+			ChannelID: 20,
+			Model:     "gpt-5",
+			ExpiresAt: time.Now().Add(time.Minute),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, storeID, saved.ID)
+		assert.Equal(t, 20, saved.ChannelID)
+
+		current, err := GetStore("group-1", 1, storeID)
+		require.NoError(t, err)
+		assert.Equal(t, 20, current.ChannelID)
 	})
 }
 
@@ -407,7 +633,7 @@ func withTestStoreDB(t *testing.T, fn func()) {
 
 	db, err := OpenSQLite(filepath.Join(t.TempDir(), "store_test.db"))
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&StoreV2{}))
+	require.NoError(t, db.AutoMigrate(&StoreV2{}, &GroupChannelStoreV2{}))
 
 	LogDB = db
 	DB = db

@@ -43,33 +43,35 @@ func AsyncConsume(
 	}
 
 	consumeWaitGroup.Add(1)
-	defer func() {
-		consumeWaitGroup.Done()
+	go func() {
+		defer func() {
+			consumeWaitGroup.Done()
 
-		if r := recover(); r != nil {
-			log.Errorf("panic in consume: %v", r)
-		}
+			if r := recover(); r != nil {
+				log.Errorf("panic in consume: %v", r)
+			}
+		}()
+
+		Consume(
+			context.Background(),
+			time.Now(),
+			postGroupConsumer,
+			firstByteAt,
+			code,
+			meta,
+			usage,
+			usageContext,
+			modelPrice,
+			content,
+			ip,
+			retryTimes,
+			requestDetail,
+			downstreamResult,
+			metadata,
+			upstreamID,
+			asyncUsageStatus,
+		)
 	}()
-
-	go Consume(
-		context.Background(),
-		time.Now(),
-		postGroupConsumer,
-		firstByteAt,
-		code,
-		meta,
-		usage,
-		usageContext,
-		modelPrice,
-		content,
-		ip,
-		retryTimes,
-		requestDetail,
-		downstreamResult,
-		metadata,
-		upstreamID,
-		asyncUsageStatus,
-	)
 }
 
 func Consume(
@@ -95,6 +97,11 @@ func Consume(
 		return
 	}
 
+	groupChannel := meta != nil && meta.Channel.Scope == model.ChannelScopeGroup
+	if groupChannel {
+		asyncUsageStatus = model.AsyncUsageStatusNone
+	}
+
 	recordUsage := usage
 
 	amountDetail := model.Amount{}
@@ -111,8 +118,10 @@ func Consume(
 	}
 
 	if downstreamResult {
-		// TODO: add record actual consume amount
-		_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
+		if !groupChannel {
+			// TODO: add record actual consume amount
+			_ = consumeAmount(ctx, amountDetail.UsedAmount, postGroupConsumer, meta)
+		}
 	} else if amountDetail.UsedAmount != 0 {
 		log.Warnf(
 			"not downstream result but used amount is not zero, request_id: %s, used_amount: %f",
@@ -151,6 +160,11 @@ func Consume(
 	)
 	if err != nil {
 		log.Error("error batch record consume: " + err.Error())
+
+		if groupChannel {
+			return
+		}
+
 		notify.ErrorThrottle("recordConsume", time.Minute*5, "record consume failed", err.Error())
 	}
 }

@@ -103,137 +103,24 @@ func (r *TestChannelRequest) optionsForModel(modelName string) testOptions {
 }
 
 func testSingleModelWithOptions(
-	mc *model.ModelCaches,
-	channel *model.Channel,
-	modelName string,
-	saveToDB bool,
-	options testOptions,
+	mc *model.ModelCaches, channel *model.Channel, modelName string,
+	saveToDB bool, options testOptions,
 ) (*model.ChannelTest, error) {
-	modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
-	if !ok {
-		return nil, errors.New(modelName + " model config not found")
-	}
-
-	if modelConfig.Type == mode.Unknown {
-		newModelConfig := guessModelConfig(modelName)
-		if newModelConfig.Type != mode.Unknown {
-			modelConfig = newModelConfig
-		}
-	}
-
-	if options.Mode != nil {
-		modelConfig.Type = *options.Mode
-	}
-
-	if modelConfig.Type != mode.Unknown {
-		a, ok := adaptors.GetAdaptor(channel.Type)
-		if !ok {
-			return nil, errors.New("adaptor not found")
-		}
-
-		if !a.SupportMode(meta.NewMeta(channel, modelConfig.Type, modelName, modelConfig)) {
-			return nil, fmt.Errorf("%s not supported by adaptor", modelConfig.Type)
-		}
-	}
-
-	if modelConfig.ExcludeFromTests {
-		return &model.ChannelTest{
-			TestAt:      time.Now(),
-			Model:       modelName,
-			ActualModel: modelName,
-			Success:     true,
-			Code:        http.StatusOK,
-			Mode:        modelConfig.Type,
-			ChannelName: channel.Name,
-			ChannelType: channel.Type,
-			ChannelID:   channel.ID,
-		}, nil
-	}
-
-	var (
-		body io.Reader
-		m    mode.Mode
-		err  error
-	)
-	if len(options.RequestBody) > 0 {
-		body = bytes.NewReader(options.RequestBody)
-		m = modelConfig.Type
-	} else {
-		body, m, err = utils.BuildRequest(modelConfig)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	w := httptest.NewRecorder()
-	newc, _ := gin.CreateTestContext(w)
-	newc.Request = &http.Request{
-		URL:    &url.URL{},
-		Body:   io.NopCloser(body),
-		Header: make(http.Header),
-	}
-	middleware.SetRequestID(newc, channelTestRequestID)
-
-	testMeta := meta.NewMeta(
-		channel,
-		m,
-		modelName,
-		modelConfig,
-		meta.WithRequestID(channelTestRequestID),
-	)
-	result := relayHandler(newc, testMeta, mc)
-	success := result.Error == nil
-
-	var (
-		respStr string
-		code    int
-	)
-
-	if success {
-		switch testMeta.Mode {
-		case mode.AudioSpeech,
-			mode.ImagesGenerations:
-			respStr = ""
-		default:
-			respStr = w.Body.String()
-		}
-
-		code = w.Code
-	} else {
-		respBody, _ := result.Error.MarshalJSON()
-		respStr = conv.BytesToString(respBody)
-		code = result.Error.StatusCode()
-	}
-
-	ct := &model.ChannelTest{
-		TestAt:      testMeta.RequestAt,
-		Model:       testMeta.OriginModel,
-		ActualModel: testMeta.ActualModel,
-		Mode:        testMeta.Mode,
-		Took:        time.Since(testMeta.RequestAt).Seconds(),
-		Success:     success,
-		Response:    respStr,
-		Code:        code,
-		ChannelName: channel.Name,
-		ChannelType: channel.Type,
-		ChannelID:   channel.ID,
-	}
-
-	// Only save to database for saved channels (not preview tests)
-	if saveToDB && channel.ID != 0 {
-		return channel.UpdateModelTest(
-			testMeta.RequestAt,
-			testMeta.OriginModel,
-			testMeta.ActualModel,
-			testMeta.Mode,
-			time.Since(testMeta.RequestAt).Seconds(),
-			success,
-			respStr,
-			code,
-		)
-	}
-
-	return ct, nil
+	return executeModelTest(mc, channel, modelName, testSingleModelOptions{
+		testOptions: options,
+		SaveResult: func(testMeta *meta.Meta, success bool, response string, code int) (*model.ChannelTest, error) {
+			return channel.UpdateModelTest(
+				testMeta.RequestAt,
+				testMeta.OriginModel,
+				testMeta.ActualModel,
+				testMeta.Mode,
+				time.Since(testMeta.RequestAt).Seconds(),
+				success,
+				response,
+				code,
+			)
+		},
+	}, saveToDB)
 }
 
 // TestChannel godoc
@@ -880,7 +767,7 @@ func createTempChannel(req *TestChannelRequest) *model.Channel {
 //	@Security		ApiKeyAuth
 //	@Param			request	body		TestSingleModelRequest	true	"Channel test request"
 //	@Success		200		{object}	middleware.APIResponse{data=model.ChannelTest}
-//	@Router			/api/channel/test [post]
+//	@Router			/api/channel/test-preview [post]
 func TestChannelPreview(c *gin.Context) {
 	var req TestSingleModelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -947,7 +834,7 @@ func TestChannelPreview(c *gin.Context) {
 //	@Param			stream			query		bool				false	"Stream mode (SSE)"
 //	@Param			request			body		TestChannelRequest	true	"Channel test request"
 //	@Success		200				{object}	middleware.APIResponse{data=[]TestResult}
-//	@Router			/api/channel/test-all [post]
+//	@Router			/api/channel/test-preview-all [post]
 func TestChannelPreviewAll(c *gin.Context) {
 	var req TestChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1040,4 +927,173 @@ func TestChannelPreviewAll(c *gin.Context) {
 			Data:    results,
 		})
 	}
+}
+
+type testSingleModelOptions struct {
+	testOptions
+	Scope                   model.ChannelScope
+	GroupID                 string
+	AllowMissingModelConfig bool
+	ModelConfig             *model.ModelConfig
+	SaveResult              func(*meta.Meta, bool, string, int) (*model.ChannelTest, error)
+}
+
+func resolveTestModelConfig(
+	mc *model.ModelCaches,
+	modelName string,
+	opts testSingleModelOptions,
+) (model.ModelConfig, bool, error) {
+	if opts.ModelConfig != nil {
+		return *opts.ModelConfig, true, nil
+	}
+
+	if mc != nil && mc.ModelConfig != nil {
+		modelConfig, ok := mc.ModelConfig.GetModelConfig(modelName)
+		if ok {
+			return modelConfig, true, nil
+		}
+	}
+
+	if !opts.AllowMissingModelConfig {
+		return model.ModelConfig{}, false, errors.New(modelName + " model config not found")
+	}
+
+	return model.NewDefaultModelConfig(modelName), false, nil
+}
+
+func testRequestModelConfig(modelConfig model.ModelConfig) model.ModelConfig {
+	if modelConfig.Type != mode.Unknown {
+		return modelConfig
+	}
+
+	guessedModelConfig := guessModelConfig(modelConfig.Model)
+	if guessedModelConfig.Type == mode.Unknown {
+		return modelConfig
+	}
+
+	modelConfig.Type = guessedModelConfig.Type
+	if len(modelConfig.Config) == 0 {
+		modelConfig.Config = guessedModelConfig.Config
+	}
+
+	return modelConfig
+}
+
+func executeModelTest(
+	mc *model.ModelCaches,
+	channel *model.Channel,
+	modelName string,
+	opts testSingleModelOptions,
+	saveToDB bool,
+) (*model.ChannelTest, error) {
+	modelConfig, _, err := resolveTestModelConfig(mc, modelName, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	requestModelConfig := testRequestModelConfig(modelConfig)
+	if opts.Mode != nil {
+		requestModelConfig.Type = *opts.Mode
+	}
+
+	if requestModelConfig.Type != mode.Unknown {
+		a, ok := adaptors.GetAdaptor(channel.Type)
+		if !ok {
+			return nil, errors.New("adaptor not found")
+		}
+
+		if !a.SupportMode(meta.NewMeta(channel, requestModelConfig.Type, modelName, modelConfig)) {
+			return nil, fmt.Errorf("%s not supported by adaptor", requestModelConfig.Type)
+		}
+	}
+
+	if modelConfig.ExcludeFromTests {
+		return &model.ChannelTest{
+			TestAt:      time.Now(),
+			Model:       modelName,
+			ActualModel: modelName,
+			Success:     true,
+			Code:        http.StatusOK,
+			Mode:        requestModelConfig.Type,
+			ChannelName: channel.Name,
+			ChannelType: channel.Type,
+			ChannelID:   channel.ID,
+		}, nil
+	}
+
+	var body io.Reader
+
+	m := requestModelConfig.Type
+	if len(opts.RequestBody) > 0 {
+		body = bytes.NewReader(opts.RequestBody)
+	} else {
+		body, m, err = utils.BuildRequest(requestModelConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	w := httptest.NewRecorder()
+	newc, _ := gin.CreateTestContext(w)
+	newc.Request = &http.Request{
+		URL:    &url.URL{},
+		Body:   io.NopCloser(body),
+		Header: make(http.Header),
+	}
+	middleware.SetRequestID(newc, channelTestRequestID)
+
+	testMeta := meta.NewMeta(
+		channel,
+		m,
+		modelName,
+		modelConfig,
+		meta.WithRequestID(channelTestRequestID),
+		meta.WithChannelScope(opts.Scope, opts.GroupID),
+	)
+	result := relayHandler(newc, testMeta, mc)
+	success := result.Error == nil
+
+	var (
+		respStr string
+		code    int
+	)
+
+	if success {
+		switch testMeta.Mode {
+		case mode.AudioSpeech,
+			mode.ImagesGenerations:
+			respStr = ""
+		default:
+			respStr = w.Body.String()
+		}
+
+		code = w.Code
+	} else {
+		respBody, _ := result.Error.MarshalJSON()
+		respStr = conv.BytesToString(respBody)
+		code = result.Error.StatusCode()
+	}
+
+	ct := &model.ChannelTest{
+		TestAt:      testMeta.RequestAt,
+		Model:       testMeta.OriginModel,
+		ActualModel: testMeta.ActualModel,
+		Mode:        testMeta.Mode,
+		Took:        time.Since(testMeta.RequestAt).Seconds(),
+		Success:     success,
+		Response:    respStr,
+		Code:        code,
+		ChannelName: channel.Name,
+		ChannelType: channel.Type,
+		ChannelID:   channel.ID,
+	}
+
+	// Only save to database for saved channels (not preview tests)
+	if saveToDB && channel.ID != 0 {
+		if opts.SaveResult != nil {
+			return opts.SaveResult(testMeta, success, respStr, code)
+		}
+	}
+
+	return ct, nil
 }

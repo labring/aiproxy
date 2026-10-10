@@ -172,7 +172,7 @@ func saveStableStoreMapping(
 		CreatedAt: now,
 		UpdatedAt: now,
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveRecentStoreMapping(
@@ -188,18 +188,22 @@ func saveRecentStoreMapping(
 
 	now := time.Now()
 
-	return store.SaveStoreWithOption(adaptor.StoreCache{
-		ID:        id,
-		GroupID:   meta.Group.ID,
-		TokenID:   meta.Token.ID,
-		ChannelID: meta.Channel.ID,
-		Model:     meta.OriginModel,
-		CreatedAt: now,
-		UpdatedAt: now,
-		ExpiresAt: expiresAt,
-	}, adaptor.SaveStoreOption{
-		MinUpdateInterval: minInterval,
-	})
+	return store.SaveStoreWithOption(
+		adaptor.StoreCache{
+			ID:        id,
+			GroupID:   meta.Group.ID,
+			TokenID:   meta.Token.ID,
+			ChannelID: meta.Channel.ID,
+			Model:     meta.OriginModel,
+			CreatedAt: now,
+			UpdatedAt: now,
+			ExpiresAt: expiresAt,
+		},
+		meta.Channel.Scope,
+		adaptor.SaveStoreOption{
+			MinUpdateInterval: minInterval,
+		},
+	)
 }
 
 func savePromptCacheMappings(

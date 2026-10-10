@@ -423,6 +423,51 @@ func GetGroupDashboardModels(c *gin.Context) {
 	middleware.SuccessResponse(c, newEnabledModelConfigs)
 }
 
+// GetGroupChannelDashboardModels godoc
+//
+//	@Summary		Get group channel dashboard models
+//	@Description	Returns group-channel model configs backed by enabled group channels for the given group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group	path		string	true	"Group"
+//	@Success		200		{object}	middleware.APIResponse{data=[]GroupModel}
+//	@Router			/api/group/{group}/channel-dashboard/models [get]
+func GetGroupChannelDashboardModels(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	configsBySet, _, err := loadGroupChannelModelsBySet(group)
+	if err != nil {
+		middleware.ErrorResponse(
+			c,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to get group channel models: %v", err),
+		)
+
+		return
+	}
+
+	groupModels := make([]GroupModel, 0)
+
+	appended := make(map[string]struct{})
+	for _, configs := range configsBySet {
+		for _, mc := range configs {
+			if _, ok := appended[mc.Model]; ok {
+				continue
+			}
+
+			groupModels = append(groupModels, NewGroupModel(mc))
+			appended[mc.Model] = struct{}{}
+		}
+	}
+
+	middleware.SuccessResponse(c, groupModels)
+}
+
 // GetTimeSeriesModelData godoc
 //
 //	@Summary		Get model usage data for a specific channel
@@ -606,20 +651,335 @@ func GetGroupTimeSeriesModelDataV3(c *gin.Context) {
 		return
 	}
 
-	rpm, _ := reqlimit.GetGroupModelTokennameRequest(
+	middleware.SuccessResponse(c, result)
+}
+
+func parseGroupChannelDashboardParams(c *gin.Context) (
+	int,
+	string,
+	time.Time,
+	time.Time,
+	model.TimeSpanType,
+	*time.Location,
+	model.SummarySelectFields,
+) {
+	groupChannelID, _ := strconv.Atoi(c.Query("group_channel"))
+	modelName := c.Query("model")
+	startTime, endTime := utils.ParseTimeRange(c, -1)
+	timezoneLocation, _ := time.LoadLocation(c.DefaultQuery("timezone", "Local"))
+	timespan := c.Query("timespan")
+	start, end, timeSpan := getDashboardTime(
+		c.Query("type"),
+		timespan,
+		startTime,
+		endTime,
+		timezoneLocation,
+	)
+	fields := model.ParseSummaryFields(c.Query("fields"))
+
+	return groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields
+}
+
+func groupChannelRateQueryKey(groupChannelID int) string {
+	if groupChannelID == 0 {
+		return ""
+	}
+	return strconv.Itoa(groupChannelID)
+}
+
+// GetGroupChannelDashboard godoc
+//
+//	@Summary		Get group channel dashboard data
+//	@Description	Returns group-channel usage statistics for a specific group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			path		string	true	"Group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start second timestamp"
+//	@Param			end_timestamp	query		int64	false	"End second timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardResponse}
+//	@Router			/api/group/{group}/channel-dashboard [get]
+func GetGroupChannelDashboard(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	dashboards, err := model.GetGroupChannelDashboardData(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	dashboards.ChartData = fillGaps(dashboards.ChartData, start, end, timeSpan)
+
+	channelKey := groupChannelRateQueryKey(groupChannelID)
+	rpm, _ := reqlimit.GetGroupChannelModelRequest(
 		c.Request.Context(),
 		group,
+		channelKey,
 		modelName,
-		tokenName,
+	)
+	dashboards.RPM = rpm
+	tpm, _ := reqlimit.GetGroupChannelModelTokensRequest(
+		c.Request.Context(),
+		group,
+		channelKey,
+		modelName,
+	)
+	dashboards.TPM = tpm
+
+	middleware.SuccessResponse(c, dashboards)
+}
+
+// GetGlobalGroupChannelDashboard godoc
+//
+//	@Summary		Get global group channel dashboard data
+//	@Description	Returns group-channel usage statistics across groups, optionally filtered by group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			query		string	false	"Filter by group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start second timestamp"
+//	@Param			end_timestamp	query		int64	false	"End second timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardResponse}
+//	@Router			/api/dashboard/group_channel [get]
+func GetGlobalGroupChannelDashboard(c *gin.Context) {
+	group := c.Query("group")
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	dashboards, err := model.GetGlobalGroupChannelDashboardData(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	dashboards.ChartData = fillGaps(dashboards.ChartData, start, end, timeSpan)
+
+	middleware.SuccessResponse(c, dashboards)
+}
+
+// GetGroupChannelTimeSeriesModelData godoc
+//
+//	@Summary		Get group channel time series data
+//	@Description	Returns group-channel model usage time series for a specific group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			path		string	true	"Group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start timestamp"
+//	@Param			end_timestamp	query		int64	false	"End timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=[]model.TimeSummaryDataV2}
+//	@Router			/api/group/{group}/channel-dashboardv2 [get]
+func GetGroupChannelTimeSeriesModelData(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	result, err := model.GetGroupChannelTimeSeriesModelData(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetGlobalGroupChannelTimeSeriesModelData godoc
+//
+//	@Summary		Get global group channel time series data
+//	@Description	Returns group-channel model usage time series across groups, optionally filtered by group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			query		string	false	"Filter by group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start timestamp"
+//	@Param			end_timestamp	query		int64	false	"End timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=[]model.TimeSummaryDataV2}
+//	@Router			/api/dashboardv2/group_channel [get]
+func GetGlobalGroupChannelTimeSeriesModelData(c *gin.Context) {
+	group := c.Query("group")
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	result, err := model.GetGlobalGroupChannelTimeSeriesModelData(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetGroupChannelTimeSeriesModelDataV3 godoc
+//
+//	@Summary		Get group channel dashboard V3 data
+//	@Description	Returns group-channel dashboard V3 data for a specific group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			path		string	true	"Group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start timestamp"
+//	@Param			end_timestamp	query		int64	false	"End timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardV3Response}
+//	@Router			/api/group/{group}/channel-dashboardv3 [get]
+func GetGroupChannelTimeSeriesModelDataV3(c *gin.Context) {
+	group := c.Param("group")
+	if group == "" {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid group parameter")
+		return
+	}
+
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	result, err := model.GetGroupChannelDashboardV3Data(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	channelKey := groupChannelRateQueryKey(groupChannelID)
+	rpm, _ := reqlimit.GetGroupChannelModelRequest(
+		c.Request.Context(),
+		group,
+		channelKey,
+		modelName,
 	)
 	result.RPM = rpm
-	tpm, _ := reqlimit.GetGroupModelTokennameTokensRequest(
+	tpm, _ := reqlimit.GetGroupChannelModelTokensRequest(
 		c.Request.Context(),
 		group,
+		channelKey,
 		modelName,
-		tokenName,
 	)
 	result.TPM = tpm
+
+	middleware.SuccessResponse(c, result)
+}
+
+// GetGlobalGroupChannelTimeSeriesModelDataV3 godoc
+//
+//	@Summary		Get global group channel dashboard V3 data
+//	@Description	Returns group-channel dashboard V3 data across groups, optionally filtered by group
+//	@Tags			dashboard
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group			query		string	false	"Filter by group"
+//	@Param			group_channel	query		int		false	"Group channel ID"
+//	@Param			model			query		string	false	"Model name"
+//	@Param			start_timestamp	query		int64	false	"Start timestamp"
+//	@Param			end_timestamp	query		int64	false	"End timestamp"
+//	@Param			timezone		query		string	false	"Timezone, default is Local"
+//	@Param			timespan		query		string	false	"Time span type (minute, hour, day, month)"
+//	@Param			fields			query		string	false	"Comma-separated list of fields to select"
+//	@Success		200				{object}	middleware.APIResponse{data=model.DashboardV3Response}
+//	@Router			/api/dashboardv3/group_channel [get]
+func GetGlobalGroupChannelTimeSeriesModelDataV3(c *gin.Context) {
+	group := c.Query("group")
+	groupChannelID, modelName, start, end, timeSpan, timezoneLocation, fields := parseGroupChannelDashboardParams(
+		c,
+	)
+
+	result, err := model.GetGlobalGroupChannelDashboardV3Data(
+		group,
+		groupChannelID,
+		modelName,
+		start,
+		end,
+		timeSpan,
+		timezoneLocation,
+		fields,
+	)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	middleware.SuccessResponse(c, result)
 }

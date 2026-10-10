@@ -182,6 +182,10 @@ func (l *Log) MarshalJSON() ([]byte, error) {
 }
 
 func GetLogDetail(logID int) (*RequestDetail, error) {
+	return getLogDetail(logID)
+}
+
+func getLogDetail(logID int) (*RequestDetail, error) {
 	var detail RequestDetail
 
 	err := LogDB.
@@ -200,6 +204,10 @@ func GetGroupLogDetail(logID int, group string) (*RequestDetail, error) {
 		return nil, errors.New("invalid group parameter")
 	}
 
+	return getLogDetailForGroup(logID, group)
+}
+
+func getLogDetailForGroup(logID int, group string) (*RequestDetail, error) {
 	var detail RequestDetail
 
 	err := LogDB.
@@ -213,6 +221,47 @@ func GetGroupLogDetail(logID int, group string) (*RequestDetail, error) {
 	}
 
 	return &detail, nil
+}
+
+func GetGroupChannelLogDetailForGroup(logID int, group string) (*RequestDetail, error) {
+	if group == "" {
+		return nil, errors.New("invalid group parameter")
+	}
+
+	return getGroupChannelLogDetailByGroup(logID, group)
+}
+
+func GetGroupChannelLogDetail(logID int) (*RequestDetail, error) {
+	return getGroupChannelLogDetailByGroup(logID, "")
+}
+
+func getGroupChannelLogDetailByGroup(logID int, group string) (*RequestDetail, error) {
+	var detail GroupChannelRequestDetail
+
+	query := LogDB.
+		Model(&GroupChannelRequestDetail{}).
+		Joins(
+			"JOIN group_channel_logs ON group_channel_logs.id = group_channel_request_details.log_id",
+		).
+		Where("log_id = ?", logID)
+	if group != "" {
+		query = query.Where("group_channel_logs.group_id = ?", group)
+	}
+
+	err := query.First(&detail).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &RequestDetail{
+		CreatedAt:             detail.CreatedAt,
+		RequestBody:           detail.RequestBody,
+		ResponseBody:          detail.ResponseBody,
+		RequestBodyTruncated:  detail.RequestBodyTruncated,
+		ResponseBodyTruncated: detail.ResponseBodyTruncated,
+		ID:                    detail.ID,
+		LogID:                 detail.LogID,
+	}, nil
 }
 
 const defaultCleanLogBatchSize = 10000
@@ -247,20 +296,12 @@ func cleanLog(batchSize int) error {
 
 	logStorageHours := config.GetLogStorageHours()
 	if logStorageHours != 0 {
-		subQuery := LogDB.
-			Model(&Log{}).
-			Where(
-				"created_at < ?",
-				time.Now().Add(-time.Duration(logStorageHours)*time.Hour),
-			).
-			Limit(batchSize).
-			Select("id")
+		cutoff := time.Now().Add(-time.Duration(logStorageHours) * time.Hour)
+		if err := cleanLogTable[Log](cutoff, batchSize); err != nil {
+			return err
+		}
 
-		err := LogDB.
-			Session(&gorm.Session{SkipDefaultTransaction: true}).
-			Where("id IN (?)", subQuery).
-			Delete(&Log{}).Error
-		if err != nil {
+		if err := cleanLogTable[GroupChannelLog](cutoff, batchSize); err != nil {
 			return err
 		}
 	}
@@ -271,28 +312,42 @@ func cleanLog(batchSize int) error {
 	}
 
 	if retryLogStorageHours != 0 {
-		subQuery := LogDB.
-			Model(&RetryLog{}).
-			Where(
-				"created_at < ?",
-				time.Now().Add(-time.Duration(retryLogStorageHours)*time.Hour),
-			).
-			Limit(batchSize).
-			Select("id")
+		cutoff := time.Now().Add(-time.Duration(retryLogStorageHours) * time.Hour)
+		if err := cleanLogTable[RetryLog](cutoff, batchSize); err != nil {
+			return err
+		}
 
-		err := LogDB.
-			Session(&gorm.Session{SkipDefaultTransaction: true}).
-			Where("id IN (?)", subQuery).
-			Delete(&RetryLog{}).Error
-		if err != nil {
+		if err := cleanLogTable[GroupChannelRetryLog](cutoff, batchSize); err != nil {
 			return err
 		}
 	}
 
-	return LogDB.
+	if err := LogDB.
 		Model(&StoreV2{}).
 		Where("expires_at < ?", time.Now()).
 		Delete(&StoreV2{}).
+		Error; err != nil {
+		return err
+	}
+
+	return LogDB.
+		Model(&GroupChannelStoreV2{}).
+		Where("expires_at < ?", time.Now()).
+		Delete(&GroupChannelStoreV2{}).
+		Error
+}
+
+func cleanLogTable[T any](cutoff time.Time, batchSize int) error {
+	subQuery := LogDB.
+		Model(new(T)).
+		Where("created_at < ?", cutoff).
+		Limit(batchSize).
+		Select("id")
+
+	return LogDB.
+		Session(&gorm.Session{SkipDefaultTransaction: true}).
+		Where("id IN (?)", subQuery).
+		Delete(new(T)).
 		Error
 }
 
@@ -310,7 +365,7 @@ func optimizeLog() error {
 	case common.UsingSQLite:
 		return LogDB.Exec("VACUUM").Error
 	default:
-		return LogDB.Exec("VACUUM ANALYZE logs").Error
+		return LogDB.Exec("VACUUM ANALYZE logs, group_channel_logs").Error
 	}
 }
 
@@ -328,24 +383,25 @@ func cleanLogDetail(batchSize int) error {
 		batchSize = defaultCleanLogBatchSize
 	}
 
-	subQuery := LogDB.
-		Model(&RequestDetail{}).
-		Where(
-			"created_at < ?",
-			time.Now().Add(-time.Duration(detailStorageHours)*time.Hour),
-		).
-		Limit(batchSize).
-		Select("id")
-
-	err := LogDB.
-		Session(&gorm.Session{SkipDefaultTransaction: true}).
-		Where("id IN (?)", subQuery).
-		Delete(&RequestDetail{}).Error
-	if err != nil {
+	cutoff := time.Now().Add(-time.Duration(detailStorageHours) * time.Hour)
+	if err := cleanLogDetailTable[RequestDetail](cutoff, batchSize); err != nil {
 		return err
 	}
 
-	return nil
+	return cleanLogDetailTable[GroupChannelRequestDetail](cutoff, batchSize)
+}
+
+func cleanLogDetailTable[T any](cutoff time.Time, batchSize int) error {
+	subQuery := LogDB.
+		Model(new(T)).
+		Where("created_at < ?", cutoff).
+		Limit(batchSize).
+		Select("id")
+
+	return LogDB.
+		Session(&gorm.Session{SkipDefaultTransaction: true}).
+		Where("id IN (?)", subQuery).
+		Delete(new(T)).Error
 }
 
 func RecordConsumeLog(
@@ -461,6 +517,13 @@ type GetGroupLogsResult struct {
 	TokenNames []string `json:"token_names"`
 }
 
+type GetGroupChannelLogsResult struct {
+	Logs       []*GroupChannelLog `json:"logs"`
+	Total      int64              `json:"total"`
+	Models     []string           `json:"models,omitempty"`
+	TokenNames []string           `json:"token_names"`
+}
+
 func buildGetLogsQuery(
 	group string,
 	startTimestamp time.Time,
@@ -537,6 +600,367 @@ func buildGetLogsQuery(
 	return tx
 }
 
+func buildGetGroupChannelLogsQuery(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	codeType CodeType,
+	code int,
+	ip string,
+	user string,
+) *gorm.DB {
+	return applyGroupChannelLogFilters(
+		LogDB.Model(&GroupChannelLog{}),
+		group,
+		true,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+}
+
+func buildGetGlobalGroupChannelLogsQuery(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	codeType CodeType,
+	code int,
+	ip string,
+	user string,
+) *gorm.DB {
+	return applyGroupChannelLogFilters(
+		LogDB.Model(&GroupChannelLog{}),
+		group,
+		false,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+}
+
+func applyGroupChannelLogFilters(
+	tx *gorm.DB,
+	group string,
+	requireGroup bool,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	codeType CodeType,
+	code int,
+	ip string,
+	user string,
+) *gorm.DB {
+	if requestID != "" {
+		tx = tx.Where("request_id = ?", requestID)
+	}
+
+	if upstreamID != "" {
+		tx = tx.Where("upstream_id = ?", upstreamID)
+	}
+
+	if ip != "" {
+		tx = tx.Where("ip = ?", ip)
+	}
+
+	if requireGroup || group != "" {
+		tx = tx.Where("group_id = ?", group)
+	}
+
+	if modelName != "" {
+		tx = tx.Where("model = ?", modelName)
+	}
+
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+	}
+
+	if channelID != 0 {
+		tx = tx.Where("group_channel_id = ?", channelID)
+	}
+
+	switch {
+	case !startTimestamp.IsZero() && !endTimestamp.IsZero():
+		tx = tx.Where("created_at BETWEEN ? AND ?", startTimestamp, endTimestamp)
+	case !startTimestamp.IsZero():
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	case !endTimestamp.IsZero():
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+
+	switch codeType {
+	case CodeTypeSuccess:
+		tx = tx.Where("code = 200")
+	case CodeTypeError:
+		tx = tx.Where("code != 200")
+	default:
+		if code != 0 {
+			tx = tx.Where("code = ?", code)
+		}
+	}
+
+	if tokenID != 0 {
+		tx = tx.Where("token_id = ?", tokenID)
+	}
+
+	if user != "" {
+		tx = tx.Where("user = ?", user)
+	}
+
+	return tx
+}
+
+func buildGroupChannelLogsQuery(
+	group string,
+	requireGroup bool,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	codeType CodeType,
+	code int,
+	ip string,
+	user string,
+) *gorm.DB {
+	if requireGroup {
+		return buildGetGroupChannelLogsQuery(
+			group,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			codeType,
+			code,
+			ip,
+			user,
+		)
+	}
+
+	return buildGetGlobalGroupChannelLogsQuery(
+		group,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+}
+
+func getGroupChannelLogsByScope(
+	group string,
+	requireGroup bool,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	var (
+		total            int64
+		groupChannelLogs []*GroupChannelLog
+	)
+
+	g := new(errgroup.Group)
+	g.Go(func() error {
+		return buildGroupChannelLogsQuery(
+			group,
+			requireGroup,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			codeType,
+			code,
+			ip,
+			user,
+		).Count(&total).Error
+	})
+
+	g.Go(func() error {
+		query := buildGroupChannelLogsQuery(
+			group,
+			requireGroup,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			codeType,
+			code,
+			ip,
+			user,
+		)
+		if withBody {
+			query = query.Preload("RequestDetail")
+		} else {
+			query = query.Preload("RequestDetail", func(db *gorm.DB) *gorm.DB {
+				return db.Select("id", "log_id")
+			})
+		}
+
+		query = query.Order(getLogOrder(order))
+		limit, offset := toLimitOffset(page, perPage)
+		query = query.Limit(limit).Offset(offset)
+
+		return query.Find(&groupChannelLogs).Error
+	})
+
+	if err := g.Wait(); err != nil {
+		return 0, nil, err
+	}
+
+	return total, groupChannelLogs, nil
+}
+
+func getGlobalGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	return getGroupChannelLogsByScope(
+		group,
+		false,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		page,
+		perPage,
+	)
+}
+
+func getGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	return getGroupChannelLogsByScope(
+		group,
+		true,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		page,
+		perPage,
+	)
+}
+
 func getLogs(
 	group string,
 	startTimestamp time.Time,
@@ -605,13 +1029,11 @@ func getLogs(
 			})
 		}
 
+		query = query.Order(getLogOrder(order))
 		limit, offset := toLimitOffset(page, perPage)
+		query = query.Limit(limit).Offset(offset)
 
-		return query.
-			Order(getLogOrder(order)).
-			Limit(limit).
-			Offset(offset).
-			Find(&logs).Error
+		return query.Find(&logs).Error
 	})
 
 	if err := g.Wait(); err != nil {
@@ -700,6 +1122,7 @@ func GetGroupLogs(
 	upstreamID string,
 	tokenID int,
 	tokenName string,
+	channelID int,
 	order string,
 	codeType CodeType,
 	code int,
@@ -734,7 +1157,7 @@ func GetGroupLogs(
 			upstreamID,
 			tokenID,
 			tokenName,
-			0,
+			channelID,
 			order,
 			codeType,
 			code,
@@ -772,6 +1195,181 @@ func GetGroupLogs(
 			Total:  total,
 			Models: models,
 		},
+		TokenNames: tokenNames,
+	}, nil
+}
+
+func GetGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (*GetGroupChannelLogsResult, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	var (
+		total      int64
+		logs       []*GroupChannelLog
+		tokenNames []string
+		models     []string
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		total, logs, err = getGroupChannelLogs(
+			group,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			order,
+			codeType,
+			code,
+			withBody,
+			ip,
+			user,
+			page,
+			perPage,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		tokenNames, err = GetGroupChannelTokenUsedTokenNames(group, startTimestamp, endTimestamp)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		models, err = GetGroupChannelTokenUsedModels(group, tokenName, startTimestamp, endTimestamp)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &GetGroupChannelLogsResult{
+		Logs:       logs,
+		Total:      total,
+		Models:     models,
+		TokenNames: tokenNames,
+	}, nil
+}
+
+func GetGlobalGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (*GetGroupChannelLogsResult, error) {
+	var (
+		total      int64
+		logs       []*GroupChannelLog
+		tokenNames []string
+		models     []string
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		total, logs, err = getGlobalGroupChannelLogs(
+			group,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			order,
+			codeType,
+			code,
+			withBody,
+			ip,
+			user,
+			page,
+			perPage,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		tokenNames, err = GetGlobalGroupChannelTokenUsedTokenNames(
+			group,
+			startTimestamp,
+			endTimestamp,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		models, err = GetGlobalGroupChannelTokenUsedModels(
+			group,
+			tokenName,
+			startTimestamp,
+			endTimestamp,
+		)
+
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &GetGroupChannelLogsResult{
+		Logs:       logs,
+		Total:      total,
+		Models:     models,
 		TokenNames: tokenNames,
 	}, nil
 }
@@ -880,6 +1478,192 @@ func exportLogsRange(
 	return logs, query.Find(&logs).Error
 }
 
+func exportGroupChannelLogsByScope(
+	group string,
+	requireGroup bool,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	var groupChannelLogs []*GroupChannelLog
+
+	query := buildGroupChannelLogsQuery(
+		group,
+		requireGroup,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+
+	if withBody {
+		query = query.Preload("RequestDetail")
+	}
+
+	query = query.Order(getLogOrder(order))
+	if maxEntries > 0 {
+		query = query.Limit(maxEntries)
+	}
+
+	return groupChannelLogs, query.Find(&groupChannelLogs).Error
+}
+
+func exportGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	return exportGroupChannelLogsByScope(
+		group,
+		true,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func exportGroupChannelLogsRangeByScope(
+	group string,
+	requireGroup bool,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	var groupChannelLogs []*GroupChannelLog
+
+	query := buildGroupChannelLogsQuery(
+		group,
+		requireGroup,
+		time.Time{},
+		time.Time{},
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+
+	if !startTimestamp.IsZero() {
+		query = query.Where("created_at >= ?", startTimestamp)
+	}
+
+	if !endExclusive.IsZero() {
+		query = query.Where("created_at < ?", endExclusive)
+	}
+
+	if withBody {
+		query = query.Preload("RequestDetail")
+	}
+
+	query = query.Order(getLogOrder(order))
+	if maxEntries > 0 {
+		query = query.Limit(maxEntries)
+	}
+
+	return groupChannelLogs, query.Find(&groupChannelLogs).Error
+}
+
+func exportGroupChannelLogsRange(
+	group string,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	return exportGroupChannelLogsRangeByScope(
+		group,
+		true,
+		startTimestamp,
+		endExclusive,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
 func ExportLogs(
 	startTimestamp time.Time,
 	endTimestamp time.Time,
@@ -924,6 +1708,7 @@ func ExportGroupLogs(
 	upstreamID string,
 	tokenID int,
 	tokenName string,
+	channelID int,
 	order string,
 	codeType CodeType,
 	code int,
@@ -945,7 +1730,88 @@ func ExportGroupLogs(
 		upstreamID,
 		tokenID,
 		tokenName,
-		0,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	return exportGroupChannelLogs(
+		group,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportGlobalGroupChannelLogs(
+	group string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	return exportGroupChannelLogsByScope(
+		group,
+		false,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
 		order,
 		codeType,
 		code,
@@ -1000,6 +1866,7 @@ func ExportGroupLogsRange(
 	upstreamID string,
 	tokenID int,
 	tokenName string,
+	channelID int,
 	order string,
 	codeType CodeType,
 	code int,
@@ -1021,7 +1888,88 @@ func ExportGroupLogsRange(
 		upstreamID,
 		tokenID,
 		tokenName,
-		0,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportGroupChannelLogsRange(
+	group string,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	return exportGroupChannelLogsRange(
+		group,
+		startTimestamp,
+		endExclusive,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		maxEntries,
+	)
+}
+
+func ExportGlobalGroupChannelLogsRange(
+	group string,
+	startTimestamp time.Time,
+	endExclusive time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	maxEntries int,
+) ([]*GroupChannelLog, error) {
+	return exportGroupChannelLogsRangeByScope(
+		group,
+		false,
+		startTimestamp,
+		endExclusive,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
 		order,
 		codeType,
 		code,
@@ -1166,6 +2114,81 @@ func buildSearchLogsQuery(
 	return tx
 }
 
+func buildSearchGroupChannelLogsQueryByScope(
+	group string,
+	requireGroup bool,
+	keyword string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	modelName string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	channelID int,
+	codeType CodeType,
+	code int,
+	ip string,
+	user string,
+) *gorm.DB {
+	tx := buildGroupChannelLogsQuery(
+		group,
+		requireGroup,
+		startTimestamp,
+		endTimestamp,
+		modelName,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		channelID,
+		codeType,
+		code,
+		ip,
+		user,
+	)
+
+	if keyword == "" {
+		return tx
+	}
+
+	var (
+		conditions []string
+		values     []any
+	)
+
+	if requestID == "" {
+		conditions = append(conditions, "request_id = ?")
+		values = append(values, keyword)
+	}
+
+	if upstreamID == "" {
+		conditions = append(conditions, "upstream_id = ?")
+		values = append(values, keyword)
+	}
+
+	if group == "" {
+		conditions = append(conditions, "group_id = ?")
+		values = append(values, keyword)
+	}
+
+	if modelName == "" {
+		conditions = append(conditions, "model = ?")
+		values = append(values, keyword)
+	}
+
+	if tokenName == "" {
+		conditions = append(conditions, "token_name = ?")
+		values = append(values, keyword)
+	}
+
+	if len(conditions) > 0 {
+		tx = tx.Where(fmt.Sprintf("(%s)", strings.Join(conditions, " OR ")), values...)
+	}
+
+	return tx
+}
+
 func searchLogs(
 	group string,
 	keyword string,
@@ -1238,13 +2261,11 @@ func searchLogs(
 			})
 		}
 
+		query = query.Order(getLogOrder(order))
 		limit, offset := toLimitOffset(page, perPage)
+		query = query.Limit(limit).Offset(offset)
 
-		return query.
-			Order(getLogOrder(order)).
-			Limit(limit).
-			Offset(offset).
-			Find(&logs).Error
+		return query.Find(&logs).Error
 	})
 
 	if err := g.Wait(); err != nil {
@@ -1252,6 +2273,180 @@ func searchLogs(
 	}
 
 	return total, logs, nil
+}
+
+func searchGroupChannelLogsByScope(
+	group string,
+	requireGroup bool,
+	keyword string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	modelName string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	var (
+		total            int64
+		groupChannelLogs []*GroupChannelLog
+	)
+
+	g := new(errgroup.Group)
+	g.Go(func() error {
+		return buildSearchGroupChannelLogsQueryByScope(
+			group,
+			requireGroup,
+			keyword,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			codeType,
+			code,
+			ip,
+			user,
+		).Count(&total).Error
+	})
+
+	g.Go(func() error {
+		query := buildSearchGroupChannelLogsQueryByScope(
+			group,
+			requireGroup,
+			keyword,
+			startTimestamp,
+			endTimestamp,
+			modelName,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			channelID,
+			codeType,
+			code,
+			ip,
+			user,
+		)
+
+		if withBody {
+			query = query.Preload("RequestDetail")
+		} else {
+			query = query.Preload("RequestDetail", func(db *gorm.DB) *gorm.DB {
+				return db.Select("id", "log_id")
+			})
+		}
+
+		query = query.Order(getLogOrder(order))
+		limit, offset := toLimitOffset(page, perPage)
+		query = query.Limit(limit).Offset(offset)
+
+		return query.Find(&groupChannelLogs).Error
+	})
+
+	if err := g.Wait(); err != nil {
+		return 0, nil, err
+	}
+
+	return total, groupChannelLogs, nil
+}
+
+func searchGlobalGroupChannelLogs(
+	group string,
+	keyword string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	modelName string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	return searchGroupChannelLogsByScope(
+		group,
+		false,
+		keyword,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		modelName,
+		startTimestamp,
+		endTimestamp,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		page,
+		perPage,
+	)
+}
+
+func searchGroupChannelLogs(
+	group string,
+	keyword string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	modelName string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (int64, []*GroupChannelLog, error) {
+	return searchGroupChannelLogsByScope(
+		group,
+		true,
+		keyword,
+		requestID,
+		upstreamID,
+		tokenID,
+		tokenName,
+		modelName,
+		startTimestamp,
+		endTimestamp,
+		channelID,
+		order,
+		codeType,
+		code,
+		withBody,
+		ip,
+		user,
+		page,
+		perPage,
+	)
 }
 
 func SearchLogs(
@@ -1348,6 +2543,7 @@ func SearchGroupLogs(
 	modelName string,
 	startTimestamp time.Time,
 	endTimestamp time.Time,
+	channelID int,
 	order string,
 	codeType CodeType,
 	code int,
@@ -1373,7 +2569,8 @@ func SearchGroupLogs(
 	g.Go(func() error {
 		var err error
 
-		total, logs, err = searchLogs(group,
+		total, logs, err = searchLogs(
+			group,
 			keyword,
 			requestID,
 			upstreamID,
@@ -1382,7 +2579,7 @@ func SearchGroupLogs(
 			modelName,
 			startTimestamp,
 			endTimestamp,
-			0,
+			channelID,
 			order,
 			codeType,
 			code,
@@ -1426,8 +2623,206 @@ func SearchGroupLogs(
 	return result, nil
 }
 
+func SearchGroupChannelLogs(
+	group string,
+	keyword string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	modelName string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (*GetGroupChannelLogsResult, error) {
+	if group == "" {
+		return nil, errors.New("group is required")
+	}
+
+	var (
+		total      int64
+		logs       []*GroupChannelLog
+		tokenNames []string
+		models     []string
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		total, logs, err = searchGroupChannelLogs(
+			group,
+			keyword,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			modelName,
+			startTimestamp,
+			endTimestamp,
+			channelID,
+			order,
+			codeType,
+			code,
+			withBody,
+			ip,
+			user,
+			page,
+			perPage,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		tokenNames, err = GetGroupChannelTokenUsedTokenNames(group, startTimestamp, endTimestamp)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		models, err = GetGroupChannelTokenUsedModels(group, tokenName, startTimestamp, endTimestamp)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	result := &GetGroupChannelLogsResult{
+		Logs:       logs,
+		Total:      total,
+		Models:     models,
+		TokenNames: tokenNames,
+	}
+
+	return result, nil
+}
+
+func SearchGlobalGroupChannelLogs(
+	group string,
+	keyword string,
+	requestID string,
+	upstreamID string,
+	tokenID int,
+	tokenName string,
+	modelName string,
+	startTimestamp time.Time,
+	endTimestamp time.Time,
+	channelID int,
+	order string,
+	codeType CodeType,
+	code int,
+	withBody bool,
+	ip string,
+	user string,
+	page int,
+	perPage int,
+) (*GetGroupChannelLogsResult, error) {
+	var (
+		total      int64
+		logs       []*GroupChannelLog
+		tokenNames []string
+		models     []string
+	)
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		var err error
+
+		total, logs, err = searchGlobalGroupChannelLogs(
+			group,
+			keyword,
+			requestID,
+			upstreamID,
+			tokenID,
+			tokenName,
+			modelName,
+			startTimestamp,
+			endTimestamp,
+			channelID,
+			order,
+			codeType,
+			code,
+			withBody,
+			ip,
+			user,
+			page,
+			perPage,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		tokenNames, err = GetGlobalGroupChannelTokenUsedTokenNames(
+			group,
+			startTimestamp,
+			endTimestamp,
+		)
+
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+
+		models, err = GetGlobalGroupChannelTokenUsedModels(
+			group,
+			tokenName,
+			startTimestamp,
+			endTimestamp,
+		)
+
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	result := &GetGroupChannelLogsResult{
+		Logs:       logs,
+		Total:      total,
+		Models:     models,
+		TokenNames: tokenNames,
+	}
+
+	return result, nil
+}
+
 func DeleteOldLog(timestamp time.Time) (int64, error) {
-	result := LogDB.Where("created_at < ?", timestamp).Delete(&Log{})
+	return deleteOldLogsFromTable[Log](timestamp)
+}
+
+func DeleteOldGroupChannelLog(timestamp time.Time) (int64, error) {
+	return deleteOldLogsFromTable[GroupChannelLog](timestamp)
+}
+
+func DeleteOldGroupChannelLogForGroup(groupID string, timestamp time.Time) (int64, error) {
+	if groupID == "" {
+		return 0, errors.New("group is required")
+	}
+
+	result := LogDB.
+		Where("group_id = ? AND created_at < ?", groupID, timestamp).
+		Delete(&GroupChannelLog{})
+
 	return result.RowsAffected, result.Error
 }
 
@@ -1436,8 +2831,24 @@ func DeleteGroupLogs(groupID string) (int64, error) {
 		return 0, errors.New("group is required")
 	}
 
-	result := LogDB.Where("group_id = ?", groupID).Delete(&Log{})
+	return deleteGroupLogsFromTable[Log](groupID)
+}
 
+func DeleteGroupChannelLogs(groupID string) (int64, error) {
+	if groupID == "" {
+		return 0, errors.New("group is required")
+	}
+
+	return deleteGroupLogsFromTable[GroupChannelLog](groupID)
+}
+
+func deleteOldLogsFromTable[T any](timestamp time.Time) (int64, error) {
+	result := LogDB.Where("created_at < ?", timestamp).Delete(new(T))
+	return result.RowsAffected, result.Error
+}
+
+func deleteGroupLogsFromTable[T any](groupID string) (int64, error) {
+	result := LogDB.Where("group_id = ?", groupID).Delete(new(T))
 	return result.RowsAffected, result.Error
 }
 

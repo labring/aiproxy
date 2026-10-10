@@ -22,6 +22,36 @@ import (
 	"github.com/labring/aiproxy/core/relay/plugin/cachefollow"
 )
 
+type scopedChannel struct {
+	channel *model.Channel
+	scope   model.ChannelScope
+	groupID string
+}
+
+func newGlobalScopedChannel(channel *model.Channel) *scopedChannel {
+	return &scopedChannel{channel: channel, scope: model.ChannelScopeGlobal}
+}
+
+func newGroupScopedChannel(groupID string, channel *model.Channel) *scopedChannel {
+	return &scopedChannel{channel: channel, scope: model.ChannelScopeGroup, groupID: groupID}
+}
+
+func (c *scopedChannel) monitorKey() string {
+	if c == nil || c.channel == nil {
+		return "0"
+	}
+
+	if c.scope == model.ChannelScopeGroup {
+		return model.GroupChannelMonitorKey(c.groupID, c.channel.ID)
+	}
+
+	return strconv.Itoa(c.channel.ID)
+}
+
+func (c *scopedChannel) isGroupChannel() bool {
+	return c != nil && c.scope == model.ChannelScopeGroup
+}
+
 const (
 	AIProxyChannelHeader = "Aiproxy-Channel"
 	// maxRetryErrorRate is the maximum error rate threshold for channel retry selection
@@ -37,17 +67,25 @@ const (
 )
 
 func supportModeMeta(
-	mc *model.ModelCaches,
 	channel *model.Channel,
 	modelName string,
 	m mode.Mode,
+	modelConfig model.ModelConfig,
 ) *relaymeta.Meta {
+	return relaymeta.NewMeta(channel, m, modelName, modelConfig)
+}
+
+func supportModeModelConfig(mc *model.ModelCaches, modelName string) model.ModelConfig {
 	modelConfig := model.ModelConfig{}
 	if mc != nil && mc.ModelConfig != nil {
 		modelConfig, _ = mc.ModelConfig.GetModelConfig(modelName)
 	}
 
-	return relaymeta.NewMeta(channel, m, modelName, modelConfig)
+	return modelConfig
+}
+
+func groupChannelSupportModeModelConfig(groupID, modelName string) (model.ModelConfig, bool) {
+	return model.ResolveGroupScopeModelConfig(groupID, modelName)
 }
 
 func adaptorSupportsMode(
@@ -57,7 +95,23 @@ func adaptorSupportsMode(
 	modelName string,
 	m mode.Mode,
 ) bool {
-	return a.SupportMode(supportModeMeta(mc, channel, modelName, m))
+	return adaptorSupportsModeWithConfig(
+		a,
+		channel,
+		modelName,
+		m,
+		supportModeModelConfig(mc, modelName),
+	)
+}
+
+func adaptorSupportsModeWithConfig(
+	a adaptor.Adaptor,
+	channel *model.Channel,
+	modelName string,
+	m mode.Mode,
+	modelConfig model.ModelConfig,
+) bool {
+	return a.SupportMode(supportModeMeta(channel, modelName, m, modelConfig))
 }
 
 func GetChannelFromHeader(
@@ -76,7 +130,8 @@ func GetChannelFromHeader(
 		return nil, fmt.Errorf("channel %d not found", channelIDInt)
 	}
 
-	if !config.EnableAdminBypassChannelModelCheck && !slices.Contains(channel.Models, modelName) {
+	if !config.EnableAdminBypassChannelModelCheck &&
+		!model.ChannelSupportsModel(channel, modelName) {
 		return nil, fmt.Errorf("channel %d not found for model `%s`", channelIDInt, modelName)
 	}
 
@@ -90,6 +145,152 @@ func GetChannelFromHeader(
 	}
 
 	return channel, nil
+}
+
+func findEnabledGlobalChannelByID(
+	mc *model.ModelCaches,
+	availableSet []string,
+	modelName string,
+	channelID int,
+) *model.Channel {
+	if mc == nil || channelID == 0 {
+		return nil
+	}
+
+	return findGlobalChannelByIDInSets(
+		mc.EnabledModel2ChannelsBySet,
+		availableSet,
+		modelName,
+		channelID,
+	)
+}
+
+func findGlobalChannelByIDInSets(
+	channelsBySet map[string]map[string][]*model.Channel,
+	availableSet []string,
+	modelName string,
+	channelID int,
+) *model.Channel {
+	if availableSet != nil && len(availableSet) == 0 {
+		return nil
+	}
+
+	findInSet := func(set string) *model.Channel {
+		for _, channel := range channelsBySet[set][modelName] {
+			if channel.ID == channelID {
+				return channel
+			}
+		}
+
+		return nil
+	}
+
+	for _, set := range availableSet {
+		if channel := findInSet(set); channel != nil {
+			return channel
+		}
+	}
+
+	if len(availableSet) > 0 {
+		return nil
+	}
+
+	for set := range channelsBySet {
+		if channel := findInSet(set); channel != nil {
+			return channel
+		}
+	}
+
+	return nil
+}
+
+func GetGroupChannelFromHeader(
+	header string,
+	group model.GroupCache,
+	availableSet []string,
+	ignoreSetLimit bool,
+	modelName string,
+	m mode.Mode,
+) (*scopedChannel, error) {
+	channelID, err := strconv.Atoi(header)
+	if err != nil {
+		return nil, err
+	}
+
+	groupChannel, err := model.LoadGroupChannelByID(group.ID, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("group channel %d not found for model `%s`", channelID, modelName)
+	}
+
+	if !groupChannelSupportsRequest(
+		groupChannel,
+		availableSet,
+		ignoreSetLimit,
+		config.EnableAdminBypassChannelModelCheck && group.Status == model.GroupStatusInternal,
+		modelName,
+		m,
+	) {
+		return nil, fmt.Errorf(
+			"group channel %d not supported for model `%s`",
+			channelID,
+			modelName,
+		)
+	}
+
+	return newGroupScopedChannel(group.ID, groupChannel.ToChannel()), nil
+}
+
+func groupChannelSupportsRequest(
+	groupChannel *model.GroupChannel,
+	availableSet []string,
+	ignoreSetLimit bool,
+	bypassModelCheck bool,
+	modelName string,
+	m mode.Mode,
+) bool {
+	if groupChannel == nil || groupChannel.Status != model.ChannelStatusEnabled {
+		return false
+	}
+
+	if !bypassModelCheck && !model.GroupChannelSupportsModel(groupChannel, modelName) {
+		return false
+	}
+
+	if !ignoreSetLimit && len(availableSet) > 0 &&
+		!slices.ContainsFunc(groupChannel.GetSets(), func(set string) bool {
+			return slices.Contains(availableSet, set)
+		}) {
+		return false
+	}
+
+	if !ignoreSetLimit && availableSet != nil && len(availableSet) == 0 {
+		return false
+	}
+
+	channel := groupChannel.ToChannel()
+
+	a, ok := adaptors.GetAdaptor(channel.Type)
+	if !ok {
+		return false
+	}
+
+	modelConfig, ok := groupChannelSupportModeModelConfig(groupChannel.GroupID, modelName)
+	if !ok {
+		if !bypassModelCheck {
+			return false
+		}
+
+		modelConfig = model.NewDefaultModelConfig(modelName)
+		modelConfig.Type = m
+	}
+
+	return adaptorSupportsModeWithConfig(
+		a,
+		channel,
+		modelName,
+		m,
+		modelConfig,
+	)
 }
 
 func needPinChannel(m mode.Mode) bool {
@@ -124,33 +325,86 @@ func GetChannelFromRequest(
 		return nil, nil
 	}
 
-	for _, set := range availableSet {
-		enabledChannels := mc.EnabledModel2ChannelsBySet[set][modelName]
-		if len(enabledChannels) > 0 {
-			for _, channel := range enabledChannels {
-				if channel.ID == channelID {
-					a, ok := adaptors.GetAdaptor(channel.Type)
-					if !ok {
-						return nil, fmt.Errorf(
-							"adaptor not found for pinned channel %d",
-							channel.ID,
-						)
-					}
-
-					if !adaptorSupportsMode(a, mc, channel, modelName, m) {
-						return nil, fmt.Errorf(
-							"pinned channel %d not supported by adaptor",
-							channel.ID,
-						)
-					}
-
-					return channel, nil
-				}
-			}
+	channel := findEnabledGlobalChannelByID(mc, availableSet, modelName, channelID)
+	if channel != nil {
+		a, ok := adaptors.GetAdaptor(channel.Type)
+		if !ok {
+			return nil, fmt.Errorf(
+				"adaptor not found for pinned channel %d",
+				channel.ID,
+			)
 		}
+
+		if !adaptorSupportsMode(a, mc, channel, modelName, m) {
+			return nil, fmt.Errorf(
+				"pinned channel %d not supported by adaptor",
+				channel.ID,
+			)
+		}
+
+		return channel, nil
 	}
 
 	return nil, fmt.Errorf("pinned channel %d not found for model `%s`", channelID, modelName)
+}
+
+func GetScopedChannelFromRequest(
+	c *gin.Context,
+	mc *model.ModelCaches,
+	availableSet []string,
+	ignoreGroupChannelSetLimit bool,
+	modelName string,
+	m mode.Mode,
+) (*scopedChannel, error) {
+	channelID := middleware.GetChannelID(c)
+	if channelID == 0 {
+		if needPinChannel(m) {
+			return nil, fmt.Errorf("%s need pinned channel", m)
+		}
+		return nil, nil
+	}
+
+	switch middleware.GetChannelScope(c) {
+	case model.ChannelScopeGroup:
+		group := middleware.GetGroup(c)
+
+		groupChannel, err := model.LoadGroupChannelByID(group.ID, channelID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"pinned group channel %d not found for model `%s`",
+				channelID,
+				modelName,
+			)
+		}
+
+		if groupChannel.Status != model.ChannelStatusEnabled {
+			return nil, fmt.Errorf("pinned group channel %d is disabled", channelID)
+		}
+
+		if !groupChannelSupportsRequest(
+			groupChannel,
+			availableSet,
+			ignoreGroupChannelSetLimit,
+			false,
+			modelName,
+			m,
+		) {
+			return nil, fmt.Errorf(
+				"pinned group channel %d not supported for model `%s`",
+				channelID,
+				modelName,
+			)
+		}
+
+		return newGroupScopedChannel(group.ID, groupChannel.ToChannel()), nil
+	default:
+		channel, err := GetChannelFromRequest(c, mc, availableSet, modelName, m)
+		if err != nil || channel == nil {
+			return nil, err
+		}
+
+		return newGlobalScopedChannel(channel), nil
+	}
 }
 
 var (
@@ -163,8 +417,13 @@ func getAvailableChannels(
 	availableSet []string,
 	modelName string,
 	mode mode.Mode,
-) ([]*model.Channel, error) {
+) ([]*scopedChannel, error) {
 	channelMap := make(map[int]*model.Channel)
+
+	if availableSet != nil && len(availableSet) == 0 {
+		return nil, ErrChannelsNotFound
+	}
+
 	if len(availableSet) != 0 {
 		for _, set := range availableSet {
 			channels := mc.EnabledModel2ChannelsBySet[set][modelName]
@@ -202,16 +461,81 @@ func getAvailableChannels(
 		return nil, ErrChannelsNotFound
 	}
 
-	migratedChannels := make([]*model.Channel, 0, len(channelMap))
+	migratedChannels := make([]*scopedChannel, 0, len(channelMap))
 	for _, channel := range channelMap {
-		migratedChannels = append(migratedChannels, channel)
+		migratedChannels = append(migratedChannels, newGlobalScopedChannel(channel))
 	}
 
 	return migratedChannels, nil
 }
 
-func getPriorityWeight(channel *model.Channel, errorRate float64) float64 {
-	priority := float64(channel.GetPriority())
+func mergeGroupChannels(
+	channels []*scopedChannel,
+	groupChannels []*model.GroupChannel,
+	availableSet []string,
+	modelName string,
+	m mode.Mode,
+) []*scopedChannel {
+	if len(groupChannels) == 0 {
+		return channels
+	}
+
+	if availableSet != nil && len(availableSet) == 0 {
+		return channels
+	}
+
+	setAllowed := make(map[string]struct{}, len(availableSet))
+	for _, set := range availableSet {
+		setAllowed[set] = struct{}{}
+	}
+
+	for _, groupChannel := range groupChannels {
+		if groupChannel.Status != model.ChannelStatusEnabled {
+			continue
+		}
+
+		if !model.GroupChannelSupportsModel(groupChannel, modelName) {
+			continue
+		}
+
+		if len(setAllowed) > 0 &&
+			!slices.ContainsFunc(groupChannel.GetSets(), func(set string) bool {
+				_, ok := setAllowed[set]
+				return ok
+			}) {
+			continue
+		}
+
+		channel := groupChannel.ToChannel()
+
+		a, ok := adaptors.GetAdaptor(channel.Type)
+		if !ok {
+			continue
+		}
+
+		modelConfig, ok := groupChannelSupportModeModelConfig(groupChannel.GroupID, modelName)
+		if !ok {
+			continue
+		}
+
+		if !adaptorSupportsModeWithConfig(
+			a,
+			channel,
+			modelName,
+			m,
+			modelConfig,
+		) {
+			continue
+		}
+
+		channels = append(channels, newGroupScopedChannel(groupChannel.GroupID, channel))
+	}
+
+	return channels
+}
+
+func getPriorityWeight(channel *scopedChannel, errorRate float64) float64 {
+	priority := float64(channel.channel.GetPriority())
 	if priority <= 0 {
 		return 0
 	}
@@ -228,7 +552,7 @@ func getPriorityWeight(channel *model.Channel, errorRate float64) float64 {
 	return priority / math.Pow(errorRate+errorRatePenaltyBase, errorRatePenalty)
 }
 
-func getChannelErrorRate(errorRates map[int64]float64, channelID int64) float64 {
+func getChannelErrorRate(errorRates map[string]float64, channelID string) float64 {
 	if errorRates == nil {
 		return 0
 	}
@@ -236,10 +560,44 @@ func getChannelErrorRate(errorRates map[int64]float64, channelID int64) float64 
 	return errorRates[channelID]
 }
 
+func int64SetToStringSet(values map[int64]struct{}) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make(map[string]struct{}, len(values))
+	for value := range values {
+		result[strconv.FormatInt(value, 10)] = struct{}{}
+	}
+
+	return result
+}
+
+func pickMinErrorRateHasPermissionChannel(
+	current *scopedChannel,
+	currentErrorRate float64,
+	candidate *scopedChannel,
+	candidateErrorRate float64,
+) *scopedChannel {
+	if candidate == nil {
+		return current
+	}
+
+	if current == nil {
+		return candidate
+	}
+
+	if candidateErrorRate < currentErrorRate {
+		return candidate
+	}
+
+	return current
+}
+
 func pickChannel(
-	channels []*model.Channel,
-	errorRates map[int64]float64,
-) (*model.Channel, error) {
+	channels []*scopedChannel,
+	errorRates map[string]float64,
+) (*scopedChannel, error) {
 	if len(channels) == 0 {
 		return nil, ErrChannelsExhausted
 	}
@@ -252,7 +610,7 @@ func pickChannel(
 
 	cachedWeights := make([]float64, len(channels))
 	for i, ch := range channels {
-		weight := getPriorityWeight(ch, getChannelErrorRate(errorRates, int64(ch.ID)))
+		weight := getPriorityWeight(ch, getChannelErrorRate(errorRates, ch.monitorKey()))
 		totalWeight += weight
 		cachedWeights[i] = weight
 	}
@@ -272,34 +630,82 @@ func pickChannel(
 	return channels[rand.IntN(len(channels))], nil
 }
 
-func getChannelWithFallback(
+func getInitialChannelScope(groupMode string) model.ChannelScope {
+	if groupMode == middleware.GroupChannelModeOwn {
+		return model.ChannelScopeGroup
+	}
+
+	return model.ChannelScopeGlobal
+}
+
+func getScopedBannedChannelKeysMap(
+	ctx context.Context,
+	scope model.ChannelScope,
+	modelName string,
+) (map[string]struct{}, error) {
+	if scope == model.ChannelScopeGroup {
+		return monitor.GetGroupChannelBannedChannelKeysMapWithModel(ctx, modelName)
+	}
+
+	return monitor.GetBannedChannelKeysMapWithModel(ctx, modelName)
+}
+
+func getScopedModelChannelErrorRateByKey(
+	ctx context.Context,
+	scope model.ChannelScope,
+	modelName string,
+) (map[string]float64, error) {
+	if scope == model.ChannelScopeGroup {
+		return monitor.GetGroupChannelModelErrorRateByKey(ctx, modelName)
+	}
+
+	return monitor.GetModelChannelErrorRateByKey(ctx, modelName)
+}
+
+func getScopedChannelWithFallback(
 	cache *model.ModelCaches,
 	availableSet []string,
+	groupChannels []*model.GroupChannel,
+	groupOnly bool,
 	modelName string,
 	mode mode.Mode,
-	preferChannelIDs []int,
-	errorRates map[int64]float64,
-	ignoreChannelIDs map[int64]struct{},
+	preferChannelKeys []string,
+	errorRates map[string]float64,
+	ignoreChannelIDs map[string]struct{},
 ) (*initialChannel, error) {
-	migratedChannels, err := getAvailableChannels(
-		cache,
+	var migratedChannels []*scopedChannel
+	if !groupOnly {
+		var err error
+
+		migratedChannels, err = getAvailableChannels(
+			cache,
+			availableSet,
+			modelName,
+			mode,
+		)
+		if err != nil && len(groupChannels) == 0 {
+			return nil, err
+		}
+	}
+
+	migratedChannels = mergeGroupChannels(
+		migratedChannels,
+		groupChannels,
 		availableSet,
 		modelName,
 		mode,
 	)
-	if err != nil {
-		return nil, err
-	}
 
 	initial := &initialChannel{
-		preferChannelIDs: preferChannelIDs,
-		ignoreChannelIDs: ignoreChannelIDs,
-		migratedChannels: migratedChannels,
+		preferChannelKeys: preferChannelKeys,
+		groupRetryOnly:    groupOnly,
+		ignoreChannelIDs:  ignoreChannelIDs,
+		migratedChannels:  migratedChannels,
 	}
 
 	filtered := filterChannels(migratedChannels, errorRates, maxRetryErrorRate, ignoreChannelIDs)
 
-	channel, err := initial.selectChannel(filtered, preferChannelIDs, errorRates)
+	channel, err := initial.selectChannel(filtered, preferChannelKeys, errorRates)
 	if err == nil {
 		initial.channel = channel
 		return initial, nil
@@ -309,17 +715,17 @@ func getChannelWithFallback(
 	backupChannels := backupOnlyChannels(migratedChannels)
 
 	// Preserve the initial request's last-resort fallbacks after healthy backups.
-	pipeline := []func() []*model.Channel{
-		func() []*model.Channel {
+	pipeline := []func() []*scopedChannel{
+		func() []*scopedChannel {
 			return filterChannels(primaryChannels, errorRates, 0, ignoreChannelIDs)
 		},
-		func() []*model.Channel {
+		func() []*scopedChannel {
 			return filterChannels(backupChannels, errorRates, 0, ignoreChannelIDs)
 		},
-		func() []*model.Channel {
+		func() []*scopedChannel {
 			return filterChannels(primaryChannels, errorRates, 0)
 		},
-		func() []*model.Channel {
+		func() []*scopedChannel {
 			return filterChannels(backupChannels, errorRates, 0)
 		},
 	}
@@ -334,78 +740,27 @@ func getChannelWithFallback(
 	return nil, ErrChannelsExhausted
 }
 
-type channelSelectionState struct {
-	backupOnlyEnabled bool // Remains enabled across retry rounds for this request.
-}
-
-// Preferences bypass backup-only gating, while health and failure filters still apply.
-func (s *channelSelectionState) selectChannel(
-	channels []*model.Channel,
-	preferChannelIDs []int,
-	errorRates map[int64]float64,
-) (*model.Channel, error) {
-	if channel := pickPreferredChannel(channels, preferChannelIDs); channel != nil {
-		return channel, nil
-	}
-
-	for {
-		candidates := channels
-		if !s.backupOnlyEnabled {
-			candidates = nonBackupChannels(channels)
-		}
-
-		channel, err := pickChannel(candidates, errorRates)
-		if err == nil || s.backupOnlyEnabled {
-			return channel, err
-		}
-
-		s.backupOnlyEnabled = true
-	}
-}
-
-func nonBackupChannels(channels []*model.Channel) []*model.Channel {
-	primary := make([]*model.Channel, 0, len(channels))
-	for _, channel := range channels {
-		if channel != nil && !channel.BackupOnly {
-			primary = append(primary, channel)
-		}
-	}
-
-	return primary
-}
-
-func backupOnlyChannels(channels []*model.Channel) []*model.Channel {
-	backups := make([]*model.Channel, 0, len(channels))
-	for _, channel := range channels {
-		if channel != nil && channel.BackupOnly {
-			backups = append(backups, channel)
-		}
-	}
-
-	return backups
-}
-
 func pickPreferredChannel(
-	channels []*model.Channel,
-	preferChannelIDs []int,
-) *model.Channel {
-	if len(channels) == 0 || len(preferChannelIDs) == 0 {
+	channels []*scopedChannel,
+	preferChannelKeys []string,
+) *scopedChannel {
+	if len(channels) == 0 || len(preferChannelKeys) == 0 {
 		return nil
 	}
 
-	channelMap := make(map[int]*model.Channel, len(channels))
+	channelMap := make(map[string]*scopedChannel, len(channels))
 	for _, channel := range channels {
-		channelMap[channel.ID] = channel
+		channelMap[channel.monitorKey()] = channel
 	}
 
-	seen := make(map[int]struct{}, len(preferChannelIDs))
-	for _, channelID := range preferChannelIDs {
-		if _, ok := seen[channelID]; ok {
+	seen := make(map[string]struct{}, len(preferChannelKeys))
+	for _, channelKey := range preferChannelKeys {
+		if _, ok := seen[channelKey]; ok {
 			continue
 		}
 
-		seen[channelID] = struct{}{}
-		if channel, ok := channelMap[channelID]; ok {
+		seen[channelKey] = struct{}{}
+		if channel, ok := channelMap[channelKey]; ok {
 			return channel
 		}
 	}
@@ -413,25 +768,66 @@ func pickPreferredChannel(
 	return nil
 }
 
+func channelIDsToKeys(ids []int) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+
+		keys = append(keys, strconv.Itoa(id))
+	}
+
+	return keys
+}
+
 type initialChannel struct {
 	channelSelectionState
 
-	channel           *model.Channel
+	channel           *scopedChannel
 	designatedChannel bool
-	preferChannelIDs  []int
-	ignoreChannelIDs  map[int64]struct{}
-	migratedChannels  []*model.Channel
+	groupRetryOnly    bool
+	preferChannelKeys []string
+	ignoreChannelIDs  map[string]struct{}
+	migratedChannels  []*scopedChannel
 }
 
 func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialChannel, error) {
 	log := common.GetLogger(c)
 
 	group := middleware.GetGroup(c)
-	availableSet := group.GetAvailableSets()
+	groupMode := middleware.GetGroupChannelMode(c)
+	availableSet := middleware.GetActiveAvailableSets(c)
 
 	if channelHeader := c.Request.Header.Get(AIProxyChannelHeader); channelHeader != "" {
+		if groupMode == middleware.GroupChannelModeOwn {
+			channel, err := GetGroupChannelFromHeader(
+				channelHeader,
+				group,
+				availableSet,
+				group.Status == model.GroupStatusInternal,
+				modelName,
+				m,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			log.Data["designated_channel"] = "true"
+
+			return &initialChannel{
+				channel:           channel,
+				designatedChannel: true,
+				groupRetryOnly:    true,
+			}, nil
+		}
+
 		if group.Status != model.GroupStatusInternal {
-			return nil, errors.New("channel header is not allowed in non-internal group")
+			return nil, errors.New("global channel header is not allowed in non-internal group")
 		}
 
 		channel, err := GetChannelFromHeader(
@@ -446,13 +842,17 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 
 		log.Data["designated_channel"] = "true"
 
-		return &initialChannel{channel: channel, designatedChannel: true}, nil
+		return &initialChannel{
+			channel:           newGlobalScopedChannel(channel),
+			designatedChannel: true,
+		}, nil
 	}
 
-	channel, err := GetChannelFromRequest(
+	channel, err := GetScopedChannelFromRequest(
 		c,
 		middleware.GetModelCaches(c),
 		availableSet,
+		group.Status == model.GroupStatusInternal,
 		modelName,
 		m,
 	)
@@ -461,12 +861,32 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 	}
 
 	if channel != nil {
-		return &initialChannel{channel: channel, designatedChannel: true}, nil
+		return &initialChannel{
+			channel:           channel,
+			designatedChannel: true,
+			groupRetryOnly:    channel.isGroupChannel(),
+		}, nil
 	}
 
 	mc := middleware.GetModelCaches(c)
 
-	ignoreChannelIDs, err := monitor.GetBannedChannelsMapWithModel(c.Request.Context(), modelName)
+	var groupChannels []*model.GroupChannel
+	if groupMode == middleware.GroupChannelModeOwn && group.ID != "" {
+		groupChannelsCache, err := model.CacheGetGroupChannels(group.ID)
+		if err != nil {
+			log.Errorf("get group channels failed: %+v", err)
+		} else {
+			groupChannels = groupChannelsCache.Channels
+		}
+	}
+
+	selectionScope := getInitialChannelScope(groupMode)
+
+	ignoreChannelKeyMap, err := getScopedBannedChannelKeysMap(
+		c.Request.Context(),
+		selectionScope,
+		modelName,
+	)
 	if err != nil {
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, context.DeadlineExceeded) {
@@ -476,9 +896,13 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		log.Errorf("get %s auto banned channels failed: %+v", modelName, err)
 	}
 
-	log.Debugf("%s model banned channels: %+v", modelName, ignoreChannelIDs)
+	log.Debugf("%s model banned channels: %+v", modelName, ignoreChannelKeyMap)
 
-	errorRates, err := monitor.GetModelChannelErrorRate(c.Request.Context(), modelName)
+	errorRates, err := getScopedModelChannelErrorRateByKey(
+		c.Request.Context(),
+		selectionScope,
+		modelName,
+	)
 	if err != nil {
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, context.DeadlineExceeded) {
@@ -488,20 +912,22 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 		log.Errorf("get channel model error rates failed: %+v", err)
 	}
 
-	preferChannelIDs := getPreferChannelIDs(c, modelName, m)
+	preferChannelKeys := getPreferChannelKeys(c, modelName, m)
 
-	if len(preferChannelIDs) > 0 {
-		log.Data["prefer_channels"] = fmt.Sprintf("%v", preferChannelIDs)
+	if len(preferChannelKeys) > 0 {
+		log.Data["prefer_channels"] = fmt.Sprintf("%v", preferChannelKeys)
 	}
 
-	return getChannelWithFallback(
+	return getScopedChannelWithFallback(
 		mc,
 		availableSet,
+		groupChannels,
+		groupMode == middleware.GroupChannelModeOwn,
 		modelName,
 		m,
-		preferChannelIDs,
+		preferChannelKeys,
 		errorRates,
-		ignoreChannelIDs,
+		ignoreChannelKeyMap,
 	)
 }
 
@@ -530,17 +956,7 @@ func supportsCacheFollowMode(m mode.Mode) bool {
 	}
 }
 
-func getCacheFollowConfig(c *gin.Context) (cachefollow.Config, bool) {
-	v, ok := c.Get(middleware.ModelConfig)
-	if !ok {
-		return cachefollow.Config{}, false
-	}
-
-	modelConfig, ok := v.(model.ModelConfig)
-	if !ok {
-		panic(fmt.Sprintf("model config type error: %T, %v", v, v))
-	}
-
+func getCacheFollowConfig(modelConfig model.ModelConfig) (cachefollow.Config, bool) {
 	pluginConfig := cachefollow.Config{}
 	if err := modelConfig.LoadPluginConfig(cachefollow.PluginName, &pluginConfig); err != nil {
 		return cachefollow.Config{}, false
@@ -553,70 +969,110 @@ func getCacheFollowConfig(c *gin.Context) (cachefollow.Config, bool) {
 	return pluginConfig, true
 }
 
-func getPreferChannelIDs(c *gin.Context, modelName string, m mode.Mode) []int {
-	pluginConfig, ok := getCacheFollowConfig(c)
-	if !supportsCacheFollowMode(m) || !ok {
+func getPreferChannelKeys(c *gin.Context, modelName string, m mode.Mode) []string {
+	if !supportsCacheFollowMode(m) {
 		return nil
 	}
 
 	group := middleware.GetGroup(c)
 	token := middleware.GetToken(c)
 	user := middleware.GetRequestUser(c)
-	preferChannelIDs := make([]int, 0, 6)
-	seen := make(map[int]struct{}, 6)
+	modelCaches := middleware.GetModelCaches(c)
+	groupMode := middleware.GetGroupChannelMode(c)
+	preferChannelKeys := make([]string, 0, 6)
+	seen := make(map[string]struct{}, 6)
 
-	appendChannelID := func(storeID string) {
+	scopes := []model.ChannelScope{model.ChannelScopeGlobal}
+	if groupMode == middleware.GroupChannelModeOwn && group.ID != "" {
+		scopes = []model.ChannelScope{model.ChannelScopeGroup}
+	}
+
+	appendChannelKey := func(storeID string, scope model.ChannelScope) {
 		if storeID == "" {
 			return
 		}
 
-		store, err := model.CacheGetStore(group.ID, token.ID, storeID)
-		if err != nil || store.ChannelID == 0 {
+		store, err := model.CacheGetStoreByScope(group.ID, token.ID, storeID, scope)
+		if err != nil {
 			return
 		}
 
-		if _, ok := seen[store.ChannelID]; ok {
+		channelKey := model.StoreChannelKey(store, scope)
+		if channelKey == "" {
 			return
 		}
 
-		seen[store.ChannelID] = struct{}{}
-		preferChannelIDs = append(preferChannelIDs, store.ChannelID)
+		if _, ok := seen[channelKey]; ok {
+			return
+		}
+
+		seen[channelKey] = struct{}{}
+		preferChannelKeys = append(preferChannelKeys, channelKey)
 	}
 
-	if supportsPromptCacheKeyMode(m) {
-		if promptCacheKey := middleware.GetPromptCacheKey(c); promptCacheKey != "" {
-			appendChannelID(
-				model.PromptCacheStoreID(
-					modelName,
-					promptCacheKey,
-					model.CacheKeyTypeStable,
-				),
+	appendScopeKeys := func(scope model.ChannelScope) {
+		modelConfig, ok := resolveScopedModelConfig(
+			group,
+			modelCaches,
+			&scopedChannel{scope: scope},
+			modelName,
+		)
+		if !ok {
+			return
+		}
+
+		pluginConfig, ok := getCacheFollowConfig(modelConfig)
+		if !ok {
+			return
+		}
+
+		if supportsPromptCacheKeyMode(m) {
+			if promptCacheKey := middleware.GetPromptCacheKey(c); promptCacheKey != "" {
+				appendChannelKey(
+					model.PromptCacheStoreID(
+						modelName,
+						promptCacheKey,
+						model.CacheKeyTypeStable,
+					),
+					scope,
+				)
+				appendChannelKey(
+					model.PromptCacheStoreID(
+						modelName,
+						promptCacheKey,
+						model.CacheKeyTypeRecent,
+					),
+					scope,
+				)
+			}
+		}
+
+		if user != "" {
+			appendChannelKey(
+				model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeStable),
+				scope,
 			)
-			appendChannelID(
-				model.PromptCacheStoreID(
-					modelName,
-					promptCacheKey,
-					model.CacheKeyTypeRecent,
-				),
+			appendChannelKey(
+				model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeRecent),
+				scope,
 			)
+		}
+
+		if pluginConfig.EnableGenericFollow {
+			appendChannelKey(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable), scope)
+			appendChannelKey(model.CacheFollowStoreID(modelName, model.CacheKeyTypeRecent), scope)
 		}
 	}
 
-	if user != "" {
-		appendChannelID(model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeStable))
-		appendChannelID(model.CacheFollowUserStoreID(modelName, user, model.CacheKeyTypeRecent))
+	for _, scope := range scopes {
+		appendScopeKeys(scope)
 	}
 
-	if pluginConfig.EnableGenericFollow {
-		appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeStable))
-		appendChannelID(model.CacheFollowStoreID(modelName, model.CacheKeyTypeRecent))
-	}
-
-	if len(preferChannelIDs) == 0 {
+	if len(preferChannelKeys) == 0 {
 		return nil
 	}
 
-	return preferChannelIDs
+	return preferChannelKeys
 }
 
 func getWebSearchChannel(
@@ -624,30 +1080,41 @@ func getWebSearchChannel(
 	mc *model.ModelCaches,
 	modelName string,
 ) (*model.Channel, error) {
-	ignoreChannelIDs, _ := monitor.GetBannedChannelsMapWithModel(ctx, modelName)
-	errorRates, _ := monitor.GetModelChannelErrorRate(ctx, modelName)
+	ignoreChannelKeyMap, _ := monitor.GetBannedChannelKeysMapWithModel(ctx, modelName)
+	errorRates, _ := monitor.GetModelChannelErrorRateByKey(ctx, modelName)
 
-	initial, err := getChannelWithFallback(
+	initial, err := getScopedChannelWithFallback(
 		mc,
 		nil,
+		nil,
+		false,
 		modelName,
 		mode.ChatCompletions,
 		nil,
 		errorRates,
-		ignoreChannelIDs,
+		ignoreChannelKeyMap,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return initial.channel, nil
+	return initial.channel.channel, nil
 }
 
 func getRetryChannel(
 	ctx context.Context,
 	state *retryState,
-) (*model.Channel, error) {
-	errorRates, err := monitor.GetModelChannelErrorRate(ctx, state.meta.OriginModel)
+) (*scopedChannel, error) {
+	retryScope := model.ChannelScopeGlobal
+	if state.groupRetryOnly {
+		retryScope = model.ChannelScopeGroup
+	}
+
+	errorRates, err := getScopedModelChannelErrorRateByKey(
+		ctx,
+		retryScope,
+		state.meta.OriginModel,
+	)
 	if err != nil {
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, context.DeadlineExceeded) {
@@ -657,7 +1124,7 @@ func getRetryChannel(
 
 	if state.designatedChannel != nil {
 		// Explicitly selected channels stay pinned for the request.
-		channelID := int64(state.designatedChannel.ID)
+		channelID := state.designatedChannel.monitorKey()
 		if _, ignored := state.ignoreChannelIDs[channelID]; ignored {
 			return nil, ErrChannelsExhausted
 		}
@@ -672,65 +1139,29 @@ func getRetryChannel(
 	return state.selectRetryChannel(errorRates)
 }
 
-func (s *retryState) selectRetryChannel(
-	errorRates map[int64]float64,
-) (*model.Channel, error) {
-	candidates := getRetryCandidates(s, errorRates)
-	if channel := pickPreferredChannel(candidates, s.preferChannelIDs); channel != nil {
-		return channel, nil
-	}
-
-	if !s.backupOnlyEnabled && len(candidates) > 0 && len(nonBackupChannels(candidates)) == 0 {
-		// Adding eligible backups starts a fresh round while preserving cache preferences.
-		s.backupOnlyEnabled = true
-		s.failedChannelIDs = make(map[int64]struct{})
-		candidates = getRetryCandidates(s, errorRates)
-	}
-
-	newChannel, err := s.selectChannel(
-		candidates,
-		s.preferChannelIDs,
-		errorRates,
-	)
-	if err != nil {
-		if !errors.Is(err, ErrChannelsExhausted) || len(s.failedChannelIDs) == 0 {
-			return nil, err
+func filterScopedChannelsByScope(
+	channels []*scopedChannel,
+	scope model.ChannelScope,
+) []*scopedChannel {
+	filtered := make([]*scopedChannel, 0, len(channels))
+	for _, channel := range channels {
+		if channel == nil || channel.scope != scope {
+			continue
 		}
 
-		// Start a new round so every currently eligible channel gets another attempt.
-		s.failedChannelIDs = make(map[int64]struct{})
-		s.preferChannelIDs = nil
-
-		return s.selectChannel(
-			getRetryCandidates(s, errorRates),
-			s.preferChannelIDs,
-			errorRates,
-		)
+		filtered = append(filtered, channel)
 	}
 
-	return newChannel, nil
-}
-
-func getRetryCandidates(
-	state *retryState,
-	errorRates map[int64]float64,
-) []*model.Channel {
-	return filterChannels(
-		state.migratedChannels,
-		errorRates,
-		maxRetryErrorRate,
-		state.ignoreChannelIDs,
-		state.failedChannelIDs,
-	)
+	return filtered
 }
 
 func filterChannels(
-	channels []*model.Channel,
-	errorRates map[int64]float64,
+	channels []*scopedChannel,
+	errorRates map[string]float64,
 	maxErrorRate float64,
-	ignoreChannel ...map[int64]struct{},
-) []*model.Channel {
-	filtered := make([]*model.Channel, 0)
+	ignoreChannel ...map[string]struct{},
+) []*scopedChannel {
+	filtered := make([]*scopedChannel, 0)
 	for _, channel := range channels {
 		if !isChannelSelectable(channel, errorRates, maxErrorRate, ignoreChannel...) {
 			continue
@@ -743,16 +1174,17 @@ func filterChannels(
 }
 
 func isChannelSelectable(
-	channel *model.Channel,
-	errorRates map[int64]float64,
+	channel *scopedChannel,
+	errorRates map[string]float64,
 	maxErrorRate float64,
-	ignoreChannel ...map[int64]struct{},
+	ignoreChannel ...map[string]struct{},
 ) bool {
-	if channel == nil || channel.Status != model.ChannelStatusEnabled {
+	if channel == nil || channel.channel == nil ||
+		channel.channel.Status != model.ChannelStatusEnabled {
 		return false
 	}
 
-	chid := int64(channel.ID)
+	chid := channel.monitorKey()
 
 	if maxErrorRate != 0 {
 		// Filter out channels with error rate higher than threshold
@@ -773,4 +1205,111 @@ func isChannelSelectable(
 	}
 
 	return true
+}
+
+type channelSelectionState struct {
+	backupOnlyEnabled bool // Remains enabled across retry rounds for this request.
+}
+
+func (s *channelSelectionState) selectChannel(
+	channels []*scopedChannel,
+	preferChannelKeys []string,
+	errorRates map[string]float64,
+) (*scopedChannel, error) {
+	if channel := pickPreferredChannel(channels, preferChannelKeys); channel != nil {
+		return channel, nil
+	}
+
+	for {
+		candidates := channels
+		if !s.backupOnlyEnabled {
+			candidates = nonBackupChannels(channels)
+		}
+
+		channel, err := pickChannel(candidates, errorRates)
+		if err == nil || s.backupOnlyEnabled {
+			return channel, err
+		}
+
+		s.backupOnlyEnabled = true
+	}
+}
+
+func nonBackupChannels(channels []*scopedChannel) []*scopedChannel {
+	primary := make([]*scopedChannel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.channel != nil && !channel.channel.BackupOnly {
+			primary = append(primary, channel)
+		}
+	}
+
+	return primary
+}
+
+func backupOnlyChannels(channels []*scopedChannel) []*scopedChannel {
+	backups := make([]*scopedChannel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.channel != nil && channel.channel.BackupOnly {
+			backups = append(backups, channel)
+		}
+	}
+
+	return backups
+}
+
+func (s *retryState) selectRetryChannel(
+	errorRates map[string]float64,
+) (*scopedChannel, error) {
+	candidates := getRetryCandidates(s, errorRates)
+	if channel := pickPreferredChannel(candidates, s.preferChannelKeys); channel != nil {
+		return channel, nil
+	}
+
+	if !s.backupOnlyEnabled && len(candidates) > 0 && len(nonBackupChannels(candidates)) == 0 {
+		// Adding eligible backups starts a fresh round while preserving cache preferences.
+		s.backupOnlyEnabled = true
+		s.failedChannelIDs = make(map[string]struct{})
+		candidates = getRetryCandidates(s, errorRates)
+	}
+
+	newChannel, err := s.selectChannel(
+		candidates,
+		s.preferChannelKeys,
+		errorRates,
+	)
+	if err != nil {
+		if !errors.Is(err, ErrChannelsExhausted) || len(s.failedChannelIDs) == 0 {
+			return nil, err
+		}
+
+		// Start a new round so every currently eligible channel gets another attempt.
+		s.failedChannelIDs = make(map[string]struct{})
+		s.preferChannelKeys = nil
+
+		return s.selectChannel(
+			getRetryCandidates(s, errorRates),
+			s.preferChannelKeys,
+			errorRates,
+		)
+	}
+
+	return newChannel, nil
+}
+
+func getRetryCandidates(
+	state *retryState,
+	errorRates map[string]float64,
+) []*scopedChannel {
+	candidates := state.migratedChannels
+	if state.groupRetryOnly {
+		candidates = filterScopedChannelsByScope(candidates, model.ChannelScopeGroup)
+	}
+
+	return filterChannels(
+		candidates,
+		errorRates,
+		maxRetryErrorRate,
+		state.ignoreChannelIDs,
+		state.failedChannelIDs,
+	)
 }

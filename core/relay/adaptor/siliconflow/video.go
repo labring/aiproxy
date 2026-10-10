@@ -973,7 +973,7 @@ func applyStoredVideoRequestMetadata(meta *meta.Meta, store adaptor.Store, store
 		return
 	}
 
-	cache, err := store.GetStore(meta.Group.ID, meta.Token.ID, storeID)
+	cache, err := store.GetStoreByScope(meta.Group.ID, meta.Token.ID, storeID, meta.Channel.Scope)
 	if err != nil || cache.Metadata == "" {
 		return
 	}
@@ -1019,7 +1019,7 @@ func saveVideoJobStore(
 		Model:     meta.OriginModel,
 		Metadata:  videoStoreMetadataString(meta),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }
 
 func saveVideoGenerationStore(
@@ -1040,5 +1040,5 @@ func saveVideoGenerationStore(
 		Model:     meta.OriginModel,
 		Metadata:  videoStoreMetadataString(meta),
 		ExpiresAt: expiresAt,
-	})
+	}, meta.Channel.Scope)
 }

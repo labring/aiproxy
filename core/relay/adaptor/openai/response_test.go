@@ -26,24 +26,36 @@ type responseTestStore struct {
 	savedIfNotExist []adaptor.StoreCache
 }
 
-func (s *responseTestStore) GetStore(string, int, string) (adaptor.StoreCache, error) {
+func (s *responseTestStore) GetStoreByScope(
+	string,
+	int,
+	string,
+	model.ChannelScope,
+) (adaptor.StoreCache, error) {
 	return adaptor.StoreCache{}, nil
 }
 
-func (s *responseTestStore) SaveStore(cache adaptor.StoreCache) error {
+func (s *responseTestStore) SaveStore(
+	cache adaptor.StoreCache,
+	_ model.ChannelScope,
+) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
 func (s *responseTestStore) SaveStoreWithOption(
 	cache adaptor.StoreCache,
+	_ model.ChannelScope,
 	_ adaptor.SaveStoreOption,
 ) error {
 	s.saved = append(s.saved, cache)
 	return nil
 }
 
-func (s *responseTestStore) SaveIfNotExistStore(cache adaptor.StoreCache) error {
+func (s *responseTestStore) SaveIfNotExistStore(
+	cache adaptor.StoreCache,
+	_ model.ChannelScope,
+) error {
 	s.savedIfNotExist = append(s.savedIfNotExist, cache)
 	return nil
 }

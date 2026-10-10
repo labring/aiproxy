@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -34,35 +35,35 @@ func TestInitialChannelSelectionPrefersOrdinaryAndAllowsBackupOnlyPool(t *testin
 	for _, tt := range []struct {
 		name       string
 		channels   []*model.Channel
-		errorRates map[int64]float64
-		ignored    map[int64]struct{}
+		errorRates map[string]float64
+		ignored    map[string]struct{}
 		wantBackup bool
 	}{
 		{name: "preferred backup is eligible alongside primary", channels: []*model.Channel{primary, backup}, wantBackup: true},
 		{
 			name:     "high error primary unlocks backup",
-			channels: []*model.Channel{primary, backup}, errorRates: map[int64]float64{1: 1}, wantBackup: true,
+			channels: []*model.Channel{primary, backup}, errorRates: map[string]float64{"1": 1}, wantBackup: true,
 		},
 		{
 			name:     "banned primary unlocks backup",
-			channels: []*model.Channel{primary, backup}, ignored: map[int64]struct{}{1: {}}, wantBackup: true,
+			channels: []*model.Channel{primary, backup}, ignored: map[string]struct{}{"1": {}}, wantBackup: true,
 		},
 		{name: "backup alone can start a request", channels: []*model.Channel{backup}, wantBackup: true},
 		{
 			name: "primary at error threshold remains eligible", channels: []*model.Channel{primary, backup},
-			errorRates: map[int64]float64{1: maxRetryErrorRate}, wantBackup: true,
+			errorRates: map[string]float64{"1": maxRetryErrorRate}, wantBackup: true,
 		},
 		{
 			name: "unhealthy backup does not replace primary fallback", channels: []*model.Channel{primary, backup},
-			errorRates: map[int64]float64{1: 1, 2: 1},
+			errorRates: map[string]float64{"1": 1, "2": 1},
 		},
 		{
 			name: "ignored backup does not replace primary fallback", channels: []*model.Channel{primary, backup},
-			errorRates: map[int64]float64{1: 1}, ignored: map[int64]struct{}{2: {}},
+			errorRates: map[string]float64{"1": 1}, ignored: map[string]struct{}{"2": {}},
 		},
 		{
 			name: "primary fallback without backups is preserved", channels: []*model.Channel{primary},
-			errorRates: map[int64]float64{1: 1}, ignored: map[int64]struct{}{1: {}},
+			errorRates: map[string]float64{"1": 1}, ignored: map[string]struct{}{"1": {}},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -82,12 +83,12 @@ func TestInitialChannelSelectionPrefersOrdinaryAndAllowsBackupOnlyPool(t *testin
 			require.NoError(t, err)
 
 			if tt.wantBackup {
-				assert.Equal(t, backup, initial.channel)
+				assert.Equal(t, backup, initial.channel.channel)
 			} else {
-				assert.Equal(t, primary, initial.channel)
+				assert.Equal(t, primary, initial.channel.channel)
 			}
 
-			assert.ElementsMatch(t, tt.channels, initial.migratedChannels)
+			assert.ElementsMatch(t, globalScopedChannels(tt.channels), initial.migratedChannels)
 		})
 	}
 }
@@ -119,15 +120,15 @@ func TestInitialPreferredBackupKeepsGeneralBackupsLocked(t *testing.T) {
 	}
 	preferIDs := []int{2, 3, 1}
 	initial, err := getChannelWithFallback(
-		mc, nil, "backup-test", mode.Responses, preferIDs, map[int64]float64{1: 1, 4: 1}, nil,
+		mc, nil, "backup-test", mode.Responses, preferIDs, map[string]float64{"1": 1, "4": 1}, nil,
 	)
 	require.NoError(t, err)
-	require.Equal(t, preferred, initial.channel)
+	require.Equal(t, preferred, initial.channel.channel)
 
-	state := initRetryState(
+	state := initGlobalRetryState(
 		3,
 		initial,
-		meta.NewMeta(initial.channel, mode.Responses, "backup-test", model.ModelConfig{}),
+		meta.NewMeta(initial.channel.channel, mode.Responses, "backup-test", model.ModelConfig{}),
 		&relaycontroller.HandleResult{
 			Error: relaymodel.NewOpenAIError(http.StatusTooManyRequests, relaymodel.OpenAIError{
 				Message: "rate limited",
@@ -138,26 +139,26 @@ func TestInitialPreferredBackupKeepsGeneralBackupsLocked(t *testing.T) {
 	assert.False(t, state.backupOnlyEnabled)
 	assert.ElementsMatch(
 		t,
-		[]*model.Channel{primary, backup, generalPrimary, generalBackup},
+		globalScopedChannels([]*model.Channel{primary, backup, generalPrimary, generalBackup}),
 		getRetryCandidates(state, nil),
 	)
-	assert.Equal(t, preferIDs, state.preferChannelIDs)
+	assert.Equal(t, channelIDsToKeys(preferIDs), state.preferChannelKeys)
 
 	channel, err := getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Equal(t, backup, channel)
+	assert.Equal(t, backup, channel.channel)
 
-	state.failedChannelIDs[1] = struct{}{}
-	state.failedChannelIDs[3] = struct{}{}
+	state.failedChannelIDs["1"] = struct{}{}
+	state.failedChannelIDs["3"] = struct{}{}
 	assert.ElementsMatch(
 		t,
-		[]*model.Channel{generalPrimary, generalBackup},
+		globalScopedChannels([]*model.Channel{generalPrimary, generalBackup}),
 		getRetryCandidates(state, nil),
 	)
 	assert.False(t, state.backupOnlyEnabled)
 	channel, err = getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Equal(t, generalPrimary, channel)
+	assert.Equal(t, generalPrimary, channel.channel)
 }
 
 func TestPreferencesIncludeBackupsBeforeRestartingRound(t *testing.T) {
@@ -188,13 +189,13 @@ func TestPreferencesIncludeBackupsBeforeRestartingRound(t *testing.T) {
 		mc, nil, "backup-test", mode.Responses, []int{2, 1, 3, 4}, nil, nil,
 	)
 	require.NoError(t, err)
-	require.Equal(t, 2, initial.channel.ID)
+	require.Equal(t, 2, initial.channel.channel.ID)
 	assert.False(t, initial.backupOnlyEnabled)
 
-	state := initRetryState(
+	state := initGlobalRetryState(
 		10,
 		initial,
-		meta.NewMeta(initial.channel, mode.Responses, "backup-test", model.ModelConfig{}),
+		meta.NewMeta(initial.channel.channel, mode.Responses, "backup-test", model.ModelConfig{}),
 		&relaycontroller.HandleResult{
 			Error: relaymodel.NewOpenAIError(http.StatusTooManyRequests, relaymodel.OpenAIError{
 				Message: "rate limited",
@@ -207,19 +208,19 @@ func TestPreferencesIncludeBackupsBeforeRestartingRound(t *testing.T) {
 	for _, id := range []int{1, 3, 4} {
 		channel, err := getRetryChannel(context.Background(), state)
 		require.NoError(t, err)
-		require.Equal(t, id, channel.ID)
+		require.Equal(t, id, channel.channel.ID)
 		assert.False(t, state.backupOnlyEnabled)
 
-		state.failedChannelIDs[int64(id)] = struct{}{}
+		state.failedChannelIDs[strconv.Itoa(id)] = struct{}{}
 	}
 
 	channel, err := getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Contains(t, channels, channel)
-	assert.Empty(t, state.preferChannelIDs)
+	assert.Contains(t, channels, channel.channel)
+	assert.Empty(t, state.preferChannelKeys)
 	assert.Empty(t, state.failedChannelIDs)
 	assert.True(t, state.backupOnlyEnabled)
-	assert.ElementsMatch(t, channels, getRetryCandidates(state, nil))
+	assert.ElementsMatch(t, globalScopedChannels(channels), getRetryCandidates(state, nil))
 }
 
 func TestBackupUnlockRestartsRoundWithOrdinaryChannels(t *testing.T) {
@@ -267,13 +268,18 @@ func TestBackupUnlockRestartsRoundWithOrdinaryChannels(t *testing.T) {
 				mc, nil, "backup-test", mode.Responses, tt.preferred, nil, nil,
 			)
 			require.NoError(t, err)
-			require.Equal(t, 1, initial.channel.ID)
+			require.Equal(t, 1, initial.channel.channel.ID)
 			require.False(t, initial.backupOnlyEnabled)
 
-			state := initRetryState(
+			state := initGlobalRetryState(
 				2,
 				initial,
-				meta.NewMeta(initial.channel, mode.Responses, "backup-test", model.ModelConfig{}),
+				meta.NewMeta(
+					initial.channel.channel,
+					mode.Responses,
+					"backup-test",
+					model.ModelConfig{},
+				),
 				&relaycontroller.HandleResult{
 					Error: relaymodel.NewOpenAIError(
 						http.StatusTooManyRequests,
@@ -288,25 +294,29 @@ func TestBackupUnlockRestartsRoundWithOrdinaryChannels(t *testing.T) {
 
 			ids := make([]int, 1, len(tt.wantIDs))
 
-			ids[0] = initial.channel.ID
+			ids[0] = initial.channel.channel.ID
 			for i := range 2 {
 				channel, err := getRetryChannel(context.Background(), state)
 				require.NoError(t, err)
 
-				ids = append(ids, channel.ID)
+				ids = append(ids, channel.channel.ID)
 
 				assert.True(t, state.backupOnlyEnabled)
-				assert.Equal(t, tt.preferred, state.preferChannelIDs)
+				assert.Equal(t, channelIDsToKeys(tt.preferred), state.preferChannelKeys)
 
 				if i == 0 {
 					assert.Empty(t, state.failedChannelIDs)
-					assert.ElementsMatch(t, channels, getRetryCandidates(state, nil))
-					assert.Equal(t, 1, state.channelRetryInfo[1].failures)
+					assert.ElementsMatch(
+						t,
+						globalScopedChannels(channels),
+						getRetryCandidates(state, nil),
+					)
+					assert.Equal(t, 1, state.channelRetryInfo["1"].failures)
 				} else {
-					assert.Contains(t, state.failedChannelIDs, int64(ids[1]))
+					assert.Contains(t, state.failedChannelIDs, strconv.Itoa(ids[1]))
 				}
 
-				state.failedChannelIDs[int64(channel.ID)] = struct{}{}
+				state.failedChannelIDs[channel.monitorKey()] = struct{}{}
 			}
 
 			assert.Equal(t, tt.wantIDs, ids)
@@ -342,47 +352,47 @@ func TestPreferredBackupEligibility(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
 		preferred    []int
-		errorRates   map[int64]float64
-		ignored      map[int64]struct{}
+		errorRates   map[string]float64
+		ignored      map[string]struct{}
 		wantIDs      []int
 		wantUnlocked bool
 	}{
 		{name: "preferred backup precedes ordinary channels", preferred: []int{2}, wantIDs: []int{2}},
 		{
 			name: "preferred primary unhealthy", preferred: []int{1, 2},
-			errorRates: map[int64]float64{1: 1}, wantIDs: []int{2},
+			errorRates: map[string]float64{"1": 1}, wantIDs: []int{2},
 		},
 		{
 			name: "preferred primary banned", preferred: []int{1, 2},
-			ignored: map[int64]struct{}{1: {}}, wantIDs: []int{2},
+			ignored: map[string]struct{}{"1": {}}, wantIDs: []int{2},
 		},
 		{
 			name: "preferred backup unhealthy", preferred: []int{1, 2},
-			errorRates: map[int64]float64{1: 1, 2: 0.9}, wantIDs: []int{3},
+			errorRates: map[string]float64{"1": 1, "2": 0.9}, wantIDs: []int{3},
 		},
 		{
 			name: "preferred backup banned", preferred: []int{1, 2},
-			ignored: map[int64]struct{}{1: {}, 2: {}}, wantIDs: []int{3},
+			ignored: map[string]struct{}{"1": {}, "2": {}}, wantIDs: []int{3},
 		},
 		{
 			name: "preferred backup at error threshold", preferred: []int{1, 2},
-			errorRates: map[int64]float64{1: 1, 2: maxRetryErrorRate, 3: 1}, wantIDs: []int{2},
+			errorRates: map[string]float64{"1": 1, "2": maxRetryErrorRate, "3": 1}, wantIDs: []int{2},
 		},
 		{
 			name: "all primaries unhealthy restores preferred backup", preferred: []int{2},
-			errorRates: map[int64]float64{1: 1, 3: 1}, wantIDs: []int{2},
+			errorRates: map[string]float64{"1": 1, "3": 1}, wantIDs: []int{2},
 		},
 		{
 			name: "all primaries banned restores preferred backup", preferred: []int{2},
-			ignored: map[int64]struct{}{1: {}, 3: {}}, wantIDs: []int{2},
+			ignored: map[string]struct{}{"1": {}, "3": {}}, wantIDs: []int{2},
 		},
 		{
 			name: "preferred backup banned after unlock", preferred: []int{2},
-			ignored: map[int64]struct{}{1: {}, 2: {}, 3: {}}, wantIDs: []int{4}, wantUnlocked: true,
+			ignored: map[string]struct{}{"1": {}, "2": {}, "3": {}}, wantIDs: []int{4}, wantUnlocked: true,
 		},
 		{
 			name: "general backup after other channels filtered", preferred: []int{1, 2},
-			errorRates: map[int64]float64{1: 1, 2: 1, 3: 1}, wantIDs: []int{4}, wantUnlocked: true,
+			errorRates: map[string]float64{"1": 1, "2": 1, "3": 1}, wantIDs: []int{4}, wantUnlocked: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -392,21 +402,21 @@ func TestPreferredBackupEligibility(t *testing.T) {
 				mc, nil, "backup-test", mode.Responses, tt.preferred, tt.errorRates, tt.ignored,
 			)
 			require.NoError(t, err)
-			assert.Contains(t, tt.wantIDs, initial.channel.ID)
+			assert.Contains(t, tt.wantIDs, initial.channel.channel.ID)
 			assert.Equal(t, tt.wantUnlocked, initial.backupOnlyEnabled)
 
 			state := &retryState{
-				migratedChannels: channels,
-				preferChannelIDs: tt.preferred,
-				ignoreChannelIDs: tt.ignored,
+				migratedChannels:  globalScopedChannels(channels),
+				preferChannelKeys: channelIDsToKeys(tt.preferred),
+				ignoreChannelIDs:  tt.ignored,
 			}
 			channel, err := state.selectChannel(
 				getRetryCandidates(state, tt.errorRates),
-				tt.preferred,
+				channelIDsToKeys(tt.preferred),
 				tt.errorRates,
 			)
 			require.NoError(t, err)
-			assert.Contains(t, tt.wantIDs, channel.ID)
+			assert.Contains(t, tt.wantIDs, channel.channel.ID)
 			assert.Equal(t, tt.wantUnlocked, state.backupOnlyEnabled)
 		})
 	}
@@ -432,12 +442,12 @@ func TestInitialGeneralBackupStaysUnlockedAfterPrimaryRecovery(t *testing.T) {
 		},
 	}
 	initial, err := getChannelWithFallback(
-		mc, nil, "backup-test", mode.Responses, nil, map[int64]float64{1: 1, 3: 1}, nil,
+		mc, nil, "backup-test", mode.Responses, nil, map[string]float64{"1": 1, "3": 1}, nil,
 	)
 	require.NoError(t, err)
-	require.Equal(t, backup, initial.channel)
+	require.Equal(t, backup, initial.channel.channel)
 
-	state := initRetryState(
+	state := initGlobalRetryState(
 		3, initial, meta.NewMeta(backup, mode.Responses, "backup-test", model.ModelConfig{}),
 		&relaycontroller.HandleResult{
 			Error: relaymodel.NewOpenAIError(http.StatusTooManyRequests, relaymodel.OpenAIError{
@@ -446,7 +456,11 @@ func TestInitialGeneralBackupStaysUnlockedAfterPrimaryRecovery(t *testing.T) {
 		}, model.Price{}, time.Now(),
 	)
 	assert.True(t, state.backupOnlyEnabled)
-	assert.ElementsMatch(t, []*model.Channel{primary, otherBackup}, getRetryCandidates(state, nil))
+	assert.ElementsMatch(
+		t,
+		globalScopedChannels([]*model.Channel{primary, otherBackup}),
+		getRetryCandidates(state, nil),
+	)
 }
 
 func TestBackupOnlyPoolUsesPreferredChannelsAndRetries(t *testing.T) {
@@ -475,34 +489,34 @@ func TestBackupOnlyPoolUsesPreferredChannelsAndRetries(t *testing.T) {
 		mc, nil, "backup-test", mode.Responses, []int{2, 1}, nil, nil,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 2, initial.channel.ID)
+	assert.Equal(t, 2, initial.channel.channel.ID)
 
 	state := &retryState{
 		channelSelectionState: initial.channelSelectionState,
 		meta: meta.NewMeta(
-			initial.channel,
+			initial.channel.channel,
 			mode.Responses,
 			"backup-test",
 			model.ModelConfig{},
 		),
-		migratedChannels: initial.migratedChannels,
-		preferChannelIDs: []int{2, 1},
-		failedChannelIDs: map[int64]struct{}{2: {}},
+		migratedChannels:  initial.migratedChannels,
+		preferChannelKeys: channelIDsToKeys([]int{2, 1}),
+		failedChannelIDs:  map[string]struct{}{"2": {}},
 	}
 	channel, err := getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Equal(t, 1, channel.ID)
+	assert.Equal(t, 1, channel.channel.ID)
 
-	state.failedChannelIDs[1] = struct{}{}
+	state.failedChannelIDs["1"] = struct{}{}
 	channel, err = getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Contains(t, channels, channel)
+	assert.Contains(t, channels, channel.channel)
 	assert.True(t, state.backupOnlyEnabled)
 
 	assert.ElementsMatch(
 		t,
-		channels,
-		getRetryCandidates(&retryState{migratedChannels: channels}, nil),
+		globalScopedChannels(channels),
+		getRetryCandidates(&retryState{migratedChannels: globalScopedChannels(channels)}, nil),
 	)
 }
 
@@ -526,8 +540,8 @@ func TestUnsupportedPrimaryDoesNotExcludeBackup(t *testing.T) {
 		mc, nil, "backup-test", mode.ResponsesCompact, []int{1, 2}, nil, nil,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, backup, initial.channel)
-	assert.Equal(t, []*model.Channel{backup}, initial.migratedChannels)
+	assert.Equal(t, backup, initial.channel.channel)
+	assert.Equal(t, globalScopedChannels([]*model.Channel{backup}), initial.migratedChannels)
 }
 
 func TestBackupOnlyUnlocksAfterPrimaryFailuresAndSurvivesRounds(t *testing.T) {
@@ -540,9 +554,13 @@ func TestBackupOnlyUnlocksAfterPrimaryFailuresAndSurvivesRounds(t *testing.T) {
 		{ID: 4, Status: model.ChannelStatusEnabled, BackupOnly: true},
 	}
 	initial := &initialChannel{
-		channel: channels[0], migratedChannels: channels, preferChannelIDs: []int{2},
+		channel: newGlobalScopedChannel(
+			channels[0],
+		),
+		migratedChannels:  globalScopedChannels(channels),
+		preferChannelKeys: channelIDsToKeys([]int{2}),
 	}
-	state := initRetryState(
+	state := initGlobalRetryState(
 		10, initial, meta.NewMeta(channels[0], mode.Responses, "backup-test", model.ModelConfig{}),
 		&relaycontroller.HandleResult{
 			Error: relaymodel.NewOpenAIError(http.StatusTooManyRequests, relaymodel.OpenAIError{
@@ -553,10 +571,10 @@ func TestBackupOnlyUnlocksAfterPrimaryFailuresAndSurvivesRounds(t *testing.T) {
 
 	channel, err := getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Equal(t, 2, channel.ID)
+	assert.Equal(t, 2, channel.channel.ID)
 	assert.False(t, state.backupOnlyEnabled)
-	assert.Equal(t, []int{2}, state.preferChannelIDs)
-	state.failedChannelIDs[2] = struct{}{}
+	assert.Equal(t, channelIDsToKeys([]int{2}), state.preferChannelKeys)
+	state.failedChannelIDs["2"] = struct{}{}
 
 	ids := make([]int, 0, 4)
 	for i := range 4 {
@@ -564,30 +582,30 @@ func TestBackupOnlyUnlocksAfterPrimaryFailuresAndSurvivesRounds(t *testing.T) {
 		require.NoError(t, err)
 
 		if i == 0 {
-			assert.Equal(t, 2, channel.ID)
+			assert.Equal(t, 2, channel.channel.ID)
 		}
 
-		ids = append(ids, channel.ID)
+		ids = append(ids, channel.channel.ID)
 
 		assert.True(t, state.backupOnlyEnabled)
-		assert.Equal(t, []int{2}, state.preferChannelIDs)
-		state.failedChannelIDs[int64(channel.ID)] = struct{}{}
+		assert.Equal(t, channelIDsToKeys([]int{2}), state.preferChannelKeys)
+		state.failedChannelIDs[channel.monitorKey()] = struct{}{}
 	}
 
 	assert.ElementsMatch(t, []int{1, 2, 3, 4}, ids)
 
 	channel, err = getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Contains(t, channels, channel)
+	assert.Contains(t, channels, channel.channel)
 	assert.Empty(t, state.failedChannelIDs)
 	assert.True(t, state.backupOnlyEnabled)
-	assert.ElementsMatch(t, channels, getRetryCandidates(state, nil))
+	assert.ElementsMatch(t, globalScopedChannels(channels), getRetryCandidates(state, nil))
 
 	// A new request starts with its own locked backup state.
-	fresh := &retryState{migratedChannels: channels}
+	fresh := &retryState{migratedChannels: globalScopedChannels(channels)}
 	channel, err = fresh.selectChannel(getRetryCandidates(fresh, nil), nil, nil)
 	require.NoError(t, err)
-	assert.Contains(t, channels[:2], channel)
+	assert.Contains(t, globalScopedChannels(channels[:2]), channel)
 	assert.False(t, fresh.backupOnlyEnabled)
 }
 
@@ -596,58 +614,58 @@ func TestBackupOnlyRetryEligibility(t *testing.T) {
 
 	for _, tt := range []struct {
 		name        string
-		failed      map[int64]struct{}
-		ignored     map[int64]struct{}
-		errorRates  map[int64]float64
+		failed      map[string]struct{}
+		ignored     map[string]struct{}
+		errorRates  map[string]float64
 		wantIDs     []int
 		wantEnabled bool
 	}{
 		{
-			name: "one primary remains", failed: map[int64]struct{}{1: {}}, wantIDs: []int{2},
+			name: "one primary remains", failed: map[string]struct{}{"1": {}}, wantIDs: []int{2},
 		},
 		{
-			name: "ignored primary does not prevent backup", failed: map[int64]struct{}{1: {}},
-			ignored: map[int64]struct{}{2: {}}, wantIDs: []int{1, 3}, wantEnabled: true,
+			name: "ignored primary does not prevent backup", failed: map[string]struct{}{"1": {}},
+			ignored: map[string]struct{}{"2": {}}, wantIDs: []int{1, 3}, wantEnabled: true,
 		},
 		{
-			name: "high error primary does not prevent backup", failed: map[int64]struct{}{1: {}},
-			errorRates: map[int64]float64{2: 0.9}, wantIDs: []int{1, 3}, wantEnabled: true,
+			name: "high error primary does not prevent backup", failed: map[string]struct{}{"1": {}},
+			errorRates: map[string]float64{"2": 0.9}, wantIDs: []int{1, 3}, wantEnabled: true,
 		},
 		{
-			name: "permission failure still unlocks backup", failed: map[int64]struct{}{1: {}, 2: {}},
-			ignored: map[int64]struct{}{1: {}, 2: {}}, wantIDs: []int{3}, wantEnabled: true,
+			name: "permission failure still unlocks backup", failed: map[string]struct{}{"1": {}, "2": {}},
+			ignored: map[string]struct{}{"1": {}, "2": {}}, wantIDs: []int{3}, wantEnabled: true,
 		},
 		{
-			name: "backup respects ignored channels", failed: map[int64]struct{}{1: {}, 2: {}},
-			ignored: map[int64]struct{}{3: {}}, wantIDs: []int{1, 2}, wantEnabled: true,
+			name: "backup respects ignored channels", failed: map[string]struct{}{"1": {}, "2": {}},
+			ignored: map[string]struct{}{"3": {}}, wantIDs: []int{1, 2}, wantEnabled: true,
 		},
 		{
-			name: "backup respects error threshold", failed: map[int64]struct{}{1: {}, 2: {}},
-			errorRates: map[int64]float64{3: 0.9}, wantIDs: []int{1, 2}, wantEnabled: true,
+			name: "backup respects error threshold", failed: map[string]struct{}{"1": {}, "2": {}},
+			errorRates: map[string]float64{"3": 0.9}, wantIDs: []int{1, 2}, wantEnabled: true,
 		},
 		{
-			name: "all primaries ignored unlocks backup without an attempt", ignored: map[int64]struct{}{1: {}, 2: {}},
+			name: "all primaries ignored unlocks backup without an attempt", ignored: map[string]struct{}{"1": {}, "2": {}},
 			wantIDs: []int{3}, wantEnabled: true,
 		},
 		{
-			name: "all primaries unhealthy unlocks backup without an attempt", errorRates: map[int64]float64{1: 1, 2: 1},
+			name: "all primaries unhealthy unlocks backup without an attempt", errorRates: map[string]float64{"1": 1, "2": 1},
 			wantIDs: []int{3}, wantEnabled: true,
 		},
 		{
-			name: "all channels unhealthy stay exhausted after reset", failed: map[int64]struct{}{1: {}, 2: {}},
-			errorRates: map[int64]float64{1: 1, 2: 1, 3: 1}, wantEnabled: true,
+			name: "all channels unhealthy stay exhausted after reset", failed: map[string]struct{}{"1": {}, "2": {}},
+			errorRates: map[string]float64{"1": 1, "2": 1, "3": 1}, wantEnabled: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			state := &retryState{
-				migratedChannels: []*model.Channel{
+				migratedChannels: globalScopedChannels([]*model.Channel{
 					{ID: 1, Status: model.ChannelStatusEnabled},
 					{ID: 2, Status: model.ChannelStatusEnabled},
 					{ID: 3, Status: model.ChannelStatusEnabled, BackupOnly: true},
 					{ID: 4, Status: model.ChannelStatusDisabled, BackupOnly: true},
-				},
+				}),
 				failedChannelIDs: tt.failed, ignoreChannelIDs: tt.ignored,
 			}
 
@@ -657,7 +675,7 @@ func TestBackupOnlyRetryEligibility(t *testing.T) {
 				assert.Nil(t, channel)
 			} else {
 				require.NoError(t, err)
-				assert.Contains(t, tt.wantIDs, channel.ID)
+				assert.Contains(t, tt.wantIDs, channel.channel.ID)
 			}
 
 			assert.Equal(t, tt.wantEnabled, state.backupOnlyEnabled)
@@ -669,7 +687,7 @@ func TestBackupOnlyRetryEligibility(t *testing.T) {
 
 				ids := make([]int, 0, len(candidates))
 				for _, candidate := range candidates {
-					ids = append(ids, candidate.ID)
+					ids = append(ids, candidate.channel.ID)
 				}
 
 				assert.ElementsMatch(t, tt.wantIDs, ids)
@@ -714,12 +732,12 @@ func TestDesignatedBackupOnlyChannelRemainsPinned(t *testing.T) {
 	assert.Equal(t, backup, channel)
 
 	state := &retryState{
-		designatedChannel: backup,
+		designatedChannel: newGlobalScopedChannel(backup),
 		meta:              meta.NewMeta(backup, mode.Responses, "backup-test", model.ModelConfig{}),
 	}
-	channel, err = getRetryChannel(context.Background(), state)
+	scoped, err := getRetryChannel(context.Background(), state)
 	require.NoError(t, err)
-	assert.Equal(t, backup, channel)
+	assert.Equal(t, backup, scoped.channel)
 }
 
 func TestBackupOnlyModelRemainsListedAndRetrievable(t *testing.T) {
@@ -733,19 +751,21 @@ func TestBackupOnlyModelRemainsListedAndRetrievable(t *testing.T) {
 	mc := &model.ModelCaches{
 		EnabledModelsBySet:     map[string][]string{model.ChannelDefaultSet: {name}},
 		EnabledModelConfigsMap: map[string]model.ModelConfig{name: {Model: name}},
+		ModelConfig:            testModelConfigCache{name: {Model: name, Type: mode.Responses}},
 		EnabledModel2ChannelsBySet: map[string]map[string][]*model.Channel{
 			model.ChannelDefaultSet: {name: {backup}},
 		},
 	}
 	token := model.TokenCache{}
-	token.SetAvailableSets([]string{model.ChannelDefaultSet})
-	token.SetModelsBySet(mc.EnabledModelsBySet)
 
 	for _, handler := range []gin.HandlerFunc{ListModels, RetrieveModel} {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
 		c.Set(middleware.ModelCaches, mc)
 		c.Set(middleware.Token, token)
+		c.Set(middleware.Group, model.GroupCache{})
+		c.Set(middleware.AvailableSets, []string{model.ChannelDefaultSet})
+		c.Set(middleware.AvailableModels, mc.EnabledModelsBySet)
 		c.Params = gin.Params{{Key: "model", Value: name}}
 		handler(c)
 		require.Equal(t, http.StatusOK, recorder.Code)
@@ -756,4 +776,50 @@ func TestBackupOnlyModelRemainsListedAndRetrievable(t *testing.T) {
 	data, err := sonic.Marshal(response)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"backup_only":true`)
+}
+
+func globalScopedChannels(channels []*model.Channel) []*scopedChannel {
+	out := make([]*scopedChannel, len(channels))
+	for i, ch := range channels {
+		out[i] = newGlobalScopedChannel(ch)
+	}
+
+	return out
+}
+
+//nolint:unparam // Keep the helper signature aligned with production selector tests.
+func getChannelWithFallback(cache *model.ModelCaches, sets []string, modelName string, m mode.Mode,
+	preferred []int, rates map[string]float64, ignored map[string]struct{},
+) (*initialChannel, error) {
+	return getScopedChannelWithFallback(
+		cache,
+		sets,
+		nil,
+		false,
+		modelName,
+		m,
+		channelIDsToKeys(preferred),
+		rates,
+		ignored,
+	)
+}
+
+//nolint:unparam // Price is part of the shared retry-state constructor contract.
+func initGlobalRetryState(retryTimes int, channel *initialChannel, mt *meta.Meta,
+	result *relaycontroller.HandleResult, price model.Price, endAt time.Time,
+) *retryState {
+	return initRetryState(
+		retryTimes,
+		channel,
+		mt,
+		result,
+		price,
+		endAt,
+		&model.ModelCaches{ModelConfig: testModelConfigCache{
+			mt.OriginModel: {Model: mt.OriginModel, Type: mt.Mode},
+		}},
+		mt.OriginModel,
+		RelayController{},
+		false,
+	)
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/model"
 )
 
@@ -189,6 +190,74 @@ func TestRecordConsumeLogLoadsNullWebSearchCountAsZero(t *testing.T) {
 	}
 }
 
+func TestGetLogsAppliesDefaultPagination(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.Log{}, &model.RequestDetail{}, &model.Summary{}); err != nil {
+		t.Fatalf("migrate log db: %v", err)
+	}
+
+	rows := make([]model.Log, 11)
+
+	baseTime := time.Unix(1777052048, 0)
+	for i := range rows {
+		rows[i] = model.Log{
+			CreatedAt:  baseTime.Add(time.Duration(i) * time.Second),
+			RequestAt:  baseTime.Add(time.Duration(i) * time.Second),
+			GroupID:    "test-group",
+			Model:      "gpt-5.4",
+			RequestID:  model.EmptyNullString("req_default_page"),
+			UpstreamID: model.EmptyNullString("resp_default_page"),
+			Code:       200,
+			Mode:       1,
+			ChannelID:  1,
+			TokenID:    1,
+			TokenName:  "test-token",
+		}
+	}
+
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed logs: %v", err)
+	}
+
+	result, err := model.GetLogs(
+		time.Time{},
+		time.Time{},
+		"",
+		"",
+		"",
+		0,
+		"",
+		"",
+		0,
+		false,
+		"",
+		"",
+		0,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("get logs: %v", err)
+	}
+
+	if result.Total != 11 {
+		t.Fatalf("expected total=11, got %d", result.Total)
+	}
+
+	if len(result.Logs) != 10 {
+		t.Fatalf("expected default page size 10, got %d", len(result.Logs))
+	}
+}
+
 func TestCleanupFinishedAsyncUsagesKeepsPending(t *testing.T) {
 	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
 	if err != nil {
@@ -347,6 +416,1052 @@ func TestGetPendingAsyncUsagesSkipsFutureNextPollAt(t *testing.T) {
 	if len(got) != 1 || got[0].RequestID != "due" {
 		t.Fatalf("expected only due row, got %+v", got)
 	}
+}
+
+func TestCleanLogRemovesExpiredGroupChannelLogs(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(
+		&model.Log{},
+		&model.GroupChannelLog{},
+		&model.RequestDetail{},
+		&model.GroupChannelRequestDetail{},
+		&model.RetryLog{},
+		&model.GroupChannelRetryLog{},
+		&model.StoreV2{},
+		&model.GroupChannelStoreV2{},
+		&model.AsyncUsageInfo{},
+	); err != nil {
+		t.Fatalf("migrate logs: %v", err)
+	}
+
+	oldLogStorageHours := config.GetLogStorageHours()
+	oldRetryLogStorageHours := config.GetRetryLogStorageHours()
+	t.Cleanup(func() {
+		config.SetLogStorageHours(oldLogStorageHours)
+		config.SetRetryLogStorageHours(oldRetryLogStorageHours)
+	})
+	config.SetLogStorageHours(1)
+	config.SetRetryLogStorageHours(0)
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+	recentTime := time.Now()
+
+	rows := []model.GroupChannelLog{
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "old_group_log",
+			CreatedAt:      oldTime,
+			RequestAt:      oldTime,
+		},
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "recent_group_log",
+			CreatedAt:      recentTime,
+			RequestAt:      recentTime,
+		},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed group channel logs: %v", err)
+	}
+
+	if err := model.CleanLog(100, false); err != nil {
+		t.Fatalf("clean log: %v", err)
+	}
+
+	var ids []string
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs: %v", err)
+	}
+
+	want := []string{"recent_group_log"}
+	if len(ids) != len(want) {
+		t.Fatalf("expected remaining group channel log ids %v, got %v", want, ids)
+	}
+
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("expected remaining group channel log ids %v, got %v", want, ids)
+		}
+	}
+}
+
+func TestDeleteOldLogPreservesGroupChannelLogs(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.Log{}, &model.GroupChannelLog{}); err != nil {
+		t.Fatalf("migrate logs: %v", err)
+	}
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+
+	recentTime := time.Now()
+	if err := db.Create(&[]model.GroupChannelLog{
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "old_group_log",
+			CreatedAt:      oldTime,
+			RequestAt:      oldTime,
+		},
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "recent_group_log",
+			CreatedAt:      recentTime,
+			RequestAt:      recentTime,
+		},
+	}).Error; err != nil {
+		t.Fatalf("seed group channel logs: %v", err)
+	}
+
+	deleted, err := model.DeleteOldLog(time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("delete old logs: %v", err)
+	}
+
+	if deleted != 0 {
+		t.Fatalf("expected no deleted normal logs, got %d", deleted)
+	}
+
+	var ids []string
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs: %v", err)
+	}
+
+	if len(ids) != 2 || ids[0] != "old_group_log" || ids[1] != "recent_group_log" {
+		t.Fatalf("expected group channel logs to remain, got %v", ids)
+	}
+
+	deleted, err = model.DeleteOldGroupChannelLog(time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("delete old group channel logs: %v", err)
+	}
+
+	if deleted != 1 {
+		t.Fatalf("expected one deleted group channel log, got %d", deleted)
+	}
+
+	ids = nil
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs after group channel delete: %v", err)
+	}
+
+	if len(ids) != 1 || ids[0] != "recent_group_log" {
+		t.Fatalf("expected only recent group channel log to remain, got %v", ids)
+	}
+}
+
+func TestDeleteOldGroupChannelLogForGroupIsScoped(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.GroupChannelLog{}); err != nil {
+		t.Fatalf("migrate group channel logs: %v", err)
+	}
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+
+	recentTime := time.Now()
+	if err := db.Create(&[]model.GroupChannelLog{
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "group_1_old",
+			CreatedAt:      oldTime,
+			RequestAt:      oldTime,
+		},
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "group_1_recent",
+			CreatedAt:      recentTime,
+			RequestAt:      recentTime,
+		},
+		{
+			GroupID:        "group-2",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "group_2_old",
+			CreatedAt:      oldTime,
+			RequestAt:      oldTime,
+		},
+	}).Error; err != nil {
+		t.Fatalf("seed group channel logs: %v", err)
+	}
+
+	deleted, err := model.DeleteOldGroupChannelLogForGroup("group-1", time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("delete scoped old group channel logs: %v", err)
+	}
+
+	if deleted != 1 {
+		t.Fatalf("expected one deleted group channel log, got %d", deleted)
+	}
+
+	var ids []string
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs: %v", err)
+	}
+
+	want := []string{"group_1_recent", "group_2_old"}
+	if len(ids) != len(want) {
+		t.Fatalf("expected remaining group channel logs %v, got %v", want, ids)
+	}
+
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("expected remaining group channel logs %v, got %v", want, ids)
+		}
+	}
+}
+
+func TestDeleteGroupLogsPreservesGroupChannelLogs(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(&model.Log{}, &model.GroupChannelLog{}); err != nil {
+		t.Fatalf("migrate logs: %v", err)
+	}
+
+	now := time.Now()
+	if err := db.Create(&[]model.GroupChannelLog{
+		{
+			GroupID:        "group-1",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "group_1_log",
+			CreatedAt:      now,
+			RequestAt:      now,
+		},
+		{
+			GroupID:        "group-2",
+			GroupChannelID: 1,
+			Model:          "gpt-5",
+			RequestID:      "group_2_log",
+			CreatedAt:      now,
+			RequestAt:      now,
+		},
+	}).Error; err != nil {
+		t.Fatalf("seed group channel logs: %v", err)
+	}
+
+	deleted, err := model.DeleteGroupLogs("group-1")
+	if err != nil {
+		t.Fatalf("delete group logs: %v", err)
+	}
+
+	if deleted != 0 {
+		t.Fatalf("expected no deleted normal logs, got %d", deleted)
+	}
+
+	var ids []string
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs: %v", err)
+	}
+
+	if len(ids) != 2 || ids[0] != "group_1_log" || ids[1] != "group_2_log" {
+		t.Fatalf("expected group channel logs to remain, got %v", ids)
+	}
+
+	deleted, err = model.DeleteGroupChannelLogs("group-1")
+	if err != nil {
+		t.Fatalf("delete group channel logs: %v", err)
+	}
+
+	if deleted != 1 {
+		t.Fatalf("expected one deleted group channel log, got %d", deleted)
+	}
+
+	ids = nil
+	if err := db.Model(&model.GroupChannelLog{}).
+		Order("request_id").
+		Pluck("request_id", &ids).Error; err != nil {
+		t.Fatalf("list group channel logs after group channel delete: %v", err)
+	}
+
+	if len(ids) != 1 || ids[0] != "group_2_log" {
+		t.Fatalf("expected group-2 group channel log to remain, got %v", ids)
+	}
+}
+
+func TestGetGroupLogsIsolatedFromGroupChannelLogs(t *testing.T) {
+	withGroupChannelLogDB(t, func(dbLogs groupChannelLogFixture) {
+		result, err := model.GetGroupLogs(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			0,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("get group logs: %v", err)
+		}
+
+		if result.Total != 1 {
+			t.Fatalf("expected total=1, got %d", result.Total)
+		}
+
+		if len(result.Logs) != 1 {
+			t.Fatalf("expected 1 log, got %d", len(result.Logs))
+		}
+
+		if result.Logs[0].RequestID != "normal_req" {
+			t.Fatalf("expected normal log, got %q", result.Logs[0].RequestID)
+		}
+
+		filtered, err := model.GetGroupLogs(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			false,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("get filtered group logs: %v", err)
+		}
+
+		if filtered.Total != 0 || len(filtered.Logs) != 0 {
+			t.Fatalf(
+				"expected no normal logs for group channel id, got total=%d logs=%#v",
+				filtered.Total,
+				filtered.Logs,
+			)
+		}
+
+		groupChannelResult, err := model.GetGroupChannelLogs(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("get group channel logs: %v", err)
+		}
+
+		if groupChannelResult.Total != 1 || len(groupChannelResult.Logs) != 1 ||
+			groupChannelResult.Logs[0].RequestID != "group_channel_req" {
+			t.Fatalf(
+				"expected group channel log from isolated endpoint, got total=%d logs=%#v",
+				groupChannelResult.Total,
+				groupChannelResult.Logs,
+			)
+		}
+
+		groupLog := groupChannelResult.Logs[0]
+		if groupLog.GroupChannelID != dbLogs.groupChannelID {
+			t.Fatalf(
+				"expected group channel id %d, got %d",
+				dbLogs.groupChannelID,
+				groupLog.GroupChannelID,
+			)
+		}
+
+		if groupLog.RequestDetail == nil || groupLog.RequestDetail.RequestBody != "group request" {
+			t.Fatalf("expected group channel request detail, got %#v", groupLog.RequestDetail)
+		}
+
+		if len(groupChannelResult.TokenNames) != 1 ||
+			groupChannelResult.TokenNames[0] != "group-token" {
+			t.Fatalf("expected group channel token facet, got %#v", groupChannelResult.TokenNames)
+		}
+	})
+}
+
+func TestGlobalLogsAreIsolatedFromGroupChannelLogs(t *testing.T) {
+	withGroupChannelLogDB(t, func(dbLogs groupChannelLogFixture) {
+		result, err := model.GetLogs(
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"group_channel_req",
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			false,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("get global logs: %v", err)
+		}
+
+		if result.Total != 0 || len(result.Logs) != 0 {
+			t.Fatalf(
+				"expected no global group channel logs, got total=%d logs=%#v",
+				result.Total,
+				result.Logs,
+			)
+		}
+
+		searchResult, err := model.SearchLogs(
+			"group_channel_req",
+			"",
+			"",
+			"",
+			0,
+			"",
+			"",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			0,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			false,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("search global logs: %v", err)
+		}
+
+		if searchResult.Total != 0 || len(searchResult.Logs) != 0 {
+			t.Fatalf(
+				"expected no searched global group channel logs, got total=%d logs=%#v",
+				searchResult.Total,
+				searchResult.Logs,
+			)
+		}
+
+		logs, err := model.ExportLogsRange(
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"group_channel_req",
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			10,
+		)
+		if err != nil {
+			t.Fatalf("export global logs: %v", err)
+		}
+
+		if len(logs) != 0 {
+			t.Fatalf("expected no exported global group channel logs, got %#v", logs)
+		}
+
+		groupChannelLogs, err := model.ExportGroupChannelLogsRange(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"group_channel_req",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			10,
+		)
+		if err != nil {
+			t.Fatalf("export isolated group channel logs: %v", err)
+		}
+
+		if len(groupChannelLogs) != 1 || groupChannelLogs[0].RequestID != "group_channel_req" ||
+			groupChannelLogs[0].RequestDetail == nil {
+			t.Fatalf("expected exported group channel log with detail, got %#v", groupChannelLogs)
+		}
+
+		detail, err := model.GetGroupChannelLogDetailForGroup(dbLogs.groupChannelLogID, "group-1")
+		if err != nil {
+			t.Fatalf("get group channel detail: %v", err)
+		}
+
+		if detail.RequestBody != "group request" {
+			t.Fatalf("unexpected global group channel detail: %#v", detail)
+		}
+	})
+}
+
+func TestGroupAndGroupChannelLogsPaginateIndependently(t *testing.T) {
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(
+		&model.Log{},
+		&model.RequestDetail{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelRequestDetail{},
+		&model.Summary{},
+		&model.GroupSummary{},
+		&model.GroupChannelTokenSummary{},
+	); err != nil {
+		t.Fatalf("migrate log db: %v", err)
+	}
+
+	baseTime := time.Now().Add(-time.Hour)
+	for i := range 12 {
+		createdAt := baseTime.Add(time.Duration(i) * time.Second)
+		if err := db.Create(&model.Log{
+			GroupID:   "group-1",
+			ChannelID: 7,
+			Model:     "gpt-5",
+			RequestID: model.EmptyNullString("normal_page_req"),
+			Code:      200,
+			CreatedAt: createdAt,
+			RequestAt: createdAt,
+		}).Error; err != nil {
+			t.Fatalf("seed normal log %d: %v", i, err)
+		}
+	}
+
+	for i := range 12 {
+		createdAt := baseTime.Add(time.Duration(12+i) * time.Second)
+		if err := db.Create(&model.GroupChannelLog{
+			GroupID:        "group-1",
+			GroupChannelID: 11,
+			Model:          "gpt-5",
+			RequestID:      model.EmptyNullString("group_page_req"),
+			Code:           200,
+			CreatedAt:      createdAt,
+			RequestAt:      createdAt,
+		}).Error; err != nil {
+			t.Fatalf("seed group channel log %d: %v", i, err)
+		}
+	}
+
+	result, err := model.GetGroupLogs(
+		"group-1",
+		time.Time{},
+		time.Now().Add(time.Hour),
+		"",
+		"",
+		"",
+		0,
+		"",
+		0,
+		"created_at-asc",
+		model.CodeTypeAll,
+		0,
+		false,
+		"",
+		"",
+		2,
+		10,
+	)
+	if err != nil {
+		t.Fatalf("get paginated group logs: %v", err)
+	}
+
+	if result.Total != 12 {
+		t.Fatalf("expected total=12, got %d", result.Total)
+	}
+
+	if len(result.Logs) != 2 {
+		t.Fatalf("expected second page size 2, got %d", len(result.Logs))
+	}
+
+	if result.Logs[0].RequestID != "normal_page_req" {
+		t.Fatalf("expected normal log beyond first 10 rows, got %q", result.Logs[0].RequestID)
+	}
+
+	searchResult, err := model.SearchGroupLogs(
+		"group-1",
+		"",
+		"",
+		"",
+		0,
+		"",
+		"",
+		time.Time{},
+		time.Now().Add(time.Hour),
+		0,
+		"created_at-asc",
+		model.CodeTypeAll,
+		0,
+		false,
+		"",
+		"",
+		2,
+		10,
+	)
+	if err != nil {
+		t.Fatalf("search paginated group logs: %v", err)
+	}
+
+	if searchResult.Total != 12 || len(searchResult.Logs) != 2 ||
+		searchResult.Logs[0].RequestID != "normal_page_req" {
+		t.Fatalf(
+			"expected paginated search to include normal rows beyond first page, total=%d logs=%#v",
+			searchResult.Total,
+			searchResult.Logs,
+		)
+	}
+
+	groupChannelResult, err := model.GetGroupChannelLogs(
+		"group-1",
+		time.Time{},
+		time.Now().Add(time.Hour),
+		"",
+		"",
+		"",
+		0,
+		"",
+		0,
+		"created_at-asc",
+		model.CodeTypeAll,
+		0,
+		false,
+		"",
+		"",
+		2,
+		10,
+	)
+	if err != nil {
+		t.Fatalf("get paginated group channel logs: %v", err)
+	}
+
+	if groupChannelResult.Total != 12 || len(groupChannelResult.Logs) != 2 ||
+		groupChannelResult.Logs[0].RequestID != "group_page_req" {
+		t.Fatalf(
+			"expected paginated group channel rows beyond first page, total=%d logs=%#v",
+			groupChannelResult.Total,
+			groupChannelResult.Logs,
+		)
+	}
+
+	groupChannelSearch, err := model.SearchGroupChannelLogs(
+		"group-1",
+		"",
+		"",
+		"",
+		0,
+		"",
+		"",
+		time.Time{},
+		time.Now().Add(time.Hour),
+		0,
+		"created_at-asc",
+		model.CodeTypeAll,
+		0,
+		false,
+		"",
+		"",
+		2,
+		10,
+	)
+	if err != nil {
+		t.Fatalf("search paginated group channel logs: %v", err)
+	}
+
+	if groupChannelSearch.Total != 12 || len(groupChannelSearch.Logs) != 2 ||
+		groupChannelSearch.Logs[0].RequestID != "group_page_req" {
+		t.Fatalf(
+			"expected paginated group channel search beyond first page, total=%d logs=%#v",
+			groupChannelSearch.Total,
+			groupChannelSearch.Logs,
+		)
+	}
+}
+
+func TestSearchAndExportGroupChannelLogsAreIsolated(t *testing.T) {
+	withGroupChannelLogDB(t, func(dbLogs groupChannelLogFixture) {
+		result, err := model.SearchGroupLogs(
+			"group-1",
+			"group_channel_req",
+			"",
+			"",
+			0,
+			"",
+			"",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			0,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			false,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("search group logs: %v", err)
+		}
+
+		if result.Total != 0 || len(result.Logs) != 0 {
+			t.Fatalf(
+				"expected no normal logs from group channel search term, got total=%d logs=%#v",
+				result.Total,
+				result.Logs,
+			)
+		}
+
+		groupChannelResult, err := model.SearchGroupChannelLogs(
+			"group-1",
+			"group_channel_req",
+			"",
+			"",
+			0,
+			"",
+			"",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			0,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			false,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err != nil {
+			t.Fatalf("search group channel logs: %v", err)
+		}
+
+		if groupChannelResult.Total != 1 || len(groupChannelResult.Logs) != 1 ||
+			groupChannelResult.Logs[0].GroupChannelID != dbLogs.groupChannelID {
+			t.Fatalf(
+				"expected searched group channel log, got total=%d logs=%#v",
+				groupChannelResult.Total,
+				groupChannelResult.Logs,
+			)
+		}
+
+		logs, err := model.ExportGroupLogsRange(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			10,
+		)
+		if err != nil {
+			t.Fatalf("export group logs: %v", err)
+		}
+
+		if len(logs) != 0 {
+			t.Fatalf(
+				"expected no exported group channel log from normal group export, got %#v",
+				logs,
+			)
+		}
+
+		groupChannelLogs, err := model.ExportGroupChannelLogsRange(
+			"group-1",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			10,
+		)
+		if err != nil {
+			t.Fatalf("export group channel logs: %v", err)
+		}
+
+		if len(groupChannelLogs) != 1 || groupChannelLogs[0].RequestID != "group_channel_req" {
+			t.Fatalf("expected exported group channel log, got %#v", groupChannelLogs)
+		}
+
+		if groupChannelLogs[0].RequestDetail == nil ||
+			groupChannelLogs[0].RequestDetail.ResponseBody != "group response" {
+			t.Fatalf(
+				"expected exported group channel detail, got %#v",
+				groupChannelLogs[0].RequestDetail,
+			)
+		}
+	})
+}
+
+func TestGetGroupChannelLogDetailForGroupReadsGroupChannelDetail(t *testing.T) {
+	withGroupChannelLogDB(t, func(dbLogs groupChannelLogFixture) {
+		detail, err := model.GetGroupChannelLogDetailForGroup(
+			dbLogs.groupChannelLogID,
+			"group-1",
+		)
+		if err != nil {
+			t.Fatalf("get group channel detail: %v", err)
+		}
+
+		if detail.RequestBody != "group request" || detail.ResponseBody != "group response" {
+			t.Fatalf("unexpected group channel detail: %#v", detail)
+		}
+	})
+}
+
+func TestGetGroupChannelLogsRequiresGroupFilter(t *testing.T) {
+	withGroupChannelLogDB(t, func(dbLogs groupChannelLogFixture) {
+		result, err := model.GetGroupChannelLogs(
+			"",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			1,
+			10,
+		)
+		if err == nil {
+			t.Fatalf("expected missing group error, got result %#v", result)
+		}
+
+		logs, err := model.ExportGroupChannelLogsRange(
+			"",
+			time.Time{},
+			time.Now().Add(time.Hour),
+			"",
+			"",
+			"",
+			0,
+			"",
+			dbLogs.groupChannelID,
+			"created_at-asc",
+			model.CodeTypeAll,
+			0,
+			true,
+			"",
+			"",
+			10,
+		)
+		if err == nil {
+			t.Fatalf("expected missing group error, got logs %#v", logs)
+		}
+	})
+}
+
+type groupChannelLogFixture struct {
+	groupChannelID    int
+	groupChannelLogID int
+}
+
+func withGroupChannelLogDB(t *testing.T, fn func(groupChannelLogFixture)) {
+	t.Helper()
+
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	prevLogDB := model.LogDB
+	model.LogDB = db
+	t.Cleanup(func() {
+		model.LogDB = prevLogDB
+	})
+
+	if err := db.AutoMigrate(
+		&model.Log{},
+		&model.RequestDetail{},
+		&model.GroupChannelLog{},
+		&model.GroupChannelRequestDetail{},
+		&model.Summary{},
+		&model.GroupSummary{},
+		&model.GroupChannelTokenSummary{},
+	); err != nil {
+		t.Fatalf("migrate log db: %v", err)
+	}
+
+	baseTime := time.Now().Add(-time.Minute)
+
+	normalLog := model.Log{
+		GroupID:   "group-1",
+		ChannelID: 7,
+		Model:     "gpt-5",
+		RequestID: "normal_req",
+		Code:      200,
+		CreatedAt: baseTime,
+		RequestAt: baseTime,
+		RequestDetail: &model.RequestDetail{
+			RequestBody:  "normal request",
+			ResponseBody: "normal response",
+		},
+	}
+	if err := db.Create(&normalLog).Error; err != nil {
+		t.Fatalf("seed normal log: %v", err)
+	}
+
+	groupChannelLog := model.GroupChannelLog{
+		GroupID:        "group-1",
+		GroupChannelID: 11,
+		TokenName:      "group-token",
+		Model:          "gpt-5",
+		RequestID:      "group_channel_req",
+		Code:           200,
+		CreatedAt:      baseTime.Add(time.Second),
+		RequestAt:      baseTime.Add(time.Second),
+		RequestDetail: &model.GroupChannelRequestDetail{
+			RequestBody:  "group request",
+			ResponseBody: "group response",
+		},
+	}
+	if err := db.Create(&groupChannelLog).Error; err != nil {
+		t.Fatalf("seed group channel log: %v", err)
+	}
+
+	if err := db.Create(&model.GroupChannelTokenSummary{
+		Unique: model.GroupChannelTokenSummaryUnique{
+			GroupID:       "group-1",
+			TokenName:     groupChannelLog.TokenName,
+			Model:         groupChannelLog.Model,
+			HourTimestamp: baseTime.Truncate(time.Hour).Unix(),
+		},
+	}).Error; err != nil {
+		t.Fatalf("seed group channel token summary: %v", err)
+	}
+
+	otherGroupLog := model.GroupChannelLog{
+		GroupID:        "group-2",
+		GroupChannelID: 11,
+		Model:          "gpt-5",
+		RequestID:      "other_group_channel_req",
+		Code:           200,
+		CreatedAt:      baseTime.Add(2 * time.Second),
+		RequestAt:      baseTime.Add(2 * time.Second),
+	}
+	if err := db.Create(&otherGroupLog).Error; err != nil {
+		t.Fatalf("seed other group channel log: %v", err)
+	}
+
+	fn(groupChannelLogFixture{
+		groupChannelID:    groupChannelLog.GroupChannelID,
+		groupChannelLogID: groupChannelLog.ID,
+	})
 }
 
 func TestTryClaimAsyncUsageInfoIsAtomic(t *testing.T) {

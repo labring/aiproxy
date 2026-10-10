@@ -141,20 +141,15 @@ func cloneStringSlice(values []string) []string {
 	return slices.Clone(values)
 }
 
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
+func cloneStringStringMap(values map[string]string) map[string]string {
 	if values == nil {
 		return nil
 	}
 
-	cloned := make(map[string][]string, len(values))
-	for key, items := range values {
-		cloned[key] = cloneStringSlice(items)
-	}
-
-	return cloned
+	return maps.Clone(values)
 }
 
-func cloneStringStringMap(values map[string]string) map[string]string {
+func cloneChannelConfigs(values ChannelConfigs) ChannelConfigs {
 	if values == nil {
 		return nil
 	}
@@ -218,8 +213,11 @@ func cloneTokenCache(token *TokenCache) *TokenCache {
 	cloned := *token
 	cloned.Subnets = redisStringSlice(cloneStringSlice([]string(token.Subnets)))
 	cloned.Models = redisStringSlice(cloneStringSlice([]string(token.Models)))
-	cloned.availableSets = cloneStringSlice(token.availableSets)
-	cloned.modelsBySet = cloneStringSliceMap(token.modelsBySet)
+	cloned.Sets = redisStringSlice(cloneStringSlice([]string(token.Sets)))
+	cloned.GroupChannelModels = redisStringSlice(
+		cloneStringSlice([]string(token.GroupChannelModels)),
+	)
+	cloned.GroupChannelSets = redisStringSlice(cloneStringSlice([]string(token.GroupChannelSets)))
 
 	return &cloned
 }
