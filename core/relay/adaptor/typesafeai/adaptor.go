@@ -187,5 +187,3 @@ func (a *Adaptor) DoResponse(
 		Usage: usage,
 	}, nil
 }
-
-

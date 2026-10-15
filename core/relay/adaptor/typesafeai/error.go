@@ -43,12 +43,20 @@ func WrapperSystemOneErrorWithMessage(message, typ string, statusCode int) adapt
 // ErrorHanlder reads an HTTP response and converts it to a SystemOneError.
 func ErrorHanlder(resp *http.Response) adaptor.Error {
 	if resp == nil {
-		return WrapperSystemOneErrorWithMessage("response is nil", "invalid_response", http.StatusInternalServerError)
+		return WrapperSystemOneErrorWithMessage(
+			"response is nil",
+			"invalid_response",
+			http.StatusInternalServerError,
+		)
 	}
 
 	body, err := common.GetResponseBody(resp)
 	if err != nil {
-		return WrapperSystemOneError(err, "read_response_body_failed", http.StatusInternalServerError)
+		return WrapperSystemOneError(
+			err,
+			"read_response_body_failed",
+			http.StatusInternalServerError,
+		)
 	}
 
 	var errResp SystemOneErrorResponse
