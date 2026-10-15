@@ -9,11 +9,11 @@ type SystemOneRequest struct {
 
 // Question represents a single typed question in the SystemOne request.
 type Question struct {
-	Type     string     `json:"type"`
-	Question string     `json:"question,omitempty"`
-	Choices  []Choice   `json:"choices,omitempty"`
-	Min      *float64   `json:"min,omitempty"`
-	Max      *float64   `json:"max,omitempty"`
+	Type     string   `json:"type"`
+	Question string   `json:"question,omitempty"`
+	Choices  []Choice `json:"choices,omitempty"`
+	Min      *float64 `json:"min,omitempty"`
+	Max      *float64 `json:"max,omitempty"`
 }
 
 // Choice represents a single choice option within a question.

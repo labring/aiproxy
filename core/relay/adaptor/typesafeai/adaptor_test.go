@@ -1,7 +1,8 @@
-package typesafeai
+package typesafeai_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,15 +11,16 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/labring/aiproxy/core/relay/adaptor"
 	coremodel "github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
+	"github.com/labring/aiproxy/core/relay/adaptor/typesafeai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAdaptorSupportMode(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 
 	assert.True(t, a.SupportMode(&meta.Meta{Mode: mode.SystemOne}))
 	assert.False(t, a.SupportMode(&meta.Meta{Mode: mode.ChatCompletions}))
@@ -26,12 +28,12 @@ func TestAdaptorSupportMode(t *testing.T) {
 }
 
 func TestAdaptorDefaultBaseURL(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	assert.Equal(t, "https://api.typesafe.ai/v1", a.DefaultBaseURL())
 }
 
 func TestAdaptorGetRequestURL(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		&coremodel.Channel{BaseURL: "https://api.typesafe.ai/v1"},
 		mode.SystemOne,
@@ -46,7 +48,7 @@ func TestAdaptorGetRequestURL(t *testing.T) {
 }
 
 func TestConvertRequestValid(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -71,7 +73,8 @@ func TestConvertRequestValid(t *testing.T) {
 	convertedBody, err := io.ReadAll(result.Body)
 	assert.NoError(t, err)
 
-	var converted SystemOneRequest
+	var converted typesafeai.SystemOneRequest
+
 	err = sonic.Unmarshal(convertedBody, &converted)
 	assert.NoError(t, err)
 
@@ -85,7 +88,7 @@ func TestConvertRequestValid(t *testing.T) {
 }
 
 func TestConvertRequestMissingState(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -107,15 +110,18 @@ func TestConvertRequestMissingState(t *testing.T) {
 	_, err = a.ConvertRequest(m, nil, req)
 	assert.Error(t, err)
 
-	sysErr, ok := err.(adaptor.Error)
+	var sysErr adaptor.Error
+
+	ok := errors.As(err, &sysErr)
 	assert.True(t, ok)
+
 	if ok {
 		assert.Equal(t, http.StatusBadRequest, sysErr.StatusCode())
 	}
 }
 
 func TestConvertRequestMissingQuestions(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -137,15 +143,18 @@ func TestConvertRequestMissingQuestions(t *testing.T) {
 	_, err = a.ConvertRequest(m, nil, req)
 	assert.Error(t, err)
 
-	sysErr, ok := err.(adaptor.Error)
+	var sysErr adaptor.Error
+
+	ok := errors.As(err, &sysErr)
 	assert.True(t, ok)
+
 	if ok {
 		assert.Equal(t, http.StatusBadRequest, sysErr.StatusCode())
 	}
 }
 
 func TestConvertRequestInvalidJSON(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -165,15 +174,17 @@ func TestConvertRequestInvalidJSON(t *testing.T) {
 	_, err = a.ConvertRequest(m, nil, req)
 	assert.Error(t, err)
 
-	sysErr, ok := err.(adaptor.Error)
+	var sysErr adaptor.Error
+
+	ok := errors.As(err, &sysErr)
 	assert.True(t, ok)
+
 	if ok {
 		assert.Equal(t, http.StatusBadRequest, sysErr.StatusCode())
 	}
 }
 
 func TestDoResponseUsageExtraction(t *testing.T) {
-
 	// Parse a valid response body to verify usage extraction
 	body := `{
 		"answers": {
@@ -191,7 +202,8 @@ func TestDoResponseUsageExtraction(t *testing.T) {
 		}
 	}`
 
-	var resp SystemOneResponse
+	var resp typesafeai.SystemOneResponse
+
 	err := sonic.Unmarshal([]byte(body), &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, 10, resp.Usage.InputTokens)
@@ -203,7 +215,7 @@ func TestDoResponseUsageExtraction(t *testing.T) {
 }
 
 func TestDoResponseWritesRawBody(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -240,7 +252,7 @@ func TestDoResponseWritesRawBody(t *testing.T) {
 }
 
 func TestDoResponseErrorStatus(t *testing.T) {
-	a := &Adaptor{}
+	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
 		nil,
 		mode.SystemOne,
@@ -268,7 +280,7 @@ func TestDoResponseErrorStatus(t *testing.T) {
 
 func TestErrorHanlder(t *testing.T) {
 	t.Run("nil response", func(t *testing.T) {
-		err := ErrorHanlder(nil)
+		err := typesafeai.ErrorHanlder(nil)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusInternalServerError, err.StatusCode())
 	})
@@ -276,33 +288,35 @@ func TestErrorHanlder(t *testing.T) {
 	t.Run("non-200 with error body", func(t *testing.T) {
 		resp := &http.Response{
 			StatusCode: http.StatusBadRequest,
-			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"bad_request","message":"test error"}}`)),
-			Header:     make(http.Header),
+			Body: io.NopCloser(
+				strings.NewReader(`{"error":{"type":"bad_request","message":"test error"}}`),
+			),
+			Header: make(http.Header),
 		}
 
-		err := ErrorHanlder(resp)
+		err := typesafeai.ErrorHanlder(resp)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusBadRequest, err.StatusCode())
 	})
 }
 
 func TestIsSuccessfulResponseStatus(t *testing.T) {
-	assert.True(t, IsSuccessfulResponseStatus(http.StatusOK))
-	assert.False(t, IsSuccessfulResponseStatus(http.StatusBadRequest))
-	assert.False(t, IsSuccessfulResponseStatus(http.StatusInternalServerError))
-	assert.False(t, IsSuccessfulResponseStatus(http.StatusNotFound))
+	assert.True(t, typesafeai.IsSuccessfulResponseStatus(http.StatusOK))
+	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusBadRequest))
+	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusInternalServerError))
+	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusNotFound))
 }
 
 func TestSystemOneRequestTypes(t *testing.T) {
 	t.Run("choice question", func(t *testing.T) {
-		req := SystemOneRequest{
+		req := typesafeai.SystemOneRequest{
 			State: "context",
 			Model: "gpt-4o",
-			Questions: map[string]Question{
+			Questions: map[string]typesafeai.Question{
 				"q1": {
 					Type:     "choice",
 					Question: "What is 2+2?",
-					Choices: []Choice{
+					Choices: []typesafeai.Choice{
 						{Label: "a", Text: "4"},
 						{Label: "b", Text: "5"},
 					},
@@ -317,7 +331,7 @@ func TestSystemOneRequestTypes(t *testing.T) {
 	t.Run("score question", func(t *testing.T) {
 		minVal := 0.0
 		maxVal := 10.0
-		question := Question{
+		question := typesafeai.Question{
 			Type:     "score",
 			Question: "Rate this text",
 			Min:      &minVal,
@@ -331,10 +345,10 @@ func TestSystemOneRequestTypes(t *testing.T) {
 	})
 
 	t.Run("noul question", func(t *testing.T) {
-		question := Question{
+		question := typesafeai.Question{
 			Type:     "noul",
 			Question: "Is this text appropriate?",
-			Choices: []Choice{
+			Choices: []typesafeai.Choice{
 				{Label: "yes"},
 				{Label: "no"},
 			},
@@ -346,7 +360,7 @@ func TestSystemOneRequestTypes(t *testing.T) {
 
 func TestAnswerTypes(t *testing.T) {
 	t.Run("choice answer", func(t *testing.T) {
-		answer := Answer{
+		answer := typesafeai.Answer{
 			Type:       "choice",
 			Choice:     "a",
 			Confidence: 0.95,
@@ -362,7 +376,7 @@ func TestAnswerTypes(t *testing.T) {
 	})
 
 	t.Run("score answer", func(t *testing.T) {
-		answer := Answer{
+		answer := typesafeai.Answer{
 			Type:       "score",
 			Score:      7.5,
 			Confidence: 0.88,
@@ -372,7 +386,7 @@ func TestAnswerTypes(t *testing.T) {
 	})
 
 	t.Run("noul answer", func(t *testing.T) {
-		answer := Answer{
+		answer := typesafeai.Answer{
 			Type:       "noul",
 			Noul:       "yes",
 			Confidence: 0.99,
