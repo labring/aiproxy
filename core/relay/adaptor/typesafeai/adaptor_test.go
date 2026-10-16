@@ -47,6 +47,21 @@ func TestAdaptorGetRequestURL(t *testing.T) {
 	assert.Equal(t, "https://api.typesafe.ai/v1/systemone", got.URL)
 }
 
+func TestAdaptorGetRequestURLCustomBaseURL(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(
+		&coremodel.Channel{BaseURL: "https://proxy.example.com/typesafeai"},
+		mode.SystemOne,
+		"gpt-4o",
+		coremodel.ModelConfig{},
+	)
+
+	got, err := a.GetRequestURL(m, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, http.MethodPost, got.Method)
+	assert.Equal(t, "https://proxy.example.com/typesafeai/systemone", got.URL)
+}
+
 func TestConvertRequestValid(t *testing.T) {
 	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
