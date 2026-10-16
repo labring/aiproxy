@@ -94,7 +94,7 @@ func (a *Adaptor) ConvertRequest(
 	}
 
 	// Validate required fields
-	if systemOneReq.State == "" {
+	if systemOneReq.State == nil {
 		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
 			"missing required field: state",
 			"validation_error",
