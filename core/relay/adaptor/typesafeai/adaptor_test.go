@@ -72,7 +72,7 @@ func TestConvertRequestValid(t *testing.T) {
 	)
 	m.ActualModel = "gpt-4o"
 
-	body := `{"state":"test state","model":"gpt-4o","questions":{"q1":{"type":"choice","question":"What is 2+2?","choices":[{"label":"a","text":"4"}]}}}`
+	body := `{"state":"test state","model":"gpt-4o","questions":{"q1":{"type":"choice","instructions":"What is 2+2?","criteria":{"a":"4","b":"5"}}}}`
 
 	req, err := http.NewRequestWithContext(
 		context.Background(),
@@ -100,6 +100,53 @@ func TestConvertRequestValid(t *testing.T) {
 	// Questions should be preserved
 	assert.Contains(t, converted.Questions, "q1")
 	assert.Equal(t, "choice", converted.Questions["q1"].Type)
+	// Instructions should be preserved (regression test for instructions being dropped)
+	assert.Equal(t, "What is 2+2?", converted.Questions["q1"].Instructions)
+}
+
+// TestConvertRequestPreservesInstructions is a regression test for the bug where
+// the "instructions" field was dropped during request conversion because the
+// Question struct used "question" as the JSON tag instead of "instructions".
+func TestConvertRequestPreservesInstructions(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(
+		nil,
+		mode.SystemOne,
+		"clef",
+		coremodel.ModelConfig{},
+	)
+	m.ActualModel = "clef"
+
+	// This is the exact request shape reported in the bug:
+	// the upstream returned "questions.is_urgent": ""instructions" must be provided"
+	body := `{"state":"Help! My payouts have been failing for 3 days.","model":"clef","questions":{"is_urgent":{"type":"noul","instructions":"Does this convey urgency?"}}}`
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/systemone",
+		strings.NewReader(body),
+	)
+	assert.NoError(t, err)
+
+	result, err := a.ConvertRequest(m, nil, req)
+	assert.NoError(t, err)
+
+	convertedBody, err := io.ReadAll(result.Body)
+	assert.NoError(t, err)
+
+	// The converted body should still contain the "instructions" field
+	assert.Contains(t, string(convertedBody), `"instructions":"Does this convey urgency?"`)
+
+	// Verify by parsing the structure
+	var converted typesafeai.SystemOneRequest
+
+	err = sonic.Unmarshal(convertedBody, &converted)
+	assert.NoError(t, err)
+
+	assert.Contains(t, converted.Questions, "is_urgent")
+	assert.Equal(t, "noul", converted.Questions["is_urgent"].Type)
+	assert.Equal(t, "Does this convey urgency?", converted.Questions["is_urgent"].Instructions)
 }
 
 func TestConvertRequestMissingState(t *testing.T) {
@@ -329,11 +376,11 @@ func TestSystemOneRequestTypes(t *testing.T) {
 			Model: "gpt-4o",
 			Questions: map[string]typesafeai.Question{
 				"q1": {
-					Type:     "choice",
-					Question: "What is 2+2?",
-					Choices: []typesafeai.Choice{
-						{Label: "a", Text: "4"},
-						{Label: "b", Text: "5"},
+					Type:         "choice",
+					Instructions: "Which team should handle this?",
+					Criteria: map[string]string{
+						"billing":   "Payments, invoicing, refunds",
+						"technical": "Bugs, outages, integrations",
 					},
 				},
 			},
@@ -341,35 +388,36 @@ func TestSystemOneRequestTypes(t *testing.T) {
 		assert.Equal(t, "context", req.State)
 		assert.Equal(t, "gpt-4o", req.Model)
 		assert.Equal(t, "choice", req.Questions["q1"].Type)
+		assert.Equal(t, "Which team should handle this?", req.Questions["q1"].Instructions)
 	})
 
 	t.Run("score question", func(t *testing.T) {
-		minVal := 0.0
-		maxVal := 10.0
 		question := typesafeai.Question{
-			Type:     "score",
-			Question: "Rate this text",
-			Min:      &minVal,
-			Max:      &maxVal,
+			Type:         "score",
+			Instructions: "How frustrated is the customer?",
+			Criteria:     []string{"Calm", "Frustrated", "Very angry"},
 		}
 		assert.Equal(t, "score", question.Type)
-		assert.NotNil(t, question.Min)
-		assert.NotNil(t, question.Max)
-		assert.Equal(t, 0.0, *question.Min)
-		assert.Equal(t, 10.0, *question.Max)
+		assert.Equal(t, "How frustrated is the customer?", question.Instructions)
+		criteria, ok := question.Criteria.([]string)
+		assert.True(t, ok)
+		assert.Len(t, criteria, 3)
 	})
 
 	t.Run("noul question", func(t *testing.T) {
 		question := typesafeai.Question{
-			Type:     "noul",
-			Question: "Is this text appropriate?",
-			Choices: []typesafeai.Choice{
-				{Label: "yes"},
-				{Label: "no"},
+			Type:         "noul",
+			Instructions: "Does this convey urgency?",
+			Criteria: map[string]string{
+				"true":  "Explicitly time-sensitive",
+				"false": "No urgency expressed",
 			},
 		}
 		assert.Equal(t, "noul", question.Type)
-		assert.Len(t, question.Choices, 2)
+		assert.Equal(t, "Does this convey urgency?", question.Instructions)
+		criteria, ok := question.Criteria.(map[string]string)
+		assert.True(t, ok)
+		assert.Len(t, criteria, 2)
 	})
 }
 
@@ -393,20 +441,32 @@ func TestAnswerTypes(t *testing.T) {
 	t.Run("score answer", func(t *testing.T) {
 		answer := typesafeai.Answer{
 			Type:       "score",
-			Score:      7.5,
-			Confidence: 0.88,
+			Score:      1.05,
+			Confidence: 0.92,
+			Legend: map[string]string{
+				"0": "Calm",
+				"1": "Frustrated",
+				"2": "Very angry",
+			},
+			Probabilities: map[string]float64{
+				"0": 0.0,
+				"1": 0.95,
+				"2": 0.05,
+			},
 		}
 		assert.Equal(t, "score", answer.Type)
-		assert.Equal(t, 7.5, answer.Score)
+		assert.Equal(t, 1.05, answer.Score)
+		assert.Equal(t, "Calm", answer.Legend["0"])
+		assert.Equal(t, 0.95, answer.Probabilities["1"])
 	})
 
 	t.Run("noul answer", func(t *testing.T) {
 		answer := typesafeai.Answer{
 			Type:       "noul",
-			Noul:       "yes",
+			Noul:       0.95,
 			Confidence: 0.99,
 		}
 		assert.Equal(t, "noul", answer.Type)
-		assert.Equal(t, "yes", answer.Noul)
+		assert.Equal(t, 0.95, answer.Noul)
 	})
 }
