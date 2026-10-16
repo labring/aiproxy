@@ -917,6 +917,48 @@ ${modelConfig?.config?.support_voices?.length
 --header "Authorization: Bearer $token"`,
                 responseExample: 'No content'
             }
+        case 41:
+            return {
+                title: t('modeType.41'),
+                endpoint: '/v1/systemone',
+                method: 'POST',
+                responseFormat: 'text',
+                requestExample: `curl --request POST \\
+--url ${apiEndpoint}/v1/systemone \\
+--header "Authorization: Bearer $token" \\
+--header "Content-Type: application/json" \\
+--data '{
+  "model": "systemone",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello"
+    }
+  ],
+  "stream": false
+}'`,
+                responseExample: `{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1700000000,
+  "model": "systemone",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 12,
+    "total_tokens": 21
+  }
+}`
+            }
         default:
             return {
                 title: t('modeType.0'),

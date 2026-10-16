@@ -706,6 +706,32 @@ func AlphaSearch() []gin.HandlerFunc {
 	}
 }
 
+// SystemOne godoc
+//
+//	@Summary		SystemOne
+//	@Description	SystemOne (Typesafe AI)
+//	@Tags			relay
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request							body		object						true	"Request"
+//	@Param			Aiproxy-Channel					header		string						false	"Optional Aiproxy-Channel header"
+//	@Param			X-Aiproxy-Group					header		string						false	"Optional group ID for internal token requests"
+//	@Param			X-Aiproxy-Group-Channel-Mode	header		string						false	"Optional group channel mode for internal token requests. Values: global, own"	Enums(global, own)
+//	@Success		200								{object}	object
+//	@Header			all								{integer}	X-RateLimit-Limit-Requests		"X-RateLimit-Limit-Requests"
+//	@Header			all								{integer}	X-RateLimit-Limit-Tokens		"X-RateLimit-Limit-Tokens"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Requests	"X-RateLimit-Remaining-Requests"
+//	@Header			all								{integer}	X-RateLimit-Remaining-Tokens	"X-RateLimit-Remaining-Tokens"
+//	@Header			all								{string}	X-RateLimit-Reset-Requests		"X-RateLimit-Reset-Requests"
+//	@Header			all								{string}	X-RateLimit-Reset-Tokens		"X-RateLimit-Reset-Tokens"
+//	@Router			/v1/systemone [post]
+func SystemOne() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.SystemOne),
+		NewRelay(mode.SystemOne),
+	}
+}
+
 // GetResponse godoc
 //
 //	@Summary		Get response
