@@ -127,6 +127,63 @@ func TestIntegrationChatCompletionToResponsesFlow(t *testing.T) {
 	assert.Equal(t, int64(10), int64(usage.Usage.OutputTokens))
 }
 
+// TestIntegrationGPT6ResponsesRouting verifies that Chat Completions clients retain
+// function tools and reasoning when GPT-6 requests are routed through Responses.
+func TestIntegrationGPT6ResponsesRouting(t *testing.T) {
+	adaptor := &openai.Adaptor{}
+
+	for _, modelName := range []string{"gpt-6-luna", "gpt-6-sol", "gpt-6-astra", "gpt-6.1-sol"} {
+		t.Run(modelName, func(t *testing.T) {
+			assert.True(t, openai.IsResponsesOnlyModel(nil, modelName))
+			assert.True(t, openai.IsResponsesOnlyModelAny(nil, modelName, "deployment-name"))
+			assert.True(t, openai.IsResponsesOnlyModelAny(nil, "custom-alias", modelName))
+
+			m := &meta.Meta{
+				OriginModel: "custom-alias",
+				ActualModel: modelName,
+				Mode:        mode.ChatCompletions,
+			}
+			m.Channel.BaseURL = "https://test.openai.azure.com/openai/v1"
+
+			requestURL, err := adaptor.GetRequestURL(m, nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "https://test.openai.azure.com/openai/v1/responses", requestURL.URL)
+
+			httpReq := httptest.NewRequestWithContext(t.Context(),
+				http.MethodPost,
+				"/v1/chat/completions",
+				bytes.NewBufferString(`{
+					"model": "custom-alias",
+					"messages": [{"role": "user", "content": "What is the weather?"}],
+					"tools": [{"type": "function", "function": {
+						"name": "get_weather", "parameters": {"type": "object", "properties": {}}
+					}}],
+					"reasoning_effort": "medium",
+					"stream": true
+				}`),
+			)
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			converted, err := openai.ConvertRequest(m, nil, httpReq)
+			require.NoError(t, err)
+			require.NotNil(t, converted.Body)
+
+			var request relaymodel.CreateResponseRequest
+
+			require.NoError(t, json.NewDecoder(converted.Body).Decode(&request))
+			assert.Equal(t, modelName, request.Model)
+			assert.NotEmpty(t, request.Input)
+			assert.True(t, request.Stream)
+			require.Len(t, request.Tools, 1)
+			assert.Equal(t, "function", request.Tools[0].Type)
+			assert.Equal(t, "get_weather", request.Tools[0].Name)
+			require.NotNil(t, request.Reasoning)
+			require.NotNil(t, request.Reasoning.Effort)
+			assert.Equal(t, "medium", *request.Reasoning.Effort)
+		})
+	}
+}
+
 // TestIntegrationModelDetection tests that IsResponsesOnlyModel correctly
 // determines when to use conversion
 func TestIntegrationModelDetection(t *testing.T) {

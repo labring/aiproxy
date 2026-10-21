@@ -114,7 +114,14 @@ func TestGetRequestURL_ResponsesOnlyModels(t *testing.T) {
 	adaptor := &azure.Adaptor{}
 
 	// Test that responses-only models always use the Responses API endpoint
-	responsesOnlyModels := []string{"gpt-5-codex", "gpt-5-pro"}
+	responsesOnlyModels := []string{
+		"gpt-5-codex",
+		"gpt-5-pro",
+		"gpt-6-luna",
+		"gpt-6-sol",
+		"gpt-6-astra",
+		"gpt-6.1-sol",
+	}
 	modes := []mode.Mode{mode.ChatCompletions, mode.Anthropic, mode.Gemini}
 
 	for _, model := range responsesOnlyModels {
