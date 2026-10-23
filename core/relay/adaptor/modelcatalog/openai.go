@@ -16,14 +16,14 @@ func OpenAIDocumentedModels(
 	defaultBaseURL string,
 	path ...string,
 ) ([]adaptor.ModelCatalogItem, error) {
-	return openAIModels(ctx, channel, defaultBaseURL, openAIModelItem, path...)
+	return openAIModels(ctx, channel, defaultBaseURL, OpenAIModelItem, path...)
 }
 
 func openAIModels(
 	ctx context.Context,
 	channel *model.Channel,
 	defaultBaseURL string,
-	project func(map[string]json.RawMessage) (adaptor.ModelCatalogItem, error),
+	project func(json.RawMessage) (adaptor.ModelCatalogItem, error),
 	path ...string,
 ) ([]adaptor.ModelCatalogItem, error) {
 	if channel == nil {
@@ -66,11 +66,7 @@ func openAIModels(
 
 	models := make([]adaptor.ModelCatalogItem, 0, len(data))
 	for _, rawModel := range data {
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
-			return nil, ErrInvalidResponse
-		}
-		item, err := project(fields)
+		item, err := project(rawModel)
 		if err != nil {
 			return nil, err
 		}
@@ -80,8 +76,9 @@ func openAIModels(
 	return models, nil
 }
 
-func openAIModelItem(fields map[string]json.RawMessage) (adaptor.ModelCatalogItem, error) {
-	if fields == nil {
+func OpenAIModelItem(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
 		return nil, ErrInvalidResponse
 	}
 	var id string
