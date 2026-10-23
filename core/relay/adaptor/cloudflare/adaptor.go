@@ -1,7 +1,7 @@
 package cloudflare
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,7 +23,7 @@ func init() {
 	registry.Register(model.ChannelTypeCloudflare, &Adaptor{})
 }
 
-const baseURL = "https://api.cloudflare.com"
+const baseURL = "https://api.cloudflare.com/client/v4/accounts/"
 
 func (a *Adaptor) DefaultBaseURL() string {
 	return baseURL
@@ -35,6 +35,34 @@ func (a *Adaptor) DefaultBaseURL() string {
 func isAIGateWay(baseURL string) bool {
 	return strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") &&
 		strings.HasSuffix(baseURL, "/workers-ai")
+}
+
+func cloudflareAIBaseURL(baseURL string) (string, error) {
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil || parsedURL.Host == "" || parsedURL.User != nil || parsedURL.Fragment != "" ||
+		(parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return "", errors.New("invalid Cloudflare base URL")
+	}
+	pathParts := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
+	if len(pathParts) != 4 || pathParts[0] != "client" || pathParts[1] != "v4" ||
+		pathParts[2] != "accounts" || pathParts[3] == "" {
+		return "", errors.New("cloudflare base URL must include /client/v4/accounts/{account_id}")
+	}
+
+	return url.JoinPath(parsedURL.String(), "ai")
+}
+
+func cloudflareAIGatewayAccountID(baseURL string) string {
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	pathParts := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
+	if len(pathParts) != 4 || pathParts[0] != "v1" || pathParts[1] == "" ||
+		pathParts[2] == "" || pathParts[3] != "workers-ai" {
+		return ""
+	}
+	return pathParts[1]
 }
 
 func (a *Adaptor) GetRequestURL(
@@ -49,7 +77,11 @@ func (a *Adaptor) GetRequestURL(
 	if isAIGateWay {
 		urlPrefix = u
 	} else {
-		urlPrefix = fmt.Sprintf("%s/client/v4/accounts/%s/ai", u, meta.Channel.Key)
+		var err error
+		urlPrefix, err = cloudflareAIBaseURL(u)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
 	}
 
 	switch meta.Mode {
