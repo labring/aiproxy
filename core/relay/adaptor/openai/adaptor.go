@@ -41,36 +41,41 @@ func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 			mt.Channel.Type == model.ChannelTypeAIProxyUSW1
 	}
 
-	return m == mode.ChatCompletions ||
-		m == mode.Completions ||
-		m == mode.Embeddings ||
-		m == mode.Moderations ||
-		m == mode.ImagesGenerations ||
-		m == mode.ImagesEdits ||
-		m == mode.AudioSpeech ||
-		m == mode.AudioTranscription ||
-		m == mode.AudioTranslation ||
-		m == mode.Rerank ||
-		m == mode.ParsePdf ||
-		m == mode.VideoGenerationsJobs ||
-		m == mode.VideoGenerationsGetJobs ||
-		m == mode.VideoGenerationsContent ||
-		m == mode.Videos ||
-		m == mode.VideosGet ||
-		m == mode.VideosContent ||
-		m == mode.VideosDelete ||
-		m == mode.VideosRemix ||
-		m == mode.VideosEdits ||
-		m == mode.VideosExtensions ||
-		m == mode.Anthropic ||
-		m == mode.Gemini ||
-		m == mode.Responses ||
-		m == mode.ResponsesCompact ||
-		m == mode.ResponsesGet ||
-		m == mode.ResponsesDelete ||
-		m == mode.ResponsesCancel ||
-		m == mode.ResponsesInputItems ||
-		m == mode.AlphaSearch
+	switch m {
+	case mode.ChatCompletions,
+		mode.Completions,
+		mode.Embeddings,
+		mode.Moderations,
+		mode.ImagesGenerations,
+		mode.ImagesEdits,
+		mode.AudioSpeech,
+		mode.AudioTranscription,
+		mode.AudioTranslation,
+		mode.Rerank,
+		mode.ParsePdf,
+		mode.VideoGenerationsJobs,
+		mode.VideoGenerationsGetJobs,
+		mode.VideoGenerationsContent,
+		mode.Videos,
+		mode.VideosGet,
+		mode.VideosContent,
+		mode.VideosDelete,
+		mode.VideosRemix,
+		mode.VideosEdits,
+		mode.VideosExtensions,
+		mode.Anthropic,
+		mode.Gemini,
+		mode.Responses,
+		mode.ResponsesCompact,
+		mode.ResponsesGet,
+		mode.ResponsesDelete,
+		mode.ResponsesCancel,
+		mode.ResponsesInputItems,
+		mode.AlphaSearch:
+		return true
+	default:
+		return false
+	}
 }
 
 //nolint:gocyclo
@@ -456,11 +461,7 @@ func ConvertRequest(
 	case mode.Completions:
 		return ConvertCompletionsRequest(meta, req, patchOpenAIReasoningEffort(meta))
 	case mode.ChatCompletions:
-		// Check if model requires Responses API conversion
-		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
-			return ConvertChatCompletionToResponsesRequest(meta, req)
-		}
-		return ConvertChatCompletionsRequest(meta, req, false, patchOpenAIReasoningEffort(meta))
+		return convertChatRequestForModel(meta, req)
 	case mode.Anthropic:
 		// Check if model requires Responses API conversion
 		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {

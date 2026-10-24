@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -19,9 +20,22 @@ import (
 // ConvertDecisionsRequest only applies model mapping. Preserve native input items,
 // typed choices, cache controls, and future fields; OpenAI validates their contract.
 func ConvertDecisionsRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	requestBody, err := common.GetRequestBodyReusable(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
+	}
+
+	// Validate the complete JSON before editing it. The reusable AST shortcut
+	// skips validation and can silently normalize malformed request bodies.
+	var node ast.Node
+	if err := json.Unmarshal(requestBody, &node); err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	// Set rejects arrays/scalars, but turns null into an object. Reject null
+	// explicitly so malformed root values cannot become valid mapped requests.
+	if node.TypeSafe() == ast.V_NULL {
+		return adaptor.ConvertResult{}, errors.New("decisions request must be a JSON object")
 	}
 
 	if _, err = node.Set("model", ast.NewString(meta.ActualModel)); err != nil {
@@ -79,13 +93,21 @@ func DecisionsHandler(
 		return adaptor.DoResponseResult{}, ErrorHanlderWithBody(resp.StatusCode, body)
 	}
 
-	var response struct {
+	var response *struct {
 		Usage relaymodel.ResponseUsage `json:"usage"`
 	}
 
 	if err := sonic.Unmarshal(body, &response); err != nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err, "unmarshal_response_body_failed", http.StatusInternalServerError,
+		)
+	}
+
+	if response == nil {
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+			"decisions response must be a JSON object",
+			"unmarshal_response_body_failed",
+			http.StatusInternalServerError,
 		)
 	}
 
