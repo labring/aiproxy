@@ -185,6 +185,8 @@ func SetRelayRouter(router *gin.Engine) {
 		)
 		relayRouter.POST("/responses",
 			controller.CreateResponse()...)
+		relayRouter.POST("/decisions",
+			controller.CreateDecision()...)
 		relayRouter.POST("/responses/compact",
 			controller.CompactResponse()...)
 		relayRouter.POST("/alpha/search",

@@ -692,6 +692,25 @@ func CreateResponse() []gin.HandlerFunc {
 	}
 }
 
+// CreateDecision godoc
+//
+//	@Summary		Create decision
+//	@Description	Evaluate text, images, JSON, or conversation history with predicate, choice, and score questions using the native OpenAI Decisions API.
+//	@Tags			relay
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request	body	model.DecisionRequest	true	"Request"
+//	@Success		200		{object}	model.DecisionResponse
+//	@Failure		400		{object}	model.OpenAIErrorResponse
+//	@Router			/v1/decisions [post]
+func CreateDecision() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.Decisions),
+		NewRelay(mode.Decisions),
+	}
+}
+
 func CompactResponse() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.NewDistribute(mode.ResponsesCompact),

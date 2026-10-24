@@ -480,6 +480,16 @@ func ConvertCompletionsRequest(
 	}, nil
 }
 
+// convertChatRequestForModel selects the upstream protocol for chat requests.
+// Responses-only models need conversion even when exposed under a public alias.
+func convertChatRequestForModel(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
+	if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+		return ConvertChatCompletionToResponsesRequest(meta, req)
+	}
+
+	return ConvertChatCompletionsRequest(meta, req, false, patchOpenAIReasoningEffort(meta))
+}
+
 func ConvertChatCompletionsRequest(
 	meta *meta.Meta,
 	req *http.Request,

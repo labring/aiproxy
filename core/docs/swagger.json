@@ -13474,6 +13474,51 @@
                 }
             }
         },
+        "/v1/decisions": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Evaluate text, images, JSON, or conversation history with predicate, choice, and score questions using the native OpenAI Decisions API.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Create decision",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.DecisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.DecisionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.OpenAIErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/embeddings": {
             "post": {
                 "security": [
@@ -17558,7 +17603,8 @@
                 37,
                 38,
                 39,
-                40
+                40,
+                41
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -17601,7 +17647,8 @@
                 "DoubaoVideoTasks",
                 "DoubaoVideoTasksDelete",
                 "ResponsesCompact",
-                "AlphaSearch"
+                "AlphaSearch",
+                "Decisions"
             ]
         },
         "model.Amount": {
@@ -18473,6 +18520,221 @@
                     }
                 },
                 "tpm": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionAnswer": {
+            "type": "object",
+            "properties": {
+                "choice": {},
+                "confidence": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "probabilities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionProbability"
+                    }
+                },
+                "probability": {
+                    "type": "number"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "predicate",
+                        "choice",
+                        "score",
+                        "refusal"
+                    ]
+                }
+            }
+        },
+        "model.DecisionChoice": {
+            "type": "object",
+            "required": [
+                "value"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "value": {}
+            }
+        },
+        "model.DecisionInputTokensDetails": {
+            "type": "object",
+            "properties": {
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionOutputTokensDetails": {
+            "type": "object",
+            "properties": {
+                "reasoning_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionProbability": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "probability": {
+                    "type": "number"
+                },
+                "value": {}
+            }
+        },
+        "model.DecisionPromptCacheOptions": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "implicit",
+                        "explicit"
+                    ]
+                },
+                "ttl": {
+                    "type": "string",
+                    "enum": [
+                        "30m"
+                    ]
+                }
+            }
+        },
+        "model.DecisionQuestion": {
+            "type": "object",
+            "required": [
+                "instructions",
+                "type"
+            ],
+            "properties": {
+                "choices": {
+                    "type": "array",
+                    "maxItems": 255,
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionChoice"
+                    }
+                },
+                "instructions": {},
+                "levels": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionScoreLevel"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "predicate",
+                        "choice",
+                        "score"
+                    ]
+                }
+            }
+        },
+        "model.DecisionRequest": {
+            "type": "object",
+            "required": [
+                "input",
+                "model",
+                "questions"
+            ],
+            "properties": {
+                "input": {
+                    "description": "Text or an ordered array of messages, function/custom tool calls and outputs."
+                },
+                "model": {
+                    "type": "string"
+                },
+                "prompt_cache_key": {
+                    "type": "string"
+                },
+                "prompt_cache_options": {
+                    "$ref": "#/definitions/model.DecisionPromptCacheOptions"
+                },
+                "questions": {
+                    "type": "array",
+                    "maxItems": 400,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionQuestion"
+                    }
+                },
+                "safety_identifier": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DecisionResponse": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionAnswer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/model.DecisionUsage"
+                }
+            }
+        },
+        "model.DecisionScoreLevel": {
+            "type": "object",
+            "required": [
+                "label"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DecisionUsage": {
+            "type": "object",
+            "properties": {
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "input_tokens_details": {
+                    "$ref": "#/definitions/model.DecisionInputTokensDetails"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens_details": {
+                    "$ref": "#/definitions/model.DecisionOutputTokensDetails"
+                },
+                "total_tokens": {
                     "type": "integer"
                 }
             }
@@ -20196,6 +20458,29 @@
                 "ModelOwnerJina",
                 "ModelOwnerAntGroup"
             ]
+        },
+        "model.OpenAIError": {
+            "type": "object",
+            "properties": {
+                "code": {},
+                "message": {
+                    "type": "string"
+                },
+                "param": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OpenAIErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/model.OpenAIError"
+                }
+            }
         },
         "model.Option": {
             "type": "object",
