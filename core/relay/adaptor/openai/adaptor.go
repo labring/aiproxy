@@ -34,6 +34,12 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 	m := adaptor.ModeFromMeta(mt)
+	if m == mode.Decisions {
+		// Do not advertise a new OpenAI endpoint on every provider embedding this adaptor.
+		return mt.Channel.Type == model.ChannelTypeOpenAI ||
+			mt.Channel.Type == model.ChannelTypeAIProxyHZH ||
+			mt.Channel.Type == model.ChannelTypeAIProxyUSW1
+	}
 
 	return m == mode.ChatCompletions ||
 		m == mode.Completions ||
@@ -76,6 +82,13 @@ func (a *Adaptor) GetRequestURL(
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
+	case mode.Decisions:
+		requestURL, err := url.JoinPath(u, "/decisions")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{Method: http.MethodPost, URL: requestURL}, nil
 	case mode.AlphaSearch:
 		url, err := url.JoinPath(u, "/alpha/search")
 		if err != nil {
@@ -378,7 +391,7 @@ func (a *Adaptor) SetupRequestHeader(
 		}
 	}
 
-	if meta.Mode == mode.ResponsesCompact {
+	if meta.Mode == mode.ResponsesCompact || meta.Mode == mode.Decisions {
 		req.Header.Set("Accept", "application/json")
 	}
 
@@ -425,6 +438,8 @@ func ConvertRequest(
 	}
 
 	switch meta.Mode {
+	case mode.Decisions:
+		return ConvertDecisionsRequest(meta, req)
 	case mode.AlphaSearch:
 		return ConvertAlphaSearchRequest(meta, req)
 	case mode.Responses:
@@ -517,6 +532,8 @@ func doResponse(
 	options DoResponseOptions,
 ) (result adaptor.DoResponseResult, err adaptor.Error) {
 	switch meta.Mode {
+	case mode.Decisions:
+		result, err = DecisionsHandler(meta, c, resp)
 	case mode.AlphaSearch:
 		result, err = AlphaSearchHandler(meta, c, resp)
 	case mode.Responses:
@@ -694,7 +711,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
+		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, Responses API, and Decisions API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
 		ConfigSchema: ConfigSchema(),
 		Models:       ModelList,
 	}
