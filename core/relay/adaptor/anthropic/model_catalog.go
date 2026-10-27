@@ -25,6 +25,7 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	endpoint, err := modelcatalog.JoinPath(baseURL, "models")
 	if err != nil {
 		return nil, err
@@ -32,23 +33,35 @@ func (a *Adaptor) ListModels(
 
 	models := make([]adaptor.ModelCatalogItem, 0)
 	seenCursors := make(map[string]struct{})
+
 	afterID := ""
 	for {
 		parsedURL, err := url.Parse(endpoint)
 		if err != nil {
 			return nil, modelcatalog.ErrInvalidConfiguration
 		}
+
 		query := parsedURL.Query()
 		query.Set("limit", "100")
+
 		if afterID != "" {
 			query.Set("after_id", afterID)
 		}
+
 		parsedURL.RawQuery = query.Encode()
 
 		headers := make(http.Header)
 		headers.Set(AnthropicTokenHeader, channel.Key)
 		headers.Set("Anthropic-Version", AnthropicVersion)
-		body, err := modelcatalog.Fetch(ctx, channel, http.MethodGet, parsedURL.String(), headers, nil)
+
+		body, err := modelcatalog.Fetch(
+			ctx,
+			channel,
+			http.MethodGet,
+			parsedURL.String(),
+			headers,
+			nil,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -65,9 +78,11 @@ func (a *Adaptor) ListModels(
 		if err := json.Unmarshal(body, &response); err != nil {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		if response.Data == nil {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		for _, upstreamModel := range *response.Data {
 			if upstreamModel.ID == "" {
 				return nil, modelcatalog.ErrInvalidResponse
@@ -77,25 +92,31 @@ func (a *Adaptor) ListModels(
 			if upstreamModel.DisplayName != "" {
 				item["name"] = upstreamModel.DisplayName
 			}
+
 			if upstreamModel.CreatedAt != "" {
 				createdAt, err := time.Parse(time.RFC3339Nano, upstreamModel.CreatedAt)
 				if err != nil {
 					return nil, modelcatalog.ErrInvalidResponse
 				}
+
 				item["created"] = createdAt.Unix()
 			}
+
 			models = append(models, item)
 		}
 
 		if !response.HasMore {
 			return models, nil
 		}
+
 		if response.LastID == "" {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		if _, ok := seenCursors[response.LastID]; ok {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		seenCursors[response.LastID] = struct{}{}
 		afterID = response.LastID
 	}

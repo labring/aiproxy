@@ -1,4 +1,4 @@
-package sealos
+package sealos_test
 
 import (
 	"context"
@@ -7,21 +7,28 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/sealos"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListModelsReadsAIProxyGatewayCatalog(t *testing.T) {
 	const apiKey = "aiproxy-gateway-key"
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/v1/models", r.URL.Path)
 		require.Equal(t, "Bearer "+apiKey, r.Header.Get("Authorization"))
-		_, err := w.Write([]byte(`{"data":[{"id":"gateway-model","object":"model","created":1720000000,"owned_by":"system","shutdown_date":"2027-01-20"}]}`))
+
+		_, err := w.Write(
+			[]byte(
+				`{"data":[{"id":"gateway-model","object":"model","created":1720000000,"owned_by":"system","shutdown_date":"2027-01-20"}]}`,
+			),
+		)
 		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&sealos.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Key:     apiKey,
 		BaseURL: server.URL + "/v1",
 	}, "")

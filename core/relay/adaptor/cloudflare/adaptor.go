@@ -43,6 +43,7 @@ func cloudflareAIBaseURL(baseURL string) (string, error) {
 		(parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return "", errors.New("invalid Cloudflare base URL")
 	}
+
 	pathParts := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
 	if len(pathParts) != 4 || pathParts[0] != "client" || pathParts[1] != "v4" ||
 		pathParts[2] != "accounts" || pathParts[3] == "" {
@@ -57,11 +58,13 @@ func cloudflareAIGatewayAccountID(baseURL string) string {
 	if err != nil {
 		return ""
 	}
+
 	pathParts := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
 	if len(pathParts) != 4 || pathParts[0] != "v1" || pathParts[1] == "" ||
 		pathParts[2] == "" || pathParts[3] != "workers-ai" {
 		return ""
 	}
+
 	return pathParts[1]
 }
 
@@ -78,6 +81,7 @@ func (a *Adaptor) GetRequestURL(
 		urlPrefix = u
 	} else {
 		var err error
+
 		urlPrefix, err = cloudflareAIBaseURL(u)
 		if err != nil {
 			return adaptor.RequestURL{}, err

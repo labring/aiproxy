@@ -14,16 +14,25 @@ func OpenAICompatibleModels(
 	defaultBaseURL string,
 	path ...string,
 ) ([]adaptor.ModelCatalogItem, error) {
-	return openAIModels(ctx, channel, defaultBaseURL, func(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error) {
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
-			return nil, ErrInvalidResponse
-		}
-		return openAICompatibleModelItem(fields)
-	}, path...)
+	return openAIModels(
+		ctx,
+		channel,
+		defaultBaseURL,
+		func(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
+				return nil, ErrInvalidResponse
+			}
+
+			return openAICompatibleModelItem(fields)
+		},
+		path...,
+	)
 }
 
-func openAICompatibleModelItem(fields map[string]json.RawMessage) (adaptor.ModelCatalogItem, error) {
+func openAICompatibleModelItem(
+	fields map[string]json.RawMessage,
+) (adaptor.ModelCatalogItem, error) {
 	item, err := openRouterModelItem(fields)
 	if err != nil {
 		return nil, err
@@ -40,6 +49,7 @@ func openAICompatibleModelItem(fields map[string]json.RawMessage) (adaptor.Model
 		if _, exists := item[field.target]; exists {
 			continue
 		}
+
 		copyModelField(fields, item, field.source, field.target)
 	}
 
@@ -59,6 +69,7 @@ func openAICompatibleModelItem(fields map[string]json.RawMessage) (adaptor.Model
 	if architecture == nil {
 		architecture = make(map[string]any)
 	}
+
 	for _, field := range []struct{ source, target string }{
 		{"input_modalities", "input_modalities"},
 		{"output_modalities", "output_modalities"},
@@ -66,8 +77,10 @@ func openAICompatibleModelItem(fields map[string]json.RawMessage) (adaptor.Model
 		if _, exists := architecture[field.target]; exists {
 			continue
 		}
+
 		copyModelField(fields, architecture, field.source, field.target)
 	}
+
 	if len(architecture) > 0 {
 		item["architecture"] = architecture
 	}

@@ -23,21 +23,32 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	basePath := strings.TrimRight(parsed.Path, "/")
 	for _, suffix := range []string{"/v3/openai", "/openai/v1", "/openai"} {
-		if strings.HasSuffix(basePath, suffix) {
-			parsed.Path = strings.TrimSuffix(basePath, suffix)
+		if before, ok := strings.CutSuffix(basePath, suffix); ok {
+			parsed.Path = before
 			parsed.RawPath = ""
 			break
 		}
 	}
+
 	parsed.RawQuery = ""
 
 	catalogChannel := *channel
 	catalogChannel.BaseURL = parsed.String()
-	return modelcatalog.OpenAICompatibleModels(ctx, &catalogChannel, catalogChannel.BaseURL, "openai", "v1", "models")
+
+	return modelcatalog.OpenAICompatibleModels(
+		ctx,
+		&catalogChannel,
+		catalogChannel.BaseURL,
+		"openai",
+		"v1",
+		"models",
+	)
 }

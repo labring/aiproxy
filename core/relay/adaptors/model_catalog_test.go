@@ -1,4 +1,4 @@
-package adaptors
+package adaptors_test
 
 import (
 	"testing"
@@ -6,11 +6,12 @@ import (
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/modelcatalog"
+	"github.com/labring/aiproxy/core/relay/adaptors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEveryChannelTypeHasModelCatalogBehavior(t *testing.T) {
-	for channelType, channelAdaptor := range ChannelAdaptor {
+	for channelType, channelAdaptor := range adaptors.ChannelAdaptor {
 		if modelcatalog.IsUnsupportedType(channelType) {
 			continue
 		}
@@ -21,7 +22,7 @@ func TestEveryChannelTypeHasModelCatalogBehavior(t *testing.T) {
 	}
 
 	for _, channelType := range modelcatalog.UnsupportedTypes() {
-		_, ok := ChannelAdaptor[channelType]
+		_, ok := adaptors.ChannelAdaptor[channelType]
 		require.Truef(t, ok, "unsupported channel type %s must be registered", channelType)
 	}
 }
@@ -31,7 +32,7 @@ func TestAIProxyGatewayChannelsUseOpenAICompatibleCatalog(t *testing.T) {
 		model.ChannelTypeAIProxyHZH,
 		model.ChannelTypeAIProxyUSW1,
 	} {
-		channelAdaptor, ok := ChannelAdaptor[channelType]
+		channelAdaptor, ok := adaptors.ChannelAdaptor[channelType]
 		require.True(t, ok)
 		_, ok = channelAdaptor.(adaptor.ModelCatalogLister)
 		require.True(t, ok)

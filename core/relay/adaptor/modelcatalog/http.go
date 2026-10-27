@@ -72,6 +72,7 @@ func Fetch(
 	if err != nil {
 		return nil, ErrInvalidConfiguration
 	}
+
 	for key, values := range headers {
 		for _, value := range values {
 			req.Header.Add(key, value)
@@ -86,12 +87,15 @@ func Fetch(
 	if err != nil {
 		return nil, ErrInvalidConfiguration
 	}
+
 	clientCopy := *client
 	clientCopy.Timeout = requestTimeout
 	clientCopy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 5 || (len(via) > 0 && (req.URL.Host != via[0].URL.Host || req.URL.Scheme != via[0].URL.Scheme)) {
+		if len(via) >= 5 ||
+			(len(via) > 0 && (req.URL.Host != via[0].URL.Host || req.URL.Scheme != via[0].URL.Scheme)) {
 			return http.ErrUseLastResponse
 		}
+
 		return nil
 	}
 
@@ -112,6 +116,7 @@ func Fetch(
 	if err != nil {
 		return nil, ErrUpstreamRequest
 	}
+
 	if len(data) > maxResponseSize {
 		return nil, ErrInvalidResponse
 	}

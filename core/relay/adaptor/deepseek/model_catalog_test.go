@@ -1,4 +1,4 @@
-package deepseek
+package deepseek_test
 
 import (
 	"context"
@@ -8,22 +8,28 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/deepseek"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListModelsUsesProviderModelsEndpoint(t *testing.T) {
-	const apiKey = "deepseek-test-key"
+	apiKey := t.Name()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/models", r.URL.Path)
 		require.Equal(t, "Bearer "+apiKey, r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"data":[{"id":"deepseek-chat","name":"DeepSeek Chat","context_window":64000}]}`))
+		_, err := w.Write(
+			[]byte(
+				`{"data":[{"id":"deepseek-chat","name":"DeepSeek Chat","context_window":64000}]}`,
+			),
+		)
 		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&deepseek.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Key:     apiKey,
 		BaseURL: server.URL + "/v1",
 	}, "")

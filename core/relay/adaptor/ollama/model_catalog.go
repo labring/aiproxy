@@ -24,6 +24,7 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	endpoint, err := modelcatalog.JoinPath(baseURL, "api", "tags")
 	if err != nil {
 		return nil, err
@@ -33,6 +34,7 @@ func (a *Adaptor) ListModels(
 	if channel.Key != "" {
 		headers.Set("Authorization", "Bearer "+channel.Key)
 	}
+
 	body, err := modelcatalog.Fetch(ctx, channel, http.MethodGet, endpoint, headers, nil)
 	if err != nil {
 		return nil, err
@@ -52,6 +54,7 @@ func (a *Adaptor) ListModels(
 		if upstreamModel.Name == "" {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		models = append(models, adaptor.ModelCatalogItem{"id": upstreamModel.Name})
 	}
 

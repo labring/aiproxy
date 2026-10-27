@@ -23,6 +23,7 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = strings.TrimRight(strings.TrimSpace(defaultBaseURL), "/")
 	}
+
 	baseURL = strings.TrimSuffix(baseURL, "/v1beta/openai")
 	if baseURL == "" {
 		return nil, modelcatalog.ErrInvalidConfiguration
@@ -30,5 +31,6 @@ func (a *Adaptor) ListModels(
 
 	catalogChannel := *channel
 	catalogChannel.BaseURL = baseURL
+
 	return (&gemini.Adaptor{}).ListModels(ctx, &catalogChannel, baseURL)
 }

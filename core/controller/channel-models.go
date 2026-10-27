@@ -62,7 +62,7 @@ type ChannelModelDefaultParameters struct {
 }
 
 type ChannelModel struct {
-	ID              string                         `json:"id" validate:"required"`
+	ID              string                         `json:"id"                             validate:"required"`
 	CanonicalSlug   string                         `json:"canonical_slug,omitempty"`
 	HuggingFaceID   string                         `json:"hugging_face_id,omitempty"`
 	Name            string                         `json:"name,omitempty"`
@@ -108,9 +108,12 @@ func GetChannelModels(c *gin.Context) {
 			middleware.ErrorResponse(c, http.StatusNotFound, "channel not found")
 			return
 		}
+
 		middleware.ErrorResponse(c, http.StatusInternalServerError, "failed to load channel")
+
 		return
 	}
+
 	if modelcatalog.IsUnsupportedType(channel.Type) {
 		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
 		return
@@ -121,6 +124,7 @@ func GetChannelModels(c *gin.Context) {
 		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
 		return
 	}
+
 	lister, ok := channelAdaptor.(adaptor.ModelCatalogLister)
 	if !ok {
 		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
@@ -130,6 +134,7 @@ func GetChannelModels(c *gin.Context) {
 	models, err := lister.ListModels(c.Request.Context(), channel, channelAdaptor.DefaultBaseURL())
 	if err != nil {
 		status := http.StatusBadGateway
+
 		message := "failed to retrieve provider model catalog"
 		if errors.Is(err, modelcatalog.ErrInvalidConfiguration) {
 			status = http.StatusBadRequest
@@ -138,12 +143,15 @@ func GetChannelModels(c *gin.Context) {
 			status = http.StatusGatewayTimeout
 			message = "provider model catalog request timed out"
 		}
+
 		middleware.ErrorResponse(c, status, message)
+
 		return
 	}
 
 	if models == nil {
 		models = make([]adaptor.ModelCatalogItem, 0)
 	}
+
 	middleware.SuccessResponse(c, models)
 }

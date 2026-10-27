@@ -53,7 +53,11 @@ type ModelCatalogItem map[string]any
 
 // ModelCatalogLister reads live models visible through a channel.
 type ModelCatalogLister interface {
-	ListModels(ctx context.Context, channel *model.Channel, defaultBaseURL string) ([]ModelCatalogItem, error)
+	ListModels(
+		ctx context.Context,
+		channel *model.Channel,
+		defaultBaseURL string,
+	) ([]ModelCatalogItem, error)
 }
 
 type RequestURL struct {

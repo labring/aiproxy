@@ -32,7 +32,7 @@ func BCEAuthorizationHeaders(method, targetURL, accessKey, secretKey string) (ht
 	signature := hex.EncodeToString(hmacSHA256([]byte(signingKey), []byte(canonicalRequest)))
 
 	headers := make(http.Header)
-	headers.Set("x-bce-date", timestamp)
+	headers.Set("X-Bce-Date", timestamp)
 	headers.Set("Authorization", authPrefix+"/host;x-bce-date/"+signature)
 
 	return headers, nil

@@ -1,4 +1,4 @@
-package cloudflare
+package cloudflare_test
 
 import (
 	"context"
@@ -9,40 +9,49 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/cloudflare"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	"github.com/stretchr/testify/require"
 )
 
+const modelPageSize = 100
+
 func TestListModelsParsesOpenRouterResponseAndPaginates(t *testing.T) {
-	const (
-		accountID = "0123456789abcdef0123456789abcdef"
-		apiToken  = "cloudflare-api-token"
-	)
+	const accountID = "0123456789abcdef0123456789abcdef"
+
+	apiToken := t.Name()
+
 	page := 0
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/client/v4/accounts/"+accountID+"/ai/models/search" {
+		if r.Method != http.MethodGet ||
+			r.URL.Path != "/client/v4/accounts/"+accountID+"/ai/models/search" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
+
 		if r.Header.Get("Authorization") != "Bearer "+apiToken {
 			t.Errorf("unexpected authorization header")
 		}
+
 		if r.URL.Query().Get("format") != "openrouter" || r.URL.Query().Get("per_page") != "100" {
 			t.Errorf("unexpected model list query: %s", r.URL.RawQuery)
 		}
 
 		currentPage := r.URL.Query().Get("page")
 		page++
+
 		var data []map[string]any
 		switch currentPage {
 		case "1":
-			data = make([]map[string]any, 0, cloudflareModelPageSize)
-			for i := 0; i < cloudflareModelPageSize; i++ {
+			data = make([]map[string]any, 0, modelPageSize)
+			for i := range modelPageSize {
 				data = append(data, map[string]any{
 					"id":   fmt.Sprintf("@cf/test/model-%d", i),
 					"name": fmt.Sprintf("Test Model %d", i),
 				})
 			}
+
 			data[0] = map[string]any{
 				"id":                  "@cf/openai/gpt-oss-120b",
 				"hugging_face_id":     "openai/gpt-oss-120b",
@@ -63,7 +72,9 @@ func TestListModelsParsesOpenRouterResponseAndPaginates(t *testing.T) {
 		default:
 			t.Errorf("unexpected page: %q", currentPage)
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"data": data,
 		}); err != nil {
@@ -76,13 +87,17 @@ func TestListModelsParsesOpenRouterResponseAndPaginates(t *testing.T) {
 		Key:     apiToken,
 		BaseURL: server.URL + "/client/v4/accounts/" + accountID + "/",
 	}
-	models, err := (&Adaptor{}).ListModels(context.Background(), channel, server.URL)
+	models, err := (&cloudflare.Adaptor{}).ListModels(context.Background(), channel, server.URL)
 	require.NoError(t, err)
-	require.Len(t, models, cloudflareModelPageSize+1)
+	require.Len(t, models, modelPageSize+1)
 	require.Equal(t, 2, page)
 	require.Equal(t, "@cf/openai/gpt-oss-120b", models[0]["id"])
 	require.Equal(t, "OpenAI: Gpt Oss 120B", models[0]["name"])
-	require.Equal(t, "OpenAI's open-weight models for reasoning and agentic tasks.", models[0]["description"])
+	require.Equal(
+		t,
+		"OpenAI's open-weight models for reasoning and agentic tasks.",
+		models[0]["description"],
+	)
 	require.Equal(t, int64(128000), models[0]["context_length"])
 	require.Equal(t, "@cf/qwen/qwq-32b", models[len(models)-1]["id"])
 	require.NotContains(t, models[0], "provider_only_field")
@@ -90,7 +105,9 @@ func TestListModelsParsesOpenRouterResponseAndPaginates(t *testing.T) {
 
 func TestListModelsAllowsEmptyCatalogWithZeroPages(t *testing.T) {
 	const accountID = "0123456789abcdef0123456789abcdef"
-	const apiToken = "cloudflare-api-token"
+
+	apiToken := t.Name()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "1", r.URL.Query().Get("page"))
 		w.Header().Set("Content-Type", "application/json")
@@ -99,7 +116,7 @@ func TestListModelsAllowsEmptyCatalogWithZeroPages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&cloudflare.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Key:     apiToken,
 		BaseURL: server.URL + "/client/v4/accounts/" + accountID + "/",
 	}, server.URL)
@@ -109,20 +126,23 @@ func TestListModelsAllowsEmptyCatalogWithZeroPages(t *testing.T) {
 
 func TestListModelsParsesAccountIDFromAIGatewayURL(t *testing.T) {
 	const (
-		apiToken   = "cloudflare-api-token"
 		accountID  = "0123456789abcdef0123456789abcdef"
 		gatewayURL = "https://gateway.ai.cloudflare.com/v1/" + accountID + "/test-gateway/workers-ai"
 	)
+
+	apiToken := t.Name()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/client/v4/accounts/"+accountID+"/ai/models/search", r.URL.Path)
 		require.Equal(t, "Bearer "+apiToken, r.Header.Get("Authorization"))
+
 		_, err := w.Write([]byte(`{"data":[]}`))
 		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&cloudflare.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Key:     apiToken,
 		BaseURL: gatewayURL,
 	}, server.URL)
@@ -136,10 +156,12 @@ func TestGetRequestURLUsesAccountScopedBaseURL(t *testing.T) {
 		channelKey = "cloudflare-api-token"
 		baseURL    = "https://api.cloudflare.com/client/v4/accounts/" + accountID + "/"
 	)
+
 	channel := &model.Channel{
 		Key:     channelKey,
 		BaseURL: baseURL,
 	}
+
 	testCases := []struct {
 		name        string
 		mode        mode.Mode
@@ -169,14 +191,15 @@ func TestGetRequestURLUsesAccountScopedBaseURL(t *testing.T) {
 			requestMeta.SetChannel(channel)
 			requestMeta.ActualModel = testCase.actualModel
 
-			request, err := (&Adaptor{}).GetRequestURL(requestMeta, nil, nil)
+			request, err := (&cloudflare.Adaptor{}).GetRequestURL(requestMeta, nil, nil)
 			require.NoError(t, err)
 			require.Equal(t, http.MethodPost, request.Method)
 			require.Equal(t, testCase.wantURL, request.URL)
 			require.NotContains(t, request.URL, channelKey)
 		})
 	}
-	properties := (&Adaptor{}).Metadata().ConfigSchema["properties"]
+
+	properties := (&cloudflare.Adaptor{}).Metadata().ConfigSchema["properties"]
 	require.NotContains(t, properties, "account_id")
 	require.NotContains(t, properties, "model_catalog_base_url")
 }
@@ -186,18 +209,19 @@ func TestGetRequestURLRequiresAccountScopedBaseURL(t *testing.T) {
 	requestMeta := &meta.Meta{Mode: mode.ChatCompletions}
 	requestMeta.SetChannel(channel)
 
-	_, err := (&Adaptor{}).GetRequestURL(requestMeta, nil, nil)
+	_, err := (&cloudflare.Adaptor{}).GetRequestURL(requestMeta, nil, nil)
 	require.ErrorContains(t, err, "/client/v4/accounts/{account_id}")
 }
 
 func TestGetRequestURLAllowsAIGatewayWithoutAccountID(t *testing.T) {
 	const gatewayURL = "https://gateway.ai.cloudflare.com/v1/account/gateway/workers-ai"
+
 	channel := &model.Channel{Key: "cloudflare-api-token", BaseURL: gatewayURL}
 	requestMeta := &meta.Meta{Mode: mode.ChatCompletions}
 	requestMeta.SetChannel(channel)
 
-	request, err := (&Adaptor{}).GetRequestURL(requestMeta, nil, nil)
+	request, err := (&cloudflare.Adaptor{}).GetRequestURL(requestMeta, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, gatewayURL+"/v1/chat/completions", request.URL)
-	require.Nil(t, (&Adaptor{}).Metadata().ConfigSchema["required"])
+	require.Nil(t, (&cloudflare.Adaptor{}).Metadata().ConfigSchema["required"])
 }

@@ -22,13 +22,16 @@ func (a *Adaptor) ListModels(
 	if channel == nil {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	token, apiVersion, err := GetTokenAndAPIVersion(channel.Key)
 	if err != nil || token == "" {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	if !strings.Contains(channel.Key, "|") {
 		apiVersion = modelCatalogAPIVersion
 	}
+
 	if apiVersion == "" {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
@@ -37,20 +40,24 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	endpoint, err := modelcatalog.JoinPath(baseURL, "openai", "models")
 	if err != nil {
 		return nil, err
 	}
+
 	parsedURL, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	query := parsedURL.Query()
 	query.Set("api-version", apiVersion)
 	parsedURL.RawQuery = query.Encode()
 
 	headers := make(http.Header)
-	headers.Set("api-key", token)
+	headers.Set("Api-Key", token)
+
 	body, err := modelcatalog.Fetch(ctx, channel, http.MethodGet, parsedURL.String(), headers, nil)
 	if err != nil {
 		return nil, err
@@ -64,17 +71,21 @@ func (a *Adaptor) ListModels(
 	}
 
 	models := make([]adaptor.ModelCatalogItem, 0, len(*response.Data))
+
 	seenIDs := make(map[string]struct{}, len(*response.Data))
 	for _, rawModel := range *response.Data {
 		item, err := modelcatalog.OpenAIModelItem(rawModel)
 		if err != nil {
 			return nil, err
 		}
+
 		id, _ := item["id"].(string)
 		if _, ok := seenIDs[id]; ok {
 			return nil, modelcatalog.ErrInvalidResponse
 		}
+
 		seenIDs[id] = struct{}{}
+
 		models = append(models, item)
 	}
 

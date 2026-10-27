@@ -1,4 +1,4 @@
-package cohere
+package cohere_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/cohere"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,10 +19,18 @@ func TestListModelsFollowsNextPageToken(t *testing.T) {
 
 		switch r.URL.Query().Get("page_token") {
 		case "":
-			_, err := w.Write([]byte(`{"models":[{"name":"command","context_length":4096.0,"endpoints":["chat"],"features":["tools"],"sampling_defaults":{"temperature":0.2,"k":40,"p":0.8,"frequency_penalty":0.1,"presence_penalty":0.2,"max_tokens_per_doc":100}}],"next_page_token":"next"}`))
+			_, err := w.Write(
+				[]byte(
+					`{"models":[{"name":"command","context_length":4096.0,"endpoints":["chat"],"features":["tools"],"sampling_defaults":{"temperature":0.2,"k":40,"p":0.8,"frequency_penalty":0.1,"presence_penalty":0.2,"max_tokens_per_doc":100}}],"next_page_token":"next"}`,
+				),
+			)
 			require.NoError(t, err)
 		case "next":
-			_, err := w.Write([]byte(`{"models":[{"name":"command-r","context_length":1.1,"sampling_defaults":{"max_tokens_per_doc":100}}]}`))
+			_, err := w.Write(
+				[]byte(
+					`{"models":[{"name":"command-r","context_length":1.1,"sampling_defaults":{"max_tokens_per_doc":100}}]}`,
+				),
+			)
 			require.NoError(t, err)
 		default:
 			t.Fatalf("unexpected page token %q", r.URL.Query().Get("page_token"))
@@ -29,7 +38,7 @@ func TestListModelsFollowsNextPageToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&cohere.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Type:    model.ChannelTypeCohere,
 		Key:     "catalog-test-key",
 		BaseURL: server.URL,

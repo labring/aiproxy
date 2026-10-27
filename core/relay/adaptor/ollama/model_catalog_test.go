@@ -1,4 +1,4 @@
-package ollama
+package ollama_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/ollama"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,12 +15,15 @@ func TestListModelsUsesInstanceTags(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/api/tags", r.URL.Path)
-		_, err := w.Write([]byte(`{"models":[{"name":"llama3:latest","model":"llama3:latest","size":123}]}`))
+
+		_, err := w.Write(
+			[]byte(`{"models":[{"name":"llama3:latest","model":"llama3:latest","size":123}]}`),
+		)
 		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+	models, err := (&ollama.Adaptor{}).ListModels(context.Background(), &model.Channel{
 		Type:    model.ChannelTypeOllama,
 		BaseURL: server.URL,
 	}, "")

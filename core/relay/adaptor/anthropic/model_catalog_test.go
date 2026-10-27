@@ -1,4 +1,4 @@
-package anthropic
+package anthropic_test
 
 import (
 	"context"
@@ -7,19 +7,26 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/anthropic"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListModelsDoesNotReturnPartialCatalog(t *testing.T) {
 	const key = "catalog-test-key"
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "GET", r.Method)
-		require.Equal(t, key, r.Header.Get("x-api-key"))
-		require.NotEmpty(t, r.Header.Get("anthropic-version"))
+		require.Equal(t, key, r.Header.Get("X-Api-Key"))
+		require.NotEmpty(t, r.Header.Get("Anthropic-Version"))
 
 		if r.URL.Query().Get("after_id") == "" {
-			_, err := w.Write([]byte(`{"data":[{"id":"model-1","display_name":"Model 1","created_at":"2024-01-02T03:04:05Z","type":"model"}],"has_more":true,"last_id":"model-1"}`))
+			_, err := w.Write(
+				[]byte(
+					`{"data":[{"id":"model-1","display_name":"Model 1","created_at":"2024-01-02T03:04:05Z","type":"model"}],"has_more":true,"last_id":"model-1"}`,
+				),
+			)
 			require.NoError(t, err)
+
 			return
 		}
 
@@ -34,7 +41,7 @@ func TestListModelsDoesNotReturnPartialCatalog(t *testing.T) {
 		BaseURL: server.URL + "/v1",
 	}
 
-	models, err := (&Adaptor{}).ListModels(context.Background(), channel, "")
+	models, err := (&anthropic.Adaptor{}).ListModels(context.Background(), channel, "")
 	require.Error(t, err)
 	require.Nil(t, models)
 }
@@ -50,13 +57,15 @@ func TestListModelsValidatesDataArray(t *testing.T) {
 		{name: "null data", body: `{"data":null}`, wantError: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, err := w.Write([]byte(test.body))
-				require.NoError(t, err)
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, err := w.Write([]byte(test.body))
+					require.NoError(t, err)
+				}),
+			)
 			defer server.Close()
 
-			models, err := (&Adaptor{}).ListModels(context.Background(), &model.Channel{
+			models, err := (&anthropic.Adaptor{}).ListModels(context.Background(), &model.Channel{
 				Key:     "catalog-test-key",
 				BaseURL: server.URL + "/v1",
 			}, "")
@@ -65,6 +74,7 @@ func TestListModelsValidatesDataArray(t *testing.T) {
 				require.Nil(t, models)
 				return
 			}
+
 			require.NoError(t, err)
 			require.Empty(t, models)
 		})

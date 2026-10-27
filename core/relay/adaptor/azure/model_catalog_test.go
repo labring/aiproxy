@@ -1,4 +1,4 @@
-package azure
+package azure_test
 
 import (
 	"context"
@@ -8,21 +8,28 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/azure"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListModelsUsesAzureDataPlaneAPI(t *testing.T) {
 	const apiKey = "azure-test-key"
+
 	var versions []string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/openai/models" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("api-key") != apiKey || r.Header.Get("Authorization") != "" {
+
+		if r.Header.Get("Api-Key") != apiKey || r.Header.Get("Authorization") != "" {
 			t.Errorf("unexpected Azure authentication headers")
 		}
+
 		versions = append(versions, r.URL.Query().Get("api-version"))
+
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"object": "list",
 			"data": []map[string]any{{
@@ -48,7 +55,7 @@ func TestListModelsUsesAzureDataPlaneAPI(t *testing.T) {
 		{key: apiKey + "|2024-10-21-preview", wantVersion: "2024-10-21-preview"},
 	} {
 		channel := &model.Channel{Key: test.key, BaseURL: server.URL}
-		models, err := (&Adaptor{}).ListModels(context.Background(), channel, "")
+		models, err := (&azure.Adaptor{}).ListModels(context.Background(), channel, "")
 		require.NoError(t, err)
 		require.Len(t, models, 1)
 		require.Equal(t, "gpt-4.1", models[0]["id"])

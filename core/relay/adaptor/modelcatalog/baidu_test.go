@@ -1,4 +1,4 @@
-package modelcatalog
+package modelcatalog_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor/modelcatalog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +18,8 @@ func TestBaiduSystemModelSetsFollowsMarker(t *testing.T) {
 		require.Equal(t, "/v2/model", r.URL.Path)
 		require.Equal(t, "DescribeSystemModelSets", r.URL.Query().Get("Action"))
 		require.Contains(t, r.Header.Get("Authorization"), "bce-auth-v1/access-key/")
-		require.NotEmpty(t, r.Header.Get("x-bce-date"))
+		require.NotEmpty(t, r.Header.Get("X-Bce-Date"))
+
 		var request struct {
 			Marker  string `json:"marker"`
 			MaxKeys int    `json:"maxKeys"`
@@ -25,18 +27,36 @@ func TestBaiduSystemModelSetsFollowsMarker(t *testing.T) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		require.Equal(t, 100, request.MaxKeys)
 		w.Header().Set("Content-Type", "application/json")
+
 		if request.Marker == "" {
-			_, err := w.Write([]byte(`{"result":{"systemModelSetList":[{"modelSetId":"set-1","modelSetName":"reranker","description":"reranking models","modelNames":["reranker-v1","reranker-v2"]}],"pageInfo":{"isTruncated":true,"nextMarker":"next"}}}`))
+			_, err := w.Write(
+				[]byte(
+					`{"result":{"systemModelSetList":[{"modelSetId":"set-1","modelSetName":"reranker","description":"reranking models","modelNames":["reranker-v1","reranker-v2"]}],"pageInfo":{"isTruncated":true,"nextMarker":"next"}}}`,
+				),
+			)
 			require.NoError(t, err)
+
 			return
 		}
+
 		require.Equal(t, "next", request.Marker)
-		_, err := w.Write([]byte(`{"result":{"systemModelSetList":[{"modelSetId":"set-2","modelSetName":"embedder","modelNames":["embedder-v1"]}],"pageInfo":{"isTruncated":false}}}`))
+
+		_, err := w.Write(
+			[]byte(
+				`{"result":{"systemModelSetList":[{"modelSetId":"set-2","modelSetName":"embedder","modelNames":["embedder-v1"]}],"pageInfo":{"isTruncated":false}}}`,
+			),
+		)
 		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	models, err := BaiduSystemModelSets(context.Background(), &model.Channel{}, server.URL+"/v2", "access-key", "secret-key")
+	models, err := modelcatalog.BaiduSystemModelSets(
+		context.Background(),
+		&model.Channel{},
+		server.URL+"/v2",
+		"access-key",
+		"secret-key",
+	)
 	require.NoError(t, err)
 	require.Len(t, models, 3)
 	require.Equal(t, "reranker-v1", models[0]["id"])
@@ -51,8 +71,15 @@ func TestBaiduSystemModelSetsHTTPStatusError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := BaiduSystemModelSets(context.Background(), &model.Channel{ID: 14}, server.URL, "access-key", "secret-key")
-	var statusErr *HTTPStatusError
+	_, err := modelcatalog.BaiduSystemModelSets(
+		context.Background(),
+		&model.Channel{ID: 14},
+		server.URL,
+		"access-key",
+		"secret-key",
+	)
+
+	var statusErr *modelcatalog.HTTPStatusError
 	require.ErrorAs(t, err, &statusErr)
 	require.Equal(t, http.StatusForbidden, statusErr.Code)
 	require.Equal(t, "provider returned status 403", err.Error())

@@ -1,6 +1,7 @@
-package controller
+package controller_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/stretchr/testify/require"
 )
@@ -29,21 +31,31 @@ func TestGetChannelModels(t *testing.T) {
 		require.NoError(t, sqlDB.Close())
 	})
 
-	const channelKey = "catalog-test-secret"
-	const failureKey = "provider-secret-from-error"
+	const (
+		channelKey = "catalog-test-secret"
+		failureKey = "provider-secret-from-error"
+	)
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
+
 		if r.URL.Path == "/fail/v1/models" {
 			require.Equal(t, "Bearer "+failureKey, r.Header.Get("Authorization"))
 			w.WriteHeader(http.StatusUnauthorized)
 			_, err := w.Write([]byte(`{"error":"upstream detail: provider-secret-from-error"}`))
 			require.NoError(t, err)
+
 			return
 		}
+
 		require.Equal(t, "/v1/models", r.URL.Path)
 		require.Equal(t, "Bearer "+channelKey, r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"object":"list","data":[{"id":"upstream-only-model","created":1720000000,"owned_by":"provider"}]}`))
+		_, err := w.Write(
+			[]byte(
+				`{"object":"list","data":[{"id":"upstream-only-model","created":1720000000,"owned_by":"provider"}]}`,
+			),
+		)
 		require.NoError(t, err)
 	}))
 	defer upstream.Close()
@@ -61,11 +73,17 @@ func TestGetChannelModels(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Params = gin.Params{{Key: "id", Value: strconv.Itoa(channel.ID)}}
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/channel/"+strconv.Itoa(channel.ID)+"/models", nil)
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/channel/"+strconv.Itoa(channel.ID)+"/models",
+		nil,
+	)
 
-	GetChannelModels(c)
+	controller.GetChannelModels(c)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+
 	var response struct {
 		Success bool             `json:"success"`
 		Data    []map[string]any `json:"data"`
@@ -86,11 +104,14 @@ func TestGetChannelModels(t *testing.T) {
 	}
 	require.NoError(t, db.Create(knownModelChannel).Error)
 
-	knownModelUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, err := w.Write([]byte(`{"data":[{"id":"gpt-6-astra"}]}`))
-		require.NoError(t, err)
-	}))
+	knownModelUpstream := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, err := w.Write([]byte(`{"data":[{"id":"gpt-6-astra"}]}`))
+			require.NoError(t, err)
+		}),
+	)
 	defer knownModelUpstream.Close()
+
 	knownModelChannel.BaseURL = knownModelUpstream.URL + "/v1"
 	require.NoError(t, db.Save(knownModelChannel).Error)
 
@@ -102,12 +123,18 @@ func TestGetChannelModels(t *testing.T) {
 		Status:  model.ChannelStatusEnabled,
 	}
 	require.NoError(t, db.Create(failingChannel).Error)
+
 	failureRecorder := httptest.NewRecorder()
 	failureContext, _ := gin.CreateTestContext(failureRecorder)
 	failureContext.Params = gin.Params{{Key: "id", Value: strconv.Itoa(failingChannel.ID)}}
-	failureContext.Request = httptest.NewRequest(http.MethodGet, "/api/channel/"+strconv.Itoa(failingChannel.ID)+"/models", nil)
+	failureContext.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/channel/"+strconv.Itoa(failingChannel.ID)+"/models",
+		nil,
+	)
 
-	GetChannelModels(failureContext)
+	controller.GetChannelModels(failureContext)
 
 	require.Equal(t, http.StatusBadGateway, failureRecorder.Code)
 	require.Contains(t, failureRecorder.Body.String(), "failed to retrieve provider model catalog")
@@ -130,9 +157,11 @@ func TestGetChannelModelsReadsAIProxyGateway(t *testing.T) {
 	})
 
 	const apiKey = "aiproxy-gateway-key"
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/v1/models", r.URL.Path)
 		require.Equal(t, "Bearer "+apiKey, r.Header.Get("Authorization"))
+
 		_, err := w.Write([]byte(`{"data":[{"id":"gateway-model"}]}`))
 		require.NoError(t, err)
 	}))
@@ -149,8 +178,13 @@ func TestGetChannelModelsReadsAIProxyGateway(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{{Key: "id", Value: strconv.Itoa(channel.ID)}}
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/channel/"+strconv.Itoa(channel.ID)+"/models", nil)
-	GetChannelModels(ctx)
+	ctx.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/channel/"+strconv.Itoa(channel.ID)+"/models",
+		nil,
+	)
+	controller.GetChannelModels(ctx)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), "not an upstream provider model catalog")

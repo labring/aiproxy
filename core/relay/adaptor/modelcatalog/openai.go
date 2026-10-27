@@ -34,9 +34,11 @@ func openAIModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	if len(path) == 0 {
 		path = []string{"models"}
 	}
+
 	endpoint, err := JoinPath(baseURL, path...)
 	if err != nil {
 		return nil, err
@@ -46,6 +48,7 @@ func openAIModels(
 	if channel.Key != "" {
 		headers.Set("Authorization", "Bearer "+channel.Key)
 	}
+
 	body, err := Fetch(ctx, channel, http.MethodGet, endpoint, headers, nil)
 	if err != nil {
 		return nil, err
@@ -55,10 +58,12 @@ func openAIModels(
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, ErrInvalidResponse
 	}
+
 	rawData, ok := response["data"]
 	if !ok || string(rawData) == "null" {
 		return nil, ErrInvalidResponse
 	}
+
 	var data []json.RawMessage
 	if err := json.Unmarshal(rawData, &data); err != nil {
 		return nil, ErrInvalidResponse
@@ -70,6 +75,7 @@ func openAIModels(
 		if err != nil {
 			return nil, err
 		}
+
 		models = append(models, item)
 	}
 
@@ -81,6 +87,7 @@ func OpenAIModelItem(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error)
 	if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
 		return nil, ErrInvalidResponse
 	}
+
 	var id string
 	if err := json.Unmarshal(fields["id"], &id); err != nil || id == "" {
 		return nil, ErrInvalidResponse
@@ -89,6 +96,7 @@ func OpenAIModelItem(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error)
 	item := adaptor.ModelCatalogItem{"id": id}
 	copyModelField(fields, item, "created", "created")
 	copyModelField(fields, item, "shutdown_date", "expiration_date")
+
 	return item, nil
 }
 

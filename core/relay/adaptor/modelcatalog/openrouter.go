@@ -27,7 +27,14 @@ var openRouterNestedModelFields = map[string][]string{
 	},
 	"top_provider":       {"context_length", "max_completion_tokens", "is_moderated"},
 	"per_request_limits": {"prompt_tokens", "completion_tokens"},
-	"default_parameters": {"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty"},
+	"default_parameters": {
+		"temperature",
+		"top_p",
+		"top_k",
+		"frequency_penalty",
+		"presence_penalty",
+		"repetition_penalty",
+	},
 }
 
 func OpenRouterModelItem(rawModel json.RawMessage) (adaptor.ModelCatalogItem, error) {
@@ -35,6 +42,7 @@ func OpenRouterModelItem(rawModel json.RawMessage) (adaptor.ModelCatalogItem, er
 	if err := json.Unmarshal(rawModel, &fields); err != nil || fields == nil {
 		return nil, ErrInvalidResponse
 	}
+
 	return openRouterModelItem(fields)
 }
 
@@ -42,6 +50,7 @@ func openRouterModelItem(fields map[string]json.RawMessage) (adaptor.ModelCatalo
 	if fields == nil {
 		return nil, ErrInvalidResponse
 	}
+
 	var id string
 	if err := json.Unmarshal(fields["id"], &id); err != nil || id == "" {
 		return nil, ErrInvalidResponse
@@ -53,11 +62,13 @@ func openRouterModelItem(fields map[string]json.RawMessage) (adaptor.ModelCatalo
 		if !ok || string(rawValue) == "null" {
 			continue
 		}
+
 		value, ok := decodeModelField(field, rawValue)
 		if ok {
 			item[field] = value
 		}
 	}
+
 	return item, nil
 }
 
@@ -68,39 +79,52 @@ func decodeModelField(field string, raw json.RawMessage) (any, bool) {
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false
 		}
+
 		return value, true
 	case "modality", "tokenizer", "instruct_type":
 		var value string
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false
 		}
+
 		if field == "modality" {
 			return normalizeModality(value)
 		}
+
 		return value, true
 	case "created", "context_length", "max_completion_tokens", "top_k":
 		var value int64
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false
 		}
+
 		return value, true
-	case "temperature", "top_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "prompt_tokens", "completion_tokens":
+	case "temperature",
+		"top_p",
+		"frequency_penalty",
+		"presence_penalty",
+		"repetition_penalty",
+		"prompt_tokens",
+		"completion_tokens":
 		var value float64
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false
 		}
+
 		return value, true
 	case "is_moderated":
 		var value bool
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false
 		}
+
 		return value, true
 	case "supported_parameters":
 		var value []string
 		if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 			return nil, false
 		}
+
 		return value, true
 	case "architecture", "top_provider", "per_request_limits", "default_parameters":
 		return decodeModelObject(field, raw)
@@ -109,6 +133,7 @@ func decodeModelField(field string, raw json.RawMessage) (any, bool) {
 		if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 			return nil, false
 		}
+
 		return value, true
 	default:
 		return nil, false
@@ -117,7 +142,15 @@ func decodeModelField(field string, raw json.RawMessage) (any, bool) {
 
 func normalizeModality(value string) (any, bool) {
 	switch value {
-	case "text", "image", "video", "audio", "speech", "transcription", "embeddings", "rerank", "decisions":
+	case "text",
+		"image",
+		"video",
+		"audio",
+		"speech",
+		"transcription",
+		"embeddings",
+		"rerank",
+		"decisions":
 		return value, true
 	default:
 		return nil, false
@@ -129,10 +162,12 @@ func decodeModelObject(field string, raw json.RawMessage) (map[string]any, bool)
 	if len(allowedFields) == 0 {
 		return nil, false
 	}
+
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
 		return nil, false
 	}
+
 	value := make(map[string]any, len(allowedFields))
 	for _, nestedField := range allowedFields {
 		if rawValue, ok := fields[nestedField]; ok && string(rawValue) != "null" {
@@ -141,8 +176,10 @@ func decodeModelObject(field string, raw json.RawMessage) (map[string]any, bool)
 			}
 		}
 	}
+
 	if len(value) == 0 {
 		return nil, false
 	}
+
 	return value, true
 }

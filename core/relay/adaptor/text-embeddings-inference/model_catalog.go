@@ -18,6 +18,7 @@ func (a *Adaptor) ListModels(
 	if channel == nil {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	endpoint, err := modelcatalog.JoinPath(channel.BaseURL, "info")
 	if err != nil {
 		return nil, err
@@ -27,6 +28,7 @@ func (a *Adaptor) ListModels(
 	if channel.Key != "" {
 		headers.Set("Authorization", "Bearer "+channel.Key)
 	}
+
 	body, err := modelcatalog.Fetch(ctx, channel, http.MethodGet, endpoint, headers, nil)
 	if err != nil {
 		return nil, err

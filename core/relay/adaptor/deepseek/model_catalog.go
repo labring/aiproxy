@@ -23,18 +23,27 @@ func (a *Adaptor) ListModels(
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, modelcatalog.ErrInvalidConfiguration
 	}
+
 	basePath := strings.TrimRight(parsed.Path, "/")
-	if strings.HasSuffix(basePath, "/v1") {
-		parsed.Path = strings.TrimSuffix(basePath, "/v1")
+	if before, ok := strings.CutSuffix(basePath, "/v1"); ok {
+		parsed.Path = before
 		parsed.RawPath = ""
 	}
+
 	parsed.RawQuery = ""
 
 	catalogChannel := *channel
 	catalogChannel.BaseURL = parsed.String()
-	return modelcatalog.OpenAICompatibleModels(ctx, &catalogChannel, catalogChannel.BaseURL, "models")
+
+	return modelcatalog.OpenAICompatibleModels(
+		ctx,
+		&catalogChannel,
+		catalogChannel.BaseURL,
+		"models",
+	)
 }

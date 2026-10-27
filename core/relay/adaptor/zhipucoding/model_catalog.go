@@ -13,5 +13,14 @@ func (a *Adaptor) ListModels(
 	channel *model.Channel,
 	defaultBaseURL string,
 ) ([]adaptor.ModelCatalogItem, error) {
-	return modelcatalog.OpenAIDocumentedModels(ctx, channel, defaultBaseURL, "api", "coding", "paas", "v4", "models")
+	return modelcatalog.OpenAIDocumentedModels(
+		ctx,
+		channel,
+		defaultBaseURL,
+		"api",
+		"coding",
+		"paas",
+		"v4",
+		"models",
+	)
 }
