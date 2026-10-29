@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"encoding"
 	"errors"
 	"fmt"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/monitor"
 	"github.com/labring/aiproxy/core/relay/mode"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -25,6 +27,20 @@ const (
 	ChannelScopeGlobal ChannelScope = "global"
 	ChannelScopeGroup  ChannelScope = "group"
 )
+
+var (
+	_ encoding.BinaryMarshaler = ChannelScopeGlobal
+	_ redis.Scanner            = (*ChannelScope)(nil)
+)
+
+func (s ChannelScope) MarshalBinary() ([]byte, error) {
+	return []byte(s), nil
+}
+
+func (s *ChannelScope) ScanRedis(value string) error {
+	*s = ParseChannelScope(value)
+	return nil
+}
 
 func ParseChannelScope(value string) ChannelScope {
 	switch strings.ToLower(strings.TrimSpace(value)) {

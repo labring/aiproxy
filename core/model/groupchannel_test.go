@@ -1379,3 +1379,22 @@ func TestGroupChannelPatchEmptyAndWrongGroup(t *testing.T) {
 		require.Equal(t, "current", loaded.Name)
 	})
 }
+
+func TestChannelScopeRedisMarshalRoundTrip(t *testing.T) {
+	for _, scope := range []ChannelScope{ChannelScopeGlobal, ChannelScopeGroup, ""} {
+		data, err := scope.MarshalBinary()
+		require.NoError(t, err)
+
+		var got ChannelScope
+		require.NoError(t, got.ScanRedis(string(data)))
+		require.Equal(t, scope, got)
+	}
+
+	var got ChannelScope
+
+	require.NoError(t, got.ScanRedis("own"))
+	require.Equal(t, ChannelScopeGroup, got)
+
+	require.NoError(t, got.ScanRedis("unknown"))
+	require.Equal(t, ChannelScope(""), got)
+}
