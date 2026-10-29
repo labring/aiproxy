@@ -227,6 +227,122 @@ definitions:
       updated_at:
         type: string
     type: object
+  controller.ChannelModel:
+    properties:
+      architecture:
+        $ref: '#/definitions/controller.ChannelModelArchitecture'
+      canonical_slug:
+        type: string
+      context_length:
+        type: integer
+      created:
+        type: integer
+      default_parameters:
+        $ref: '#/definitions/controller.ChannelModelDefaultParameters'
+      description:
+        type: string
+      expiration_date:
+        type: string
+      hugging_face_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      per_request_limits:
+        $ref: '#/definitions/controller.ChannelModelRequestLimits'
+      pricing:
+        $ref: '#/definitions/controller.ChannelModelPricing'
+      supported_parameters:
+        items:
+          type: string
+        type: array
+      top_provider:
+        $ref: '#/definitions/controller.ChannelModelTopProvider'
+    required:
+    - id
+    type: object
+  controller.ChannelModelArchitecture:
+    properties:
+      input_modalities:
+        items:
+          type: string
+        type: array
+      instruct_type:
+        type: string
+      modality:
+        type: string
+      output_modalities:
+        items:
+          type: string
+        type: array
+      tokenizer:
+        type: string
+    type: object
+  controller.ChannelModelDefaultParameters:
+    properties:
+      frequency_penalty:
+        type: number
+      presence_penalty:
+        type: number
+      repetition_penalty:
+        type: number
+      temperature:
+        type: number
+      top_k:
+        type: integer
+      top_p:
+        type: number
+    type: object
+  controller.ChannelModelPricing:
+    properties:
+      audio:
+        type: string
+      audio_output:
+        type: string
+      completion:
+        type: string
+      discount:
+        type: string
+      image:
+        type: string
+      image_output:
+        type: string
+      image_token:
+        type: string
+      input_audio_cache:
+        type: string
+      input_cache_read:
+        type: string
+      input_cache_write:
+        type: string
+      input_cache_write_1h:
+        type: string
+      internal_reasoning:
+        type: string
+      prompt:
+        type: string
+      request:
+        type: string
+      web_search:
+        type: string
+    type: object
+  controller.ChannelModelRequestLimits:
+    properties:
+      completion_tokens:
+        type: number
+      prompt_tokens:
+        type: number
+    type: object
+  controller.ChannelModelTopProvider:
+    properties:
+      context_length:
+        type: integer
+      is_moderated:
+        type: boolean
+      max_completion_tokens:
+        type: integer
+    type: object
   controller.CreateGroupRequest:
     properties:
       available_sets:
@@ -2746,6 +2862,8 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2753,8 +2871,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4054,8 +4170,6 @@ definitions:
         type: integer
       status_2xx_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -4063,6 +4177,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4149,8 +4265,6 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -4158,6 +4272,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4860,6 +4976,64 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Test channel model
+      tags:
+      - channel
+  /api/channel/{id}/models:
+    get:
+      description: Reads the complete model catalog visible to a saved global channel
+        through its provider or OpenAI-compatible AIProxy gateway. Results include
+        models absent from channel.model_mapping and are not paginated.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.ChannelModel'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a channel's model catalog
       tags:
       - channel
   /api/channel/{id}/status:

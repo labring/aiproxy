@@ -48,6 +48,18 @@ type Metadata struct {
 	Models       []model.ModelConfig
 }
 
+// ModelCatalogItem contains provider facts mapped to standard catalog fields.
+type ModelCatalogItem map[string]any
+
+// ModelCatalogLister reads live models visible through a channel.
+type ModelCatalogLister interface {
+	ListModels(
+		ctx context.Context,
+		channel *model.Channel,
+		defaultBaseURL string,
+	) ([]ModelCatalogItem, error)
+}
+
 type RequestURL struct {
 	Method string
 	URL    string

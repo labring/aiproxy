@@ -302,6 +302,97 @@
                 }
             }
         },
+        "/api/channel/{id}/models": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Reads the complete model catalog visible to a saved global channel through its provider or OpenAI-compatible AIProxy gateway. Results include models absent from channel.model_mapping and are not paginated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "channel"
+                ],
+                "summary": "Get a channel's model catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Channel ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/controller.ChannelModel"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/channel/{id}/status": {
             "post": {
                 "security": [
@@ -15568,6 +15659,183 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "controller.ChannelModel": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "architecture": {
+                    "$ref": "#/definitions/controller.ChannelModelArchitecture"
+                },
+                "canonical_slug": {
+                    "type": "string"
+                },
+                "context_length": {
+                    "type": "integer"
+                },
+                "created": {
+                    "type": "integer"
+                },
+                "default_parameters": {
+                    "$ref": "#/definitions/controller.ChannelModelDefaultParameters"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "expiration_date": {
+                    "type": "string"
+                },
+                "hugging_face_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "per_request_limits": {
+                    "$ref": "#/definitions/controller.ChannelModelRequestLimits"
+                },
+                "pricing": {
+                    "$ref": "#/definitions/controller.ChannelModelPricing"
+                },
+                "supported_parameters": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "top_provider": {
+                    "$ref": "#/definitions/controller.ChannelModelTopProvider"
+                }
+            }
+        },
+        "controller.ChannelModelArchitecture": {
+            "type": "object",
+            "properties": {
+                "input_modalities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "instruct_type": {
+                    "type": "string"
+                },
+                "modality": {
+                    "type": "string"
+                },
+                "output_modalities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tokenizer": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.ChannelModelDefaultParameters": {
+            "type": "object",
+            "properties": {
+                "frequency_penalty": {
+                    "type": "number"
+                },
+                "presence_penalty": {
+                    "type": "number"
+                },
+                "repetition_penalty": {
+                    "type": "number"
+                },
+                "temperature": {
+                    "type": "number"
+                },
+                "top_k": {
+                    "type": "integer"
+                },
+                "top_p": {
+                    "type": "number"
+                }
+            }
+        },
+        "controller.ChannelModelPricing": {
+            "type": "object",
+            "properties": {
+                "audio": {
+                    "type": "string"
+                },
+                "audio_output": {
+                    "type": "string"
+                },
+                "completion": {
+                    "type": "string"
+                },
+                "discount": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "image_output": {
+                    "type": "string"
+                },
+                "image_token": {
+                    "type": "string"
+                },
+                "input_audio_cache": {
+                    "type": "string"
+                },
+                "input_cache_read": {
+                    "type": "string"
+                },
+                "input_cache_write": {
+                    "type": "string"
+                },
+                "input_cache_write_1h": {
+                    "type": "string"
+                },
+                "internal_reasoning": {
+                    "type": "string"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "request": {
+                    "type": "string"
+                },
+                "web_search": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.ChannelModelRequestLimits": {
+            "type": "object",
+            "properties": {
+                "completion_tokens": {
+                    "type": "number"
+                },
+                "prompt_tokens": {
+                    "type": "number"
+                }
+            }
+        },
+        "controller.ChannelModelTopProvider": {
+            "type": "object",
+            "properties": {
+                "context_length": {
+                    "type": "integer"
+                },
+                "is_moderated": {
+                    "type": "boolean"
+                },
+                "max_completion_tokens": {
+                    "type": "integer"
                 }
             }
         },
