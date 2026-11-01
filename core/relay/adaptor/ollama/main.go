@@ -259,6 +259,7 @@ func StreamHandler(
 		}
 
 		response := streamResponse2OpenAI(meta, &ollamaResponse, toolCallCount)
+
 		toolCallCount += len(response.Choices[0].Delta.ToolCalls)
 		if response.Usage != nil {
 			usage = response.Usage

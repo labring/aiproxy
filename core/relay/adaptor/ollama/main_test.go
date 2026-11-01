@@ -99,7 +99,7 @@ func TestStreamHandler_ToolCallIndexes(t *testing.T) {
 
 	got := map[string]int{}
 
-	for _, line := range strings.Split(w.Body.String(), "\n") {
+	for line := range strings.SplitSeq(w.Body.String(), "\n") {
 		payload, ok := strings.CutPrefix(line, "data:")
 		if !ok || strings.TrimSpace(payload) == "[DONE]" {
 			continue
