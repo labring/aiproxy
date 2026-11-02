@@ -72,7 +72,7 @@ func TestStreamHandler_ToolCallIndexes(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/chat/completions", nil)
 
 	m := meta.NewMeta(
 		&model.Channel{Type: model.ChannelTypeOllama},
