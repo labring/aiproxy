@@ -125,7 +125,10 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	}, nil
 }
 
-func getToolCalls(ollamaResponse *ChatResponse) []relaymodel.ToolCall {
+// getToolCalls converts Ollama tool calls to OpenAI ones. indexOffset is the
+// number of tool calls already emitted earlier in the same stream, so that
+// every call gets a distinct index.
+func getToolCalls(ollamaResponse *ChatResponse, indexOffset int) []relaymodel.ToolCall {
 	if ollamaResponse.Message == nil || len(ollamaResponse.Message.ToolCalls) == 0 {
 		return nil
 	}
@@ -138,8 +141,9 @@ func getToolCalls(ollamaResponse *ChatResponse) []relaymodel.ToolCall {
 		}
 
 		toolCalls = append(toolCalls, relaymodel.ToolCall{
-			ID:   openai.CallID(),
-			Type: "function",
+			Index: indexOffset + len(toolCalls),
+			ID:    openai.CallID(),
+			Type:  "function",
 			Function: relaymodel.Function{
 				Name:      tool.Function.Name,
 				Arguments: argString,
@@ -159,7 +163,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 			Role:             response.Message.Role,
 			Content:          response.Message.Content,
 			ReasoningContent: response.Message.Thinking,
-			ToolCalls:        getToolCalls(response),
+			ToolCalls:        getToolCalls(response, 0),
 		}
 	}
 
@@ -186,6 +190,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 func streamResponse2OpenAI(
 	meta *meta.Meta,
 	ollamaResponse *ChatResponse,
+	toolCallOffset int,
 ) *relaymodel.ChatCompletionsStreamResponse {
 	choice := relaymodel.ChatCompletionsStreamResponseChoice{
 		Text: ollamaResponse.Response,
@@ -195,7 +200,7 @@ func streamResponse2OpenAI(
 			Role:             ollamaResponse.Message.Role,
 			Content:          ollamaResponse.Message.Content,
 			ReasoningContent: ollamaResponse.Message.Thinking,
-			ToolCalls:        getToolCalls(ollamaResponse),
+			ToolCalls:        getToolCalls(ollamaResponse, toolCallOffset),
 		}
 	}
 
@@ -237,6 +242,8 @@ func StreamHandler(
 
 	var usage *relaymodel.ChatUsage
 
+	toolCallCount := 0
+
 	scanner, cleanup := utils.NewScanner(resp.Body)
 	defer cleanup()
 
@@ -251,7 +258,9 @@ func StreamHandler(
 			continue
 		}
 
-		response := streamResponse2OpenAI(meta, &ollamaResponse)
+		response := streamResponse2OpenAI(meta, &ollamaResponse, toolCallCount)
+
+		toolCallCount += len(response.Choices[0].Delta.ToolCalls)
 		if response.Usage != nil {
 			usage = response.Usage
 		}
