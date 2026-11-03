@@ -53,7 +53,7 @@ func TestGPT56ModelConfigs(t *testing.T) {
 func TestGPT6AstraModelConfig(t *testing.T) {
 	config := findOpenAIModelConfig(t, "gpt-6-astra")
 	require.Equal(t, mode.ChatCompletions, config.Type)
-	require.False(t, openai.IsResponsesOnlyModel(&config, config.Model))
+	require.True(t, openai.IsResponsesOnlyModel(&config, config.Model))
 	require.True(t, config.ShouldSummaryServiceTier())
 	require.NoError(t, config.Price.ValidateConditionalPrices())
 

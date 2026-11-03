@@ -1449,6 +1449,10 @@ var responsesOnlyModels = map[string]struct{}{
 	"gpt-54-pro":            {},
 	"gpt-55":                {},
 	"gpt-55-pro":            {},
+	"gpt-6-luna":            {},
+	"gpt-6-sol":             {},
+	"gpt-6-astra":           {},
+	"gpt-61-sol":            {},
 }
 
 // IsResponsesOnlyModel checks if a model only supports the Responses API
