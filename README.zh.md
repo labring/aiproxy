@@ -24,6 +24,7 @@ AI Proxy 是一个强大的、生产就绪的 AI 网关，提供智能请求路�
 - **智能重试机制**：智能重试策略与自动错误恢复
 - **基于优先级的渠道选择**：根据渠道优先级和错误率路由请求
 - **负载均衡**：高效地在多个 AI 提供商之间分配流量
+- **OpenAI Decisions**：原生支持 `/v1/decisions` 分类、条件概率和评分，保留对话历史及提示缓存参数。详见[配置与示例](docs/DECISIONS.md)。
 - **协议转换**：在 OpenAI Chat Completions、Claude Messages、Gemini 和 OpenAI Responses API 之间无缝转换
   - Chat/Claude/Gemini → Responses API：使用任意协议访问仅支持 Responses 的模型
 

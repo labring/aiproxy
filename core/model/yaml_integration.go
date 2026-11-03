@@ -199,6 +199,7 @@ func ModelTypeNameToType(typeName string) mode.Mode {
 		"responsescompact":          mode.ResponsesCompact,
 		"responses_compact":         mode.ResponsesCompact,
 		"responses-compact":         mode.ResponsesCompact,
+		"decisions":                 mode.Decisions,
 	}
 
 	if typ, ok := typeMap[typeName]; ok {
