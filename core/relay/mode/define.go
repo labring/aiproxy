@@ -53,6 +53,7 @@ var modeNames = map[Mode]string{
 	ResponsesInputItems:     "ResponsesInputItems",
 	ResponsesCompact:        "ResponsesCompact",
 	AlphaSearch:             "AlphaSearch",
+	SystemOne:               "SystemOne",
 	Gemini:                  "Gemini",
 }
 
@@ -98,4 +99,5 @@ const (
 	DoubaoVideoTasksDelete
 	ResponsesCompact
 	AlphaSearch
+	SystemOne
 )
