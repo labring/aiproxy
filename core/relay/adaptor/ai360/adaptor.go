@@ -11,6 +11,8 @@ type Adaptor struct {
 	openai.Adaptor
 }
 
+var _ adaptor.ModelCatalogLister = (*Adaptor)(nil)
+
 func init() {
 	registry.Register(model.ChannelTypeAI360, &Adaptor{})
 }
