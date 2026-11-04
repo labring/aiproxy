@@ -1,6 +1,8 @@
+//nolint:testpackage
 package ollama
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,7 +25,10 @@ func toolCallMessage() *Message {
 func TestResponse2OpenAI_FinishReason(t *testing.T) {
 	m := &meta.Meta{OriginModel: "llama3"}
 
-	withTools := response2OpenAI(m, &ChatResponse{Message: toolCallMessage(), Done: true, DoneReason: "stop"})
+	withTools := response2OpenAI(
+		m,
+		&ChatResponse{Message: toolCallMessage(), Done: true, DoneReason: "stop"},
+	)
 	assert.Equal(t, "tool_calls", withTools.Choices[0].FinishReason)
 
 	plain := response2OpenAI(m, &ChatResponse{
@@ -45,7 +50,7 @@ func TestStreamHandler_FinishReasonToolCalls(t *testing.T) {
 `
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
