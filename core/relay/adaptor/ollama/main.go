@@ -168,7 +168,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 	}
 
 	if response.Done {
-		choice.FinishReason = response.DoneReason
+		choice.FinishReason = finishReason(response.DoneReason, len(choice.Message.ToolCalls) > 0)
 	}
 
 	fullTextResponse := relaymodel.TextResponse{
@@ -185,6 +185,17 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 	}
 
 	return &fullTextResponse
+}
+
+// finishReason maps Ollama's done_reason to the OpenAI finish_reason.
+// Ollama reports "stop" even when the model ended its turn with tool calls,
+// while OpenAI clients expect "tool_calls" in that case.
+func finishReason(doneReason string, hasToolCalls bool) string {
+	if hasToolCalls && (doneReason == "" || doneReason == "stop") {
+		return relaymodel.FinishReasonToolCalls
+	}
+
+	return doneReason
 }
 
 func streamResponse2OpenAI(
@@ -205,7 +216,10 @@ func streamResponse2OpenAI(
 	}
 
 	if ollamaResponse.Done {
-		choice.FinishReason = ollamaResponse.DoneReason
+		choice.FinishReason = finishReason(
+			ollamaResponse.DoneReason,
+			toolCallOffset > 0 || len(choice.Delta.ToolCalls) > 0,
+		)
 	}
 
 	response := relaymodel.ChatCompletionsStreamResponse{
