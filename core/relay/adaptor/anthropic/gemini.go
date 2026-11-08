@@ -149,11 +149,8 @@ func ConvertClaudeToGeminiResponse(
 
 	// Convert usage
 	if claudeResp.Usage.InputTokens > 0 || claudeResp.Usage.OutputTokens > 0 {
-		geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-			PromptTokenCount:     claudeResp.Usage.InputTokens,
-			CandidatesTokenCount: claudeResp.Usage.OutputTokens,
-			TotalTokenCount:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
-		}
+		usage := claudeResp.Usage.ToGeminiUsage()
+		geminiResp.UsageMetadata = &usage
 	}
 
 	// Create candidate
@@ -311,6 +308,10 @@ func GeminiStreamHandler(
 			if geminiResp.UsageMetadata != nil {
 				usage = geminiResp.UsageMetadata.ToModelUsage()
 			}
+
+			if billed, ok := streamState.BilledUsage(); ok {
+				usage = billed
+			}
 		}
 	}
 
@@ -329,6 +330,22 @@ type GeminiStreamState struct {
 	CurrentToolName string
 	CurrentToolID   string
 	CurrentToolArgs strings.Builder
+	// startUsage keeps the input/cache counters from message_start, because
+	// message_delta usually only carries output_tokens.
+	startUsage relaymodel.ClaudeUsage
+	// finalUsage is the message_delta usage merged with startUsage (cache
+	// counters and server tool use), used for billing.
+	finalUsage *relaymodel.ClaudeUsage
+}
+
+// BilledUsage returns the usage to bill for the stream, built the same way as
+// the non-stream Gemini handler (cache creation and web search included).
+func (s *GeminiStreamState) BilledUsage() (model.Usage, bool) {
+	if s.finalUsage == nil {
+		return model.Usage{}, false
+	}
+
+	return s.finalUsage.ToOpenAIUsage().ToModelUsage(), true
 }
 
 func NewGeminiStreamState() *GeminiStreamState {
@@ -355,9 +372,15 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 
 	switch claudeResp.Type {
 	case relaymodel.ClaudeStreamTypeMessageStart:
+		if claudeResp.Message != nil {
+			s.startUsage = claudeResp.Message.Usage
+		}
+
 		if claudeResp.Message != nil && claudeResp.Message.Usage.InputTokens > 0 {
+			usage := claudeResp.Message.Usage.ToGeminiUsage()
 			geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-				PromptTokenCount: claudeResp.Message.Usage.InputTokens,
+				PromptTokenCount:        usage.PromptTokenCount,
+				CachedContentTokenCount: usage.CachedContentTokenCount,
 			}
 		}
 
@@ -437,11 +460,27 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 		}
 
 		if claudeResp.Usage != nil {
-			geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-				PromptTokenCount:     claudeResp.Usage.InputTokens,
-				CandidatesTokenCount: claudeResp.Usage.OutputTokens,
-				TotalTokenCount:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+			merged := *claudeResp.Usage
+			if merged.InputTokens == 0 {
+				merged.InputTokens = s.startUsage.InputTokens
 			}
+
+			if merged.CacheReadInputTokens == 0 {
+				merged.CacheReadInputTokens = s.startUsage.CacheReadInputTokens
+			}
+
+			if merged.CacheCreationInputTokens == 0 {
+				merged.CacheCreationInputTokens = s.startUsage.CacheCreationInputTokens
+			}
+
+			if merged.ServerToolUse == nil {
+				merged.ServerToolUse = s.startUsage.ServerToolUse
+			}
+
+			s.finalUsage = &merged
+
+			usage := merged.ToGeminiUsage()
+			geminiResp.UsageMetadata = &usage
 		}
 
 	case relaymodel.ClaudeStreamTypeMessageStop:

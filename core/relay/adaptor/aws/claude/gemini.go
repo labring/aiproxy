@@ -155,6 +155,10 @@ func GeminiStreamHandler(
 				if geminiResp.UsageMetadata != nil {
 					usage = geminiResp.UsageMetadata.ToModelUsage()
 				}
+
+				if billed, ok := streamState.BilledUsage(); ok {
+					usage = billed
+				}
 			}
 
 		case *types.UnknownUnionMember:
