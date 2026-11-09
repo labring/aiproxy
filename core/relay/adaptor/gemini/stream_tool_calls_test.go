@@ -28,7 +28,7 @@ data: [DONE]
 `
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/chat/completions", nil)
 	_, err := gemini.StreamHandler(
 		&meta.Meta{OriginModel: "gemini-2.5-pro"},
 		c,
