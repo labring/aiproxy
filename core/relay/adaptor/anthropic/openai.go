@@ -30,10 +30,14 @@ const (
 
 func stopReasonClaude2OpenAI(reason string) string {
 	switch reason {
-	case relaymodel.ClaudeStopReasonEndTurn, relaymodel.ClaudeStopReasonStopSequence:
+	case relaymodel.ClaudeStopReasonEndTurn,
+		relaymodel.ClaudeStopReasonStopSequence,
+		relaymodel.ClaudeStopReasonPauseTurn:
 		return relaymodel.FinishReasonStop
-	case relaymodel.ClaudeStopReasonMaxTokens:
+	case relaymodel.ClaudeStopReasonMaxTokens, relaymodel.ClaudeStopReasonContextLimit:
 		return relaymodel.FinishReasonLength
+	case relaymodel.ClaudeStopReasonRefusal:
+		return relaymodel.FinishReasonContentFilter
 	case relaymodel.ClaudeStopReasonToolUse:
 		return relaymodel.FinishReasonToolCalls
 	case "null":
