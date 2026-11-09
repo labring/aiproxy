@@ -303,6 +303,9 @@ const (
 	ClaudeStopReasonMaxTokens    = "max_tokens"
 	ClaudeStopReasonToolUse      = "tool_use"
 	ClaudeStopReasonStopSequence = "stop_sequence"
+	ClaudeStopReasonPauseTurn    = "pause_turn"
+	ClaudeStopReasonRefusal      = "refusal"
+	ClaudeStopReasonContextLimit = "model_context_window_exceeded"
 )
 
 // Claude Type constants

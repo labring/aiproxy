@@ -609,3 +609,36 @@ func TestOpenAIConvertRequest_UsesOriginModelNameFirst(t *testing.T) {
 	require.NotNil(t, claudeReq.OutputConfig.Effort)
 	assert.Equal(t, "low", *claudeReq.OutputConfig.Effort)
 }
+
+func TestResponse2OpenAI_StopReasonMapping(t *testing.T) {
+	cases := map[string]string{
+		"end_turn":                      "stop",
+		"stop_sequence":                 "stop",
+		"max_tokens":                    "length",
+		"tool_use":                      "tool_calls",
+		"model_context_window_exceeded": "length",
+		"refusal":                       "content_filter",
+		"pause_turn":                    "stop",
+	}
+
+	for stopReason, want := range cases {
+		t.Run(stopReason, func(t *testing.T) {
+			data := []byte(`{
+				"id": "msg_1",
+				"type": "message",
+				"role": "assistant",
+				"model": "claude-sonnet-4-5",
+				"content": [{"type": "text", "text": "hi"}],
+				"stop_reason": "` + stopReason + `",
+				"usage": {"input_tokens": 1, "output_tokens": 1}
+			}`)
+
+			resp, err := anthropic.Response2OpenAI(
+				&meta.Meta{OriginModel: "claude-sonnet-4-5"},
+				data,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, want, resp.Choices[0].FinishReason)
+		})
+	}
+}
