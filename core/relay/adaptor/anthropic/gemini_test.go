@@ -358,6 +358,7 @@ func TestClaudeGeminiUsageIncludesCache(t *testing.T) {
 			Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
 			Usage: &usage,
 		})
+
 		if resp == nil || resp.UsageMetadata == nil {
 			t.Fatal("expected usage metadata")
 		}
@@ -386,6 +387,7 @@ func TestClaudeGeminiUsageIncludesCache(t *testing.T) {
 			Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
 			Usage: &relaymodel.ClaudeUsage{OutputTokens: 5},
 		})
+
 		if resp == nil || resp.UsageMetadata == nil {
 			t.Fatal("expected usage metadata")
 		}
