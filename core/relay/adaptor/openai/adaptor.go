@@ -259,6 +259,16 @@ func (a *Adaptor) GetRequestURL(
 			Method: http.MethodPost,
 			URL:    url,
 		}, nil
+	case mode.ParsePdf:
+		url, err := url.JoinPath(u, "/parse/pdf")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
 	case mode.VideoGenerationsJobs:
 		url, err := url.JoinPath(u, "/video/generations/jobs")
 		if err != nil {
@@ -415,9 +425,10 @@ func (a *Adaptor) ConvertRequest(
 	return ConvertRequest(meta, store, req)
 }
 
+//nolint:gocyclo
 func ConvertRequest(
 	meta *meta.Meta,
-	_ adaptor.Store,
+	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	if req == nil {
@@ -462,6 +473,8 @@ func ConvertRequest(
 		return ConvertTTSRequest(meta, req, "")
 	case mode.Rerank:
 		return ConvertRerankRequest(meta, req)
+	case mode.ParsePdf:
+		return ConvertParsePdfRequest(meta, req)
 	case mode.VideoGenerationsJobs:
 		return ConvertVideoGenerationJobRequest(meta, req)
 	case mode.VideoGenerationsGetJobs:
@@ -553,6 +566,8 @@ func doResponse(
 		result, err = TTSHandler(meta, c, resp)
 	case mode.Rerank:
 		result, err = RerankHandler(meta, c, resp)
+	case mode.ParsePdf:
+		result, err = ParsePdfHandler(meta, c, resp)
 	case mode.Moderations:
 		result, err = ModerationsHandler(meta, c, resp)
 	case mode.Embeddings:
