@@ -70,6 +70,11 @@ DashScope realtime billing is retained from `result-generated` events because
 keep the largest reported value instead of summing it across sentence events.
 Only when upstream duration is absent does the bridge use measured audio length.
 
+Realtime connections honor the selected channel's HTTP/HTTPS or SOCKS proxy and
+TLS verification settings. HTTP/1.1 is negotiated independently for WebSocket
+upgrades. The model request timeout covers connection setup and recognition;
+failed upgrades preserve upstream authentication/rate-limit status and errors.
+
 ## Asynchronous and session-based models
 
 `paraformer-v2`, `fun-asr`, SenseVoice and Qwen `*-filetrans` use native file

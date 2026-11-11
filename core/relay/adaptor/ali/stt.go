@@ -67,7 +67,7 @@ func resolveSTTProtocol(mt *meta.Meta) (string, error) {
 
 		if strings.Contains(name, "filetrans") || name == "fun-asr" ||
 			strings.HasPrefix(name, "fun-asr-20") ||
-			strings.HasPrefix(name, "fun-asr-mtl") ||
+			(strings.HasPrefix(name, "fun-asr-mtl") && !strings.Contains(name, "realtime")) ||
 			(strings.HasPrefix(name, "paraformer-") && !strings.Contains(name, "realtime")) ||
 			name == "sensevoicesmall" {
 			return "", sttInputError(
@@ -175,6 +175,14 @@ func convertSTTRequest(mt *meta.Meta, req *http.Request) (adaptor.ConvertResult,
 		return adaptor.ConvertResult{}, sttInputError(
 			"this STT protocol does not support streaming transcription responses",
 		)
+	}
+
+	for _, key := range []string{"timestamp_granularities", "timestamp_granularities[]"} {
+		if len(req.MultipartForm.Value[key]) > 0 {
+			return adaptor.ConvertResult{}, sttInputError(
+				"this STT protocol does not support timestamp_granularities",
+			)
+		}
 	}
 
 	if protocol == sttRealtime {

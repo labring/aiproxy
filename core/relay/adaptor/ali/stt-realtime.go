@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -121,6 +122,18 @@ func ConvertSTTRequest(
 // STTDoRequest opens the selected channel's WebSocket using its proxy/TLS
 // settings and a bounded deadline. Failed setup never leaves a connection open.
 func STTDoRequest(meta *meta.Meta, req *http.Request) (*http.Response, error) {
+	timeout := meta.RequestTimeout
+	if timeout <= 0 {
+		timeout = time.Minute
+	}
+
+	// Start the request budget before dialing so slow TCP/TLS/upgrade setup
+	// cannot exceed the model timeout or extend the recognition deadline.
+	ctx, cancel := context.WithTimeout(req.Context(), timeout)
+	defer cancel()
+
+	deadline, _ := ctx.Deadline()
+
 	wsURL := *req.URL
 	switch wsURL.Scheme {
 	case "https":
@@ -158,22 +171,52 @@ func STTDoRequest(meta *meta.Meta, req *http.Request) (*http.Response, error) {
 		TLSClientConfig: tlsConfig, HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, resp, err := dialer.DialContext(req.Context(), wsURL.String(), req.Header)
+	if transport.Proxy != nil {
+		proxyURL, proxyErr := transport.Proxy(req)
+		if proxyErr != nil {
+			return nil, proxyErr
+		}
+
+		if proxyURL != nil && strings.EqualFold(proxyURL.Scheme, "https") {
+			// Gorilla implements HTTP CONNECT but does not register HTTPS
+			// proxies. Encrypt the proxy hop first, then reuse its CONNECT
+			// implementation and the separate upstream TLS handshake.
+			connectProxy := *proxyURL
+
+			connectProxy.Scheme = "http"
+			if connectProxy.Port() == "" {
+				connectProxy.Host = net.JoinHostPort(proxyURL.Hostname(), "443")
+			}
+
+			dialer.Proxy = http.ProxyURL(&connectProxy)
+			proxyTLS := tlsConfig.Clone()
+			proxyTLS.ServerName = proxyURL.Hostname()
+			dialer.NetDialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				conn, err := transport.DialContext(ctx, network, address)
+				if err != nil {
+					return nil, err
+				}
+
+				encrypted := tls.Client(conn, proxyTLS)
+				if err := encrypted.HandshakeContext(ctx); err != nil {
+					conn.Close()
+					return nil, err
+				}
+
+				return encrypted, nil
+			}
+		}
+	}
+
+	conn, resp, err := dialer.DialContext(ctx, wsURL.String(), req.Header)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
+			// Preserve upstream auth/rate-limit errors for channel monitoring
+			// and retry selection; the handler also closes the rejected body.
+			return nil, ErrorHanlder(resp)
 		}
+
 		return nil, err
-	}
-
-	timeout := meta.RequestTimeout
-	if timeout <= 0 {
-		timeout = time.Minute
-	}
-
-	deadline := time.Now().Add(timeout)
-	if d, ok := req.Context().Deadline(); ok && d.Before(deadline) {
-		deadline = d
 	}
 
 	_ = conn.SetReadDeadline(deadline)

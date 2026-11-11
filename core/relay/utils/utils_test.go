@@ -137,29 +137,31 @@ func TestDoRequestResponseHeaderTimeout(t *testing.T) {
 }
 
 func TestLoadHTTPClientReuse(t *testing.T) {
+	// Compare identity: deep equality walks live transport connection pools
+	// and races with requests started by other client tests.
 	convey.Convey("LoadHTTPClient reuse", t, func() {
 		client1, err := utils.LoadHTTPClientE(time.Second, "")
 		convey.So(err, convey.ShouldBeNil)
 
 		client2, err := utils.LoadHTTPClientE(time.Second, "")
 		convey.So(err, convey.ShouldBeNil)
-		convey.So(client1, convey.ShouldEqual, client2)
+		convey.So(client1, convey.ShouldPointTo, client2)
 
 		client3, err := utils.LoadHTTPClientE(time.Second, "http://127.0.0.1:7890")
 		convey.So(err, convey.ShouldBeNil)
-		convey.So(client3, convey.ShouldNotEqual, client1)
+		convey.So(client3, convey.ShouldNotPointTo, client1)
 
 		client4, err := utils.LoadHTTPClientE(time.Second, "http://127.0.0.1:7890")
 		convey.So(err, convey.ShouldBeNil)
-		convey.So(client4, convey.ShouldEqual, client3)
+		convey.So(client4, convey.ShouldPointTo, client3)
 
 		client5, err := utils.LoadHTTPClientWithTLSConfigE(time.Second, "", true)
 		convey.So(err, convey.ShouldBeNil)
-		convey.So(client5, convey.ShouldNotEqual, client1)
+		convey.So(client5, convey.ShouldNotPointTo, client1)
 
 		client6, err := utils.LoadHTTPClientWithTLSConfigE(time.Second, "", true)
 		convey.So(err, convey.ShouldBeNil)
-		convey.So(client6, convey.ShouldEqual, client5)
+		convey.So(client6, convey.ShouldPointTo, client5)
 	})
 }
 

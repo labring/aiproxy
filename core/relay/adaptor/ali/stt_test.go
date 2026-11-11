@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
@@ -20,6 +22,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
+	"github.com/labring/aiproxy/core/internal/testutil"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/controller"
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -38,6 +41,9 @@ func TestSTTProtocolSelection(t *testing.T) {
 	}{
 		{name: "legacy realtime", actual: "paraformer-realtime-v2", want: sttRealtime},
 		{name: "fun realtime", actual: "fun-asr-realtime", want: sttRealtime},
+		{name: "fun MTL realtime", actual: "fun-asr-mtl-realtime", want: sttRealtime},
+		{name: "dated fun MTL realtime", actual: "fun-asr-mtl-realtime-2025-12-10", want: sttRealtime},
+		{name: "async fun MTL", actual: "fun-asr-mtl-2025-08-25", bad: true},
 		{name: "Qwen ASR", actual: "qwen3-asr-flash", want: sttChatAudio},
 		{name: "dated Qwen", actual: "qwen3-asr-flash-2026-02-10", want: sttChatAudio},
 		{name: "channel default", actual: "private-asr", protocol: sttChatAudio, want: sttChatAudio},
@@ -194,7 +200,7 @@ func TestSTTChatAudioConversion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sttWAV(), data)
 
-	for _, fields := range []map[string]string{{"response_format": "verbose_json"}, {"stream": "true"}} {
+	for _, fields := range []map[string]string{{"response_format": "verbose_json"}, {"stream": "true"}, {"timestamp_granularities[]": "word"}, {"timestamp_granularities": "segment"}} {
 		_, err := convertSTTRequest(mt, sttUpload(t, sttWAV(), fields))
 		require.Error(t, err)
 	}
@@ -589,4 +595,152 @@ func TestSTTPlainTextResponse(t *testing.T) {
 	require.Nil(t, err)
 	assert.Equal(t, "你好", recorder.Body.String())
 	assert.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
+}
+
+// A stalled upgrade must consume the same request budget as the recognition,
+// rather than always waiting for the dialer's ten-second handshake timeout.
+func TestSTTWebSocketHandshakeTimeout(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+
+	mt := meta.NewMeta(
+		&model.Channel{}, mode.AudioTranscription, "paraformer-realtime-v2",
+		model.ModelConfig{},
+	)
+	mt.RequestTimeout = 100 * time.Millisecond
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		upstream.URL,
+		strings.NewReader("{}"),
+	)
+	require.NoError(t, err)
+
+	start := time.Now()
+
+	resp, err := STTDoRequest(mt, req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), time.Second)
+}
+
+// Failed HTTP upgrades must retain status/code so relay retries, auth bans and
+// caller errors behave exactly like the HTTP speech recognition paths.
+func TestSTTWebSocketHandshakeErrors(t *testing.T) {
+	setSTTFFmpeg(t, false)
+
+	for _, status := range []int{http.StatusUnauthorized, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			upstream := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(status)
+					_, _ = io.WriteString(
+						w,
+						`{"code":"UpstreamError","message":"test upgrade rejection"}`,
+					)
+				}),
+			)
+			defer upstream.Close()
+
+			mt := meta.NewMeta(
+				&model.Channel{BaseURL: upstream.URL},
+				mode.AudioTranscription,
+				"paraformer-realtime-v2",
+				model.ModelConfig{},
+			)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = sttUpload(t, sttWAV(), nil)
+			_, _, relayErr := controller.DoHelper(&Adaptor{}, c, mt, nil)
+			require.NotNil(t, relayErr)
+			assert.Equal(t, status, relayErr.StatusCode())
+			body, err := relayErr.MarshalJSON()
+			require.NoError(t, err)
+			assert.Contains(t, string(body), "UpstreamError")
+			assert.Contains(t, string(body), "test upgrade rejection")
+		})
+	}
+}
+
+// Proxy credentials must stay on CONNECT, and HTTPS proxies need their own TLS
+// handshake before the independent TLS/upgrade handshake with the upstream.
+func TestSTTWebSocketChannelProxy(t *testing.T) {
+	for _, proxyTLS := range []bool{false, true} {
+		for _, targetTLS := range []bool{false, true} {
+			t.Run(fmt.Sprintf("proxyTLS=%t/targetTLS=%t", proxyTLS, targetTLS), func(t *testing.T) {
+				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, "Bearer upstream-key", r.Header.Get("Authorization"))
+					assert.Empty(t, r.Header.Get("Proxy-Authorization"))
+
+					conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+					if err != nil {
+						return
+					}
+					defer conn.Close()
+
+					_, _, _ = conn.ReadMessage()
+				})
+
+				upstream := httptest.NewUnstartedServer(handler)
+				if targetTLS {
+					upstream.StartTLS()
+				} else {
+					upstream.Start()
+				}
+				defer upstream.Close()
+
+				proxy, requests := testutil.NewHTTPProxy(t, upstream, proxyTLS)
+				proxyURL, err := url.Parse(proxy.URL)
+				require.NoError(t, err)
+
+				proxyURL.User = url.UserPassword("user@example", "p:ass")
+				mt := meta.NewMeta(
+					&model.Channel{ProxyURL: proxyURL.String(), SkipTLSVerify: true},
+					mode.AudioTranscription,
+					"paraformer-realtime-v2",
+					model.ModelConfig{},
+				)
+				mt.RequestTimeout = time.Second
+
+				scheme := "http"
+				if targetTLS {
+					scheme = "https"
+				}
+
+				req, err := http.NewRequestWithContext(
+					t.Context(),
+					http.MethodPost,
+					scheme+"://upstream.invalid/api-ws/v1/inference",
+					strings.NewReader("{}"),
+				)
+				require.NoError(t, err)
+				req.Header.Set("Authorization", "Bearer upstream-key")
+				resp, err := STTDoRequest(mt, req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+
+				conn, ok := mt.MustGet("ws_conn").(*websocket.Conn)
+				require.True(t, ok)
+				require.NoError(t, conn.Close())
+
+				select {
+				case request := <-requests:
+					assert.Equal(t, http.MethodConnect, request.Method)
+					assert.Equal(
+						t,
+						"Basic "+base64.StdEncoding.EncodeToString([]byte("user@example:p:ass")),
+						request.Authorization,
+					)
+				case <-time.After(time.Second):
+					t.Fatal("proxy did not receive CONNECT")
+				}
+			})
+		}
+	}
 }
