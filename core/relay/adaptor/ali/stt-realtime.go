@@ -182,6 +182,7 @@ func STTDoRequest(meta *meta.Meta, req *http.Request) (*http.Response, error) {
 	if err == nil {
 		err = conn.WriteMessage(websocket.TextMessage, data)
 	}
+
 	if err != nil {
 		conn.Close()
 		return nil, err
