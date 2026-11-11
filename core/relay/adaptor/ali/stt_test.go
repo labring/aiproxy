@@ -389,27 +389,18 @@ func TestSTTRelayProtocolsAndChannelSwitch(t *testing.T) {
 
 			assert.Len(t, received, 3200)
 
-			end := 100
-			require.NoError(
-				t,
-				conn.WriteJSON(
-					STTMessage{
-						Header: STTHeader{Event: "result-generated"},
-						Payload: STTPayload{
-							Output: STTOutput{STTSentence: STTSentence{Text: "你好", EndTime: &end}},
-						},
-					},
-				),
-			)
-			require.NoError(
-				t,
-				conn.WriteJSON(
-					STTMessage{
-						Header:  STTHeader{Event: "task-finished"},
-						Payload: STTPayload{Usage: STTUsage{Duration: 0.1}},
-					},
-				),
-			)
+			// Billing is cumulative on result events, not on task-finished.
+			for _, event := range []string{
+				`{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"text":"interim","end_time":100,"sentence_end":false}},"usage":null}}`,
+				`{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"text":"你好","end_time":100}},"usage":{"duration":2}}}`,
+				`{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"text":"世界","end_time":null,"sentence_end":true}},"usage":{"duration":7}}}`,
+				`{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"text":"heartbeat","sentence_end":true,"heartbeat":true}},"usage":{"duration":7}}}`,
+				`{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"text":"","sentence_end":true}},"usage":{"duration":6}}}`,
+				`{"header":{"event":"task-finished"},"payload":{"output":{},"usage":null}}`,
+			} {
+				require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(event)))
+			}
+
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -441,6 +432,18 @@ func TestSTTRelayProtocolsAndChannelSwitch(t *testing.T) {
 			_, _, err := controller.DoHelper(&Adaptor{}, c, mt, nil)
 			require.Nil(t, err)
 			assert.Contains(t, recorder.Body.String(), "你好")
+
+			if protocol == sttRealtime {
+				var body struct {
+					Text  string `json:"text"`
+					Usage struct {
+						Seconds int64 `json:"seconds"`
+					} `json:"usage"`
+				}
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+				assert.Equal(t, "你好世界", body.Text)
+				assert.EqualValues(t, 7, body.Usage.Seconds)
+			}
 		})
 	}
 }

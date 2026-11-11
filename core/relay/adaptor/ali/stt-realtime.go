@@ -63,8 +63,10 @@ type STTOutput struct {
 }
 
 type STTSentence struct {
-	Text    string `json:"text"`
-	EndTime *int   `json:"end_time"`
+	Text        string `json:"text"`
+	EndTime     *int   `json:"end_time"`
+	SentenceEnd *bool  `json:"sentence_end,omitempty"`
+	Heartbeat   bool   `json:"heartbeat,omitempty"`
 }
 
 type STTUsage struct {
@@ -219,6 +221,7 @@ func STTDoResponse(
 
 	output := strings.Builder{}
 	started := false
+	billedDuration := float64(0)
 
 	usage := model.Usage{
 		InputTokens:      meta.RequestUsage.InputTokens,
@@ -254,6 +257,12 @@ func STTDoResponse(
 				http.StatusInternalServerError,
 			)
 		}
+		// DashScope reports cumulative task billing on result-generated, and
+		// task-finished usually has usage=null. Retain the latest maximum;
+		// summing sentence events would charge the same audio multiple times.
+		if msg.Payload.Usage.Duration > billedDuration {
+			billedDuration = msg.Payload.Usage.Duration
+		}
 
 		switch msg.Header.Event {
 		case "task-started":
@@ -270,9 +279,15 @@ func STTDoResponse(
 				}
 			}()
 		case "result-generated":
-			if msg.Payload.Output.STTSentence.EndTime != nil &&
-				msg.Payload.Output.STTSentence.Text != "" {
-				output.WriteString(msg.Payload.Output.STTSentence.Text)
+			sentence := msg.Payload.Output.STTSentence
+
+			final := sentence.SentenceEnd != nil && *sentence.SentenceEnd
+			if sentence.SentenceEnd == nil {
+				final = sentence.EndTime != nil
+			}
+
+			if final && !sentence.Heartbeat && sentence.Text != "" {
+				output.WriteString(sentence.Text)
 			}
 
 			continue
@@ -284,8 +299,8 @@ func STTDoResponse(
 				}
 			}
 
-			if msg.Payload.Usage.Duration > 0 {
-				seconds = int64(math.Ceil(msg.Payload.Usage.Duration))
+			if billedDuration > 0 {
+				seconds = int64(math.Ceil(billedDuration))
 			}
 
 			sttUsage := relaymodel.SttUsage{

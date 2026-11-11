@@ -65,6 +65,11 @@ seconds must not interpret token totals as duration. Realtime usage is reported
 with `type=duration` and measured/upstream seconds, including when preflight
 duration accounting is disabled.
 
+DashScope realtime billing is retained from `result-generated` events because
+`task-finished` normally has `usage=null`. The duration is cumulative per task:
+keep the largest reported value instead of summing it across sentence events.
+Only when upstream duration is absent does the bridge use measured audio length.
+
 ## Asynchronous and session-based models
 
 `paraformer-v2`, `fun-asr`, SenseVoice and Qwen `*-filetrans` use native file
