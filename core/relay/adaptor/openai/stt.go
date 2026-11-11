@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -233,6 +234,20 @@ func handleSTTNonStream(
 			}
 		}
 
+		responseBody, err = injectSTTSeconds(
+			responseBody,
+			int64(meta.RequestUsage.AudioInputTokens),
+		)
+		if err != nil {
+			return adaptor.DoResponseResult{
+				Usage: usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"inject_usage_seconds_failed",
+				http.StatusInternalServerError,
+			)
+		}
+
 		c.Writer.Header().Set("Content-Type", "application/json")
 	}
 
@@ -330,6 +345,13 @@ func processSSEResponse(
 	case relaymodel.SttSSEResponseTypeTranscriptTextDone:
 		if sseResponse.Usage != nil {
 			fullText.Reset()
+
+			// Only enrich the wire response; retain the original usage for legacy token accounting.
+			withSeconds, err := injectSTTSeconds(data, int64(meta.RequestUsage.AudioInputTokens))
+			if err == nil {
+				data = withSeconds
+			}
+
 			return data, sseResponse.Usage
 		}
 
@@ -341,6 +363,37 @@ func processSSEResponse(
 	default:
 		return data, nil
 	}
+}
+
+// injectSTTSeconds fills missing/invalid response seconds from server-measured audio duration.
+// It preserves upstream zero, token fields, unknown fields and numeric precision. The response
+// copy is separate from billing usage so duration-to-token accounting remains unchanged.
+func injectSTTSeconds(data []byte, seconds int64) ([]byte, error) {
+	node, err := common.GetJSONNodeNoCopy(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse STT response: %w", err)
+	}
+
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		_, err = node.SetAny("usage", map[string]int64{"seconds": max(0, seconds)})
+	} else {
+		secondsNode := usageNode.Get("seconds")
+		if secondsNode != nil && secondsNode.TypeSafe() == ast.V_NUMBER {
+			value, valueErr := secondsNode.Float64()
+			if valueErr == nil && value >= 0 && !math.IsInf(value, 0) && !math.IsNaN(value) {
+				return data, nil
+			}
+		}
+
+		_, err = usageNode.SetAny("seconds", max(0, seconds))
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("set STT seconds: %w", err)
+	}
+
+	return node.MarshalJSON()
 }
 
 // getTextFromResponse extracts text from SSE response or builder

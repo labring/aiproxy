@@ -51,7 +51,7 @@ const (
 
 type SttUsage struct {
 	Type              SttUsageType               `json:"type,omitempty"`
-	Seconds           int64                      `json:"seconds,omitempty"`
+	Seconds           int64                      `json:"seconds"`
 	InputTokens       int64                      `json:"input_tokens,omitempty"`
 	OutputTokens      int64                      `json:"output_tokens,omitempty"`
 	TotalTokens       int64                      `json:"total_tokens,omitempty"`

@@ -65,6 +65,14 @@ seconds must not interpret token totals as duration. Realtime usage is reported
 with `type=duration` and measured/upstream seconds, including when preflight
 duration accounting is disabled.
 
+Successful OpenAI-compatible JSON responses and `transcript.text.done` SSE events
+also include `usage.seconds`, even if the upstream usage only contains token
+fields. Valid upstream seconds, including zero, are preserved. Missing, null or
+negative seconds are filled from server-measured request audio duration; when no
+duration is available the response explicitly includes `seconds: 0`. Existing
+token fields, vendor-specific usage fields and internal token accounting are
+unchanged. Plain-text/subtitle formats do not gain a JSON usage envelope.
+
 DashScope realtime billing is retained from `result-generated` events because
 `task-finished` normally has `usage=null`. The duration is cumulative per task:
 keep the largest reported value instead of summing it across sentence events.
