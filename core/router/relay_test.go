@@ -26,4 +26,5 @@ func TestSetRelayRouterRegistersGeminiModelScopedOperationRoutes(t *testing.T) {
 	require.True(t, registered["GET /v1beta/files/*model"])
 	require.True(t, registered["POST /v1/responses/compact"])
 	require.True(t, registered["POST /v1/alpha/search"])
+	require.True(t, registered["POST /v1/decisions"])
 }

@@ -40,7 +40,7 @@ func (t *Timeout) ConvertRequest(
 	case mode.AudioTranscription,
 		mode.AudioTranslation:
 		meta.RequestTimeout = time.Minute * 5
-	case mode.Rerank:
+	case mode.Rerank, mode.Decisions:
 		meta.RequestTimeout = time.Minute * 3
 	case mode.ParsePdf:
 		meta.RequestTimeout = time.Minute * 3

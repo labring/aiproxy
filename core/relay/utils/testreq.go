@@ -39,6 +39,8 @@ func BuildRequest(modelConfig model.ModelConfig) (io.Reader, mode.Mode, error) {
 		return buildModelRequest(modelConfig.Model, mode.Moderations, BuildModerationsRequest)
 	case mode.Responses:
 		return buildModelRequest(modelConfig.Model, mode.Responses, BuildResponsesRequest)
+	case mode.Decisions:
+		return buildModelRequest(modelConfig.Model, mode.Decisions, BuildDecisionsRequest)
 	case mode.ImagesGenerations, mode.GeminiImage:
 		return buildModelConfigRequest(
 			modelConfig,
@@ -111,6 +113,19 @@ func marshalRequestReader(request any) (io.Reader, error) {
 	}
 
 	return bytes.NewReader(jsonBytes), nil
+}
+
+// BuildDecisionsRequest probes the Decisions endpoint with a native predicate,
+// so a successful chat completion cannot be mistaken for Decisions support.
+func BuildDecisionsRequest(model string) (io.Reader, error) {
+	return marshalRequestReader(relaymodel.DecisionRequest{
+		Model: model,
+		Input: "The package arrived with a broken screen.",
+		Questions: []relaymodel.DecisionQuestion{{
+			Type:         "predicate",
+			Instructions: "Does the customer report a damaged item?",
+		}},
+	})
 }
 
 func BuildChatCompletionRequest(model string) (io.Reader, error) {
