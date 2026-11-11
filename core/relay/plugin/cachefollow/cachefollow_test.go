@@ -189,6 +189,55 @@ func TestDoResponseRecordsPromptAndGenericMappingsForResponses(t *testing.T) {
 	assert.True(t, store.saved[0].ExpiresAt.Before(end.Add(5*time.Minute+time.Second)))
 }
 
+func TestDecisionsCacheWriteRecordsScopedPromptMapping(t *testing.T) {
+	t.Parallel()
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	store := &recordingStore{}
+	requestMeta := &meta.Meta{
+		Mode:           mode.Decisions,
+		OriginModel:    "decision-model",
+		PromptCacheKey: "decision-key",
+		ModelConfig: model.ModelConfig{
+			Model:  "decision-model",
+			Plugin: map[string]map[string]any{PluginName: {"enable": true}},
+		},
+		Group:   model.GroupCache{ID: "decision-group"},
+		Token:   model.TokenCache{ID: 7},
+		Channel: meta.ChannelMeta{ID: 9, Scope: model.ChannelScopeGroup},
+	}
+
+	_, relayErr := (&Plugin{}).DoResponse(
+		requestMeta,
+		store,
+		c,
+		&http.Response{StatusCode: http.StatusOK},
+		doResponseFunc{
+			fn: func(_ *meta.Meta, _ adaptor.Store, c *gin.Context, _ *http.Response) (adaptor.DoResponseResult, adaptor.Error) {
+				_, _ = c.Writer.Write(
+					[]byte(
+						`{"model":"decision-model","answers":[{"type":"predicate","name":null,"probability":1}]}`,
+					),
+				)
+
+				return adaptor.DoResponseResult{
+					Usage: model.Usage{InputTokens: 100, CacheCreationTokens: 80},
+				}, nil
+			},
+		},
+	)
+	require.Nil(t, relayErr)
+	require.Len(t, store.savedIfNotExist, 1)
+	require.Len(t, store.saved, 1)
+	require.Equal(t, model.ChannelScopeGroup, store.saveIfScope)
+	require.Equal(
+		t,
+		model.PromptCacheStoreID("decision-model", "decision-key", model.CacheKeyTypeStable),
+		store.savedIfNotExist[0].ID,
+	)
+	require.Equal(t, "decision-group", store.savedIfNotExist[0].GroupID)
+}
+
 func TestDoResponseRecordsPromptAndGenericMappingsForResponsesCompact(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

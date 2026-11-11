@@ -33,38 +33,42 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
-	m := adaptor.ModeFromMeta(mt)
-
-	return m == mode.ChatCompletions ||
-		m == mode.Completions ||
-		m == mode.Embeddings ||
-		m == mode.Moderations ||
-		m == mode.ImagesGenerations ||
-		m == mode.ImagesEdits ||
-		m == mode.AudioSpeech ||
-		m == mode.AudioTranscription ||
-		m == mode.AudioTranslation ||
-		m == mode.Rerank ||
-		m == mode.ParsePdf ||
-		m == mode.VideoGenerationsJobs ||
-		m == mode.VideoGenerationsGetJobs ||
-		m == mode.VideoGenerationsContent ||
-		m == mode.Videos ||
-		m == mode.VideosGet ||
-		m == mode.VideosContent ||
-		m == mode.VideosDelete ||
-		m == mode.VideosRemix ||
-		m == mode.VideosEdits ||
-		m == mode.VideosExtensions ||
-		m == mode.Anthropic ||
-		m == mode.Gemini ||
-		m == mode.Responses ||
-		m == mode.ResponsesCompact ||
-		m == mode.ResponsesGet ||
-		m == mode.ResponsesDelete ||
-		m == mode.ResponsesCancel ||
-		m == mode.ResponsesInputItems ||
-		m == mode.AlphaSearch
+	switch adaptor.ModeFromMeta(mt) {
+	case mode.ChatCompletions,
+		mode.Completions,
+		mode.Embeddings,
+		mode.Moderations,
+		mode.ImagesGenerations,
+		mode.ImagesEdits,
+		mode.AudioSpeech,
+		mode.AudioTranscription,
+		mode.AudioTranslation,
+		mode.Rerank,
+		mode.ParsePdf,
+		mode.VideoGenerationsJobs,
+		mode.VideoGenerationsGetJobs,
+		mode.VideoGenerationsContent,
+		mode.Videos,
+		mode.VideosGet,
+		mode.VideosContent,
+		mode.VideosDelete,
+		mode.VideosRemix,
+		mode.VideosEdits,
+		mode.VideosExtensions,
+		mode.Anthropic,
+		mode.Gemini,
+		mode.Responses,
+		mode.ResponsesCompact,
+		mode.ResponsesGet,
+		mode.ResponsesDelete,
+		mode.ResponsesCancel,
+		mode.ResponsesInputItems,
+		mode.AlphaSearch,
+		mode.Decisions:
+		return true
+	default:
+		return false
+	}
 }
 
 //nolint:gocyclo
@@ -76,6 +80,13 @@ func (a *Adaptor) GetRequestURL(
 	u := meta.Channel.BaseURL
 
 	switch meta.Mode {
+	case mode.Decisions:
+		requestURL, err := url.JoinPath(u, "/decisions")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{Method: http.MethodPost, URL: requestURL}, nil
 	case mode.AlphaSearch:
 		url, err := url.JoinPath(u, "/alpha/search")
 		if err != nil {
@@ -393,7 +404,7 @@ func (a *Adaptor) SetupRequestHeader(
 		}
 	}
 
-	if meta.Mode == mode.ResponsesCompact {
+	if meta.Mode == mode.ResponsesCompact || meta.Mode == mode.Decisions {
 		req.Header.Set("Accept", "application/json")
 	}
 
@@ -441,6 +452,8 @@ func ConvertRequest(
 	}
 
 	switch meta.Mode {
+	case mode.Decisions:
+		return ConvertDecisionsRequest(meta, req)
 	case mode.AlphaSearch:
 		return ConvertAlphaSearchRequest(meta, req)
 	case mode.Responses:
@@ -540,6 +553,8 @@ func doResponse(
 	options DoResponseOptions,
 ) (result adaptor.DoResponseResult, err adaptor.Error) {
 	switch meta.Mode {
+	case mode.Decisions:
+		result, err = DecisionsHandler(meta, c, resp)
 	case mode.AlphaSearch:
 		result, err = AlphaSearchHandler(meta, c, resp)
 	case mode.Responses:
@@ -726,7 +741,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `chat_upstream_protocol` selects auto, responses, or chat_completions for incoming Chat Completions requests\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
+		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, Responses API, and Decisions API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `chat_upstream_protocol` selects auto, responses, or chat_completions for incoming Chat Completions requests\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
 		ConfigSchema: ChatUpstreamProtocolConfigSchema(),
 		Models:       ModelList,
 	}

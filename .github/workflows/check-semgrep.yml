@@ -7,8 +7,11 @@ on:
   schedule:
     - cron: 0 0 * * *
   push:
+    # Full-repository scans on topic branches have no Semgrep baseline, so
+    # pre-existing findings reappear as blocking and fail the check. Pull
+    # request scans already cover branch changes; the schedule covers main.
     branches:
-      - "**"
+      - main
     tags:
       - "v*.*.*"
     paths-ignore:

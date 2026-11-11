@@ -917,6 +917,41 @@ ${modelConfig?.config?.support_voices?.length
 --header "Authorization: Bearer $token"`,
                 responseExample: 'No content'
             }
+        case 41:
+            return {
+                title: t('modeType.41'),
+                endpoint: '/decisions',
+                method: 'POST',
+                responseFormat: 'json',
+                requestExample: `curl --request POST \\
+--url ${apiEndpoint}/v1/decisions \\
+--header "Authorization: Bearer $token" \\
+--header 'Content-Type: application/json' \\
+--data '{
+  "model": "${modelConfig.model}",
+  "input": "The package arrived with a broken screen.",
+  "questions": [
+    {
+      "type": "predicate",
+      "name": "damaged",
+      "instructions": "Does the customer report a damaged item?"
+    }
+  ]
+}'`,
+                responseExample: `{
+  "model": "${modelConfig.model}",
+  "answers": [
+    { "type": "predicate", "name": "damaged", "probability": 0.95 }
+  ],
+  "usage": {
+    "input_tokens": 42,
+    "input_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
+    "output_tokens": 0,
+    "output_tokens_details": { "reasoning_tokens": 0 },
+    "total_tokens": 42
+  }
+}`
+            }
         default:
             return {
                 title: t('modeType.0'),
