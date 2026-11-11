@@ -147,8 +147,13 @@ func (a *Adaptor) GetRequestURL(
 			URL:    url,
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
-		// Check if model requires Responses API
-		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+		// Select the upstream protocol using the channel override before model detection.
+		useResponses, err := ShouldUseResponsesAPI(meta)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		if useResponses {
 			url, err := url.JoinPath(u, "/responses")
 			if err != nil {
 				return adaptor.RequestURL{}, err
@@ -251,6 +256,16 @@ func (a *Adaptor) GetRequestURL(
 		}, nil
 	case mode.Rerank:
 		url, err := url.JoinPath(u, "/rerank")
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		return adaptor.RequestURL{
+			Method: http.MethodPost,
+			URL:    url,
+		}, nil
+	case mode.ParsePdf:
+		url, err := url.JoinPath(u, "/parse/pdf")
 		if err != nil {
 			return adaptor.RequestURL{}, err
 		}
@@ -415,9 +430,10 @@ func (a *Adaptor) ConvertRequest(
 	return ConvertRequest(meta, store, req)
 }
 
+//nolint:gocyclo
 func ConvertRequest(
 	meta *meta.Meta,
-	_ adaptor.Store,
+	store adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
 	if req == nil {
@@ -441,10 +457,15 @@ func ConvertRequest(
 	case mode.Completions:
 		return ConvertCompletionsRequest(meta, req, patchOpenAIReasoningEffort(meta))
 	case mode.ChatCompletions:
-		// Check if model requires Responses API conversion
-		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+		useResponses, err := ShouldUseResponsesAPI(meta)
+		if err != nil {
+			return adaptor.ConvertResult{}, err
+		}
+
+		if useResponses {
 			return ConvertChatCompletionToResponsesRequest(meta, req)
 		}
+
 		return ConvertChatCompletionsRequest(meta, req, false, patchOpenAIReasoningEffort(meta))
 	case mode.Anthropic:
 		// Check if model requires Responses API conversion
@@ -462,6 +483,8 @@ func ConvertRequest(
 		return ConvertTTSRequest(meta, req, "")
 	case mode.Rerank:
 		return ConvertRerankRequest(meta, req)
+	case mode.ParsePdf:
+		return ConvertParsePdfRequest(meta, req)
 	case mode.VideoGenerationsJobs:
 		return ConvertVideoGenerationJobRequest(meta, req)
 	case mode.VideoGenerationsGetJobs:
@@ -553,6 +576,8 @@ func doResponse(
 		result, err = TTSHandler(meta, c, resp)
 	case mode.Rerank:
 		result, err = RerankHandler(meta, c, resp)
+	case mode.ParsePdf:
+		result, err = ParsePdfHandler(meta, c, resp)
 	case mode.Moderations:
 		result, err = ModerationsHandler(meta, c, resp)
 	case mode.Embeddings:
@@ -578,8 +603,15 @@ func doResponse(
 			}
 		}
 
-		// Check if model required Responses API conversion
-		if IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+		// Use the same protocol decision as URL and request conversion.
+		useResponses, configErr := ShouldUseResponsesAPI(meta)
+		if configErr != nil {
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+				configErr, "load_channel_config_failed", http.StatusInternalServerError,
+			)
+		}
+
+		if useResponses {
 			// Convert Responses API response back to ChatCompletion format
 			if utils.IsStreamResponse(resp) {
 				result, err = ConvertResponsesToChatCompletionStreamResponse(meta, c, resp)
@@ -694,8 +726,8 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
-		ConfigSchema: ConfigSchema(),
+		Readme:       "OpenAI native API\nSupports chat, completions, embeddings, moderations, image, audio, rerank, PDF parsing, video generation, and Responses API\nAlso supports Anthropic-compatible and Gemini-compatible request conversion on top of the OpenAI endpoint\nChannel config `chat_upstream_protocol` selects auto, responses, or chat_completions for incoming Chat Completions requests\nChannel config `responses_first_event_timeout` sets the maximum seconds to wait for the first effective Responses stream event\nChannel config `map_reasoning_to_reasoning_content` rewrites upstream `reasoning` fields to `reasoning_content` in chat completion responses",
+		ConfigSchema: ChatUpstreamProtocolConfigSchema(),
 		Models:       ModelList,
 	}
 }

@@ -13,6 +13,7 @@ import (
 	mcpservers "github.com/labring/aiproxy/mcp-servers"
 	"github.com/labring/aiproxy/openapi-mcp/convert"
 	"github.com/mark3labs/mcp-go/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 type EndpointProvider interface {
@@ -46,7 +47,7 @@ func handleSSEMCPServer(
 	defer cancel()
 
 	// Start message processing goroutine
-	go processMCPSSEMpscMessages(ctx, newSession, server)
+	go processMCPSSEMpscMessages(ctx, cancel, newSession, server)
 
 	// Handle SSE connection
 	server.ServeHTTP(c.Writer, c.Request)
@@ -55,6 +56,7 @@ func handleSSEMCPServer(
 // processMCPSSEMpscMessages handles message processing for OpenAPI
 func processMCPSSEMpscMessages(
 	ctx context.Context,
+	cancel context.CancelFunc,
 	sessionID string,
 	server *mcpproxy.SSEServer,
 ) {
@@ -70,7 +72,13 @@ func processMCPSSEMpscMessages(
 			}
 
 			if err := server.HandleMessage(ctx, data); err != nil {
-				continue
+				// The response could not be queued on the SSE stream, so the
+				// client would wait for it forever. Close the session so the
+				// client reconnects instead of silently losing the response.
+				log.Errorf("mcp sse session %s: closing session: %v", sessionID, err)
+				cancel()
+
+				return
 			}
 		}
 	}

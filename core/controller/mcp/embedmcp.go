@@ -465,7 +465,7 @@ func handleTestEmbedMCPServer(c *gin.Context, s mcpservers.Server) {
 	defer cancel()
 
 	// Start message processing goroutine
-	go processMCPSSEMpscMessages(ctx, newSession, server)
+	go processMCPSSEMpscMessages(ctx, cancel, newSession, server)
 
 	// Handle SSE connection
 	server.ServeHTTP(c.Writer, c.Request)

@@ -1,14 +1,17 @@
 package openai
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/labring/aiproxy/core/relay/meta"
+	"github.com/labring/aiproxy/core/relay/mode"
 )
 
 const defaultResponsesFirstEventTimeoutSeconds uint32 = 2
 
 type Config struct {
+	ChatUpstreamProtocol           string `json:"chat_upstream_protocol"`
 	MapReasoningToReasoningContent bool   `json:"map_reasoning_to_reasoning_content"`
 	ResponsesFirstEventTimeout     uint32 `json:"responses_first_event_timeout"`
 }
@@ -27,6 +30,22 @@ func defaultConfig() Config {
 // ConfigSchema returns the channel configuration schema shared by OpenAI-compatible adaptors.
 func ConfigSchema() map[string]any {
 	return configSchema()
+}
+
+// ChatUpstreamProtocolConfigSchema exposes protocol selection only on adaptors
+// that use the complete OpenAI request and response conversion path.
+func ChatUpstreamProtocolConfigSchema() map[string]any {
+	schema := configSchema()
+	properties, _ := schema["properties"].(map[string]any)
+	properties["chat_upstream_protocol"] = map[string]any{
+		"type":        "string",
+		"title":       "Chat upstream protocol",
+		"description": "Upstream protocol for incoming Chat Completions requests. Explicit choices override model type and model-name detection for every model on this channel. Other incoming endpoints are unchanged. The upstream must support the selected protocol.",
+		"enum":        []string{"auto", "responses", "chat_completions"},
+		"default":     "auto",
+	}
+
+	return schema
 }
 
 func (c Config) responsesFirstEventTimeout() time.Duration {
@@ -99,4 +118,32 @@ func (a *Adaptor) getChatCompletionResponsePreHandlers(
 	return StreamReasoningToReasoningContentPreHandler,
 		ReasoningToReasoningContentPreHandler,
 		nil
+}
+
+// ShouldUseResponsesAPI selects the upstream protocol for the current channel.
+// Explicit channel settings only override Chat Completions requests; other modes
+// retain their existing model-based behavior. Read the selected channel snapshot
+// directly so retries cannot reuse a protocol decision from a previous channel.
+func ShouldUseResponsesAPI(mt *meta.Meta) (bool, error) {
+	if mt.Mode == mode.ChatCompletions {
+		cfg := defaultConfig()
+		if err := mt.ChannelConfigs.LoadConfig(&cfg); err != nil {
+			return false, fmt.Errorf("load channel config: %w", err)
+		}
+
+		switch cfg.ChatUpstreamProtocol {
+		case "", "auto":
+		case "responses":
+			return true, nil
+		case "chat_completions":
+			return false, nil
+		default:
+			return false, fmt.Errorf(
+				"invalid chat_upstream_protocol %q: expected auto, responses, or chat_completions",
+				cfg.ChatUpstreamProtocol,
+			)
+		}
+	}
+
+	return IsResponsesOnlyModelAny(&mt.ModelConfig, mt.OriginModel, mt.ActualModel), nil
 }

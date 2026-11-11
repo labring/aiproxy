@@ -1520,6 +1520,7 @@ func StreamHandler(
 	webSearchQueries := map[string]struct{}{}
 	webSearchGrounded := false
 	webSearchGemini3 := isGemini3Meta(meta)
+	toolCallIndexes := make(map[int]int)
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -1541,6 +1542,13 @@ func StreamHandler(
 		}
 
 		response := streamResponseChat2OpenAI(meta, &geminiResponse)
+		for _, choice := range response.Choices {
+			for i := range choice.Delta.ToolCalls {
+				choice.Delta.ToolCalls[i].Index = toolCallIndexes[choice.Index]
+				toolCallIndexes[choice.Index]++
+			}
+		}
+
 		if response.Usage != nil {
 			usage = geminiResponse.UsageMetadata.ToModelUsage()
 		}
