@@ -30,7 +30,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 		KeyHelp: "Use a Sealos AI Proxy API key",
 		Readme: "Sealos AIProxy OpenAI-compatible API\n" +
 			"Configure model IDs available to your API key; GET /v1/models lists accessible models\n" +
-			"Supports Anthropic/Gemini request conversion\n" +
+			"Supports Anthropic/Gemini request conversion and PDF parsing relay (/v1/parse/pdf)\n" +
 			"Endpoint: " + a.DefaultBaseURL(),
 		ConfigSchema: openai.ConfigSchema(),
 	}
