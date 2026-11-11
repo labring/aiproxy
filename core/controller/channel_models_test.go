@@ -177,7 +177,11 @@ func TestGetChannelModelsUnsupported(t *testing.T) {
 	controller.GetChannelModels(c)
 
 	require.Equal(t, http.StatusNotImplemented, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "model catalog is unsupported for this channel type")
+	require.Contains(
+		t,
+		recorder.Body.String(),
+		"model catalog is unsupported for this channel type",
+	)
 }
 
 func TestGetChannelModelsReadsAIProxyGateway(t *testing.T) {
