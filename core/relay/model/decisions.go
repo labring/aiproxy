@@ -18,8 +18,8 @@ type DecisionQuestion struct {
 	Type         string               `json:"type"              enums:"predicate,choice,score" binding:"required"`
 	Instructions any                  `json:"instructions"                                     binding:"required"`
 	Name         *string              `json:"name,omitempty"`
-	Choices      []DecisionChoice     `json:"choices,omitempty"                                                    binding:"omitempty,min=2,max=255"`
-	Levels       []DecisionScoreLevel `json:"levels,omitempty"                                                     binding:"omitempty,min=2,max=10"`
+	Choices      []DecisionChoice     `json:"choices,omitempty"                                binding:"omitempty,min=2,max=255"`
+	Levels       []DecisionScoreLevel `json:"levels,omitempty"                                 binding:"omitempty,min=2,max=10"`
 }
 
 type DecisionChoice struct {
