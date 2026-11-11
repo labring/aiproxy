@@ -142,6 +142,44 @@ func TestGetChannelModels(t *testing.T) {
 	require.NotContains(t, failureRecorder.Body.String(), "upstream detail")
 }
 
+func TestGetChannelModelsUnsupported(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "unsupported-models.db"))
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+
+	previousDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+	})
+
+	channel := &model.Channel{
+		Type:   model.ChannelTypeBaidu,
+		Status: model.ChannelStatusEnabled,
+	}
+	require.NoError(t, db.Create(channel).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: strconv.Itoa(channel.ID)}}
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/channel/"+strconv.Itoa(channel.ID)+"/models",
+		nil,
+	)
+
+	controller.GetChannelModels(c)
+
+	require.Equal(t, http.StatusNotImplemented, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "model catalog is unsupported for this channel type")
+}
+
 func TestGetChannelModelsReadsAIProxyGateway(t *testing.T) {
 	db, err := model.OpenSQLite(filepath.Join(t.TempDir(), "channel-models.db"))
 	require.NoError(t, err)

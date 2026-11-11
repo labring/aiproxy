@@ -92,6 +92,7 @@ type ChannelModel struct {
 //	@Failure		404	{object}	middleware.APIResponse
 //	@Failure		422	{object}	middleware.APIResponse
 //	@Failure		500	{object}	middleware.APIResponse
+//	@Failure		501	{object}	middleware.APIResponse
 //	@Failure		502	{object}	middleware.APIResponse
 //	@Failure		504	{object}	middleware.APIResponse
 //	@Router			/api/channel/{id}/models [get]
@@ -115,19 +116,19 @@ func GetChannelModels(c *gin.Context) {
 	}
 
 	if modelcatalog.IsUnsupportedType(channel.Type) {
-		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
+		middleware.ErrorResponse(c, http.StatusNotImplemented, modelcatalog.UnsupportedMessage)
 		return
 	}
 
 	channelAdaptor, ok := adaptors.GetAdaptor(channel.Type)
 	if !ok {
-		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
+		middleware.ErrorResponse(c, http.StatusNotImplemented, modelcatalog.UnsupportedMessage)
 		return
 	}
 
 	lister, ok := channelAdaptor.(adaptor.ModelCatalogLister)
 	if !ok {
-		middleware.ErrorResponse(c, http.StatusUnprocessableEntity, modelcatalog.UnsupportedMessage)
+		middleware.ErrorResponse(c, http.StatusNotImplemented, modelcatalog.UnsupportedMessage)
 		return
 	}
 

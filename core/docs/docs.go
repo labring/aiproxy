@@ -387,6 +387,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/middleware.APIResponse"
                         }
                     },
+                    "501": {
+                        "description": "Not Implemented",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
