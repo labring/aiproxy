@@ -22,10 +22,12 @@ At least one search engine must be configured with valid API credentials:
 
 - `google_api_key`: Your Google Custom Search API key
 - `google_cx`: Your Google Custom Search Engine ID
+- `google_base_url` (optional): Custom Search JSON API endpoint, default `https://www.googleapis.com/customsearch/v1`
 
 #### Bing Search
 
 - `bing_api_key`: Your Bing Search API key
+- `bing_base_url` (optional): Bing Web Search v7 endpoint, default `https://api.bing.microsoft.com/v7.0/search`
 
 #### Bing CN Search
 

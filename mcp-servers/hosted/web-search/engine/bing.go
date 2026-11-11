@@ -13,14 +13,24 @@ import (
 	"github.com/bytedance/sonic"
 )
 
+// DefaultBingBaseURL is the Bing Web Search v7 endpoint used when no base URL is set
+const DefaultBingBaseURL = "https://api.bing.microsoft.com/v7.0/search"
+
 type BingEngine struct {
-	apiKey string
-	client *http.Client
+	apiKey  string
+	baseURL string
+	client  *http.Client
 }
 
-func NewBingEngine(apiKey string) *BingEngine {
+// NewBingEngine creates a Bing engine; an empty baseURL uses DefaultBingBaseURL
+func NewBingEngine(apiKey, baseURL string) *BingEngine {
+	if baseURL == "" {
+		baseURL = DefaultBingBaseURL
+	}
+
 	return &BingEngine{
-		apiKey: apiKey,
+		apiKey:  apiKey,
+		baseURL: strings.TrimRight(baseURL, "/"),
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -53,7 +63,7 @@ func (b *BingEngine) Search(ctx context.Context, query SearchQuery) ([]SearchRes
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		"https://api.bing.microsoft.com/v7.0/search?"+querys.Encode(),
+		b.baseURL+"?"+querys.Encode(),
 		nil,
 	)
 	if err != nil {
