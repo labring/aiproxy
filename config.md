@@ -55,6 +55,52 @@ channels:
       - "default"
 ```
 
+#### Chat Completions Upstream Protocol
+
+OpenAI and Azure channels support `configs.chat_upstream_protocol` for incoming
+`POST /v1/chat/completions` requests:
+
+| Value | Behavior |
+| --- | --- |
+| `auto` (default, also used when omitted or empty) | Keep existing model-type and model-name detection. |
+| `responses` | Convert every Chat Completions request on this channel to the upstream Responses API. |
+| `chat_completions` | Use the upstream Chat Completions API, overriding model-type and model-name detection. |
+
+For example, two OpenAI channels can serve the same public model differently:
+
+```json
+[
+  {
+    "name": "channel-a",
+    "type": 1,
+    "models": ["gpt-5"],
+    "configs": { "chat_upstream_protocol": "responses" }
+  },
+  {
+    "name": "channel-b",
+    "type": 1,
+    "models": ["gpt-5"],
+    "configs": { "chat_upstream_protocol": "chat_completions" }
+  }
+]
+```
+
+Add the appropriate `base_url` and `key` to each channel. Explicit channel settings
+have priority over both the model configuration and the built-in model-name list,
+including names produced by `model_mapping`. The choice is evaluated again for the
+selected channel when a request retries on another channel.
+
+The Responses path converts request bodies and both JSON and SSE responses, so
+callers continue to receive Chat Completions responses. Existing conversion limits
+still apply: `n > 1` is rejected and `store` is forced to `false`. The selected
+upstream must support the chosen API; this setting does not probe or negotiate
+upstream capabilities.
+
+The option applies to every model on the channel. It does not change native
+`/v1/responses`, legacy `/v1/completions`, or other incoming endpoints. Other vendor
+adaptors may implement their own conversion paths; use an OpenAI channel for a
+custom OpenAI-compatible upstream that needs this option.
+
 #### Channel Type Names
 
 You can use either `type_name` (human-readable string) or `type` (numeric code). Using `type_name` is recommended for better readability:

@@ -44,7 +44,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 			azure.DefaultAPIVersion,
 		),
 		KeyHelp:      "key or key|api-version",
-		ConfigSchema: openai.ConfigSchema(),
+		ConfigSchema: openai.ChatUpstreamProtocolConfigSchema(),
 		Models:       openai.ModelList,
 	}
 }
