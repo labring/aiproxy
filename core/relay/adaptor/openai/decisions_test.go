@@ -162,17 +162,33 @@ func TestDecisionsRelayPreservesNativeContract(t *testing.T) {
 	}
 }
 
-func TestDecisionsErrorsPreserveOpenAIEnvelope(t *testing.T) {
+func TestDecisionsErrorsUseOpenAIErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
-		name   string
-		status int
-		body   string
-		code   any
+		name     string
+		status   int
+		body     string
+		wantJSON string
+		code     any
 	}{
-		{"bad request", http.StatusBadRequest, `{"error":{"message":"Missing questions","type":"invalid_request_error","param":"questions","code":null}}`, nil},
-		{"rate limit", http.StatusTooManyRequests, `{"error":{"message":"Slow down","type":"rate_limit_error","param":null,"code":"rate_limit_exceeded","future_field":true},"request_id":"req_123"}`, "rate_limit_exceeded"},
+		{
+			name:   "bad request",
+			status: http.StatusBadRequest,
+			body:   `{"error":{"message":"Missing questions","type":"invalid_request_error","param":"questions","code":null}}`,
+			wantJSON: `{"error":{"message":"Missing questions",` +
+				`"type":"invalid_request_error","param":"questions"}}`,
+			code: nil,
+		},
+		{
+			name:   "rate limit",
+			status: http.StatusTooManyRequests,
+			body: `{"error":{"message":"Slow down","type":"rate_limit_error","param":null,` +
+				`"code":"rate_limit_exceeded","future_field":true},"request_id":"req_123"}`,
+			wantJSON: `{"error":{"message":"Slow down",` +
+				`"type":"rate_limit_error","code":"rate_limit_exceeded"}}`,
+			code: "rate_limit_exceeded",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -186,12 +202,11 @@ func TestDecisionsErrorsPreserveOpenAIEnvelope(t *testing.T) {
 			require.Equal(t, tt.status, relayErr.StatusCode())
 			encoded, err := json.Marshal(relayErr)
 			require.NoError(t, err)
-			require.JSONEq(t, tt.body, string(encoded))
+			require.JSONEq(t, tt.wantJSON, string(encoded))
 
 			provider, ok := relayErr.(adaptor.ErrorCodeProvider)
 			require.True(t, ok)
 			require.Equal(t, tt.code, provider.ErrorCode())
-			require.Contains(t, relayErr.Error(), tt.body)
 		})
 	}
 }
@@ -469,6 +484,7 @@ func TestDecisionsRelayQuestionBoundaries(t *testing.T) {
 			require.NoError(t, err)
 
 			status := http.StatusOK
+			errorBody := ""
 			answer := `{"type":"predicate","name":null,"probability":0.5}`
 
 			if tt.kind == "choices" || tt.kind == "levels" {
@@ -521,6 +537,10 @@ func TestDecisionsRelayQuestionBoundaries(t *testing.T) {
 				status = http.StatusBadRequest
 				responseBody = fmt.Sprintf(
 					`{"error":{"message":"Invalid %s count","type":"invalid_request_error","param":"questions","code":null}}`,
+					tt.kind,
+				)
+				errorBody = fmt.Sprintf(
+					`{"error":{"message":"Invalid %s count","type":"invalid_request_error","param":"questions"}}`,
 					tt.kind,
 				)
 			}
@@ -576,7 +596,7 @@ func TestDecisionsRelayQuestionBoundaries(t *testing.T) {
 				require.Equal(t, status, relayErr.StatusCode())
 				data, marshalErr := relayErr.MarshalJSON()
 				require.NoError(t, marshalErr)
-				require.JSONEq(t, responseBody, string(data))
+				require.JSONEq(t, errorBody, string(data))
 				require.Empty(t, recorder.Body.String())
 			}
 		})

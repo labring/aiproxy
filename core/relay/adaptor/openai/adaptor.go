@@ -33,15 +33,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 }
 
 func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
-	m := adaptor.ModeFromMeta(mt)
-	if m == mode.Decisions {
-		// Do not advertise a new OpenAI endpoint on every provider embedding this adaptor.
-		return mt.Channel.Type == model.ChannelTypeOpenAI ||
-			mt.Channel.Type == model.ChannelTypeAIProxyHZH ||
-			mt.Channel.Type == model.ChannelTypeAIProxyUSW1
-	}
-
-	switch m {
+	switch adaptor.ModeFromMeta(mt) {
 	case mode.ChatCompletions,
 		mode.Completions,
 		mode.Embeddings,
@@ -71,7 +63,8 @@ func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 		mode.ResponsesDelete,
 		mode.ResponsesCancel,
 		mode.ResponsesInputItems,
-		mode.AlphaSearch:
+		mode.AlphaSearch,
+		mode.Decisions:
 		return true
 	default:
 		return false

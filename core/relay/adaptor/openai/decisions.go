@@ -74,22 +74,6 @@ func DecisionsHandler(
 	}
 
 	if !adaptor.IsSuccessfulResponseStatus(mode.Decisions, resp.StatusCode) {
-		var failure struct {
-			Error *relaymodel.OpenAIError `json:"error"`
-		}
-
-		// Preserve null code/param values and additional native error fields while
-		// still exposing the error code to the existing retry/monitor pipeline.
-		if err := sonic.Unmarshal(body, &failure); err == nil && failure.Error != nil {
-			return adaptor.DoResponseResult{}, adaptor.NewError(
-				resp.StatusCode,
-				decisionsErrorResponse{
-					RawMessage: body,
-					code:       failure.Error.Code,
-				},
-			)
-		}
-
 		return adaptor.DoResponseResult{}, ErrorHanlderWithBody(resp.StatusCode, body)
 	}
 
@@ -123,19 +107,4 @@ func DecisionsHandler(
 	_, _ = c.Writer.Write(body)
 
 	return adaptor.DoResponseResult{Usage: response.Usage.ToModelUsage()}, nil
-}
-
-// decisionsErrorResponse keeps OpenAI's error JSON intact, including nulls and
-// extension fields, without losing the error code used for relay retries.
-type decisionsErrorResponse struct {
-	json.RawMessage
-	code any
-}
-
-func (e decisionsErrorResponse) ErrorCode() any {
-	return e.code
-}
-
-func (e decisionsErrorResponse) String() string {
-	return string(e.RawMessage)
 }

@@ -24,6 +24,9 @@ func TestDecisionsModeAndChannelCompatibility(t *testing.T) {
 	require.False(t, middleware.CheckRelayMode(mode.ChatCompletions, mode.Decisions))
 	require.False(t, middleware.CheckRelayMode(mode.Responses, mode.Decisions))
 
+	// Decisions follows the same support rules as other native OpenAI modes:
+	// adaptors embedding the OpenAI adaptor inherit it, while vendors with an
+	// explicit SupportMode list (Deepseek) and non-OpenAI adaptors exclude it.
 	for _, tt := range []struct {
 		channelType model.ChannelType
 		supported   bool
@@ -31,7 +34,7 @@ func TestDecisionsModeAndChannelCompatibility(t *testing.T) {
 		{model.ChannelTypeOpenAI, true},
 		{model.ChannelTypeAIProxyHZH, true},
 		{model.ChannelTypeAIProxyUSW1, true},
-		{model.ChannelTypeOpenRouter, false},
+		{model.ChannelTypeOpenRouter, true},
 		{model.ChannelTypeDeepseek, false},
 		{model.ChannelTypeAnthropic, false},
 	} {

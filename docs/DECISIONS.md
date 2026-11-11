@@ -1,7 +1,8 @@
 # OpenAI Decisions API
 
-AIProxy exposes the native `POST /v1/decisions` endpoint on OpenAI channels
-(type `1`) and Sealos AIProxy channels. The public request and response follow the
+AIProxy exposes the native `POST /v1/decisions` endpoint on OpenAI-compatible
+channels, following the same per-channel support rules as other native endpoints.
+The public request and response follow the
 [OpenAI Decisions API](https://developers.openai.com/api/docs/guides/decisions).
 
 ## Configure a model
