@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     Select,
@@ -123,11 +124,60 @@ interface SchemaFieldProps {
     onValueChange: (path: string[], value: unknown) => void
 }
 
+/** Edit named enum overrides without converting an object into a string. */
+function EnumMapField({ schema, path, rootValue, onValueChange }: SchemaFieldProps) {
+    const choices = schema.additionalProperties?.enum || []
+    const [name, setName] = useState('')
+    const [protocol, setProtocol] = useState(choices[0] || '')
+    const current = getAtPath(rootValue, path)
+    const entries = current && typeof current === 'object' && !Array.isArray(current)
+        ? current as ConfigObject
+        : {}
+    const trimmedName = name.trim()
+    const { t } = useTranslation()
+
+    return (
+        <div className="space-y-2 rounded-lg border p-3">
+            <Label>{schema.title || path[path.length - 1]}</Label>
+            {schema.description && <p className="text-xs text-muted-foreground">{schema.description}</p>}
+            {Object.entries(entries).map(([model, value]) => (
+                <div key={model} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 break-all text-sm">{model}</span>
+                    <Select value={typeof value === 'string' ? value : ''}
+                        onValueChange={(next) => onValueChange(path, { ...entries, [model]: next })}>
+                        <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                        <SelectContent>{choices.map((choice) => <SelectItem key={choice} value={choice}>{choice}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" aria-label={`${t('common.delete')} ${model}`}
+                        onClick={() => onValueChange(path, Object.fromEntries(Object.entries(entries).filter(([key]) => key !== model)))}>
+                        ×
+                    </Button>
+                </div>
+            ))}
+            <div className="flex gap-2">
+                <Input aria-label={t('channel.dialog.models')} value={name} onChange={(event) => setName(event.target.value)} />
+                <Select value={protocol} onValueChange={setProtocol}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>{choices.map((choice) => <SelectItem key={choice} value={choice}>{choice}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button type="button" variant="outline" disabled={!trimmedName || Object.prototype.hasOwnProperty.call(entries, trimmedName)}
+                    onClick={() => { onValueChange(path, { ...entries, [trimmedName]: protocol }); setName('') }}>
+                    {t('channel.defaultModels.add')}
+                </Button>
+            </div>
+        </div>
+    )
+}
+
 function SchemaField({ schema, path, rootValue, onValueChange }: SchemaFieldProps) {
     const key = path[path.length - 1]
     const title = schema.title || key
     const description = schema.description
     const currentValue = getAtPath(rootValue, path)
+
+    if (schema.type === 'object' && schema.additionalProperties?.enum) {
+        return <EnumMapField schema={schema} path={path} rootValue={rootValue} onValueChange={onValueChange} />
+    }
 
     if (schema.type === 'object' && schema.properties) {
         return (

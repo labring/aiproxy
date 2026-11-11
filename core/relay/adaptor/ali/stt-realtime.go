@@ -2,21 +2,25 @@ package ali
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
 	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/labring/aiproxy/core/relay/utils"
 )
 
 type STTMessage struct {
@@ -64,39 +68,17 @@ type STTSentence struct {
 }
 
 type STTUsage struct {
-	Characters int64 `json:"characters"`
+	Duration   float64 `json:"duration"`
+	Characters int64   `json:"characters"`
 }
 
 func ConvertSTTRequest(
 	meta *meta.Meta,
 	request *http.Request,
 ) (adaptor.ConvertResult, error) {
-	err := common.ParseMultipartFormWithLimit(request)
+	audioData, format, sampleRate, err := prepareSTTAudio(meta, request, true)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
-	}
-
-	audioFile, _, err := request.FormFile("file")
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	audioData, err := io.ReadAll(audioFile)
-	if err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	format := "mp3"
-	if request.FormValue("format") != "" {
-		format = request.FormValue("format")
-	}
-
-	sampleRate := 24000
-	if request.FormValue("sample_rate") != "" {
-		sampleRate, err = strconv.Atoi(request.FormValue("sample_rate"))
-		if err != nil {
-			return adaptor.ConvertResult{}, err
-		}
 	}
 
 	sttRequest := STTMessage{
@@ -128,38 +110,86 @@ func ConvertSTTRequest(
 
 	return adaptor.ConvertResult{
 		Header: http.Header{
-			"X-DashScope-DataInspection": {"enable"},
+			"Content-Type": {"application/json"},
 		},
 		Body: bytes.NewReader(data),
 	}, nil
 }
 
+// STTDoRequest opens the selected channel's WebSocket using its proxy/TLS
+// settings and a bounded deadline. Failed setup never leaves a connection open.
 func STTDoRequest(meta *meta.Meta, req *http.Request) (*http.Response, error) {
-	wsURL := req.URL
-	wsURL.Scheme = "wss"
+	wsURL := *req.URL
+	switch wsURL.Scheme {
+	case "https":
+		wsURL.Scheme = "wss"
+	case "http":
+		wsURL.Scheme = "ws"
+	}
 
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL.String(), req.Header)
+	client, err := utils.LoadHTTPClientWithTLSConfigE(
+		meta.RequestTimeout,
+		meta.Channel.ProxyURL,
+		meta.Channel.SkipTLSVerify,
+	)
 	if err != nil {
+		return nil, err
+	}
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("unsupported STT HTTP transport")
+	}
+	// Clone synchronizes the transport's lazy HTTP/2 initialization before
+	// inspecting TLS settings shared with concurrent HTTP requests.
+	transport = transport.Clone()
+	// HTTP transports may advertise h2. Gorilla's upgrade handshake requires
+	// HTTP/1.1; clone the config so this does not alter the shared HTTP client.
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	if transport.TLSClientConfig != nil {
+		tlsConfig = transport.TLSClientConfig.Clone()
+	}
+
+	tlsConfig.NextProtos = []string{"http/1.1"}
+	dialer := websocket.Dialer{
+		Proxy: transport.Proxy, NetDialContext: transport.DialContext,
+		TLSClientConfig: tlsConfig, HandshakeTimeout: 10 * time.Second,
+	}
+
+	conn, resp, err := dialer.DialContext(req.Context(), wsURL.String(), req.Header)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+
+	timeout := meta.RequestTimeout
+	if timeout <= 0 {
+		timeout = time.Minute
+	}
+
+	deadline := time.Now().Add(timeout)
+	if d, ok := req.Context().Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+
+	_ = conn.SetReadDeadline(deadline)
+	_ = conn.SetWriteDeadline(deadline)
+	conn.SetReadLimit(4 * 1024 * 1024)
+
+	data, err := io.ReadAll(req.Body)
+	if err == nil {
+		err = conn.WriteMessage(websocket.TextMessage, data)
+	}
+	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 
 	meta.Set("ws_conn", conn)
 
-	jsonWriter, err := conn.NextWriter(websocket.TextMessage)
-	if err != nil {
-		return nil, err
-	}
-	defer jsonWriter.Close()
-
-	_, err = io.Copy(jsonWriter, req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(nil),
-	}, nil
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(nil))}, nil
 }
 
 func STTDoResponse(
@@ -183,7 +213,11 @@ func STTDoResponse(
 	}
 	defer conn.Close()
 
+	stop := context.AfterFunc(c.Request.Context(), func() { _ = conn.Close() })
+	defer stop()
+
 	output := strings.Builder{}
+	started := false
 
 	usage := model.Usage{
 		InputTokens:      meta.RequestUsage.InputTokens,
@@ -222,62 +256,18 @@ func STTDoResponse(
 
 		switch msg.Header.Event {
 		case "task-started":
-			chunkSize := 3 * 1024
-			for i := 0; i < len(audioData); i += chunkSize {
-				end := min(i+chunkSize, len(audioData))
+			if started {
+				continue
+			}
 
-				chunk := audioData[i:end]
-
-				err = conn.WriteMessage(websocket.BinaryMessage, chunk)
-				if err != nil {
-					responseErr := relaymodel.WrapperOpenAIErrorWithMessage(
-						"ali_wss_write_msg_failed",
-						nil,
-						http.StatusInternalServerError,
-					)
-
-					return adaptor.DoResponseResult{
-						Usage: usage,
-					}, responseErr
+			started = true
+			// Read results while writing audio: upstream buffers may otherwise
+			// fill and deadlock both peers on longer recordings.
+			go func() {
+				if err := sendSTTAudio(conn, taskID, audioData); err != nil {
+					_ = conn.Close()
 				}
-			}
-
-			finishMsg := STTMessage{
-				Header: STTHeader{
-					Action:    "finish-task",
-					TaskID:    taskID,
-					Streaming: "duplex",
-				},
-				Payload: STTPayload{
-					Input: STTInput{},
-				},
-			}
-
-			finishData, err := sonic.Marshal(finishMsg)
-			if err != nil {
-				responseErr := relaymodel.WrapperOpenAIErrorWithMessage(
-					"ali_wss_write_msg_failed",
-					nil,
-					http.StatusInternalServerError,
-				)
-
-				return adaptor.DoResponseResult{
-					Usage: usage,
-				}, responseErr
-			}
-
-			err = conn.WriteMessage(websocket.TextMessage, finishData)
-			if err != nil {
-				responseErr := relaymodel.WrapperOpenAIErrorWithMessage(
-					"ali_wss_write_msg_failed",
-					nil,
-					http.StatusInternalServerError,
-				)
-
-				return adaptor.DoResponseResult{
-					Usage: usage,
-				}, responseErr
-			}
+			}()
 		case "result-generated":
 			if msg.Payload.Output.STTSentence.EndTime != nil &&
 				msg.Payload.Output.STTSentence.Text != "" {
@@ -286,22 +276,23 @@ func STTDoResponse(
 
 			continue
 		case "task-finished":
-			sttUsage := relaymodel.SttUsage{
-				Type:         relaymodel.SttUsageTypeTokens,
-				Seconds:      int64(meta.RequestUsage.AudioInputTokens),
-				InputTokens:  int64(meta.RequestUsage.AudioInputTokens),
-				OutputTokens: msg.Payload.Usage.Characters,
-				InputTokenDetails: &relaymodel.SttUsageInputTokenDetails{
-					AudioTokens: int64(meta.RequestUsage.AudioInputTokens),
-				},
-				TotalTokens: int64(
-					meta.RequestUsage.AudioInputTokens,
-				) + msg.Payload.Usage.Characters,
+			seconds := int64(meta.RequestUsage.AudioInputTokens)
+			if value, ok := meta.Get("stt_audio_seconds"); ok {
+				if duration, ok := value.(float64); ok {
+					seconds = int64(math.Ceil(duration))
+				}
 			}
-			c.JSON(http.StatusOK, gin.H{
-				"text":  output.String(),
-				"usage": sttUsage,
-			})
+
+			if msg.Payload.Usage.Duration > 0 {
+				seconds = int64(math.Ceil(msg.Payload.Usage.Duration))
+			}
+
+			sttUsage := relaymodel.SttUsage{
+				Type:        relaymodel.SttUsageTypeDuration,
+				Seconds:     seconds,
+				TotalTokens: seconds,
+			}
+			writeSTTResponse(c, output.String(), sttUsage)
 
 			return adaptor.DoResponseResult{Usage: sttUsage.ToModelUsage()}, nil
 		case "task-failed":
@@ -312,4 +303,23 @@ func STTDoResponse(
 			)
 		}
 	}
+}
+
+// sendSTTAudio has exclusive ownership of WebSocket writes after run-task.
+// Closing the connection on return from the reader also unblocks this writer.
+func sendSTTAudio(conn *websocket.Conn, taskID string, audio []byte) error {
+	const chunkSize = 3 * 1024
+	for offset := 0; offset < len(audio); offset += chunkSize {
+		if err := conn.WriteMessage(
+			websocket.BinaryMessage,
+			audio[offset:min(offset+chunkSize, len(audio))],
+		); err != nil {
+			return err
+		}
+	}
+
+	return conn.WriteJSON(STTMessage{
+		Header:  STTHeader{Action: "finish-task", TaskID: taskID, Streaming: "duplex"},
+		Payload: STTPayload{Input: STTInput{}},
+	})
 }
