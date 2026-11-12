@@ -60,6 +60,18 @@ func TestConvertClaudeToResponsesRequest(t *testing.T) {
 			validateContent:  true,
 		},
 		{
+			name: "claude request with string system prompt",
+			inputRequest: `{
+				"model": "gpt-5-codex",
+				"system": "You are a helpful assistant.",
+				"messages": [{"role": "user", "content": "Hello"}],
+				"max_tokens": 1024
+			}`,
+			expectedModel:    "gpt-5-codex",
+			expectedMessages: 2,
+			validateContent:  true,
+		},
+		{
 			name: "claude request with system and user messages",
 			inputRequest: `{
 				"model": "gpt-5-codex",
@@ -167,6 +179,65 @@ func TestConvertClaudeToResponsesRequest(t *testing.T) {
 			} else {
 				t.Errorf("Input is not an array, got type %T", responsesReq.Input)
 			}
+		})
+	}
+}
+
+func TestConvertClaudeRequestSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		system string
+		want   string
+	}{
+		{
+			name:   "string",
+			system: `"You are a helpful assistant."`,
+			want:   "You are a helpful assistant.",
+		},
+		{
+			name: "content blocks",
+			system: `[
+				{"type":"text","text":"First instruction"},
+				{"type":"text","text":"Second instruction"}
+			]`,
+			want: "First instruction\nSecond instruction",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages",
+				strings.NewReader(`{
+					"model":"claude",
+					"system":`+tt.system+`,
+					"messages":[{"role":"user","content":"Hello"}],
+					"max_tokens":128,
+					"stream":true
+				}`),
+			)
+			req.Header.Set("Content-Type", "application/json")
+
+			result, err := openai.ConvertClaudeRequest(
+				&meta.Meta{ActualModel: "upstream-model"},
+				req,
+			)
+			require.NoError(t, err)
+
+			var request relaymodel.GeneralOpenAIRequest
+
+			require.NoError(t, json.NewDecoder(result.Body).Decode(&request))
+			require.Len(t, request.Messages, 2)
+			assert.Equal(t, relaymodel.RoleSystem, request.Messages[0].Role)
+			assert.Equal(t, tt.want, request.Messages[0].Content)
+			assert.Equal(t, relaymodel.RoleUser, request.Messages[1].Role)
+			assert.Equal(t, "Hello", request.Messages[1].Content)
+			assert.Equal(t, "upstream-model", request.Model)
+			assert.Equal(t, 128, request.MaxTokens)
+			assert.True(t, request.Stream)
 		})
 	}
 }

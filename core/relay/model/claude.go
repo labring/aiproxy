@@ -1,6 +1,9 @@
 package model
 
 import (
+	"bytes"
+
+	"github.com/bytedance/sonic"
 	"github.com/labring/aiproxy/core/model"
 )
 
@@ -64,6 +67,30 @@ type ClaudeContent struct {
 	ToolUseID    string              `json:"tool_use_id,omitempty"`
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
 	Signature    string              `json:"signature,omitempty"`
+}
+
+// ClaudeSystemPrompt normalizes string and content-block system prompts to blocks.
+type ClaudeSystemPrompt []ClaudeContent
+
+// UnmarshalJSON accepts both Anthropic system formats while preserving block metadata.
+func (s *ClaudeSystemPrompt) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || data[0] != '"' {
+		return sonic.Unmarshal(data, (*[]ClaudeContent)(s))
+	}
+
+	var text string
+	if err := sonic.Unmarshal(data, &text); err != nil {
+		return err
+	}
+
+	// Empty prompts should not produce an invalid empty text block upstream.
+	*s = nil
+	if text != "" {
+		*s = ClaudeSystemPrompt{{Type: ClaudeContentTypeText, Text: text}}
+	}
+
+	return nil
 }
 
 type ClaudeAnyContentMessage struct {
@@ -146,7 +173,7 @@ type ClaudeRequest struct {
 	Temperature   *float64            `json:"temperature,omitempty"`
 	TopP          *float64            `json:"top_p,omitempty"`
 	Model         string              `json:"model,omitempty"`
-	System        []ClaudeContent     `json:"system,omitempty"`
+	System        ClaudeSystemPrompt  `json:"system,omitempty"`
 	Messages      []ClaudeMessage     `json:"messages"`
 	StopSequences []string            `json:"stop_sequences,omitempty"`
 	Tools         []ClaudeTool        `json:"tools,omitempty"`
@@ -162,7 +189,7 @@ type ClaudeAnyContentRequest struct {
 	Temperature         *float64                  `json:"temperature,omitempty"`
 	TopP                *float64                  `json:"top_p,omitempty"`
 	Model               string                    `json:"model,omitempty"`
-	System              []ClaudeContent           `json:"system,omitempty"`
+	System              ClaudeSystemPrompt        `json:"system,omitempty"`
 	Messages            []ClaudeAnyContentMessage `json:"messages"`
 	StopSequences       []string                  `json:"stop_sequences,omitempty"`
 	Tools               []ClaudeTool              `json:"tools,omitempty"`
