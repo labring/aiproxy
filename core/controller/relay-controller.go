@@ -14,6 +14,7 @@ import (
 
 	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/consume"
@@ -349,6 +350,10 @@ func RelayHelper(
 	handel RelayHandler,
 ) (*controller.HandleResult, bool) {
 	result := handel(c, meta)
+	// A live WebSocket cannot be retried after upgrade or receive an HTTP error body.
+	if websocket.IsWebSocketUpgrade(c.Request) && c.Writer.Written() {
+		return result, false
+	}
 	if result.Error == nil {
 		return result, false
 	}
@@ -1233,6 +1238,9 @@ func RelayNotImplemented(c *gin.Context) {
 }
 
 func ErrorWithRequestID(c *gin.Context, relayErr adaptor.Error) {
+	if websocket.IsWebSocketUpgrade(c.Request) && c.Writer.Written() {
+		return
+	}
 	requestID := middleware.GetRequestID(c)
 	if requestID == "" {
 		c.JSON(relayErr.StatusCode(), relayErr)
