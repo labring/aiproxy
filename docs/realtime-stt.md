@@ -8,7 +8,8 @@ partial recognition events arrive while the microphone is recording.
 Register/enable the realtime model as an AudioTranscription model (type `8`) and
 associate it with an Aliyun channel. Existing token model allowlists, group/scope
 routing, channel mappings, RPM/TPM checks and consumption logging still apply.
-The first implementation supports `qwen3-asr-flash-realtime` and dated versions.
+Supported models are `qwen3-asr-flash-realtime` (including dated versions) and
+`qwen-audio-3.1-asr-flash-message`.
 Existing whole-file requests and their token-accounting behavior are unchanged.
 
 ## Authentication and connection
@@ -25,6 +26,11 @@ The upstream URL is built from the selected channel host and
 Provider credentials stay on the gateway. Upstream handshake failures are
 returned before upgrading; an established session is never retried/replayed.
 
+For `qwen-audio-3.1-asr-flash-message`, the gateway uses `/api-ws/v1/inference`
+on the channel host instead, and translates run-task/binary PCM/finish-task into
+the same browser-facing events. Both the legacy DashScope host and workspace
+hosts can be configured in the channel base URL.
+
 ## Events and audio
 
 Send `session.update` with `input_audio_format: "pcm"`, `sample_rate: 16000`,
@@ -40,6 +46,16 @@ are bounded to five minutes and 300 seconds of audio, with inactivity deadlines
 and a bounded write buffer. Use `session.finish` and await `session.finished` so
 the final utterance is not dropped.
 
+Message-model sessions require `turn_detection.type: "server_vad"` and a single
+initial `session.update`. Set `session.disfluency_removal_enabled: true` to let
+the model remove fillers, repetitions and self-corrections from final sentences.
+Intermediate results remain enabled and appear underlined; final polished text
+replaces the same sentence by ID. The demo selects this model and enables the
+option by default. Audio-buffer commit/clear and mid-session reconfiguration
+are rejected for this model because its upstream protocol does not support them.
+The VAD silence interval maps to `max_sentence_silence`; the Qwen VAD threshold
+has no equivalent and is not forwarded.
+
 Native server events pass through, especially:
 
 - `conversation.item.input_audio_transcription.text`: replace the current item's
@@ -50,7 +66,15 @@ Native server events pass through, especially:
   derived from PCM bytes actually forwarded upstream, rounded up. If no upstream
   usage exists, a `type: "duration"` usage with legacy `total_tokens = seconds`
   is supplied. Existing upstream token/vendor fields are preserved. Internal
-  gateway accounting uses the forwarded audio duration, never a client duration.
+  gateway accounting for Qwen3 sessions uses the forwarded audio duration, never
+  a client duration.
+
+For message-model events, cumulative upstream usage is retained without summing
+sentence results. `duration` is also exposed as `seconds`, or forwarded PCM
+duration is used when absent. Original input/output/total tokens remain intact.
+Gateway accounting for this model uses those native tokens when provided, or
+forwarded PCM duration when no token usage is available. Configure its model
+prices in the corresponding units.
 
 Disconnecting/cancelling does not replay audio and still accounts for audio
 already forwarded. Quota admission uses the existing request checks; this bounded

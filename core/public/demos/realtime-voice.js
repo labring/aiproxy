@@ -322,6 +322,9 @@
                 input_audio_format: "pcm",
                 sample_rate: 16000,
                 input_audio_transcription: { language: "zh" },
+                ...(model === "qwen-audio-3.1-asr-flash-message"
+                  ? { disfluency_removal_enabled: true }
+                  : {}),
                 turn_detection: {
                   type: "server_vad",
                   threshold: 0,

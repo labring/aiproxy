@@ -40,9 +40,10 @@ func realtimeSTTOriginAllowed(req *http.Request) bool {
 
 // realtimeSTTURL selects the channel's native Qwen ASR session endpoint, preserving model mapping.
 func realtimeSTTURL(mt *meta.Meta) (*url.URL, error) {
-	if !strings.HasPrefix(mt.ActualModel, "qwen3-asr-flash-realtime") {
+	messageModel := mt.ActualModel == realtimeMessageModel
+	if !messageModel && !strings.HasPrefix(mt.ActualModel, "qwen3-asr-flash-realtime") {
 		return nil, errors.New(
-			"realtime STT requires qwen3-asr-flash-realtime or its dated version",
+			"unsupported realtime STT model",
 		)
 	}
 
@@ -65,12 +66,19 @@ func realtimeSTTURL(mt *meta.Meta) (*url.URL, error) {
 		return nil, errors.New("unsupported realtime STT URL scheme")
 	}
 
-	if !strings.HasSuffix(u.Path, "/api-ws/v1/realtime") {
+	if messageModel {
+		u.Path = "/api-ws/v1/inference"
+	} else if !strings.HasSuffix(u.Path, "/api-ws/v1/realtime") {
 		u.Path = "/api-ws/v1/realtime"
 	}
 
 	q := u.Query()
-	q.Set("model", mt.ActualModel)
+	if messageModel {
+		q.Del("model")
+	} else {
+		q.Set("model", mt.ActualModel)
+	}
+
 	u.RawQuery = q.Encode()
 	u.Fragment = ""
 
@@ -139,13 +147,19 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 	stop := context.AfterFunc(ctx, func() { _ = upstream.Close(); _ = downstream.Close() })
 	defer stop()
 
-	var audioBytes atomic.Int64
+	var (
+		audioBytes     atomic.Int64
+		messageSession *realtimeMessageSession
+	)
+	if mt.ActualModel == realtimeMessageModel {
+		messageSession = newRealtimeMessageSession()
+	}
 
 	finished := make(chan error, 1)
 
 	started := time.Now()
 	go func() {
-		err := forwardRealtimeAudio(downstream, upstream, &audioBytes, started)
+		err := forwardRealtimeAudio(downstream, upstream, &audioBytes, started, messageSession)
 		if err != nil {
 			_ = upstream.Close()
 		}
@@ -168,6 +182,18 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 
 		if messageType != websocket.TextMessage {
 			continue
+		}
+
+		if messageSession != nil {
+			data, err = messageSession.serverEvent(data)
+			if err != nil {
+				sessionErr = err
+				break
+			}
+
+			if data == nil {
+				continue
+			}
 		}
 
 		var event struct {
@@ -216,7 +242,11 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 	clientErr := <-finished
 	seconds := int64(math.Ceil(float64(audioBytes.Load()) / float64(realtimeSampleRate*2)))
 	usage := relaymodel.SttUsage{Type: relaymodel.SttUsageTypeDuration, Seconds: seconds}
+
 	result := adaptor.DoResponseResult{Usage: usage.ToModelUsage(), UpstreamID: upstreamID}
+	if messageSession != nil {
+		result.Usage = messageSession.modelUsage(seconds)
+	}
 	// A normal client cancellation still consumes the audio already accepted by upstream.
 	if sessionErr != nil && clientErr == nil {
 		return result, relaymodel.WrapperOpenAIError(
@@ -280,6 +310,7 @@ func forwardRealtimeAudio(
 	client, upstream *websocket.Conn,
 	total *atomic.Int64,
 	started time.Time,
+	messageSession *realtimeMessageSession,
 ) error {
 	for {
 		_ = client.SetReadDeadline(time.Now().Add(30 * time.Second))
@@ -334,8 +365,15 @@ func forwardRealtimeAudio(
 			return errors.New("unsupported realtime STT client event")
 		}
 
+		if messageSession != nil {
+			typ, data, err = messageSession.clientEvent(data)
+			if err != nil {
+				return err
+			}
+		}
+
 		_ = upstream.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := upstream.WriteMessage(websocket.TextMessage, data); err != nil {
+		if err := upstream.WriteMessage(typ, data); err != nil {
 			return err
 		}
 

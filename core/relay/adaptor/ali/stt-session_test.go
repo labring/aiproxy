@@ -210,6 +210,8 @@ func TestRealtimeSTTURL(t *testing.T) {
 		{name: "default", model: "qwen3-asr-flash-realtime", want: "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime"},
 		{name: "mapped snapshot", model: "qwen3-asr-flash-realtime-2026-02-10", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", want: "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime-2026-02-10"},
 		{name: "local", model: "qwen3-asr-flash-realtime", base: "http://localhost:9000/v1", want: "ws://localhost:9000/api-ws/v1/realtime?model=qwen3-asr-flash-realtime"},
+		{name: "message model", model: realtimeMessageModel, want: "wss://dashscope.aliyuncs.com/api-ws/v1/inference"},
+		{name: "message workspace", model: realtimeMessageModel, base: "https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1?model=old", want: "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference"},
 		{name: "batch model", model: "qwen3-asr-flash", bad: true},
 		{name: "credentials", model: "qwen3-asr-flash-realtime", base: (&url.URL{Scheme: "https", Host: "example.com", User: url.UserPassword("fixture", "fixture")}).String(), bad: true},
 		{name: "invalid scheme", model: "qwen3-asr-flash-realtime", base: "file://example.com", bad: true},
@@ -282,7 +284,7 @@ func TestRealtimeSTTRejectInvalidClientFrames(t *testing.T) {
 					defer conn.Close()
 
 					var count atomic.Int64
-					results <- forwardRealtimeAudio(conn, nil, &count, time.Now())
+					results <- forwardRealtimeAudio(conn, nil, &count, time.Now(), nil)
 				}),
 			)
 			defer server.Close()
