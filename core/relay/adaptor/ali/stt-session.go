@@ -25,6 +25,19 @@ const (
 	realtimeMaxAudioBytes = realtimeSampleRate * 2 * 300
 )
 
+// realtimeSTTOriginAllowed permits same-origin browsers and authenticated non-browser clients.
+func realtimeSTTOriginAllowed(req *http.Request) bool {
+	origin := req.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+
+	u, err := url.Parse(origin)
+
+	return err == nil && u.User == nil && (u.Scheme == "http" || u.Scheme == "https") &&
+		strings.EqualFold(u.Host, req.Host)
+}
+
 // realtimeSTTURL selects the channel's native Qwen ASR session endpoint, preserving model mapping.
 func realtimeSTTURL(mt *meta.Meta) (*url.URL, error) {
 	if !strings.HasPrefix(mt.ActualModel, "qwen3-asr-flash-realtime") {
@@ -80,14 +93,8 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 		return fail(err, http.StatusBadRequest)
 	}
 
-	if origin := c.GetHeader("Origin"); origin != "" {
-		u, parseErr := url.Parse(origin)
-		if parseErr != nil || !strings.EqualFold(u.Host, c.Request.Host) {
-			return fail(
-				errors.New("realtime STT requires a same-origin client"),
-				http.StatusForbidden,
-			)
-		}
+	if !realtimeSTTOriginAllowed(c.Request) {
+		return fail(errors.New("realtime STT requires a same-origin client"), http.StatusForbidden)
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
@@ -112,7 +119,7 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 	upstream.SetReadLimit(1024 * 1024)
 	_ = upstream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-	downstream, err := (&websocket.Upgrader{Subprotocols: []string{"aiproxy-realtime"}, HandshakeTimeout: 10 * time.Second}).Upgrade(
+	downstream, err := (&websocket.Upgrader{Subprotocols: []string{"aiproxy-realtime"}, HandshakeTimeout: 10 * time.Second, CheckOrigin: realtimeSTTOriginAllowed}).Upgrade(
 		c.Writer,
 		c.Request,
 		nil,

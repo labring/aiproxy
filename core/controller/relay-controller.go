@@ -354,6 +354,7 @@ func RelayHelper(
 	if websocket.IsWebSocketUpgrade(c.Request) && c.Writer.Written() {
 		return result, false
 	}
+
 	if result.Error == nil {
 		return result, false
 	}
@@ -1241,6 +1242,7 @@ func ErrorWithRequestID(c *gin.Context, relayErr adaptor.Error) {
 	if websocket.IsWebSocketUpgrade(c.Request) && c.Writer.Written() {
 		return
 	}
+
 	requestID := middleware.GetRequestID(c)
 	if requestID == "" {
 		c.JSON(relayErr.StatusCode(), relayErr)

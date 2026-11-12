@@ -321,3 +321,30 @@ func TestRealtimeFinishedDataPreservesTokens(t *testing.T) {
 		assert.JSONEq(t, tt.want, string(got))
 	}
 }
+
+func TestRealtimeSTTOriginAllowed(t *testing.T) {
+	for _, tt := range []struct {
+		origin  string
+		allowed bool
+	}{
+		{origin: "", allowed: true},
+		{origin: "http://gateway:3810", allowed: true},
+		{origin: "https://GATEWAY:3810", allowed: true},
+		{origin: "http://other:3810", allowed: false},
+		{origin: "http://gateway:3811", allowed: false},
+		{origin: "null", allowed: false},
+		{origin: "ftp://gateway:3810", allowed: false},
+		{origin: "http://fixture@gateway:3810", allowed: false},
+	} {
+		t.Run(tt.origin, func(t *testing.T) {
+			r := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodGet,
+				"http://gateway:3810/v1/audio/realtime",
+				nil,
+			)
+			r.Header.Set("Origin", tt.origin)
+			assert.Equal(t, tt.allowed, realtimeSTTOriginAllowed(r))
+		})
+	}
+}
