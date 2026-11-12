@@ -87,3 +87,19 @@ Real browser validation uses Chrome's fake-audio device to feed a known WAV into
 actual MediaDevices/AudioWorklet, with the real Aliyun upstream. It is not a mock
 ASR or browser speech-recognition service. Paid live checks are opt-in; browser
 credentials, private gateway data and recordings stay outside the repository.
+
+### Opening the standalone file or selecting another gateway
+
+The demo probes `/v1/audio/realtime` before handing off to a different gateway;
+this probe sends no key. An old deployment returning 404 is shown as an unavailable
+realtime endpoint rather than an unexplained same-origin error. The local test
+service can be selected explicitly. Loopback aliases on the same port are
+normalized to the current page origin.
+
+When the HTML is opened directly, or another upgraded gateway is selected, use
+"打开该服务的实时演示". The gateway's own page is opened and the key/model/draft
+are handed over with `postMessage` to that exact origin. The receiver validates
+both its opener and the declared opener origin, then severs the opener relation.
+Only the non-secret opener origin briefly appears in the URL; keys are never put
+in URLs or browser storage. Actual microphone streaming still occurs on the
+gateway origin, so the server's same-origin WebSocket policy is unchanged.

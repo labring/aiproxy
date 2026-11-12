@@ -15,7 +15,73 @@
     listening: "正在聆听",
     finishing: "正在确认最后一句…",
   };
-  $("endpoint").value = location.origin;
+  const localDemoOrigin = "http://127.0.0.1:3810";
+  const hasWebOrigin = ["http:", "https:"].includes(location.protocol);
+  $("endpoint").value = hasWebOrigin ? location.origin : localDemoOrigin;
+  let checkingConnection = false;
+  let gatewayDemoOrigin;
+  const expectedOpenerOrigin = new URLSearchParams(location.search).get(
+    "opener_origin",
+  );
+
+  // A separately opened HTML can hand off to the gateway's own demo without putting keys in URLs/storage.
+  function openHostedDemo(origin) {
+    const target = new URL("/demo/realtime-voice.html", origin);
+    target.searchParams.set(
+      "opener_origin",
+      location.protocol === "file:" ? "null" : location.origin,
+    );
+    const config = {
+      type: "aiproxy.voice.config",
+      key: $("apiKey").value.trim(),
+      model: $("model").value.trim(),
+      draft: editor.textContent,
+    };
+    const popup = window.open(target.href, "_blank");
+    if (!popup) {
+      error("浏览器阻止了新窗口，请允许弹出窗口后重试。");
+      return;
+    }
+    let attempts = 0;
+    // The target may still be loading. Only that exact origin can receive the in-memory configuration.
+    const timer = setInterval(() => {
+      if (popup.closed || ++attempts > 75) {
+        clearInterval(timer);
+        return;
+      }
+      popup.postMessage(config, target.origin);
+    }, 200);
+  }
+  window.addEventListener("message", (event) => {
+    if (
+      !window.opener ||
+      event.source !== window.opener ||
+      !expectedOpenerOrigin ||
+      event.origin !== expectedOpenerOrigin ||
+      event.data?.type !== "aiproxy.voice.config"
+    )
+      return;
+    const { key, model, draft } = event.data;
+    if (typeof key !== "string" || typeof model !== "string") return;
+    $("apiKey").value = key;
+    $("model").value = model;
+    $("endpoint").value = location.origin;
+    if (typeof draft === "string") editor.textContent = draft;
+    $("config").open = false;
+    window.opener = null;
+    history.replaceState(null, "", location.pathname);
+    updateState("idle");
+  });
+  $("openGatewayDemo").addEventListener("click", () => {
+    if (gatewayDemoOrigin) openHostedDemo(gatewayDemoOrigin);
+  });
+  $("useLocalDemo").addEventListener("click", () => {
+    $("endpoint").value = localDemoOrigin;
+    if (location.origin === localDemoOrigin) {
+      error("");
+      $("config").open = false;
+    } else openHostedDemo(localDemoOrigin);
+  });
   const processorSource = `class VoicePCM extends AudioWorkletProcessor {
     constructor(){super();this.phase=0;this.sum=0;this.count=0;this.samples=[];this.port.onmessage=e=>{if(e.data==='flush'){this.flush();this.port.postMessage({flushed:true});}};}
     flush(){if(!this.samples.length)return;const pcm=new Int16Array(this.samples);this.samples=[];this.port.postMessage({pcm:pcm.buffer},[pcm.buffer]);}
@@ -37,6 +103,7 @@
   }
   function error(message) {
     $("error").textContent = message;
+    $("connectionActions").hidden = true;
   }
   function audioCleanup(session) {
     session.stream?.getTracks().forEach((t) => t.stop());
@@ -129,16 +196,70 @@
     return { anchor, original };
   }
   async function start(mode) {
-    if (state !== "idle") return;
+    if (state !== "idle" || checkingConnection) return;
     error("");
     const key = $("apiKey").value.trim(),
       model = $("model").value.trim();
     let endpoint;
     try {
       endpoint = new URL($("endpoint").value);
-      if (endpoint.origin !== location.origin)
-        throw Error("请在 AI Proxy 同源演示页中连接，以保护录音凭据。");
+      if (endpoint.protocol === "ws:") endpoint.protocol = "http:";
+      if (endpoint.protocol === "wss:") endpoint.protocol = "https:";
+      if (
+        !["http:", "https:"].includes(endpoint.protocol) ||
+        endpoint.username ||
+        endpoint.password
+      )
+        throw Error("请填写不含 Key 的 HTTP 或 HTTPS 服务地址。");
       if (!key) throw Error("请先在连接设置中填写 AI Proxy API Key。");
+      const loopback = (host) =>
+        ["localhost", "127.0.0.1", "[::1]"].includes(host);
+      if (
+        hasWebOrigin &&
+        loopback(endpoint.hostname) &&
+        loopback(location.hostname) &&
+        endpoint.port === location.port &&
+        endpoint.protocol === location.protocol
+      ) {
+        endpoint = new URL(location.origin);
+        $("endpoint").value = endpoint.origin;
+      }
+      if (endpoint.origin !== location.origin) {
+        checkingConnection = true;
+        let available = false;
+        let unavailableStatus;
+        try {
+          const response = await fetch(
+            new URL("/v1/audio/realtime", endpoint),
+            {
+              credentials: "omit",
+              referrerPolicy: "no-referrer",
+              signal: AbortSignal.timeout(6000),
+            },
+          );
+          unavailableStatus = response.status;
+          const body = await response.json();
+          available =
+            response.status === 400 &&
+            body.error === "WebSocket upgrade required";
+        } catch {
+          /* A direct same-origin page can also resolve a target's CORS restriction. */
+        } finally {
+          checkingConnection = false;
+        }
+        error(
+          available
+            ? "此服务支持实时语音。点击“打开该服务的实时演示”，连接信息会自动带入。"
+            : unavailableStatus === 404
+              ? "目标 AI Proxy 尚未部署实时接口（404）。可先使用本机新版演示，远程 dev 需要升级实时接口版本。"
+              : "暂时无法访问该服务的实时接口。可先使用本机新版演示。",
+        );
+        gatewayDemoOrigin = endpoint.origin;
+        $("openGatewayDemo").hidden = !available;
+        $("connectionActions").hidden = false;
+        $("config").open = true;
+        return;
+      }
       if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode)
         throw Error(
           "当前浏览器不支持录音，请使用 HTTPS 或 localhost 下的新版 Chrome。",
