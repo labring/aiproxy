@@ -11,6 +11,81 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestClaudeContentMarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content model.ClaudeContent
+		want    string
+	}{
+		{
+			name:    "empty text block start",
+			content: model.ClaudeContent{Type: model.ClaudeContentTypeText},
+			want:    `{"type":"text","text":""}`,
+		},
+		{
+			name: "text preserves cache control",
+			content: model.ClaudeContent{
+				Type:         model.ClaudeContentTypeText,
+				Text:         "Hello",
+				CacheControl: &model.ClaudeCacheControl{Type: "ephemeral", TTL: "1h"},
+			},
+			want: `{"type":"text","text":"Hello","cache_control":{"type":"ephemeral","ttl":"1h"}}`,
+		},
+		{
+			name:    "empty thinking block start",
+			content: model.ClaudeContent{Type: model.ClaudeContentTypeThinking},
+			want:    `{"type":"thinking","thinking":""}`,
+		},
+		{
+			name: "thinking preserves signature",
+			content: model.ClaudeContent{
+				Type:      model.ClaudeContentTypeThinking,
+				Thinking:  "Let me think",
+				Signature: "signature",
+			},
+			want: `{"type":"thinking","thinking":"Let me think","signature":"signature"}`,
+		},
+		{
+			name: "tool use has no text or thinking fields",
+			content: model.ClaudeContent{
+				Type:  model.ClaudeContentTypeToolUse,
+				ID:    "tool_1",
+				Name:  "read",
+				Input: map[string]any{},
+			},
+			want: `{"type":"tool_use","id":"tool_1","name":"read","input":{}}`,
+		},
+	}
+	encoders := map[string]func(any) ([]byte, error){
+		"encoding/json": json.Marshal,
+		"sonic":         sonic.Marshal,
+	}
+
+	for encoderName, encode := range encoders {
+		t.Run(encoderName, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					t.Parallel()
+
+					data, err := encode(model.ClaudeStreamResponse{
+						Type: model.ClaudeStreamTypeContentBlockStart, ContentBlock: &tt.content,
+					})
+					require.NoError(t, err)
+
+					var event map[string]json.RawMessage
+
+					require.NoError(t, json.Unmarshal(data, &event))
+					assert.JSONEq(t, tt.want, string(event["content_block"]))
+				})
+			}
+		})
+	}
+}
+
 func TestClaudeRequestSystemPrompt(t *testing.T) {
 	t.Parallel()
 

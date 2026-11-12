@@ -69,6 +69,26 @@ type ClaudeContent struct {
 	Signature    string              `json:"signature,omitempty"`
 }
 
+// MarshalJSON retains required empty text/thinking fields in stream block starts.
+func (c ClaudeContent) MarshalJSON() ([]byte, error) {
+	type content ClaudeContent
+
+	switch c.Type {
+	case ClaudeContentTypeText:
+		return sonic.Marshal(struct {
+			content
+			Text string `json:"text"`
+		}{content: content(c), Text: c.Text})
+	case ClaudeContentTypeThinking:
+		return sonic.Marshal(struct {
+			content
+			Thinking string `json:"thinking"`
+		}{content: content(c), Thinking: c.Thinking})
+	default:
+		return sonic.Marshal(content(c))
+	}
+}
+
 // ClaudeSystemPrompt normalizes string and content-block system prompts to blocks.
 type ClaudeSystemPrompt []ClaudeContent
 
