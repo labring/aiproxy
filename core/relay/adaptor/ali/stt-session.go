@@ -123,6 +123,7 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 		Subprotocols: []string{"aiproxy-realtime"}, HandshakeTimeout: 10 * time.Second,
 		CheckOrigin: realtimeSTTOriginAllowed,
 	}
+
 	downstream, err := upgrader.Upgrade(
 		c.Writer,
 		c.Request,
