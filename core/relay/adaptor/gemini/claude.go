@@ -167,6 +167,7 @@ func ClaudeStreamHandler(
 		webSearchGrounded   bool
 		webSearchGemini3    = isGemini3Meta(meta)
 		stopReason          string
+		hasToolUse          bool
 		currentContentIndex = -1
 		currentContentType  = ""
 		sentMessageStart    = false
@@ -315,6 +316,7 @@ func ClaudeStreamHandler(
 						},
 					})
 				case part.FunctionCall != nil:
+					hasToolUse = true
 					// Handle tool/function calls
 					closeCurrentBlock()
 
@@ -365,6 +367,9 @@ func ClaudeStreamHandler(
 
 	claudeUsage := relaymodel.ClaudeFromModelUsage(usage)
 
+	if hasToolUse && (stopReason == "" || stopReason == relaymodel.ClaudeStopReasonEndTurn) {
+		stopReason = relaymodel.ClaudeStopReasonToolUse
+	}
 	if stopReason == "" {
 		stopReason = relaymodel.ClaudeStopReasonEndTurn
 	}
@@ -415,6 +420,9 @@ func geminiResponse2Claude(
 		// Extract content
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
+				if claudeResponse.StopReason == relaymodel.ClaudeStopReasonEndTurn {
+					claudeResponse.StopReason = relaymodel.ClaudeStopReasonToolUse
+				}
 				// Convert function call to tool use
 				claudeResponse.Content = append(claudeResponse.Content, relaymodel.ClaudeContent{
 					Type:      relaymodel.ClaudeContentTypeToolUse,
@@ -470,8 +478,6 @@ func geminiFinishReason2Claude(reason string) string {
 		return relaymodel.ClaudeStopReasonMaxTokens
 	case relaymodel.GeminiFinishReasonToolCalls, relaymodel.GeminiFinishReasonFunctionCall:
 		return relaymodel.ClaudeStopReasonToolUse
-	case relaymodel.GeminiFinishReasonSafety:
-		return relaymodel.ClaudeStopReasonStopSequence
 	default:
 		return relaymodel.ClaudeStopReasonEndTurn
 	}

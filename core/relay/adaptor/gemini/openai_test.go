@@ -1431,3 +1431,18 @@ func TestStreamResponseChat2OpenAIConvertsAudioInlineDataToDeltaAudio(t *testing
 	assert.NotNil(t, openAIChunk.Choices[0].Delta.Audio)
 	assert.Equal(t, audioData, openAIChunk.Choices[0].Delta.Audio.Data)
 }
+
+func TestFinishReason2OpenAI(t *testing.T) {
+	for _, tt := range []struct{ reason, want string }{
+		{"", ""},
+		{"STOP", "stop"},
+		{"MAX_TOKENS", "length"},
+		{"SAFETY", "content_filter"},
+		{"RECITATION", "content_filter"},
+		{"OTHER", "stop"},
+	} {
+		t.Run(tt.reason, func(t *testing.T) {
+			assert.Equal(t, tt.want, gemini.FinishReason2OpenAI(tt.reason))
+		})
+	}
+}
