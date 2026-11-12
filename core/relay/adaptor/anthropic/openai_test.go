@@ -642,3 +642,33 @@ func TestResponse2OpenAI_StopReasonMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
+	for _, tc := range []struct {
+		name                              string
+		delta                             string
+		input, cached, creation, searches int64
+	}{
+		{"output only", `{"output_tokens":5}`, 100, 30, 20, 2},
+		{"updated usage", `{"input_tokens":110,"output_tokens":5,"cache_read_input_tokens":40,"cache_creation_input_tokens":25,"server_tool_use":{"web_search_requests":3}}`, 110, 40, 25, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := anthropic.NewStreamState()
+			m := &meta.Meta{OriginModel: "claude-sonnet-4-5"}
+			start, err := state.StreamResponse2OpenAI(m, []byte(`{"type":"message_start","message":{"id":"msg_usage","usage":{"input_tokens":100,"output_tokens":1,"cache_read_input_tokens":30,"cache_creation_input_tokens":20,"server_tool_use":{"web_search_requests":2}}}}`))
+			require.NoError(t, err)
+			require.NotNil(t, start.Usage)
+			final, err := state.StreamResponse2OpenAI(m, []byte(`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+tc.delta+`}`))
+			require.NoError(t, err)
+			require.NotNil(t, final.Usage)
+			assert.Equal(t, tc.input+tc.cached+tc.creation, final.Usage.PromptTokens)
+			assert.EqualValues(t, 5, final.Usage.CompletionTokens)
+			assert.Equal(t, tc.input+tc.cached+tc.creation+5, final.Usage.TotalTokens)
+			require.NotNil(t, final.Usage.PromptTokensDetails)
+			assert.Equal(t, tc.cached, final.Usage.PromptTokensDetails.CachedTokens)
+			assert.Equal(t, tc.creation, final.Usage.PromptTokensDetails.CacheCreationTokens)
+			assert.EqualValues(t, tc.searches, final.Usage.WebSearchCount)
+			assert.EqualValues(t, 150, start.Usage.PromptTokens)
+		})
+	}
+}
