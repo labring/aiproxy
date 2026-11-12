@@ -119,7 +119,11 @@ func RealtimeSTTHandler(mt *meta.Meta, c *gin.Context) (adaptor.DoResponseResult
 	upstream.SetReadLimit(1024 * 1024)
 	_ = upstream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-	downstream, err := (&websocket.Upgrader{Subprotocols: []string{"aiproxy-realtime"}, HandshakeTimeout: 10 * time.Second, CheckOrigin: realtimeSTTOriginAllowed}).Upgrade(
+	upgrader := websocket.Upgrader{
+		Subprotocols: []string{"aiproxy-realtime"}, HandshakeTimeout: 10 * time.Second,
+		CheckOrigin: realtimeSTTOriginAllowed,
+	}
+	downstream, err := upgrader.Upgrade(
 		c.Writer,
 		c.Request,
 		nil,
