@@ -38,3 +38,23 @@ func TestStreamResponse2OpenAINilFinishReason(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
+
+func TestStopReasonCohere2OpenAI(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		reason *string
+		want   string
+	}{
+		{nil, ""},
+		{new("COMPLETE"), relaymodel.FinishReasonStop},
+		{new("MAX_TOKENS"), relaymodel.FinishReasonLength},
+		{new("ERROR"), relaymodel.FinishReasonStop},
+		{new("ERROR_TOXIC"), relaymodel.FinishReasonContentFilter},
+		{new("COMPLETE_UNEXPECTED"), "COMPLETE_UNEXPECTED"},
+	} {
+		if got := stopReasonCohere2OpenAI(tt.reason); got != tt.want {
+			t.Fatalf("stopReasonCohere2OpenAI(%v) = %q, want %q", tt.reason, got, tt.want)
+		}
+	}
+}
