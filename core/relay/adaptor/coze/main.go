@@ -20,23 +20,6 @@ import (
 
 // https://www.coze.com/open
 
-func stopReasonCoze2OpenAI(reason *string) relaymodel.FinishReason {
-	if reason == nil {
-		return ""
-	}
-
-	switch *reason {
-	case relaymodel.ClaudeStopReasonEndTurn:
-		return relaymodel.FinishReasonLength
-	case relaymodel.ClaudeStopReasonStopSequence:
-		return relaymodel.FinishReasonStop
-	case relaymodel.ClaudeStopReasonMaxTokens:
-		return relaymodel.FinishReasonLength
-	default:
-		return *reason
-	}
-}
-
 func StreamResponse2OpenAI(
 	meta *meta.Meta,
 	cozeResponse *StreamResponse,
