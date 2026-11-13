@@ -83,8 +83,10 @@ func TestChatUsageConversions(t *testing.T) {
 	t.Run("ChatUsage to GeminiUsage", func(t *testing.T) {
 		geminiUsage := chatUsage.ToGeminiUsage()
 		assert.Equal(t, int64(100), geminiUsage.PromptTokenCount)
-		assert.Equal(t, int64(50), geminiUsage.CandidatesTokenCount)
+		assert.Equal(t, int64(20), geminiUsage.CandidatesTokenCount) // 50 - 30 reasoning
 		assert.Equal(t, int64(150), geminiUsage.TotalTokenCount)
+		assert.Equal(t, geminiUsage.TotalTokenCount,
+			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount)
 		assert.Equal(t, int64(20), geminiUsage.CachedContentTokenCount)
 		assert.Equal(t, int64(30), geminiUsage.ThoughtsTokenCount)
 	})
@@ -149,10 +151,28 @@ func TestResponseUsageConversions(t *testing.T) {
 	t.Run("ResponseUsage to GeminiUsage", func(t *testing.T) {
 		geminiUsage := responseUsage.ToGeminiUsage()
 		assert.Equal(t, int64(100), geminiUsage.PromptTokenCount)
-		assert.Equal(t, int64(50), geminiUsage.CandidatesTokenCount)
+		assert.Equal(t, int64(20), geminiUsage.CandidatesTokenCount) // 50 - 30 reasoning
 		assert.Equal(t, int64(150), geminiUsage.TotalTokenCount)
+		assert.Equal(t, geminiUsage.TotalTokenCount,
+			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount)
 		assert.Equal(t, int64(20), geminiUsage.CachedContentTokenCount)
 		assert.Equal(t, int64(30), geminiUsage.ThoughtsTokenCount)
+	})
+
+	t.Run("ResponseUsage to GeminiUsage reasoning only", func(t *testing.T) {
+		reasoningOnly := model.ResponseUsage{
+			InputTokens:  268,
+			OutputTokens: 192,
+			TotalTokens:  460,
+			OutputTokensDetails: &model.ResponseUsageDetails{
+				ReasoningTokens: 192,
+			},
+		}
+
+		geminiUsage := reasoningOnly.ToGeminiUsage()
+		assert.Equal(t, int64(0), geminiUsage.CandidatesTokenCount)
+		assert.Equal(t, int64(192), geminiUsage.ThoughtsTokenCount)
+		assert.Equal(t, int64(460), geminiUsage.TotalTokenCount)
 	})
 }
 
@@ -311,9 +331,13 @@ func TestRoundTripConversions(t *testing.T) {
 		}
 
 		geminiUsage := original.ToGeminiUsage()
+		assert.Equal(t, int64(20), geminiUsage.CandidatesTokenCount)
+		assert.Equal(t, int64(30), geminiUsage.ThoughtsTokenCount)
+
 		converted := geminiUsage.ToResponseUsage()
 		assert.Equal(t, original.InputTokens, converted.InputTokens)
-		assert.Equal(t, original.OutputTokens, converted.OutputTokens)
+		// ToResponseUsage copies candidatesTokenCount and does not add thoughts.
+		assert.Equal(t, geminiUsage.CandidatesTokenCount, converted.OutputTokens)
 		assert.Equal(t, original.TotalTokens, converted.TotalTokens)
 		assert.Equal(
 			t,
@@ -324,6 +348,14 @@ func TestRoundTripConversions(t *testing.T) {
 			t,
 			original.OutputTokensDetails.ReasoningTokens,
 			converted.OutputTokensDetails.ReasoningTokens,
+		)
+
+		restored := geminiUsage.ToUsage()
+		assert.Equal(t, original.OutputTokens, restored.CompletionTokens)
+		assert.Equal(
+			t,
+			original.OutputTokensDetails.ReasoningTokens,
+			restored.CompletionTokensDetails.ReasoningTokens,
 		)
 	})
 }
