@@ -105,7 +105,7 @@ func StreamResponse2OpenAI(
 				},
 			},
 		}
-		finishReason = *cohereResponse.Response.FinishReason
+		finishReason = stopReasonCohere2OpenAI(cohereResponse.Response.FinishReason)
 	default:
 		return nil
 	}
