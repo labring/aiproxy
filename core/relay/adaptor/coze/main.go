@@ -41,10 +41,7 @@ func StreamResponse2OpenAI(
 	meta *meta.Meta,
 	cozeResponse *StreamResponse,
 ) *relaymodel.ChatCompletionsStreamResponse {
-	var (
-		stopReason string
-		choice     relaymodel.ChatCompletionsStreamResponseChoice
-	)
+	var choice relaymodel.ChatCompletionsStreamResponseChoice
 
 	if cozeResponse.Message != nil {
 		if cozeResponse.Message.Type != messagetype.Answer {
@@ -56,9 +53,8 @@ func StreamResponse2OpenAI(
 
 	choice.Delta.Role = "assistant"
 
-	finishReason := stopReasonCoze2OpenAI(&stopReason)
-	if finishReason != "null" {
-		choice.FinishReason = finishReason
+	if cozeResponse.IsFinish {
+		choice.FinishReason = relaymodel.FinishReasonStop
 	}
 
 	openaiResponse := relaymodel.ChatCompletionsStreamResponse{
