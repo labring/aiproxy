@@ -28,6 +28,12 @@ func stopReasonCohere2OpenAI(reason *string) string {
 	switch *reason {
 	case "COMPLETE":
 		return relaymodel.FinishReasonStop
+	case "MAX_TOKENS":
+		return relaymodel.FinishReasonLength
+	case "ERROR_TOXIC":
+		return relaymodel.FinishReasonContentFilter
+	case "ERROR":
+		return relaymodel.FinishReasonStop
 	default:
 		return *reason
 	}
@@ -105,7 +111,7 @@ func StreamResponse2OpenAI(
 				},
 			},
 		}
-		finishReason = *cohereResponse.Response.FinishReason
+		finishReason = stopReasonCohere2OpenAI(cohereResponse.Response.FinishReason)
 	default:
 		return nil
 	}
