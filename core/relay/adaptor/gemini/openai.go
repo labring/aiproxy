@@ -1251,8 +1251,13 @@ func TTSHandler(
 
 // Type aliases for usage-related types to use unified definitions from relaymodel
 var finishReason2OpenAI = map[string]string{
-	relaymodel.GeminiFinishReasonStop:      relaymodel.FinishReasonStop,
-	relaymodel.GeminiFinishReasonMaxTokens: relaymodel.FinishReasonLength,
+	relaymodel.GeminiFinishReasonStop:         relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonMaxTokens:    relaymodel.FinishReasonLength,
+	relaymodel.GeminiFinishReasonSafety:       relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonRecitation:   relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonOther:        relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonToolCalls:    relaymodel.FinishReasonToolCalls,
+	relaymodel.GeminiFinishReasonFunctionCall: relaymodel.FinishReasonToolCalls,
 }
 
 func FinishReason2OpenAI(reason string) string {
@@ -1388,6 +1393,10 @@ func responseChat2OpenAI(
 			choice.Message.ReasoningContent = reasoningContent.String()
 		}
 
+		if choice.FinishReason == relaymodel.FinishReasonStop && len(choice.Message.ToolCalls) > 0 {
+			choice.FinishReason = relaymodel.FinishReasonToolCalls
+		}
+
 		fullTextResponse.Choices = append(fullTextResponse.Choices, &choice)
 	}
 
@@ -1494,6 +1503,10 @@ func streamResponseChat2OpenAI(
 			choice.Delta.ReasoningContent = reasoningContent.String()
 		}
 
+		if choice.FinishReason == relaymodel.FinishReasonStop && len(choice.Delta.ToolCalls) > 0 {
+			choice.FinishReason = relaymodel.FinishReasonToolCalls
+		}
+
 		response.Choices = append(response.Choices, &choice)
 	}
 
@@ -1546,6 +1559,13 @@ func StreamHandler(
 			for i := range choice.Delta.ToolCalls {
 				choice.Delta.ToolCalls[i].Index = toolCallIndexes[choice.Index]
 				toolCallIndexes[choice.Index]++
+			}
+		}
+
+		for _, choice := range response.Choices {
+			if choice.FinishReason == relaymodel.FinishReasonStop &&
+				toolCallIndexes[choice.Index] > 0 {
+				choice.FinishReason = relaymodel.FinishReasonToolCalls
 			}
 		}
 
