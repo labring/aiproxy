@@ -456,18 +456,23 @@ func (s *StreamState) StreamResponse2OpenAI(
 	case "message_delta":
 		if claudeResponse.Usage != nil {
 			merged := *claudeResponse.Usage
+
 			if merged.InputTokens == 0 {
 				merged.InputTokens = s.startUsage.InputTokens
 			}
+
 			if merged.CacheReadInputTokens == 0 {
 				merged.CacheReadInputTokens = s.startUsage.CacheReadInputTokens
 			}
+
 			if merged.CacheCreationInputTokens == 0 {
 				merged.CacheCreationInputTokens = s.startUsage.CacheCreationInputTokens
 			}
+
 			if merged.ServerToolUse == nil {
 				merged.ServerToolUse = s.startUsage.ServerToolUse
 			}
+
 			openAIUsage := merged.ToOpenAIUsage()
 			usage = &openAIUsage
 		}

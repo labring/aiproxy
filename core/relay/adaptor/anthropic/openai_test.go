@@ -655,10 +655,21 @@ func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			state := anthropic.NewStreamState()
 			m := &meta.Meta{OriginModel: "claude-sonnet-4-5"}
-			start, err := state.StreamResponse2OpenAI(m, []byte(`{"type":"message_start","message":{"id":"msg_usage","usage":{"input_tokens":100,"output_tokens":1,"cache_read_input_tokens":30,"cache_creation_input_tokens":20,"server_tool_use":{"web_search_requests":2}}}}`))
+			start, err := state.StreamResponse2OpenAI(
+				m,
+				[]byte(
+					`{"type":"message_start","message":{"id":"msg_usage","usage":{"input_tokens":100,"output_tokens":1,"cache_read_input_tokens":30,"cache_creation_input_tokens":20,"server_tool_use":{"web_search_requests":2}}}}`,
+				),
+			)
 			require.NoError(t, err)
 			require.NotNil(t, start.Usage)
-			final, err := state.StreamResponse2OpenAI(m, []byte(`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+tc.delta+`}`))
+
+			final, err := state.StreamResponse2OpenAI(
+				m,
+				[]byte(
+					`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+tc.delta+`}`,
+				),
+			)
 			require.NoError(t, err)
 			require.NotNil(t, final.Usage)
 			assert.Equal(t, tc.input+tc.cached+tc.creation, final.Usage.PromptTokens)
