@@ -85,8 +85,11 @@ func TestChatUsageConversions(t *testing.T) {
 		assert.Equal(t, int64(100), geminiUsage.PromptTokenCount)
 		assert.Equal(t, int64(20), geminiUsage.CandidatesTokenCount) // 50 - 30 reasoning
 		assert.Equal(t, int64(150), geminiUsage.TotalTokenCount)
-		assert.Equal(t, geminiUsage.TotalTokenCount,
-			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount)
+		assert.Equal(
+			t,
+			geminiUsage.TotalTokenCount,
+			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount,
+		)
 		assert.Equal(t, int64(20), geminiUsage.CachedContentTokenCount)
 		assert.Equal(t, int64(30), geminiUsage.ThoughtsTokenCount)
 	})
@@ -153,8 +156,11 @@ func TestResponseUsageConversions(t *testing.T) {
 		assert.Equal(t, int64(100), geminiUsage.PromptTokenCount)
 		assert.Equal(t, int64(20), geminiUsage.CandidatesTokenCount) // 50 - 30 reasoning
 		assert.Equal(t, int64(150), geminiUsage.TotalTokenCount)
-		assert.Equal(t, geminiUsage.TotalTokenCount,
-			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount)
+		assert.Equal(
+			t,
+			geminiUsage.TotalTokenCount,
+			geminiUsage.PromptTokenCount+geminiUsage.CandidatesTokenCount+geminiUsage.ThoughtsTokenCount,
+		)
 		assert.Equal(t, int64(20), geminiUsage.CachedContentTokenCount)
 		assert.Equal(t, int64(30), geminiUsage.ThoughtsTokenCount)
 	})
