@@ -370,6 +370,7 @@ func ClaudeStreamHandler(
 	if hasToolUse && (stopReason == "" || stopReason == relaymodel.ClaudeStopReasonEndTurn) {
 		stopReason = relaymodel.ClaudeStopReasonToolUse
 	}
+
 	if stopReason == "" {
 		stopReason = relaymodel.ClaudeStopReasonEndTurn
 	}
