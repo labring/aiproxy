@@ -90,6 +90,15 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	}, nil
 }
 
+// finishReason maps Baidu's is_truncated flag to an OpenAI finish_reason.
+func finishReason(truncated bool) relaymodel.FinishReason {
+	if truncated {
+		return relaymodel.FinishReasonLength
+	}
+
+	return relaymodel.FinishReasonStop
+}
+
 func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextResponse {
 	choice := relaymodel.TextResponseChoice{
 		Index: 0,
@@ -97,7 +106,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 			Role:    "assistant",
 			Content: response.Result,
 		},
-		FinishReason: relaymodel.FinishReasonStop,
+		FinishReason: finishReason(response.IsTruncated),
 	}
 
 	fullTextResponse := relaymodel.TextResponse{
@@ -122,7 +131,7 @@ func streamResponse2OpenAI(
 
 	choice.Delta.Content = baiduResponse.Result
 	if baiduResponse.IsEnd {
-		choice.FinishReason = relaymodel.FinishReasonStop
+		choice.FinishReason = finishReason(baiduResponse.IsTruncated)
 	}
 
 	response := relaymodel.ChatCompletionsStreamResponse{
