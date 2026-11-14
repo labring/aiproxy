@@ -20,31 +20,11 @@ import (
 
 // https://www.coze.com/open
 
-func stopReasonCoze2OpenAI(reason *string) relaymodel.FinishReason {
-	if reason == nil {
-		return ""
-	}
-
-	switch *reason {
-	case relaymodel.ClaudeStopReasonEndTurn:
-		return relaymodel.FinishReasonLength
-	case relaymodel.ClaudeStopReasonStopSequence:
-		return relaymodel.FinishReasonStop
-	case relaymodel.ClaudeStopReasonMaxTokens:
-		return relaymodel.FinishReasonLength
-	default:
-		return *reason
-	}
-}
-
 func StreamResponse2OpenAI(
 	meta *meta.Meta,
 	cozeResponse *StreamResponse,
 ) *relaymodel.ChatCompletionsStreamResponse {
-	var (
-		stopReason string
-		choice     relaymodel.ChatCompletionsStreamResponseChoice
-	)
+	var choice relaymodel.ChatCompletionsStreamResponseChoice
 
 	if cozeResponse.Message != nil {
 		if cozeResponse.Message.Type != messagetype.Answer {
@@ -56,9 +36,8 @@ func StreamResponse2OpenAI(
 
 	choice.Delta.Role = "assistant"
 
-	finishReason := stopReasonCoze2OpenAI(&stopReason)
-	if finishReason != "null" {
-		choice.FinishReason = finishReason
+	if cozeResponse.IsFinish {
+		choice.FinishReason = relaymodel.FinishReasonStop
 	}
 
 	openaiResponse := relaymodel.ChatCompletionsStreamResponse{
