@@ -94,6 +94,8 @@ func TestStreamHandlerSkipsEventsWithoutChunk(t *testing.T) {
 
 	if !strings.Contains(w.Body.String(), `"content":"hi"`) {
 		t.Fatalf("missing text chunk: %s", w.Body.String())
+	}
+}
 
 func TestConvertRequestKeepsEarlierUserTurnsInHistory(t *testing.T) {
 	t.Parallel()
