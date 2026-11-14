@@ -2,8 +2,13 @@
 package cohere
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
@@ -56,6 +61,39 @@ func TestStopReasonCohere2OpenAI(t *testing.T) {
 		if got := stopReasonCohere2OpenAI(tt.reason); got != tt.want {
 			t.Fatalf("stopReasonCohere2OpenAI(%v) = %q, want %q", tt.reason, got, tt.want)
 		}
+	}
+}
+
+func TestStreamHandlerSkipsEventsWithoutChunk(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+
+	body := strings.Join([]string{
+		`{"event_type":"stream-start","generation_id":"g1","is_finished":false}`,
+		`{"event_type":"text-generation","text":"hi","is_finished":false}`,
+		`{"event_type":"search-queries-generation","is_finished":false}`,
+		`{"event_type":"stream-end","finish_reason":"COMPLETE","is_finished":true,"response":{"finish_reason":"COMPLETE","meta":{"tokens":{"input_tokens":3,"output_tokens":2}}}}`,
+	}, "\n")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+
+	result, err := StreamHandler(&meta.Meta{}, c, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Usage.InputTokens != 3 || result.Usage.OutputTokens != 2 {
+		t.Fatalf("unexpected usage: %+v", result.Usage)
+	}
+
+	if !strings.Contains(w.Body.String(), `"content":"hi"`) {
+		t.Fatalf("missing text chunk: %s", w.Body.String())
 	}
 }
 
