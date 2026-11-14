@@ -48,12 +48,14 @@ func (e *EngineConfig) LoadSpec(spec any) error {
 
 // Engine-specific configuration structures
 type GoogleSpec struct {
-	APIKey string `json:"api_key"`
-	CX     string `json:"cx"`
+	APIKey  string `json:"api_key"`
+	CX      string `json:"cx"`
+	BaseURL string `json:"base_url,omitempty"`
 }
 
 type BingSpec struct {
-	APIKey string `json:"api_key"`
+	APIKey  string `json:"api_key"`
+	BaseURL string `json:"base_url,omitempty"`
 }
 
 type ArxivSpec struct{}
