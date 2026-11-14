@@ -197,8 +197,8 @@ func (s *realtimeMessageSession) serverEvent(data []byte) ([]byte, error) {
 				s.usage["seconds"] = seconds
 			}
 
-			if _, ok := s.usage["total_tokens"]; ok {
-				s.usage["type"] = json.RawMessage(`"tokens"`)
+			if _, err := s.normalizeUsage(); err != nil {
+				return nil, err
 			}
 
 			result["usage"] = s.usage
@@ -218,17 +218,53 @@ func (s *realtimeMessageSession) serverEvent(data []byte) ([]byte, error) {
 // modelUsage retains native token accounting for this token-priced model, including
 // the last cumulative usage on cancellation. Missing tokens fall back to forwarded PCM duration.
 func (s *realtimeMessageSession) modelUsage(seconds int64) model.Usage {
-	data, err := json.Marshal(s.usage)
-	if err == nil {
-		var usage relaymodel.SttUsage
-		if json.Unmarshal(data, &usage) == nil && len(s.usage["total_tokens"]) > 0 &&
-			string(s.usage["total_tokens"]) != "null" && usage.TotalTokens >= 0 {
-			usage.Type = relaymodel.SttUsageTypeTokens
-			return usage.ToModelUsage()
-		}
+	if usage, err := s.normalizeUsage(); err == nil && usage.Type == relaymodel.SttUsageTypeTokens {
+		return usage.ToModelUsage()
 	}
 
 	usage := relaymodel.SttUsage{Type: relaymodel.SttUsageTypeDuration, Seconds: seconds}
 
 	return usage.ToModelUsage()
+}
+
+// normalizeUsage retains cumulative upstream counters and accepts independently
+// reported input/output tokens even when no total is present. Cancellation uses
+// the same normalization as session.finished; no component is inferred.
+func (s *realtimeMessageSession) normalizeUsage() (relaymodel.SttUsage, error) {
+	data, err := json.Marshal(s.usage)
+	if err != nil {
+		return relaymodel.SttUsage{}, err
+	}
+
+	data, err = relaymodel.NormalizeSTTTokenUsage(data)
+	if err != nil {
+		return relaymodel.SttUsage{}, err
+	}
+
+	var usage relaymodel.SttUsage
+	// Seconds is a separate wire measurement and may be fractional. Token
+	// accounting does not need to decode it into the legacy integer meter.
+	counters := struct {
+		*relaymodel.SttUsage
+		Seconds json.RawMessage `json:"seconds"`
+	}{SttUsage: &usage}
+	if err = json.Unmarshal(data, &counters); err != nil {
+		return usage, err
+	}
+
+	if err = json.Unmarshal(data, &s.usage); err != nil {
+		return usage, err
+	}
+
+	if usage.Type != relaymodel.SttUsageTypeDuration {
+		for _, key := range []string{"input_tokens", "output_tokens", "total_tokens"} {
+			if raw := s.usage[key]; len(raw) > 0 && string(raw) != "null" {
+				usage.Type = relaymodel.SttUsageTypeTokens
+				s.usage["type"] = json.RawMessage(`"tokens"`)
+				break
+			}
+		}
+	}
+
+	return usage, nil
 }

@@ -202,3 +202,33 @@ func TestRealtimeMessageFailures(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+
+func TestRealtimeMessageSplitUsageWithoutTotal(t *testing.T) {
+	for _, tt := range []struct {
+		body          string
+		input, output int64
+	}{
+		{`{"input_tokens":125,"output_tokens":17}`, 125, 17},
+		{`{"prompt_tokens":125,"completion_tokens":17}`, 125, 17},
+		{`{"input_tokens":0,"prompt_tokens":125,"output_tokens":17}`, 0, 17},
+		{`{"output_tokens":17}`, 0, 17},
+		{`{"input_tokens":125,"output_tokens":17,"seconds":1.25}`, 125, 17},
+	} {
+		s := newRealtimeMessageSession()
+		payload := `{"header":{"task_id":"` + s.taskID + `","event":"task-finished"},"payload":{"usage":` + tt.body + `}}`
+		data, err := s.serverEvent([]byte(payload))
+		require.NoError(t, err)
+
+		var response struct {
+			Usage map[string]json.RawMessage `json:"usage"`
+		}
+		require.NoError(t, json.Unmarshal(data, &response))
+		assert.JSONEq(t, `"tokens"`, string(response.Usage["type"]))
+		assert.NotContains(t, response.Usage, "total_tokens")
+
+		usage := s.modelUsage(60)
+		assert.EqualValues(t, tt.input, usage.InputTokens)
+		assert.EqualValues(t, tt.output, usage.OutputTokens)
+		assert.Zero(t, usage.TotalTokens)
+	}
+}
