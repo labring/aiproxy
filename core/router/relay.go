@@ -4,9 +4,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/controller"
 	"github.com/labring/aiproxy/core/middleware"
+	"github.com/labring/aiproxy/core/public"
 )
 
 func SetRelayRouter(router *gin.Engine) {
+	router.GET(
+		"/demo/realtime-voice.html",
+		func(c *gin.Context) { c.Data(200, "text/html; charset=utf-8", public.RealtimeVoiceHTML) },
+	)
+	router.GET(
+		"/demo/realtime-voice.js",
+		func(c *gin.Context) { c.Data(200, "application/javascript; charset=utf-8", public.RealtimeVoiceJS) },
+	)
+
+	realtime := router.Group("/v1/audio/realtime")
+	realtime.Use(middleware.IPBlock, controller.RealtimeSTTBrowserAuth, middleware.TokenAuth)
+	realtime.GET("", controller.AudioRealtime()...)
+
 	// https://platform.openai.com/docs/api-reference/introduction
 	v1Router := router.Group("/v1")
 	v1Router.Use(middleware.IPBlock, middleware.TokenAuth)

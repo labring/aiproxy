@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>实时语音输入 · AI Proxy</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+        color: #1b2435;
+        background: #f5f7fa;
+        font-synthesis: none;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+      .shell {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 56px 24px;
+      }
+      .brand {
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .brand i {
+        height: 10px;
+        width: 10px;
+        border-radius: 3px;
+        background: #466df4;
+      }
+      h1 {
+        font-size: 34px;
+        letter-spacing: -1px;
+        margin: 25px 0 12px;
+        font-weight: 650;
+      }
+      .intro {
+        font-size: 15px;
+        line-height: 1.8;
+        color: #6d778a;
+        margin: 0 0 30px;
+      }
+      .composer {
+        background: white;
+        border: 1px solid #dfe5ef;
+        border-radius: 20px;
+        box-shadow: 0 12px 36px #24345408;
+        overflow: hidden;
+      }
+      .editor {
+        min-height: 190px;
+        max-height: 380px;
+        overflow: auto;
+        padding: 28px 28px 18px;
+        font-size: 19px;
+        line-height: 1.9;
+        outline: none;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .editor:empty:before {
+        content: attr(data-placeholder);
+        color: #a1aaba;
+        pointer-events: none;
+      }
+      .pending {
+        text-decoration-line: underline;
+        text-decoration-style: solid;
+        text-decoration-color: #6385ed;
+        text-underline-offset: 6px;
+        text-decoration-thickness: 1.5px;
+        color: #3559b8;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+      }
+      .mic {
+        border: 0;
+        border-radius: 12px;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        color: #66728a;
+        background: #f0f3f8;
+        transition: background 0.2s;
+      }
+      .mic:hover {
+        background: #e6ecf8;
+      }
+      .mic.active {
+        color: #fff;
+        background: #466df4;
+      }
+      .mic svg {
+        width: 22px;
+        height: 22px;
+      }
+      .mic.active .mic-icon {
+        display: none;
+      }
+      .stop-icon {
+        display: none;
+      }
+      .mic.active .stop-icon {
+        display: block;
+      }
+      .status {
+        font-size: 13px;
+        color: #7a8699;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .status.live {
+        color: #3559b8;
+      }
+      .pulse {
+        display: none;
+        height: 7px;
+        width: 7px;
+        border-radius: 50%;
+        background: #466df4;
+      }
+      .live .pulse {
+        display: block;
+        animation: pulse 1.4s infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .elapsed {
+        font-variant-numeric: tabular-nums;
+        color: #78869b;
+        font-size: 12px;
+        margin-left: auto;
+      }
+      .cancel {
+        border: 0;
+        background: transparent;
+        color: #7b8699;
+        padding: 7px 8px;
+        border-radius: 7px;
+        font-size: 13px;
+      }
+      .cancel:hover {
+        background: #f4f6fa;
+      }
+      .send {
+        background: #1f2e48;
+        color: #fff;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-size: 13px;
+      }
+      .hint {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        color: #8a94a6;
+        font-size: 12px;
+        line-height: 1.8;
+        padding: 14px 4px;
+      }
+      .hint kbd {
+        font: inherit;
+        background: #fff;
+        border: 1px solid #dfe5ed;
+        border-radius: 4px;
+        padding: 2px 5px;
+        color: #5f6e85;
+      }
+      .config {
+        margin-top: 28px;
+        font-size: 13px;
+        color: #77859a;
+      }
+      .config summary {
+        cursor: pointer;
+        padding: 10px 0;
+        list-style: none;
+      }
+      .config summary:before {
+        content: "＋";
+        margin-right: 8px;
+      }
+      .config[open] summary:before {
+        content: "－";
+      }
+      .fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        padding: 15px 0;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .field input {
+        width: 100%;
+        border: 1px solid #dce3ed;
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px 12px;
+        font-size: 13px;
+        color: #34445d;
+        outline: none;
+      }
+      .field input:focus {
+        border-color: #7493ed;
+      }
+      .full {
+        grid-column: 1/-1;
+      }
+      .note {
+        font-size: 12px;
+        line-height: 1.8;
+        color: #96a0b0;
+      }
+      .error {
+        color: #bd4658;
+        font-size: 13px;
+        line-height: 1.7;
+        min-height: 0;
+        margin-top: 12px;
+      }
+      .messages {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .message {
+        background: #e9efff;
+        color: #30476f;
+        border-radius: 14px 14px 3px 14px;
+        padding: 12px 18px;
+        max-width: 90%;
+        white-space: pre-wrap;
+        line-height: 1.7;
+        font-size: 15px;
+      }
+      .bottom {
+        font-size: 12px;
+        color: #a0a8b7;
+        margin-top: 48px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .stats {
+        font-variant-numeric: tabular-nums;
+      }
+      .listen {
+        font-weight: 500;
+      }
+      @media (max-width: 600px) {
+        .shell {
+          padding: 32px 18px;
+        }
+        h1 {
+          font-size: 28px;
+        }
+        .editor {
+          padding: 22px 20px;
+          font-size: 18px;
+          min-height: 170px;
+        }
+        .fields {
+          grid-template-columns: 1fr;
+        }
+        .hint {
+          flex-direction: column;
+          gap: 3px;
+        }
+        .toolbar {
+          padding: 14px;
+        }
+        .status {
+          font-size: 12px;
+        }
+        .bottom {
+          gap: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="brand">
+        <i></i> AI PROXY
+        <span style="font-weight: 400; color: #a0aabc">/ VOICE LAB</span>
+      </div>
+      <h1>把想法，说出来。</h1>
+      <p class="intro">
+        边说边成文，识别会随语境修正。<br />带下划线的文字正在确认，完成后会自然定稿。
+      </p>
+      <section
+        id="messages"
+        class="messages"
+        aria-label="已发送的文字"
+      ></section>
+      <section class="composer" aria-label="语音输入">
+        <div
+          id="editor"
+          class="editor"
+          role="textbox"
+          aria-label="消息输入框"
+          aria-multiline="true"
+          contenteditable="true"
+          data-placeholder="写点什么，或点击麦克风开始说话……"
+        ></div>
+        <div class="toolbar">
+          <button
+            id="mic"
+            class="mic"
+            aria-label="开始语音输入"
+            title="点击开始，再次点击结束；也可以按住右侧 Alt / Option"
+          >
+            <svg
+              class="mic-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+            >
+              <rect x="8" y="3" width="8" height="12" rx="4" />
+              <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+            </svg>
+            <svg class="stop-icon" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="3" />
+            </svg>
+          </button>
+          <div id="status" class="status" role="status" aria-live="polite">
+            <span class="pulse"></span
+            ><span id="statusText">点击麦克风，开始语音输入</span>
+          </div>
+          <span id="elapsed" class="elapsed" hidden>00:00</span>
+          <button id="cancel" class="cancel" hidden>取消</button>
+          <button id="send" class="send" disabled>发送</button>
+        </div>
+      </section>
+      <div class="hint">
+        <span>按住 <kbd>右 Alt / Option</kbd> 说话，松开结束</span
+        ><span><kbd>Esc</kbd> 取消本次录音</span>
+      </div>
+      <div id="error" class="error" role="alert"></div>
+      <div id="connectionActions" hidden>
+        <button id="useLocalDemo" class="cancel" type="button">
+          使用本机实时演示
+        </button>
+        <button id="openGatewayDemo" class="cancel" type="button" hidden>
+          打开该服务的实时演示
+        </button>
+      </div>
+      <details id="config" class="config" open>
+        <summary>连接设置</summary>
+        <div class="fields">
+          <label class="field"
+            >AI Proxy 地址<input
+              id="endpoint"
+              type="url"
+              placeholder="http://127.0.0.1:3810"
+              autocomplete="off"
+          /></label>
+          <label class="field"
+            >实时模型<input
+              id="model"
+              value="qwen-audio-3.1-asr-flash-message"
+              autocomplete="off"
+              spellcheck="false"
+          /></label>
+          <label class="field full"
+            >AI Proxy API Key<input
+              id="apiKey"
+              type="password"
+              placeholder="填写 AI Proxy 的访问 Key"
+              autocomplete="off"
+              spellcheck="false"
+          /></label>
+        </div>
+        <div class="note">
+          连接你自己的 AI Proxy；Key 只保留在当前页面内存中。浏览器通过同源
+          WebSocket 发送音频，百炼渠道凭据始终留在服务端。
+        </div>
+      </details>
+      <div class="bottom">
+        <span>Qwen3 ASR · 原生实时识别</span
+        ><span id="stats" class="stats">准备就绪</span>
+      </div>
+    </main>
+    <script src="./realtime-voice.js"></script>
+  </body>
+</html>
