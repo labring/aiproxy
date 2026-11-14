@@ -70,8 +70,16 @@ also include `usage.seconds`, even if the upstream usage only contains token
 fields. Valid upstream seconds, including zero, are preserved. Missing, null or
 negative seconds are filled from server-measured request audio duration; when no
 duration is available the response explicitly includes `seconds: 0`. Existing
-token fields, vendor-specific usage fields and internal token accounting are
-unchanged. Plain-text/subtitle formats do not gain a JSON usage envelope.
+total_tokens and vendor-specific usage fields remain unchanged.
+
+Token-priced consumers use independent input_tokens and output_tokens. Chat
+prompt_tokens/completion_tokens are normalized to these fields; explicitly
+present canonical counters (including zero) win. Missing/invalid components are
+zero, never derived from totals, seconds, or transcript text. The gateway's
+legacy total_tokens fallback is retained. Without upstream usage, wire usage is
+marked type=duration and does not expose estimated input/output tokens as real
+model usage. Configure separate input/output prices per million tokens for
+models billed by tokens; duration-priced models continue using seconds. Plain-text/subtitle formats do not gain a JSON usage envelope.
 
 DashScope realtime billing is retained from `result-generated` events because
 `task-finished` normally has `usage=null`. The duration is cumulative per task:

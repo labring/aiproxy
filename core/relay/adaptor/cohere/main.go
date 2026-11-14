@@ -28,6 +28,12 @@ func stopReasonCohere2OpenAI(reason *string) string {
 	switch *reason {
 	case "COMPLETE":
 		return relaymodel.FinishReasonStop
+	case "MAX_TOKENS":
+		return relaymodel.FinishReasonLength
+	case "ERROR_TOXIC":
+		return relaymodel.FinishReasonContentFilter
+	case "ERROR":
+		return relaymodel.FinishReasonStop
 	default:
 		return *reason
 	}
@@ -55,9 +61,17 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 		cohereRequest.Connectors = append(cohereRequest.Connectors, WebSearchConnector)
 	}
 
-	for _, message := range textRequest.Messages {
-		messageContent, _ := message.Content.(string)
+	lastUser := -1
+
+	for i, message := range textRequest.Messages {
 		if message.Role == "user" {
+			lastUser = i
+		}
+	}
+
+	for i, message := range textRequest.Messages {
+		messageContent, _ := message.Content.(string)
+		if i == lastUser {
 			cohereRequest.Message = messageContent
 		} else {
 			var role string
@@ -96,6 +110,10 @@ func StreamResponse2OpenAI(
 	case "text-generation":
 		responseText += cohereResponse.Text
 	case "stream-end":
+		if cohereResponse.Response == nil {
+			return nil
+		}
+
 		usage := cohereResponse.Response.Meta.Tokens
 		response = &Response{
 			Meta: Meta{
@@ -105,7 +123,7 @@ func StreamResponse2OpenAI(
 				},
 			},
 		}
-		finishReason = *cohereResponse.Response.FinishReason
+		finishReason = stopReasonCohere2OpenAI(cohereResponse.Response.FinishReason)
 	default:
 		return nil
 	}
@@ -194,6 +212,10 @@ func StreamHandler(
 		}
 
 		response := StreamResponse2OpenAI(meta, &cohereResponse)
+		if response == nil {
+			continue
+		}
+
 		if response.Usage != nil {
 			usage = *response.Usage
 		}

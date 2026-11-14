@@ -207,7 +207,22 @@ func handleSTTNonStream(
 				}, responseErr
 			}
 
-			err = sonic.UnmarshalString(usageStr, usage)
+			normalized, normalizeErr := relaymodel.NormalizeSTTTokenUsage([]byte(usageStr))
+			if normalizeErr != nil {
+				err = normalizeErr
+			} else {
+				// The legacy total counter remains intact, but absent input/output
+				// counters must not inherit request-duration/text estimates.
+				usage.InputTokens, usage.OutputTokens, usage.InputTokenDetails = 0, 0, nil
+
+				err = sonic.Unmarshal(normalized, usage)
+				if err == nil {
+					_, err = node.SetAny("usage", sonic.NoCopyRawMessage(normalized))
+					if err == nil {
+						responseBody, err = node.MarshalJSON()
+					}
+				}
+			}
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
 					err,
@@ -220,7 +235,7 @@ func handleSTTNonStream(
 				}, responseErr
 			}
 		} else {
-			responseBody, err = injectUsageIntoJSON(&node, usage)
+			responseBody, err = injectUsageIntoJSON(&node, durationResponseUsage(usage))
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
 					err,
@@ -299,6 +314,13 @@ func processSTTStreamChunks(
 			break
 		}
 
+		normalized, normalizeErr := normalizeSTTResponseTokenUsage(data)
+		if normalizeErr != nil {
+			log.Error("error normalizing STT stream usage: " + normalizeErr.Error())
+			continue
+		}
+
+		data = normalized
 		var sseResponse relaymodel.SttSSEResponse
 
 		err := sonic.Unmarshal(data, &sseResponse)
@@ -358,7 +380,7 @@ func processSSEResponse(
 		text := getTextFromResponse(sseResponse, fullText)
 		usage := calculateSTTUsage(text, meta)
 
-		return injectUsageIntoSSE(data, usage), usage
+		return injectUsageIntoSSE(data, durationResponseUsage(usage)), usage
 
 	default:
 		return data, nil
@@ -422,6 +444,46 @@ func calculateSTTUsage(text string, meta *meta.Meta) *relaymodel.SttUsage {
 			AudioTokens: int64(meta.RequestUsage.AudioInputTokens),
 		},
 		TotalTokens: int64(meta.RequestUsage.InputTokens) + outputTokens,
+	}
+}
+
+// normalizeSTTResponseTokenUsage enriches JSON/SSE usage while preserving all
+// other event fields. Missing/null usage remains absent for duration fallback.
+func normalizeSTTResponseTokenUsage(data []byte) ([]byte, error) {
+	node, err := common.GetJSONNodeNoCopy(data)
+	if err != nil {
+		return nil, err
+	}
+
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		return data, nil
+	}
+
+	raw, err := usageNode.Raw()
+	if err != nil {
+		return nil, err
+	}
+
+	normalized, err := relaymodel.NormalizeSTTTokenUsage([]byte(raw))
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = node.SetAny("usage", sonic.NoCopyRawMessage(normalized)); err != nil {
+		return nil, err
+	}
+
+	return node.MarshalJSON()
+}
+
+// durationResponseUsage prevents legacy request/text estimates from looking like
+// genuine token usage on the wire. Internal legacy total accounting is retained.
+func durationResponseUsage(usage *relaymodel.SttUsage) *relaymodel.SttUsage {
+	return &relaymodel.SttUsage{
+		Type:        relaymodel.SttUsageTypeDuration,
+		Seconds:     usage.Seconds,
+		TotalTokens: usage.TotalTokens,
 	}
 }
 
