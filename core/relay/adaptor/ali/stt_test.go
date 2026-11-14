@@ -290,6 +290,9 @@ func TestSTTChatResponseAndErrors(t *testing.T) {
 		wantError  bool
 	}{
 		{name: "tokens and seconds", body: `{"id":"req-1","choices":[{"message":{"content":"你好"}}],"usage":{"prompt_tokens":50,"completion_tokens":3,"total_tokens":53,"seconds":2,"prompt_tokens_details":{"audio_tokens":50}}}`, status: 200},
+		{name: "native input output", body: `{"choices":[{"message":{"content":"你好"}}],"usage":{"input_tokens":125,"output_tokens":17,"total_tokens":999,"seconds":2.1}}`, status: 200},
+		{name: "explicit zero", body: `{"choices":[{"message":{"content":"你好"}}],"usage":{"input_tokens":0,"output_tokens":0,"prompt_tokens":125,"completion_tokens":17,"total_tokens":999}}`, status: 200},
+
 		{name: "silence is valid", body: `{"choices":[{"message":{"content":""}}]}`, status: 200},
 		{name: "missing content", body: `{"choices":[]}`, status: 200, wantError: true},
 		{name: "malformed", body: `not json`, status: 200, wantError: true},
@@ -327,6 +330,18 @@ func TestSTTChatResponseAndErrors(t *testing.T) {
 
 			require.Nil(t, err)
 
+			if tt.name == "native input output" {
+				assert.EqualValues(t, 125, result.Usage.InputTokens)
+				assert.EqualValues(t, 17, result.Usage.OutputTokens)
+				assert.EqualValues(t, 999, result.Usage.TotalTokens)
+				assert.Contains(t, recorder.Body.String(), `"seconds":3`)
+			}
+
+			if tt.name == "explicit zero" {
+				assert.Zero(t, result.Usage.InputTokens)
+				assert.Zero(t, result.Usage.OutputTokens)
+				assert.EqualValues(t, 999, result.Usage.TotalTokens)
+			}
 			if tt.name == "tokens and seconds" {
 				assert.Contains(t, recorder.Body.String(), `"seconds":2`)
 				assert.Contains(t, recorder.Body.String(), `"total_tokens":53`)

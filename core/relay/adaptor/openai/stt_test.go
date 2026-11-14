@@ -41,7 +41,7 @@ func TestSTTResponseSeconds(t *testing.T) {
 			upstreamUsage: `{"input_tokens":100,"output_tokens":17,"total_tokens":777}`,
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{100, 17, 777, 5},
+			jsonBilling:   [4]int64{100, 17, 777, 0},
 			streamBilling: [4]int64{100, 17, 777, 0},
 		},
 		{
@@ -101,7 +101,7 @@ func TestSTTResponseSeconds(t *testing.T) {
 			upstreamUsage: `null`,
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{5, 1, 6, 5},
+			jsonBilling:   [4]int64{0, 0, 6, 0},
 			streamBilling: [4]int64{5, 1, 6, 5},
 		},
 		{
@@ -109,7 +109,7 @@ func TestSTTResponseSeconds(t *testing.T) {
 			upstreamUsage: `{}`,
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{5, 1, 6, 5},
+			jsonBilling:   [4]int64{0, 0, 6, 0},
 		},
 		{
 			name:          "duration usage without seconds",
@@ -125,6 +125,20 @@ func TestSTTResponseSeconds(t *testing.T) {
 			seconds:       3,
 			jsonBilling:   [4]int64{3, 0, 3, 0},
 			streamBilling: [4]int64{3, 0, 3, 0},
+		},
+		{
+			name:          "total only does not fabricate components",
+			upstreamUsage: `{"total_tokens":777}`,
+			measured:      5, seconds: 5,
+			jsonBilling: [4]int64{0, 0, 777, 0}, streamBilling: [4]int64{0, 0, 777, 0},
+		},
+		{
+			name:          "chat aliases",
+			upstreamUsage: `{"prompt_tokens":125,"completion_tokens":17,"total_tokens":999,"vendor":{"kept":true}}`,
+			measured:      5,
+			seconds:       5,
+			jsonBilling:   [4]int64{125, 17, 999, 0},
+			streamBilling: [4]int64{125, 17, 999, 0},
 		},
 	}
 	for _, tt := range tests {
@@ -193,7 +207,7 @@ func TestSTTResponseSeconds(t *testing.T) {
 						AudioInputTokens: model.ZeroNullInt64(expectedBilling[3]),
 					},
 					result.Usage,
-					"response enrichment must not change legacy billing",
+					"actual token components and the legacy total are accounted independently",
 				)
 
 				returned := recorder.Body.String()
@@ -237,14 +251,23 @@ func TestSTTResponseSeconds(t *testing.T) {
 					var original map[string]json.RawMessage
 					require.NoError(t, json.Unmarshal([]byte(tt.upstreamUsage), &original))
 					delete(original, "seconds")
+
+					if tt.name == "chat aliases" {
+						original["input_tokens"] = json.RawMessage(`125`)
+						original["output_tokens"] = json.RawMessage(`17`)
+					}
+
 					delete(usage, "seconds")
 					assert.Equal(
 						t,
 						original,
 						usage,
-						"only seconds may change; preserve unknown fields and exact token numbers",
+						"preserve unknown fields and exact token numbers while normalizing explicit aliases",
 					)
 				case tt.upstreamUsage == "" || stream:
+					assert.JSONEq(t, `"duration"`, string(usage["type"]))
+					assert.NotContains(t, usage, "input_tokens")
+					assert.NotContains(t, usage, "output_tokens")
 					assert.JSONEq(
 						t,
 						strconv.FormatInt(expectedBilling[2], 10),
