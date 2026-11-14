@@ -140,7 +140,7 @@ func TestRealtimeMessageMissingUsageFallsBackToPCM(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(
 		t,
-		`{"type":"session.finished","usage":{"type":"duration","seconds":3,"total_tokens":3}}`,
+		`{"type":"session.finished","usage":{"type":"duration","seconds":3}}`,
 		string(data),
 	)
 	assert.Equal(t, model.ZeroNullInt64(3), s.modelUsage(3).TotalTokens)

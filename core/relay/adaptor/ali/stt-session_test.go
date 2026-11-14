@@ -173,7 +173,7 @@ func TestRealtimeSTTBridge(t *testing.T) {
 
 		if event.Type == "session.finished" {
 			assert.Equal(t, float64(1), event.Usage["seconds"])
-			assert.Equal(t, float64(1), event.Usage["total_tokens"])
+			assert.NotContains(t, event.Usage, "total_tokens")
 			break
 		}
 	}
@@ -316,7 +316,7 @@ func TestRealtimeFinishedDataPreservesTokens(t *testing.T) {
 	for _, tt := range []struct{ body, want string }{
 		{body: `{"type":"session.finished","usage":{"total_tokens":777,"vendor":{"kept":true}}}`, want: `{"type":"session.finished","usage":{"total_tokens":777,"vendor":{"kept":true},"seconds":5}}`},
 		{body: `{"type":"session.finished","usage":{"total_tokens":777,"seconds":0}}`, want: `{"type":"session.finished","usage":{"total_tokens":777,"seconds":0}}`},
-		{body: `{"type":"session.finished","usage":null}`, want: `{"type":"session.finished","usage":{"type":"duration","seconds":5,"total_tokens":5}}`},
+		{body: `{"type":"session.finished","usage":null}`, want: `{"type":"session.finished","usage":{"type":"duration","seconds":5}}`},
 	} {
 		got, err := realtimeFinishedData([]byte(tt.body), 5)
 		require.NoError(t, err)

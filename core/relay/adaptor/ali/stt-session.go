@@ -270,9 +270,8 @@ func realtimeFinishedData(data []byte, seconds int64) ([]byte, error) {
 	if err := json.Unmarshal(body["usage"], &usage); err != nil || usage == nil {
 		encoded, err := json.Marshal(
 			relaymodel.SttUsage{
-				Type:        relaymodel.SttUsageTypeDuration,
-				Seconds:     seconds,
-				TotalTokens: seconds,
+				Type:    relaymodel.SttUsageTypeDuration,
+				Seconds: seconds,
 			},
 		)
 		if err != nil {
