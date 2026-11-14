@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSTTResponseSeconds checks the public JSON/SSE response and the separate legacy billing result.
+// TestSTTResponseSeconds checks the public JSON/SSE response and independently metered billing.
 func TestSTTResponseSeconds(t *testing.T) {
 	const upstreamFields = `"type":"tokens","input_tokens":100,"output_tokens":17,"total_tokens":777,"input_token_details":{"audio_tokens":80,"text_tokens":20},"vendor":{"kept":true},"large":9007199254740993`
 
@@ -87,29 +87,29 @@ func TestSTTResponseSeconds(t *testing.T) {
 			name:          "no upstream usage",
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{5, 1, 6, 5},
-			streamBilling: [4]int64{5, 1, 6, 5},
+			jsonBilling:   [4]int64{5, 0, 5, 0},
+			streamBilling: [4]int64{5, 0, 5, 0},
 		},
 		{
 			name:          "no upstream usage or duration",
 			seconds:       0,
-			jsonBilling:   [4]int64{0, 1, 1, 0},
-			streamBilling: [4]int64{0, 1, 1, 0},
+			jsonBilling:   [4]int64{0, 0, 0, 0},
+			streamBilling: [4]int64{0, 0, 0, 0},
 		},
 		{
 			name:          "null usage",
 			upstreamUsage: `null`,
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{0, 0, 6, 0},
-			streamBilling: [4]int64{5, 1, 6, 5},
+			jsonBilling:   [4]int64{5, 0, 5, 0},
+			streamBilling: [4]int64{5, 0, 5, 0},
 		},
 		{
 			name:          "empty usage",
 			upstreamUsage: `{}`,
 			measured:      5,
 			seconds:       5,
-			jsonBilling:   [4]int64{0, 0, 6, 0},
+			jsonBilling:   [4]int64{0, 0, 0, 0},
 		},
 		{
 			name:          "duration usage without seconds",
@@ -139,6 +139,22 @@ func TestSTTResponseSeconds(t *testing.T) {
 			seconds:       5,
 			jsonBilling:   [4]int64{125, 17, 999, 0},
 			streamBilling: [4]int64{125, 17, 999, 0},
+		},
+		{
+			name:          "input output without total",
+			upstreamUsage: `{"type":"tokens","input_tokens":125,"output_tokens":17}`,
+			measured:      5,
+			seconds:       5,
+			jsonBilling:   [4]int64{125, 17, 0, 0},
+			streamBilling: [4]int64{125, 17, 0, 0},
+		},
+		{
+			name:          "only output",
+			upstreamUsage: `{"type":"tokens","output_tokens":17}`,
+			measured:      5,
+			seconds:       5,
+			jsonBilling:   [4]int64{0, 17, 0, 0},
+			streamBilling: [4]int64{0, 17, 0, 0},
 		},
 	}
 	for _, tt := range tests {
@@ -207,7 +223,7 @@ func TestSTTResponseSeconds(t *testing.T) {
 						AudioInputTokens: model.ZeroNullInt64(expectedBilling[3]),
 					},
 					result.Usage,
-					"actual token components and the legacy total are accounted independently",
+					"only upstream token components can contribute token usage",
 				)
 
 				returned := recorder.Body.String()
@@ -264,16 +280,11 @@ func TestSTTResponseSeconds(t *testing.T) {
 						usage,
 						"preserve unknown fields and exact token numbers while normalizing explicit aliases",
 					)
-				case tt.upstreamUsage == "" || stream:
+				case tt.upstreamUsage == "" || tt.upstreamUsage == "null":
 					assert.JSONEq(t, `"duration"`, string(usage["type"]))
 					assert.NotContains(t, usage, "input_tokens")
 					assert.NotContains(t, usage, "output_tokens")
-					assert.JSONEq(
-						t,
-						strconv.FormatInt(expectedBilling[2], 10),
-						string(usage["total_tokens"]),
-						"retain generated total_tokens",
-					)
+					assert.NotContains(t, usage, "total_tokens")
 				default:
 					assert.NotContains(
 						t,
@@ -315,5 +326,5 @@ func TestSTTTextResponseUnchanged(t *testing.T) {
 	)
 	require.Nil(t, relayErr)
 	assert.Equal(t, "hello\n", recorder.Body.String())
-	assert.Equal(t, model.ZeroNullInt64(6), result.Usage.TotalTokens)
+	assert.Equal(t, model.ZeroNullInt64(5), result.Usage.TotalTokens)
 }

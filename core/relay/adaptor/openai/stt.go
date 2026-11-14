@@ -166,7 +166,7 @@ func handleSTTNonStream(
 		)
 	}
 
-	text, err := extractTextFromResponse(responseBody, meta.GetString(MetaResponseFormat))
+	_, err = extractTextFromResponse(responseBody, meta.GetString(MetaResponseFormat))
 	if err != nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
@@ -175,7 +175,7 @@ func handleSTTNonStream(
 		)
 	}
 
-	usage := calculateSTTUsage(text, meta)
+	usage := measuredSTTDurationUsage(meta)
 
 	// Handle JSON response with usage injection
 	if strings.Contains(resp.Header.Get("Content-Type"), "json") {
@@ -193,7 +193,7 @@ func handleSTTNonStream(
 		}
 
 		usageNode := node.Get("usage")
-		if usageNode != nil && usageNode.Exists() {
+		if usageNode != nil && usageNode.Exists() && usageNode.TypeSafe() != ast.V_NULL {
 			usageStr, err := usageNode.Raw()
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
@@ -211,9 +211,12 @@ func handleSTTNonStream(
 			if normalizeErr != nil {
 				err = normalizeErr
 			} else {
-				// The legacy total counter remains intact, but absent input/output
-				// counters must not inherit request-duration/text estimates.
-				usage.InputTokens, usage.OutputTokens, usage.InputTokenDetails = 0, 0, nil
+				// Upstream components start at zero; neither totals nor text can
+				// supply missing input/output usage.
+				usage = &relaymodel.SttUsage{
+					Type:    relaymodel.SttUsageTypeTokens,
+					Seconds: int64(meta.RequestUsage.AudioInputTokens),
+				}
 
 				err = sonic.Unmarshal(normalized, usage)
 				if err == nil {
@@ -236,7 +239,7 @@ func handleSTTNonStream(
 				}, responseErr
 			}
 		} else {
-			responseBody, err = injectUsageIntoJSON(&node, durationResponseUsage(usage))
+			responseBody, err = injectUsageIntoJSON(&node, usage)
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
 					err,
@@ -299,10 +302,7 @@ func processSTTStreamChunks(
 ) model.Usage {
 	log := common.GetLogger(c)
 
-	var (
-		usage    *relaymodel.SttUsage
-		fullText strings.Builder
-	)
+	var usage *relaymodel.SttUsage
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -331,7 +331,7 @@ func processSTTStreamChunks(
 			continue
 		}
 
-		data, totalUsage := processSSEResponse(sseResponse, &fullText, meta, data)
+		data, totalUsage := processSSEResponse(sseResponse, meta, data)
 		if totalUsage != nil {
 			usage = totalUsage
 		}
@@ -342,7 +342,7 @@ func processSTTStreamChunks(
 	render.OpenaiDone(c)
 
 	if usage == nil {
-		usage = calculateSTTUsage(fullText.String(), meta)
+		usage = measuredSTTDurationUsage(meta)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -355,22 +355,16 @@ func processSTTStreamChunks(
 // processSSEResponse processes individual SSE response and returns usage if complete
 func processSSEResponse(
 	sseResponse relaymodel.SttSSEResponse,
-	fullText *strings.Builder,
 	meta *meta.Meta,
 	data []byte,
 ) ([]byte, *relaymodel.SttUsage) {
 	switch sseResponse.Type {
 	case relaymodel.SttSSEResponseTypeTranscriptTextDelta:
-		if sseResponse.Delta != "" {
-			fullText.WriteString(sseResponse.Delta)
-		}
 		return data, nil
 
 	case relaymodel.SttSSEResponseTypeTranscriptTextDone:
 		if sseResponse.Usage != nil {
-			fullText.Reset()
-
-			// Only enrich the wire response; retain the original usage for legacy token accounting.
+			// Expose server-measured seconds independently of upstream input/output counters.
 			withSeconds, err := injectSTTSeconds(data, int64(meta.RequestUsage.AudioInputTokens))
 			if err == nil {
 				data = withSeconds
@@ -379,10 +373,9 @@ func processSSEResponse(
 			return data, sseResponse.Usage
 		}
 
-		text := getTextFromResponse(sseResponse, fullText)
-		usage := calculateSTTUsage(text, meta)
+		usage := measuredSTTDurationUsage(meta)
 
-		return injectUsageIntoSSE(data, durationResponseUsage(usage)), usage
+		return injectUsageIntoSSE(data, usage), usage
 
 	default:
 		return data, nil
@@ -391,7 +384,7 @@ func processSSEResponse(
 
 // injectSTTSeconds fills missing/invalid response seconds from server-measured audio duration.
 // It preserves upstream zero, token fields, unknown fields and numeric precision. The response
-// copy is separate from billing usage so duration-to-token accounting remains unchanged.
+// copy preserves upstream input/output counters; duration never supplies token quantities.
 func injectSTTSeconds(data []byte, seconds int64) ([]byte, error) {
 	node, err := common.GetJSONNodeNoCopy(data)
 	if err != nil {
@@ -420,32 +413,12 @@ func injectSTTSeconds(data []byte, seconds int64) ([]byte, error) {
 	return node.MarshalJSON()
 }
 
-// getTextFromResponse extracts text from SSE response or builder
-func getTextFromResponse(sseResponse relaymodel.SttSSEResponse, fullText *strings.Builder) string {
-	if sseResponse.Text != "" {
-		return sseResponse.Text
-	}
-
-	text := fullText.String()
-	fullText.Reset()
-
-	return text
-}
-
-// calculateSTTUsage calculates usage for STT
-func calculateSTTUsage(text string, meta *meta.Meta) *relaymodel.SttUsage {
-	outputTokens := CountTokenText(text, meta.ActualModel)
-
+// measuredSTTDurationUsage supplies only the server-measured duration when
+// upstream usage is absent. Token quantities must always come from upstream.
+func measuredSTTDurationUsage(meta *meta.Meta) *relaymodel.SttUsage {
 	return &relaymodel.SttUsage{
-		Type:         relaymodel.SttUsageTypeTokens,
-		Seconds:      int64(meta.RequestUsage.AudioInputTokens),
-		InputTokens:  int64(meta.RequestUsage.InputTokens),
-		OutputTokens: outputTokens,
-		InputTokenDetails: &relaymodel.SttUsageInputTokenDetails{
-			TextTokens:  int64(meta.RequestUsage.InputTokens - meta.RequestUsage.AudioInputTokens),
-			AudioTokens: int64(meta.RequestUsage.AudioInputTokens),
-		},
-		TotalTokens: int64(meta.RequestUsage.InputTokens) + outputTokens,
+		Type:    relaymodel.SttUsageTypeDuration,
+		Seconds: int64(meta.RequestUsage.AudioInputTokens),
 	}
 }
 
@@ -477,16 +450,6 @@ func normalizeSTTResponseTokenUsage(data []byte) ([]byte, error) {
 	}
 
 	return node.MarshalJSON()
-}
-
-// durationResponseUsage prevents legacy request/text estimates from looking like
-// genuine token usage on the wire. Internal legacy total accounting is retained.
-func durationResponseUsage(usage *relaymodel.SttUsage) *relaymodel.SttUsage {
-	return &relaymodel.SttUsage{
-		Type:        relaymodel.SttUsageTypeDuration,
-		Seconds:     usage.Seconds,
-		TotalTokens: usage.TotalTokens,
-	}
 }
 
 // injectUsageIntoJSON injects usage into JSON response

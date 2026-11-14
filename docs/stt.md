@@ -75,10 +75,10 @@ total_tokens and vendor-specific usage fields remain unchanged.
 Token-priced consumers use independent input_tokens and output_tokens. Chat
 prompt_tokens/completion_tokens are normalized to these fields; explicitly
 present canonical counters (including zero) win. Missing/invalid components are
-zero, never derived from totals, seconds, or transcript text. The gateway's
-legacy total_tokens fallback is retained. Without upstream usage, wire usage is
-marked type=duration and does not expose estimated input/output tokens as real
-model usage. Configure separate input/output prices per million tokens for
+zero, never derived from totals, seconds, or transcript text. Without upstream usage, only server-measured duration is reported with
+type=duration. Input/output/total tokens are never estimated from audio or
+transcript text. Upstream total_tokens is retained as a statistic and never
+used to infer input/output charges. Configure separate input/output prices per million tokens for
 models billed by tokens; duration-priced models continue using seconds. Plain-text/subtitle formats do not gain a JSON usage envelope.
 
 DashScope realtime billing is retained from `result-generated` events because
