@@ -102,6 +102,10 @@ func StreamResponse2OpenAI(
 	case "text-generation":
 		responseText += cohereResponse.Text
 	case "stream-end":
+		if cohereResponse.Response == nil {
+			return nil
+		}
+
 		usage := cohereResponse.Response.Meta.Tokens
 		response = &Response{
 			Meta: Meta{
@@ -200,6 +204,10 @@ func StreamHandler(
 		}
 
 		response := StreamResponse2OpenAI(meta, &cohereResponse)
+		if response == nil {
+			continue
+		}
+
 		if response.Usage != nil {
 			usage = *response.Usage
 		}
