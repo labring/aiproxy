@@ -326,6 +326,7 @@ func sttResponse(
 	if usage.Seconds <= 0 {
 		usage.Seconds = int64(mt.RequestUsage.AudioInputTokens)
 	}
+
 	writeSTTResponse(c, *result.Choices[0].Message.Content, usage)
 
 	return adaptor.DoResponseResult{Usage: usage.ToModelUsage(), UpstreamID: result.ID}, nil

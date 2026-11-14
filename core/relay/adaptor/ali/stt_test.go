@@ -342,6 +342,7 @@ func TestSTTChatResponseAndErrors(t *testing.T) {
 				assert.Zero(t, result.Usage.OutputTokens)
 				assert.EqualValues(t, 999, result.Usage.TotalTokens)
 			}
+
 			if tt.name == "tokens and seconds" {
 				assert.Contains(t, recorder.Body.String(), `"seconds":2`)
 				assert.Contains(t, recorder.Body.String(), `"total_tokens":53`)

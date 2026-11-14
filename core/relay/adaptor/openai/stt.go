@@ -223,6 +223,7 @@ func handleSTTNonStream(
 					}
 				}
 			}
+
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
 					err,
@@ -321,6 +322,7 @@ func processSTTStreamChunks(
 		}
 
 		data = normalized
+
 		var sseResponse relaymodel.SttSSEResponse
 
 		err := sonic.Unmarshal(data, &sseResponse)
