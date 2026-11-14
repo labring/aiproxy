@@ -94,5 +94,38 @@ func TestStreamHandlerSkipsEventsWithoutChunk(t *testing.T) {
 
 	if !strings.Contains(w.Body.String(), `"content":"hi"`) {
 		t.Fatalf("missing text chunk: %s", w.Body.String())
+
+func TestConvertRequestKeepsEarlierUserTurnsInHistory(t *testing.T) {
+	t.Parallel()
+
+	req := &relaymodel.GeneralOpenAIRequest{
+		Model: "command-r",
+		Messages: []relaymodel.Message{
+			{Role: "system", Content: "be brief"},
+			{Role: "user", Content: "first question"},
+			{Role: "assistant", Content: "first answer"},
+			{Role: "user", Content: "second question"},
+		},
+	}
+
+	got := ConvertRequest(req)
+
+	if got.Message != "second question" {
+		t.Fatalf("Message = %q, want %q", got.Message, "second question")
+	}
+
+	want := []ChatMessage{
+		{Role: "SYSTEM", Message: "be brief"},
+		{Role: "USER", Message: "first question"},
+		{Role: "CHATBOT", Message: "first answer"},
+	}
+	if len(got.ChatHistory) != len(want) {
+		t.Fatalf("ChatHistory = %+v, want %+v", got.ChatHistory, want)
+	}
+
+	for i := range want {
+		if got.ChatHistory[i] != want[i] {
+			t.Fatalf("ChatHistory[%d] = %+v, want %+v", i, got.ChatHistory[i], want[i])
+		}
 	}
 }
