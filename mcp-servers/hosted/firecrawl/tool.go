@@ -1,9 +1,11 @@
 package firecrawl
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -353,8 +355,8 @@ func (s *Server) handleExtract(
 	return mcp.NewToolResultText(trimResponseText(string(resultJSON))), nil
 }
 
-// agentPollInterval is how often handleDeepResearch checks an agent run
-const agentPollInterval = 2 * time.Second
+// jobPollInterval is how often the deep research and LLMs.txt tools check a running job
+const jobPollInterval = 2 * time.Second
 
 // deepResearchSchema asks the agent for the report that /v1/deep-research returned as finalAnalysis
 var deepResearchSchema = map[string]any{
@@ -465,7 +467,7 @@ func (s *Server) handleDeepResearch(
 
 // waitForAgent polls an agent run until it is no longer processing
 func (s *Server) waitForAgent(ctx context.Context, id string) (*AgentStatusResponse, error) {
-	ticker := time.NewTicker(agentPollInterval)
+	ticker := time.NewTicker(jobPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -491,6 +493,20 @@ func (s *Server) waitForAgent(ctx context.Context, id string) (*AgentStatusRespo
 		case <-ticker.C:
 		}
 	}
+}
+
+// llmsTxtSummaryFormat asks each page for the title and description that its llms.txt line needs
+var llmsTxtSummaryFormat = map[string]any{
+	"type":   "json",
+	"prompt": "Write a 3-4 word title and a 9-10 word description of this page.",
+	"schema": map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"title":       map[string]any{"type": "string"},
+			"description": map[string]any{"type": "string"},
+		},
+		"required": []string{"title", "description"},
+	},
 }
 
 // addGenerateLLMsTextTool adds the generate LLMs.txt tool
@@ -539,7 +555,9 @@ func (s *Server) addGenerateLLMsTextTool() {
 	s.AddTool(generateTool, s.handleGenerateLLMsText)
 }
 
-// handleGenerateLLMsText handles the generate LLMs.txt tool
+// handleGenerateLLMsText handles the generate LLMs.txt tool. Firecrawl shuts down /v1/llmstxt on
+// 2026-12-10, so the files are built from map and batch scrape results:
+// https://docs.firecrawl.dev/migrating-from-llmstxt
 func (s *Server) handleGenerateLLMsText(
 	ctx context.Context,
 	request mcp.CallToolRequest,
@@ -551,46 +569,240 @@ func (s *Server) handleGenerateLLMsText(
 		return nil, errors.New("url is required")
 	}
 
-	params := GenerateLLMsTextParams{
-		URL:    url,
-		Origin: "mcp-server",
+	// /v1/llmstxt processed 10 URLs unless told otherwise, while map returns up to 5000
+	maxURLs := 10
+	if v, ok := args["maxUrls"].(float64); ok {
+		maxURLs = int(v)
 	}
 
-	// Parse optional parameters
-	if maxURLs, ok := args["maxUrls"].(float64); ok {
-		maxURLsInt := int(maxURLs)
-		params.MaxURLs = &maxURLsInt
-	}
+	showFullText, _ := args["showFullText"].(bool)
+	includeSubdomains := false
 
-	if showFullText, ok := args["showFullText"].(bool); ok {
-		params.ShowFullText = &showFullText
-	}
-
-	var response *GenerateLLMsTextResponse
+	var mapped *MapLinksResponse
 
 	err := s.withRetry(ctx, func() error {
 		var err error
 
-		response, err = s.client.GenerateLLMsText(ctx, params)
+		mapped, err = s.client.MapLinks(ctx, MapLinksParams{
+			URL:               url,
+			IncludeSubdomains: &includeSubdomains,
+			Limit:             &maxURLs,
+			Origin:            "mcp-server",
+		})
+
 		return err
 	})
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("LLMs.txt generation failed: %v", err)), nil
 	}
 
-	if !response.Success {
-		return mcp.NewToolResultError(
-			"LLMs.txt generation failed: " + response.Error,
-		), nil
+	if !mapped.Success {
+		return mcp.NewToolResultError("LLMs.txt generation failed: " + mapped.Error), nil
 	}
 
-	resultText := "LLMs.txt content:\n\n" + response.Data.LLMsText
+	urls := make([]string, 0, len(mapped.Links))
+	for _, link := range mapped.Links {
+		urls = append(urls, link.URL)
+	}
 
-	if params.ShowFullText != nil && *params.ShowFullText && response.Data.LLMsFullText != "" {
-		resultText += "\n\nLLMs-full.txt content:\n\n" + response.Data.LLMsFullText
+	var pages []ScrapedPage
+
+	if len(urls) > 0 {
+		pages, err = s.scrapeLLMsTxtPages(ctx, urls, showFullText)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("LLMs.txt generation failed: %v", err)), nil
+		}
+	}
+
+	llmsTxt, llmsFullTxt := buildLLMsTxt(url, urls, pages)
+
+	resultText := "LLMs.txt content:\n\n" + llmsTxt
+
+	if showFullText && llmsFullTxt != "" {
+		resultText += "\n\nLLMs-full.txt content:\n\n" + llmsFullTxt
 	}
 
 	return mcp.NewToolResultText(trimResponseText(resultText)), nil
+}
+
+// scrapeLLMsTxtPages batch scrapes the mapped pages and returns every page of the results
+func (s *Server) scrapeLLMsTxtPages(
+	ctx context.Context,
+	urls []string,
+	showFullText bool,
+) ([]ScrapedPage, error) {
+	formats := []any{llmsTxtSummaryFormat}
+	if showFullText {
+		formats = []any{"markdown", llmsTxtSummaryFormat}
+	}
+
+	// Only the start is retried as a unit: a retried poll must not start, and bill, a second batch.
+	var started *BatchScrapeResponse
+
+	err := s.withRetry(ctx, func() error {
+		var err error
+
+		started, err = s.client.StartBatchScrape(ctx, BatchScrapeParams{
+			URLs:    urls,
+			Formats: formats,
+			Origin:  "mcp-server",
+		})
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !started.Success || started.ID == "" {
+		return nil, jobError("batch scrape did not start", started.Error)
+	}
+
+	status, err := s.waitForBatchScrape(ctx, started.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if status.Status != "completed" {
+		return nil, jobError("batch scrape "+status.Status, status.Error)
+	}
+
+	// A finished batch scrape pages its results through next, which ends after the last page
+	pages := status.Data
+	for next := status.Next; next != ""; {
+		var page *BatchScrapeStatusResponse
+
+		err := s.withRetry(ctx, func() error {
+			var err error
+
+			page, err = s.client.GetBatchScrapeStatus(ctx, started.ID, next)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		pages = append(pages, page.Data...)
+
+		if page.Next == next {
+			break
+		}
+
+		next = page.Next
+	}
+
+	return pages, nil
+}
+
+// waitForBatchScrape polls a batch scrape until it is no longer scraping
+func (s *Server) waitForBatchScrape(
+	ctx context.Context,
+	id string,
+) (*BatchScrapeStatusResponse, error) {
+	ticker := time.NewTicker(jobPollInterval)
+	defer ticker.Stop()
+
+	for {
+		var status *BatchScrapeStatusResponse
+
+		err := s.withRetry(ctx, func() error {
+			var err error
+
+			status, err = s.client.GetBatchScrapeStatus(ctx, id, "")
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if status.Status != "scraping" {
+			return status, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// jobError returns Firecrawl's error message, or fallback when it sent none
+func jobError(fallback, message string) error {
+	if message != "" {
+		return errors.New(message)
+	}
+
+	return errors.New(fallback)
+}
+
+// buildLLMsTxt writes llms.txt and llms-full.txt in the format /v1/llmstxt returned. Pages that came
+// back with a status of 400 or more are left out, and the rest go back into map order, since batch
+// results come back in the order they finish.
+func buildLLMsTxt(
+	rootURL string,
+	urls []string,
+	pages []ScrapedPage,
+) (llmsTxt, llmsFullTxt string) {
+	mapOrder := make(map[string]int, len(urls))
+	for i, pageURL := range urls {
+		if _, seen := mapOrder[pageURL]; !seen {
+			mapOrder[pageURL] = i
+		}
+	}
+
+	position := func(page ScrapedPage) int {
+		if i, ok := mapOrder[firstString(page.Metadata["sourceURL"])]; ok {
+			return i
+		}
+
+		return len(urls)
+	}
+
+	kept := make([]ScrapedPage, 0, len(pages))
+	for _, page := range pages {
+		if statusCode, _ := page.Metadata["statusCode"].(float64); statusCode >= 400 {
+			continue
+		}
+
+		kept = append(kept, page)
+	}
+
+	slices.SortStableFunc(kept, func(a, b ScrapedPage) int {
+		return cmp.Compare(position(a), position(b))
+	})
+
+	var index, full strings.Builder
+
+	index.WriteString("# " + rootURL + " llms.txt\n\n")
+	full.WriteString("# " + rootURL + " llms-full.txt\n\n")
+
+	for _, page := range kept {
+		pageURL := firstString(page.Metadata["url"], page.Metadata["sourceURL"])
+		title := firstString(page.JSON["title"], page.Metadata["title"], pageURL)
+		description := firstString(page.JSON["description"], page.Metadata["description"])
+
+		index.WriteString("- [" + title + "](" + pageURL + "): " + description + "\n")
+		full.WriteString("## " + title + "\n" + page.Markdown + "\n\n")
+	}
+
+	return index.String(), full.String()
+}
+
+// firstString returns the first non-empty string among values. Page metadata can hold a string or a
+// list of strings, so a list counts as its first item.
+func firstString(values ...any) string {
+	for _, value := range values {
+		if list, ok := value.([]any); ok && len(list) > 0 {
+			value = list[0]
+		}
+
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+
+	return ""
 }
 
 // addScrapeTools adds the scrape tool
