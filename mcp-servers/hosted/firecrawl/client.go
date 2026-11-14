@@ -124,13 +124,12 @@ type ExtractParams struct {
 	Origin             string         `json:"origin,omitempty"`
 }
 
-// DeepResearchParams represents parameters for deep research
-type DeepResearchParams struct {
-	Query     string `json:"query"`
-	MaxDepth  *int   `json:"maxDepth,omitempty"`
-	TimeLimit *int   `json:"timeLimit,omitempty"`
-	MaxURLs   *int   `json:"maxUrls,omitempty"`
-	Origin    string `json:"origin,omitempty"`
+// AgentParams represents parameters for an agent run
+type AgentParams struct {
+	Prompt     string         `json:"prompt"`
+	Schema     map[string]any `json:"schema,omitempty"`
+	MaxCredits *int           `json:"maxCredits,omitempty"`
+	Origin     string         `json:"origin,omitempty"`
 }
 
 // GenerateLLMsTextParams represents parameters for LLMs.txt generation
@@ -191,16 +190,17 @@ type ExtractResponse struct {
 	Error   string         `json:"error,omitempty"`
 }
 
-type DeepResearchResponse struct {
-	Success bool              `json:"success"`
-	Data    *DeepResearchData `json:"data,omitempty"`
-	Error   string            `json:"error,omitempty"`
+type AgentResponse struct {
+	Success bool   `json:"success"`
+	ID      string `json:"id,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
-type DeepResearchData struct {
-	FinalAnalysis string           `json:"finalAnalysis"`
-	Activities    []map[string]any `json:"activities"`
-	Sources       []map[string]any `json:"sources"`
+type AgentStatusResponse struct {
+	Success bool           `json:"success"`
+	Status  string         `json:"status"`
+	Data    map[string]any `json:"data,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
 type GenerateLLMsTextResponse struct {
@@ -364,14 +364,23 @@ func (c *Client) Extract(
 	return &response, nil
 }
 
-// DeepResearch conducts deep web research
-func (c *Client) DeepResearch(
-	ctx context.Context,
-	params DeepResearchParams,
-) (*DeepResearchResponse, error) {
-	var response DeepResearchResponse
+// StartAgent starts an agent run
+func (c *Client) StartAgent(ctx context.Context, params AgentParams) (*AgentResponse, error) {
+	var response AgentResponse
 
-	err := c.makeRequest(ctx, http.MethodPost, "/v1/research", params, &response)
+	err := c.makeRequest(ctx, http.MethodPost, "/v2/agent", params, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// GetAgentStatus gets the status and, once completed, the data of an agent run
+func (c *Client) GetAgentStatus(ctx context.Context, id string) (*AgentStatusResponse, error) {
+	var response AgentStatusResponse
+
+	err := c.makeRequest(ctx, http.MethodGet, "/v2/agent/"+id, nil, &response)
 	if err != nil {
 		return nil, err
 	}
