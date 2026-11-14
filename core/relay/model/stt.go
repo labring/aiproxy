@@ -50,10 +50,11 @@ const (
 )
 
 type SttUsage struct {
-	Type              SttUsageType               `json:"type,omitempty"`
-	Seconds           int64                      `json:"seconds,omitempty"`
-	InputTokens       int64                      `json:"input_tokens,omitempty"`
-	OutputTokens      int64                      `json:"output_tokens,omitempty"`
+	Type         SttUsageType `json:"type,omitempty"`
+	Seconds      int64        `json:"seconds"`
+	InputTokens  int64        `json:"input_tokens,omitempty"`
+	OutputTokens int64        `json:"output_tokens,omitempty"`
+	// Upstream statistic only; token charges use independent input/output counters.
 	TotalTokens       int64                      `json:"total_tokens,omitempty"`
 	InputTokenDetails *SttUsageInputTokenDetails `json:"input_token_details,omitempty"`
 }

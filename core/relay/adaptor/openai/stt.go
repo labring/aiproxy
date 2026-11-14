@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -165,7 +166,7 @@ func handleSTTNonStream(
 		)
 	}
 
-	text, err := extractTextFromResponse(responseBody, meta.GetString(MetaResponseFormat))
+	_, err = extractTextFromResponse(responseBody, meta.GetString(MetaResponseFormat))
 	if err != nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
@@ -174,7 +175,7 @@ func handleSTTNonStream(
 		)
 	}
 
-	usage := calculateSTTUsage(text, meta)
+	usage := measuredSTTDurationUsage(meta)
 
 	// Handle JSON response with usage injection
 	if strings.Contains(resp.Header.Get("Content-Type"), "json") {
@@ -192,7 +193,7 @@ func handleSTTNonStream(
 		}
 
 		usageNode := node.Get("usage")
-		if usageNode != nil && usageNode.Exists() {
+		if usageNode != nil && usageNode.Exists() && usageNode.TypeSafe() != ast.V_NULL {
 			usageStr, err := usageNode.Raw()
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
@@ -206,7 +207,26 @@ func handleSTTNonStream(
 				}, responseErr
 			}
 
-			err = sonic.UnmarshalString(usageStr, usage)
+			normalized, normalizeErr := relaymodel.NormalizeSTTTokenUsage([]byte(usageStr))
+			if normalizeErr != nil {
+				err = normalizeErr
+			} else {
+				// Upstream components start at zero; neither totals nor text can
+				// supply missing input/output usage.
+				usage = &relaymodel.SttUsage{
+					Type:    relaymodel.SttUsageTypeTokens,
+					Seconds: int64(meta.RequestUsage.AudioInputTokens),
+				}
+
+				err = sonic.Unmarshal(normalized, usage)
+				if err == nil {
+					_, err = node.SetAny("usage", sonic.NoCopyRawMessage(normalized))
+					if err == nil {
+						responseBody, err = node.MarshalJSON()
+					}
+				}
+			}
+
 			if err != nil {
 				responseErr := relaymodel.WrapperOpenAIError(
 					err,
@@ -231,6 +251,20 @@ func handleSTTNonStream(
 					Usage: usage.ToModelUsage(),
 				}, responseErr
 			}
+		}
+
+		responseBody, err = injectSTTSeconds(
+			responseBody,
+			int64(meta.RequestUsage.AudioInputTokens),
+		)
+		if err != nil {
+			return adaptor.DoResponseResult{
+				Usage: usage.ToModelUsage(),
+			}, relaymodel.WrapperOpenAIError(
+				err,
+				"inject_usage_seconds_failed",
+				http.StatusInternalServerError,
+			)
 		}
 
 		c.Writer.Header().Set("Content-Type", "application/json")
@@ -268,10 +302,7 @@ func processSTTStreamChunks(
 ) model.Usage {
 	log := common.GetLogger(c)
 
-	var (
-		usage    *relaymodel.SttUsage
-		fullText strings.Builder
-	)
+	var usage *relaymodel.SttUsage
 
 	for scanner.Scan() {
 		data := scanner.Bytes()
@@ -284,6 +315,14 @@ func processSTTStreamChunks(
 			break
 		}
 
+		normalized, normalizeErr := normalizeSTTResponseTokenUsage(data)
+		if normalizeErr != nil {
+			log.Error("error normalizing STT stream usage: " + normalizeErr.Error())
+			continue
+		}
+
+		data = normalized
+
 		var sseResponse relaymodel.SttSSEResponse
 
 		err := sonic.Unmarshal(data, &sseResponse)
@@ -292,7 +331,7 @@ func processSTTStreamChunks(
 			continue
 		}
 
-		data, totalUsage := processSSEResponse(sseResponse, &fullText, meta, data)
+		data, totalUsage := processSSEResponse(sseResponse, meta, data)
 		if totalUsage != nil {
 			usage = totalUsage
 		}
@@ -303,7 +342,7 @@ func processSTTStreamChunks(
 	render.OpenaiDone(c)
 
 	if usage == nil {
-		usage = calculateSTTUsage(fullText.String(), meta)
+		usage = measuredSTTDurationUsage(meta)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -316,25 +355,25 @@ func processSTTStreamChunks(
 // processSSEResponse processes individual SSE response and returns usage if complete
 func processSSEResponse(
 	sseResponse relaymodel.SttSSEResponse,
-	fullText *strings.Builder,
 	meta *meta.Meta,
 	data []byte,
 ) ([]byte, *relaymodel.SttUsage) {
 	switch sseResponse.Type {
 	case relaymodel.SttSSEResponseTypeTranscriptTextDelta:
-		if sseResponse.Delta != "" {
-			fullText.WriteString(sseResponse.Delta)
-		}
 		return data, nil
 
 	case relaymodel.SttSSEResponseTypeTranscriptTextDone:
 		if sseResponse.Usage != nil {
-			fullText.Reset()
+			// Expose server-measured seconds independently of upstream input/output counters.
+			withSeconds, err := injectSTTSeconds(data, int64(meta.RequestUsage.AudioInputTokens))
+			if err == nil {
+				data = withSeconds
+			}
+
 			return data, sseResponse.Usage
 		}
 
-		text := getTextFromResponse(sseResponse, fullText)
-		usage := calculateSTTUsage(text, meta)
+		usage := measuredSTTDurationUsage(meta)
 
 		return injectUsageIntoSSE(data, usage), usage
 
@@ -343,33 +382,74 @@ func processSSEResponse(
 	}
 }
 
-// getTextFromResponse extracts text from SSE response or builder
-func getTextFromResponse(sseResponse relaymodel.SttSSEResponse, fullText *strings.Builder) string {
-	if sseResponse.Text != "" {
-		return sseResponse.Text
+// injectSTTSeconds fills missing/invalid response seconds from server-measured audio duration.
+// It preserves upstream zero, token fields, unknown fields and numeric precision. The response
+// copy preserves upstream input/output counters; duration never supplies token quantities.
+func injectSTTSeconds(data []byte, seconds int64) ([]byte, error) {
+	node, err := common.GetJSONNodeNoCopy(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse STT response: %w", err)
 	}
 
-	text := fullText.String()
-	fullText.Reset()
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		_, err = node.SetAny("usage", map[string]int64{"seconds": max(0, seconds)})
+	} else {
+		secondsNode := usageNode.Get("seconds")
+		if secondsNode != nil && secondsNode.TypeSafe() == ast.V_NUMBER {
+			value, valueErr := secondsNode.Float64()
+			if valueErr == nil && value >= 0 && !math.IsInf(value, 0) && !math.IsNaN(value) {
+				return data, nil
+			}
+		}
 
-	return text
+		_, err = usageNode.SetAny("seconds", max(0, seconds))
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("set STT seconds: %w", err)
+	}
+
+	return node.MarshalJSON()
 }
 
-// calculateSTTUsage calculates usage for STT
-func calculateSTTUsage(text string, meta *meta.Meta) *relaymodel.SttUsage {
-	outputTokens := CountTokenText(text, meta.ActualModel)
-
+// measuredSTTDurationUsage supplies only the server-measured duration when
+// upstream usage is absent. Token quantities must always come from upstream.
+func measuredSTTDurationUsage(meta *meta.Meta) *relaymodel.SttUsage {
 	return &relaymodel.SttUsage{
-		Type:         relaymodel.SttUsageTypeTokens,
-		Seconds:      int64(meta.RequestUsage.AudioInputTokens),
-		InputTokens:  int64(meta.RequestUsage.InputTokens),
-		OutputTokens: outputTokens,
-		InputTokenDetails: &relaymodel.SttUsageInputTokenDetails{
-			TextTokens:  int64(meta.RequestUsage.InputTokens - meta.RequestUsage.AudioInputTokens),
-			AudioTokens: int64(meta.RequestUsage.AudioInputTokens),
-		},
-		TotalTokens: int64(meta.RequestUsage.InputTokens) + outputTokens,
+		Type:    relaymodel.SttUsageTypeDuration,
+		Seconds: int64(meta.RequestUsage.AudioInputTokens),
 	}
+}
+
+// normalizeSTTResponseTokenUsage enriches JSON/SSE usage while preserving all
+// other event fields. Missing/null usage remains absent for duration fallback.
+func normalizeSTTResponseTokenUsage(data []byte) ([]byte, error) {
+	node, err := common.GetJSONNodeNoCopy(data)
+	if err != nil {
+		return nil, err
+	}
+
+	usageNode := node.Get("usage")
+	if usageNode == nil || !usageNode.Exists() || usageNode.TypeSafe() == ast.V_NULL {
+		return data, nil
+	}
+
+	raw, err := usageNode.Raw()
+	if err != nil {
+		return nil, err
+	}
+
+	normalized, err := relaymodel.NormalizeSTTTokenUsage([]byte(raw))
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = node.SetAny("usage", sonic.NoCopyRawMessage(normalized)); err != nil {
+		return nil, err
+	}
+
+	return node.MarshalJSON()
 }
 
 // injectUsageIntoJSON injects usage into JSON response

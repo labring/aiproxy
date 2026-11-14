@@ -3,6 +3,7 @@ package ali
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -281,16 +282,7 @@ func sttResponse(
 				Content *string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
-		Usage struct {
-			Prompt     int64   `json:"prompt_tokens"`
-			Completion int64   `json:"completion_tokens"`
-			Total      int64   `json:"total_tokens"`
-			Seconds    float64 `json:"seconds"`
-			Details    struct {
-				Audio int64 `json:"audio_tokens"`
-				Text  int64 `json:"text_tokens"`
-			} `json:"prompt_tokens_details"`
-		} `json:"usage"`
+		Usage json.RawMessage `json:"usage"`
 	}
 	if err == nil {
 		err = sonic.Unmarshal(data, &result)
@@ -308,22 +300,33 @@ func sttResponse(
 		)
 	}
 
-	seconds := int64(math.Ceil(result.Usage.Seconds))
-	if seconds <= 0 {
-		seconds = int64(mt.RequestUsage.AudioInputTokens)
+	usage := relaymodel.SttUsage{Type: relaymodel.SttUsageTypeTokens}
+	if len(result.Usage) > 0 {
+		normalized, usageErr := relaymodel.NormalizeSTTTokenUsage(result.Usage)
+		if usageErr == nil {
+			var decoded struct {
+				*relaymodel.SttUsage
+				Seconds float64 `json:"seconds"`
+			}
+
+			decoded.SttUsage = &usage
+			usageErr = sonic.Unmarshal(normalized, &decoded)
+			usage.Seconds = int64(math.Ceil(decoded.Seconds))
+		}
+
+		if usageErr != nil {
+			return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
+				usageErr,
+				"invalid_stt_usage",
+				http.StatusBadGateway,
+			)
+		}
 	}
 
-	usage := relaymodel.SttUsage{
-		Type:         relaymodel.SttUsageTypeTokens,
-		Seconds:      seconds,
-		InputTokens:  result.Usage.Prompt,
-		OutputTokens: result.Usage.Completion,
-		TotalTokens:  result.Usage.Total,
-		InputTokenDetails: &relaymodel.SttUsageInputTokenDetails{
-			AudioTokens: result.Usage.Details.Audio,
-			TextTokens:  result.Usage.Details.Text,
-		},
+	if usage.Seconds <= 0 {
+		usage.Seconds = int64(mt.RequestUsage.AudioInputTokens)
 	}
+
 	writeSTTResponse(c, *result.Choices[0].Message.Content, usage)
 
 	return adaptor.DoResponseResult{Usage: usage.ToModelUsage(), UpstreamID: result.ID}, nil
