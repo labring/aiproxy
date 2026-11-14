@@ -61,9 +61,17 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 		cohereRequest.Connectors = append(cohereRequest.Connectors, WebSearchConnector)
 	}
 
-	for _, message := range textRequest.Messages {
-		messageContent, _ := message.Content.(string)
+	lastUser := -1
+
+	for i, message := range textRequest.Messages {
 		if message.Role == "user" {
+			lastUser = i
+		}
+	}
+
+	for i, message := range textRequest.Messages {
+		messageContent, _ := message.Content.(string)
+		if i == lastUser {
 			cohereRequest.Message = messageContent
 		} else {
 			var role string
