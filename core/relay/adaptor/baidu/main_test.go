@@ -20,6 +20,20 @@ func TestResponse2OpenAI_FinishReason(t *testing.T) {
 	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonLength {
 		t.Fatalf("truncated finish_reason = %q, want length", fr)
 	}
+
+	got = response2OpenAI(m, &ChatResponse{Result: "blocked", NeedClearHistory: true})
+	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonContentFilter {
+		t.Fatalf("need_clear_history finish_reason = %q, want content_filter", fr)
+	}
+
+	got = response2OpenAI(m, &ChatResponse{
+		Result:           "blocked",
+		IsTruncated:      true,
+		NeedClearHistory: true,
+	})
+	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonContentFilter {
+		t.Fatalf("safety+truncated finish_reason = %q, want content_filter", fr)
+	}
 }
 
 func TestStreamResponse2OpenAI_FinishReason(t *testing.T) {
@@ -41,5 +55,21 @@ func TestStreamResponse2OpenAI_FinishReason(t *testing.T) {
 	})
 	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonLength {
 		t.Fatalf("truncated finish_reason = %q, want length", fr)
+	}
+
+	got = streamResponse2OpenAI(m, &ChatStreamResponse{
+		ChatResponse: ChatResponse{Result: "blocked", NeedClearHistory: true},
+		IsEnd:        false,
+	})
+	if fr := got.Choices[0].FinishReason; fr != "" {
+		t.Fatalf("mid-stream need_clear_history finish_reason = %q, want empty", fr)
+	}
+
+	got = streamResponse2OpenAI(m, &ChatStreamResponse{
+		ChatResponse: ChatResponse{Result: "blocked", NeedClearHistory: true},
+		IsEnd:        true,
+	})
+	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonContentFilter {
+		t.Fatalf("need_clear_history finish_reason = %q, want content_filter", fr)
 	}
 }
