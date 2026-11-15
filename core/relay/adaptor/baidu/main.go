@@ -90,8 +90,14 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	}, nil
 }
 
-// finishReason maps Baidu's is_truncated flag to an OpenAI finish_reason.
-func finishReason(truncated bool) relaymodel.FinishReason {
+// finishReason maps Wenxin flags to an OpenAI finish_reason.
+// need_clear_history means the input tripped the safety check and the
+// session must be cleared, so it takes precedence over is_truncated.
+func finishReason(truncated, needClearHistory bool) relaymodel.FinishReason {
+	if needClearHistory {
+		return relaymodel.FinishReasonContentFilter
+	}
+
 	if truncated {
 		return relaymodel.FinishReasonLength
 	}
@@ -106,7 +112,7 @@ func response2OpenAI(meta *meta.Meta, response *ChatResponse) *relaymodel.TextRe
 			Role:    "assistant",
 			Content: response.Result,
 		},
-		FinishReason: finishReason(response.IsTruncated),
+		FinishReason: finishReason(response.IsTruncated, response.NeedClearHistory),
 	}
 
 	fullTextResponse := relaymodel.TextResponse{
@@ -131,7 +137,10 @@ func streamResponse2OpenAI(
 
 	choice.Delta.Content = baiduResponse.Result
 	if baiduResponse.IsEnd {
-		choice.FinishReason = finishReason(baiduResponse.IsTruncated)
+		choice.FinishReason = finishReason(
+			baiduResponse.IsTruncated,
+			baiduResponse.NeedClearHistory,
+		)
 	}
 
 	response := relaymodel.ChatCompletionsStreamResponse{
