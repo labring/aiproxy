@@ -468,6 +468,7 @@ func TestClaudeStopReasonToGeminiFinishReason(t *testing.T) {
 		t.Run("stream "+tc.claude, func(t *testing.T) {
 			state := &anthropic.GeminiStreamState{}
 			stop := tc.claude
+
 			resp := state.ConvertClaudeStreamToGemini(m, &relaymodel.ClaudeStreamResponse{
 				Type:  relaymodel.ClaudeStreamTypeMessageDelta,
 				Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
