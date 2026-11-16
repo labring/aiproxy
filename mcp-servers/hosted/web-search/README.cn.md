@@ -22,10 +22,12 @@
 
 - `google_api_key`: 您的Google自定义搜索API密钥
 - `google_cx`: 您的Google自定义搜索引擎ID
+- `google_base_url`（可选）: Custom Search JSON API 地址，默认 `https://www.googleapis.com/customsearch/v1`
 
 #### Bing搜索
 
 - `bing_api_key`: 您的Bing搜索API密钥
+- `bing_base_url`（可选）: Bing Web Search v7 地址，默认 `https://api.bing.microsoft.com/v7.0/search`
 
 #### 必应中国搜索
 

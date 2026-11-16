@@ -342,7 +342,7 @@ func (p *WebSearch) initializeSearchEngines(configs []EngineConfig) ([]engine.En
 				return nil, false, err
 			}
 
-			engines = append(engines, engine.NewBingEngine(spec.APIKey))
+			engines = append(engines, engine.NewBingEngine(spec.APIKey, spec.BaseURL))
 		case "bingcn":
 			engines = append(engines, engine.NewBingCNEngine())
 		case "google":
@@ -351,7 +351,7 @@ func (p *WebSearch) initializeSearchEngines(configs []EngineConfig) ([]engine.En
 				return nil, false, err
 			}
 
-			engines = append(engines, engine.NewGoogleEngine(spec.APIKey, spec.CX))
+			engines = append(engines, engine.NewGoogleEngine(spec.APIKey, spec.CX, spec.BaseURL))
 		case "arxiv":
 			engines = append(engines, engine.NewArxivEngine())
 			arxivExists = true

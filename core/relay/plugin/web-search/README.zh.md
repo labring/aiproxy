@@ -99,6 +99,7 @@ Web Search Plugin 是一个为 AI 模型提供实时网络搜索能力的插件�
 |------|------|------|------|
 | `api_key` | string | 是 | Google Custom Search API 密钥 |
 | `cx` | string | 是 | Google 自定义搜索引擎 ID |
+| `base_url` | string | 否 | Custom Search JSON API 地址，默认 `https://www.googleapis.com/customsearch/v1` |
 
 ##### Bing 搜索引擎配置 (`spec`)
 
@@ -114,6 +115,7 @@ Web Search Plugin 是一个为 AI 模型提供实时网络搜索能力的插件�
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `api_key` | string | 是 | Bing Search API 密钥 |
+| `base_url` | string | 否 | Bing Web Search v7 地址，默认 `https://api.bing.microsoft.com/v7.0/search` |
 
 
 ##### BingCN 搜索引擎配置 (`spec`)
