@@ -514,7 +514,13 @@ func TestSTTWebSocketTLSDoesNotShareHTTPALPN(t *testing.T) {
 			}
 			defer conn.Close()
 
-			_, _, _ = conn.ReadMessage()
+			// Read until the client closes: closing first races the client-side
+			// TLS close_notify with this handler's teardown.
+			for {
+				if _, _, err := conn.ReadMessage(); err != nil {
+					return
+				}
+			}
 		}),
 	)
 	upstream.EnableHTTP2 = true
@@ -692,7 +698,13 @@ func TestSTTWebSocketChannelProxy(t *testing.T) {
 					}
 					defer conn.Close()
 
-					_, _, _ = conn.ReadMessage()
+					// Read until the client closes: closing first races the client-side
+					// TLS close_notify with this handler's teardown.
+					for {
+						if _, _, err := conn.ReadMessage(); err != nil {
+							return
+						}
+					}
 				})
 
 				upstream := httptest.NewUnstartedServer(handler)
