@@ -108,6 +108,7 @@ func ChannelTypeNameToType(typeName string) int {
 		"fake-error":                            55,
 		"fake error":                            55,
 		"fakeerror":                             55,
+		"voyage":                                60,
 	}
 
 	if typ, ok := typeMap[typeName]; ok {

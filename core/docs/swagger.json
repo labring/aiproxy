@@ -10058,7 +10058,8 @@
                             56,
                             57,
                             58,
-                            59
+                            59,
+                            60
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -17955,7 +17956,8 @@
                 56,
                 57,
                 58,
-                59
+                59,
+                60
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -18004,7 +18006,8 @@
                 "ChannelTypeQwenCloud",
                 "ChannelTypeAIProxyHZH",
                 "ChannelTypeAIProxyUSW1",
-                "ChannelTypeTokenDance"
+                "ChannelTypeTokenDance",
+                "ChannelTypeVoyage"
             ]
         },
         "model.ChartData": {

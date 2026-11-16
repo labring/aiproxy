@@ -1831,6 +1831,7 @@ definitions:
     - 57
     - 58
     - 59
+    - 60
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1880,6 +1881,7 @@ definitions:
     - ChannelTypeAIProxyHZH
     - ChannelTypeAIProxyUSW1
     - ChannelTypeTokenDance
+    - ChannelTypeVoyage
   model.ChartData:
     properties:
       audio_input_amount:
@@ -11086,6 +11088,7 @@ paths:
         - 57
         - 58
         - 59
+        - 60
         in: path
         name: type
         required: true
