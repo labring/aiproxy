@@ -46,6 +46,7 @@ import (
 	_ "github.com/labring/aiproxy/core/relay/adaptor/text-embeddings-inference"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/tokendance"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/vertexai"
+	_ "github.com/labring/aiproxy/core/relay/adaptor/voyage"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/xai"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/xunfei"
 	_ "github.com/labring/aiproxy/core/relay/adaptor/zhipu"

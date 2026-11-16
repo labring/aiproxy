@@ -137,6 +137,20 @@ func ConvertGeminiRequestToStruct(
 	return &claudeReq, nil
 }
 
+// stopReasonClaude2Gemini maps a Claude stop reason to a Gemini finish reason,
+// mirroring stopReasonClaude2OpenAI so a refusal or a context-window cut-off is
+// not reported as a normal STOP.
+func stopReasonClaude2Gemini(reason string) string {
+	switch reason {
+	case relaymodel.ClaudeStopReasonMaxTokens, relaymodel.ClaudeStopReasonContextLimit:
+		return relaymodel.GeminiFinishReasonMaxTokens
+	case relaymodel.ClaudeStopReasonRefusal:
+		return relaymodel.GeminiFinishReasonSafety
+	default:
+		return relaymodel.GeminiFinishReasonStop
+	}
+}
+
 // ConvertClaudeToGeminiResponse converts Claude response to Gemini format
 func ConvertClaudeToGeminiResponse(
 	meta *meta.Meta,
@@ -163,16 +177,7 @@ func ConvertClaudeToGeminiResponse(
 	}
 
 	// Convert stop reason
-	switch claudeResp.StopReason {
-	case relaymodel.ClaudeStopReasonEndTurn:
-		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-	case relaymodel.ClaudeStopReasonMaxTokens:
-		candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
-	case relaymodel.ClaudeStopReasonToolUse:
-		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-	default:
-		candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-	}
+	candidate.FinishReason = stopReasonClaude2Gemini(claudeResp.StopReason)
 
 	// Convert content
 	for _, content := range claudeResp.Content {
@@ -447,16 +452,7 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 
 	case relaymodel.ClaudeStreamTypeMessageDelta:
 		if claudeResp.Delta != nil && claudeResp.Delta.StopReason != nil {
-			switch *claudeResp.Delta.StopReason {
-			case relaymodel.ClaudeStopReasonEndTurn:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-			case relaymodel.ClaudeStopReasonMaxTokens:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
-			case relaymodel.ClaudeStopReasonToolUse:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-			default:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-			}
+			candidate.FinishReason = stopReasonClaude2Gemini(*claudeResp.Delta.StopReason)
 		}
 
 		if claudeResp.Usage != nil {

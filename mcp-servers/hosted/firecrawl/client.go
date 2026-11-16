@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -124,21 +125,27 @@ type ExtractParams struct {
 	Origin             string         `json:"origin,omitempty"`
 }
 
-// DeepResearchParams represents parameters for deep research
-type DeepResearchParams struct {
-	Query     string `json:"query"`
-	MaxDepth  *int   `json:"maxDepth,omitempty"`
-	TimeLimit *int   `json:"timeLimit,omitempty"`
-	MaxURLs   *int   `json:"maxUrls,omitempty"`
-	Origin    string `json:"origin,omitempty"`
+// AgentParams represents parameters for an agent run
+type AgentParams struct {
+	Prompt     string         `json:"prompt"`
+	Schema     map[string]any `json:"schema,omitempty"`
+	MaxCredits *int           `json:"maxCredits,omitempty"`
+	Origin     string         `json:"origin,omitempty"`
 }
 
-// GenerateLLMsTextParams represents parameters for LLMs.txt generation
-type GenerateLLMsTextParams struct {
-	URL          string `json:"url"`
-	MaxURLs      *int   `json:"maxUrls,omitempty"`
-	ShowFullText *bool  `json:"showFullText,omitempty"`
-	Origin       string `json:"origin,omitempty"`
+// MapLinksParams represents parameters for a v2 map
+type MapLinksParams struct {
+	URL               string `json:"url"`
+	IncludeSubdomains *bool  `json:"includeSubdomains,omitempty"`
+	Limit             *int   `json:"limit,omitempty"`
+	Origin            string `json:"origin,omitempty"`
+}
+
+// BatchScrapeParams represents parameters for a batch scrape
+type BatchScrapeParams struct {
+	URLs    []string `json:"urls"`
+	Formats []any    `json:"formats,omitempty"`
+	Origin  string   `json:"origin,omitempty"`
 }
 
 // Response types
@@ -191,27 +198,50 @@ type ExtractResponse struct {
 	Error   string         `json:"error,omitempty"`
 }
 
-type DeepResearchResponse struct {
-	Success bool              `json:"success"`
-	Data    *DeepResearchData `json:"data,omitempty"`
-	Error   string            `json:"error,omitempty"`
+type AgentResponse struct {
+	Success bool   `json:"success"`
+	ID      string `json:"id,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
-type DeepResearchData struct {
-	FinalAnalysis string           `json:"finalAnalysis"`
-	Activities    []map[string]any `json:"activities"`
-	Sources       []map[string]any `json:"sources"`
+type AgentStatusResponse struct {
+	Success bool           `json:"success"`
+	Status  string         `json:"status"`
+	Data    map[string]any `json:"data,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
-type GenerateLLMsTextResponse struct {
+type MapLinksResponse struct {
+	Success bool      `json:"success"`
+	Links   []MapLink `json:"links,omitempty"`
+	Error   string    `json:"error,omitempty"`
+}
+
+type MapLink struct {
+	URL         string `json:"url"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type BatchScrapeResponse struct {
+	Success bool   `json:"success"`
+	ID      string `json:"id,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+type BatchScrapeStatusResponse struct {
 	Success bool          `json:"success"`
-	Data    *LLMsTextData `json:"data,omitempty"`
+	Status  string        `json:"status"`
+	Data    []ScrapedPage `json:"data,omitempty"`
+	Next    string        `json:"next,omitempty"`
 	Error   string        `json:"error,omitempty"`
 }
 
-type LLMsTextData struct {
-	LLMsText     string `json:"llmstxt"`
-	LLMsFullText string `json:"llmsfulltxt,omitempty"`
+// ScrapedPage is a page from a v2 batch scrape
+type ScrapedPage struct {
+	Markdown string         `json:"markdown,omitempty"`
+	JSON     map[string]any `json:"json,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type Document struct {
@@ -364,14 +394,11 @@ func (c *Client) Extract(
 	return &response, nil
 }
 
-// DeepResearch conducts deep web research
-func (c *Client) DeepResearch(
-	ctx context.Context,
-	params DeepResearchParams,
-) (*DeepResearchResponse, error) {
-	var response DeepResearchResponse
+// StartAgent starts an agent run
+func (c *Client) StartAgent(ctx context.Context, params AgentParams) (*AgentResponse, error) {
+	var response AgentResponse
 
-	err := c.makeRequest(ctx, http.MethodPost, "/v1/research", params, &response)
+	err := c.makeRequest(ctx, http.MethodPost, "/v2/agent", params, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -379,14 +406,65 @@ func (c *Client) DeepResearch(
 	return &response, nil
 }
 
-// GenerateLLMsText generates LLMs.txt file
-func (c *Client) GenerateLLMsText(
-	ctx context.Context,
-	params GenerateLLMsTextParams,
-) (*GenerateLLMsTextResponse, error) {
-	var response GenerateLLMsTextResponse
+// GetAgentStatus gets the status and, once completed, the data of an agent run
+func (c *Client) GetAgentStatus(ctx context.Context, id string) (*AgentStatusResponse, error) {
+	var response AgentStatusResponse
 
-	err := c.makeRequest(ctx, http.MethodPost, "/v1/llmstxt", params, &response)
+	err := c.makeRequest(ctx, http.MethodGet, "/v2/agent/"+id, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// MapLinks maps a website with the v2 map API
+func (c *Client) MapLinks(ctx context.Context, params MapLinksParams) (*MapLinksResponse, error) {
+	var response MapLinksResponse
+
+	err := c.makeRequest(ctx, http.MethodPost, "/v2/map", params, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// StartBatchScrape starts a batch scrape of the given URLs
+func (c *Client) StartBatchScrape(
+	ctx context.Context,
+	params BatchScrapeParams,
+) (*BatchScrapeResponse, error) {
+	var response BatchScrapeResponse
+
+	err := c.makeRequest(ctx, http.MethodPost, "/v2/batch/scrape", params, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// GetBatchScrapeStatus gets the status and results of a batch scrape. A non-empty next, taken from a
+// previous response, reads the following page of results from the same API URL.
+func (c *Client) GetBatchScrapeStatus(
+	ctx context.Context,
+	id, next string,
+) (*BatchScrapeStatusResponse, error) {
+	endpoint := "/v2/batch/scrape/" + id
+
+	if next != "" {
+		nextURL, err := url.Parse(next)
+		if err != nil {
+			return nil, fmt.Errorf("invalid next URL: %w", err)
+		}
+
+		endpoint = nextURL.RequestURI()
+	}
+
+	var response BatchScrapeStatusResponse
+
+	err := c.makeRequest(ctx, http.MethodGet, endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}

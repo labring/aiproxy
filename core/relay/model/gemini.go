@@ -320,7 +320,7 @@ func (u *GeminiUsageMetadata) ToModelUsage() model.Usage {
 func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 	usage := ResponseUsage{
 		InputTokens:  u.PromptTokenCount,
-		OutputTokens: u.CandidatesTokenCount,
+		OutputTokens: u.CandidatesTokenCount + u.ThoughtsTokenCount,
 		TotalTokens:  u.TotalTokenCount,
 	}
 

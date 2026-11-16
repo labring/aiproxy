@@ -440,3 +440,46 @@ func TestGeminiStreamHandlerBillsLikeNonStream(t *testing.T) {
 		t.Fatalf("stream usage %+v != non-stream usage %+v", got.Usage, exp)
 	}
 }
+
+func TestClaudeStopReasonToGeminiFinishReason(t *testing.T) {
+	m := &meta.Meta{}
+
+	cases := []struct {
+		claude string
+		want   string
+	}{
+		{relaymodel.ClaudeStopReasonEndTurn, relaymodel.GeminiFinishReasonStop},
+		{relaymodel.ClaudeStopReasonToolUse, relaymodel.GeminiFinishReasonStop},
+		{relaymodel.ClaudeStopReasonMaxTokens, relaymodel.GeminiFinishReasonMaxTokens},
+		{relaymodel.ClaudeStopReasonContextLimit, relaymodel.GeminiFinishReasonMaxTokens},
+		{relaymodel.ClaudeStopReasonRefusal, relaymodel.GeminiFinishReasonSafety},
+	}
+
+	for _, tc := range cases {
+		t.Run("non-stream "+tc.claude, func(t *testing.T) {
+			resp := anthropic.ConvertClaudeToGeminiResponse(m, &relaymodel.ClaudeResponse{
+				StopReason: tc.claude,
+			})
+			if got := resp.Candidates[0].FinishReason; got != tc.want {
+				t.Fatalf("finish reason = %q, want %q", got, tc.want)
+			}
+		})
+
+		t.Run("stream "+tc.claude, func(t *testing.T) {
+			state := &anthropic.GeminiStreamState{}
+			stop := tc.claude
+
+			resp := state.ConvertClaudeStreamToGemini(m, &relaymodel.ClaudeStreamResponse{
+				Type:  relaymodel.ClaudeStreamTypeMessageDelta,
+				Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
+			})
+			if resp == nil || len(resp.Candidates) == 0 {
+				t.Fatal("expected a candidate")
+			}
+
+			if got := resp.Candidates[0].FinishReason; got != tc.want {
+				t.Fatalf("finish reason = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

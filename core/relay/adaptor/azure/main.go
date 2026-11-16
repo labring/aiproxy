@@ -155,8 +155,13 @@ func GetRequestURL(meta *meta.Meta, replaceDot bool) (adaptor.RequestURL, error)
 			URL:    fmt.Sprintf("%s?api-version=%s", url, apiVersion),
 		}, nil
 	case mode.ChatCompletions, mode.Anthropic, mode.Gemini:
-		// Check if model requires Responses API
-		if openai.IsResponsesOnlyModelAny(&meta.ModelConfig, meta.OriginModel, meta.ActualModel) {
+		// Select the upstream protocol using the channel override before model detection.
+		useResponses, err := openai.ShouldUseResponsesAPI(meta)
+		if err != nil {
+			return adaptor.RequestURL{}, err
+		}
+
+		if useResponses {
 			// Azure Responses API format
 			url, err := url.JoinPath(
 				meta.Channel.BaseURL,
@@ -440,7 +445,7 @@ func (a *Adaptor) Metadata() adaptor.Metadata {
 			DefaultAPIVersion,
 		),
 		KeyHelp:      "key or key|api-version",
-		ConfigSchema: openai.ConfigSchema(),
+		ConfigSchema: openai.ChatUpstreamProtocolConfigSchema(),
 		Models:       openai.ModelList,
 	}
 }

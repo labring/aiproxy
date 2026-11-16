@@ -550,3 +550,47 @@ func TestConvertRequest_ImagesGenerationsDotReplacementUsesAzureDeploymentWithou
 	_, ok := payload["model"]
 	assert.False(t, ok)
 }
+
+func TestChatUpstreamProtocolOverride(t *testing.T) {
+	for _, tt := range []struct {
+		protocol     string
+		model        string
+		modelType    mode.Mode
+		expectedPath string
+		responses    bool
+	}{
+		{"responses", "gpt-4o", mode.ChatCompletions, "/openai/v1/responses?api-version=preview", true},
+		{"chat_completions", "gpt-5", mode.Responses, "/openai/deployments/gpt-5/chat/completions?api-version=2024-02-01", false},
+	} {
+		t.Run(tt.protocol, func(t *testing.T) {
+			a := &azure.Adaptor{}
+			mt := meta.NewMeta(&model.Channel{
+				BaseURL: "https://example.com", Key: "test-key|2024-02-01",
+				Configs: model.ChannelConfigs{"chat_upstream_protocol": tt.protocol},
+			}, mode.ChatCompletions, tt.model, model.ModelConfig{Type: tt.modelType})
+			url, err := a.GetRequestURL(mt, nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "https://example.com"+tt.expectedPath, url.URL)
+			req, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/chat/completions",
+				strings.NewReader(`{"messages":[{"role":"user","content":"hello"}]}`),
+			)
+			require.NoError(t, err)
+			converted, err := a.ConvertRequest(mt, nil, req)
+			require.NoError(t, err)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(converted.Body).Decode(&body))
+
+			if tt.responses {
+				assert.Contains(t, body, "input")
+				assert.NotContains(t, body, "messages")
+			} else {
+				assert.Contains(t, body, "messages")
+				assert.NotContains(t, body, "input")
+			}
+		})
+	}
+}

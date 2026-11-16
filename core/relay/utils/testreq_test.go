@@ -12,6 +12,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildRequestDecisions(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, mode.Decisions, model.ModelTypeNameToType("decisions"))
+	body, relayMode, err := utils.BuildRequest(
+		model.ModelConfig{Model: "gpt-6-luna", Type: mode.Decisions},
+	)
+	require.NoError(t, err)
+	require.Equal(t, mode.Decisions, relayMode)
+
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"gpt-6-luna",
+		"input":"The package arrived with a broken screen.",
+		"questions":[{"type":"predicate","instructions":"Does the customer report a damaged item?"}]
+	}`, string(data))
+}
+
 func TestBuildRequestGeminiVideo(t *testing.T) {
 	body, relayMode, err := utils.BuildRequest(model.ModelConfig{
 		Model: "veo-3.1-generate-preview",

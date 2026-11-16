@@ -521,11 +521,18 @@ func (u *ResponseUsage) ToClaudeUsage() ClaudeUsage {
 	return usage
 }
 
-// ToGeminiUsage converts ResponseUsage to GeminiUsageMetadata (Google Gemini format)
+// ToGeminiUsage converts ResponseUsage to GeminiUsageMetadata (Google Gemini format).
+// OpenAI output_tokens include reasoning_tokens. Gemini candidatesTokenCount
+// does not include thoughtsTokenCount, and ToUsage adds them back together.
 func (u *ResponseUsage) ToGeminiUsage() GeminiUsageMetadata {
+	var reasoningTokens int64
+	if u.OutputTokensDetails != nil {
+		reasoningTokens = u.OutputTokensDetails.ReasoningTokens
+	}
+
 	usage := GeminiUsageMetadata{
 		PromptTokenCount:     u.InputTokens,
-		CandidatesTokenCount: u.OutputTokens,
+		CandidatesTokenCount: max(0, u.OutputTokens-reasoningTokens),
 		TotalTokenCount:      u.TotalTokens,
 	}
 
@@ -533,8 +540,8 @@ func (u *ResponseUsage) ToGeminiUsage() GeminiUsageMetadata {
 		usage.CachedContentTokenCount = u.InputTokensDetails.CachedTokens
 	}
 
-	if u.OutputTokensDetails != nil && u.OutputTokensDetails.ReasoningTokens > 0 {
-		usage.ThoughtsTokenCount = u.OutputTokensDetails.ReasoningTokens
+	if reasoningTokens > 0 {
+		usage.ThoughtsTokenCount = reasoningTokens
 	}
 
 	return usage
