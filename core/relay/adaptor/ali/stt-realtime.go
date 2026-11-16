@@ -347,9 +347,8 @@ func STTDoResponse(
 			}
 
 			sttUsage := relaymodel.SttUsage{
-				Type:        relaymodel.SttUsageTypeDuration,
-				Seconds:     seconds,
-				TotalTokens: seconds,
+				Type:    relaymodel.SttUsageTypeDuration,
+				Seconds: seconds,
 			}
 			writeSTTResponse(c, output.String(), sttUsage)
 

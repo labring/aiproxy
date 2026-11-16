@@ -287,8 +287,9 @@ func sttResponse(
 			Total      int64   `json:"total_tokens"`
 			Seconds    float64 `json:"seconds"`
 			Details    struct {
-				Audio int64 `json:"audio_tokens"`
-				Text  int64 `json:"text_tokens"`
+				Audio   int64   `json:"audio_tokens"`
+				Text    int64   `json:"text_tokens"`
+				Seconds float64 `json:"seconds"`
 			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 	}
@@ -308,14 +309,17 @@ func sttResponse(
 		)
 	}
 
-	seconds := int64(math.Ceil(result.Usage.Seconds))
+	// qwen3-asr-flash reports the audio seconds in prompt_tokens_details.seconds, older
+	// deployments at the usage top level; either upstream value wins over the locally
+	// measured duration.
+	seconds := math.Ceil(max(result.Usage.Details.Seconds, result.Usage.Seconds))
 	if seconds <= 0 {
-		seconds = int64(mt.RequestUsage.AudioInputTokens)
+		seconds = float64(mt.RequestUsage.AudioInputTokens)
 	}
 
 	usage := relaymodel.SttUsage{
 		Type:         relaymodel.SttUsageTypeTokens,
-		Seconds:      seconds,
+		Seconds:      int64(seconds),
 		InputTokens:  result.Usage.Prompt,
 		OutputTokens: result.Usage.Completion,
 		TotalTokens:  result.Usage.Total,

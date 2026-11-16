@@ -290,6 +290,7 @@ func TestSTTChatResponseAndErrors(t *testing.T) {
 		wantError  bool
 	}{
 		{name: "tokens and seconds", body: `{"id":"req-1","choices":[{"message":{"content":"你好"}}],"usage":{"prompt_tokens":50,"completion_tokens":3,"total_tokens":53,"seconds":2,"prompt_tokens_details":{"audio_tokens":50}}}`, status: 200},
+		{name: "nested seconds", body: `{"id":"req-1","choices":[{"message":{"content":"你好"}}],"usage":{"prompt_tokens":50,"completion_tokens":3,"total_tokens":53,"prompt_tokens_details":{"audio_tokens":50,"seconds":5}}}`, status: 200},
 		{name: "silence is valid", body: `{"choices":[{"message":{"content":""}}]}`, status: 200},
 		{name: "missing content", body: `{"choices":[]}`, status: 200, wantError: true},
 		{name: "malformed", body: `not json`, status: 200, wantError: true},
@@ -330,6 +331,13 @@ func TestSTTChatResponseAndErrors(t *testing.T) {
 			if tt.name == "tokens and seconds" {
 				assert.Contains(t, recorder.Body.String(), `"seconds":2`)
 				assert.Contains(t, recorder.Body.String(), `"total_tokens":53`)
+				assert.EqualValues(t, 50, result.Usage.AudioInputTokens)
+			}
+
+			if tt.name == "nested seconds" {
+				assert.Contains(t, recorder.Body.String(), `"seconds":5`)
+				assert.Contains(t, recorder.Body.String(), `"total_tokens":53`)
+				assert.EqualValues(t, 50, result.Usage.InputTokens)
 				assert.EqualValues(t, 50, result.Usage.AudioInputTokens)
 			}
 		})
