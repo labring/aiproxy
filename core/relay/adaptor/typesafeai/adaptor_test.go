@@ -322,7 +322,7 @@ func TestDoResponseErrorStatus(t *testing.T) {
 		coremodel.ModelConfig{},
 	)
 
-	responseBody := `{"error":{"type":"invalid_request","message":"Invalid model"}}`
+	responseBody := `{"detail":"Invalid model"}`
 
 	resp := &http.Response{
 		StatusCode: http.StatusBadRequest,
@@ -341,17 +341,11 @@ func TestDoResponseErrorStatus(t *testing.T) {
 }
 
 func TestErrorHanlder(t *testing.T) {
-	t.Run("nil response", func(t *testing.T) {
-		err := typesafeai.ErrorHanlder(nil)
-		assert.NotNil(t, err)
-		assert.Equal(t, http.StatusInternalServerError, err.StatusCode())
-	})
-
-	t.Run("non-200 with error body", func(t *testing.T) {
+	t.Run("string detail", func(t *testing.T) {
 		resp := &http.Response{
 			StatusCode: http.StatusBadRequest,
 			Body: io.NopCloser(
-				strings.NewReader(`{"error":{"type":"bad_request","message":"test error"}}`),
+				strings.NewReader(`{"detail":"state must be provided"}`),
 			),
 			Header: make(http.Header),
 		}
@@ -359,14 +353,39 @@ func TestErrorHanlder(t *testing.T) {
 		err := typesafeai.ErrorHanlder(resp)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusBadRequest, err.StatusCode())
+		assert.Contains(t, err.Error(), "state must be provided")
 	})
-}
 
-func TestIsSuccessfulResponseStatus(t *testing.T) {
-	assert.True(t, typesafeai.IsSuccessfulResponseStatus(http.StatusOK))
-	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusBadRequest))
-	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusInternalServerError))
-	assert.False(t, typesafeai.IsSuccessfulResponseStatus(http.StatusNotFound))
+	t.Run("validation detail array", func(t *testing.T) {
+		resp := &http.Response{
+			StatusCode: http.StatusUnprocessableEntity,
+			Body: io.NopCloser(strings.NewReader(
+				`{"detail":[{"loc":["questions","is_urgent"],"msg":"\"instructions\" must be provided","type":"missing"}` +
+					`,{"loc":["state"],"msg":"field required","type":"missing"}]}`,
+			)),
+			Header: make(http.Header),
+		}
+
+		err := typesafeai.ErrorHanlder(resp)
+		assert.NotNil(t, err)
+		assert.Equal(t, http.StatusUnprocessableEntity, err.StatusCode())
+		assert.Contains(t, err.Error(), `"instructions" must be provided`)
+		assert.Contains(t, err.Error(), "field required")
+	})
+
+	t.Run("unrecognized body falls back to raw copy", func(t *testing.T) {
+		resp := &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(strings.NewReader(`upstream exploded`)),
+			Header:     make(http.Header),
+		}
+
+		err := typesafeai.ErrorHanlder(resp)
+		assert.NotNil(t, err)
+		assert.Equal(t, http.StatusInternalServerError, err.StatusCode())
+		assert.Contains(t, err.Error(), "HTTP 500")
+		assert.Contains(t, err.Error(), "upstream exploded")
+	})
 }
 
 func TestSystemOneRequestTypes(t *testing.T) {

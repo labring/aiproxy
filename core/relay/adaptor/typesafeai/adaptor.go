@@ -15,6 +15,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/registry"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/labring/aiproxy/core/relay/utils"
 )
 
@@ -22,14 +23,13 @@ func init() {
 	registry.Register(model.ChannelTypeTypeSafeAI, &Adaptor{})
 }
 
-// Adaptor implements the adaptor.Adaptor interface for the Typesafe AI SystemOne API.
+// Adaptor implements the adaptor.Adaptor interface for the TypeSafe SystemOne API.
 type Adaptor struct{}
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "Support native Endpoint: /v1/systemone",
-		Models:       ModelList,
-		ConfigSchema: nil,
+		Readme: "https://docs.typesafe.ai\nSupport native Endpoint: /v1/systemone",
+		Models: ModelList,
 	}
 }
 
@@ -46,16 +46,19 @@ func (a *Adaptor) GetRequestURL(
 	_ adaptor.Store,
 	_ *gin.Context,
 ) (adaptor.RequestURL, error) {
-	pu, err := url.Parse(meta.Channel.BaseURL)
+	base := meta.Channel.BaseURL
+	if base == "" {
+		base = a.DefaultBaseURL()
+	}
+
+	requestURL, err := url.JoinPath(base, "/systemone")
 	if err != nil {
 		return adaptor.RequestURL{}, err
 	}
 
-	result := pu.JoinPath("/systemone")
-
 	return adaptor.RequestURL{
 		Method: http.MethodPost,
-		URL:    result.String(),
+		URL:    requestURL,
 	}, nil
 }
 
@@ -77,47 +80,45 @@ func (a *Adaptor) ConvertRequest(
 ) (adaptor.ConvertResult, error) {
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
-		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
-			"failed to read request body: "+err.Error(),
-			"request_body_error",
+		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"read_request_body_failed",
 			http.StatusInternalServerError,
 		)
 	}
 
 	var systemOneReq SystemOneRequest
 	if err := sonic.Unmarshal(body, &systemOneReq); err != nil {
-		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
+		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"invalid request body: "+err.Error(),
-			"request_body_error",
+			"invalid_request_error",
 			http.StatusBadRequest,
 		)
 	}
 
-	// Validate required fields
 	if systemOneReq.State == nil {
-		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
+		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing required field: state",
-			"validation_error",
+			"invalid_request_error",
 			http.StatusBadRequest,
 		)
 	}
 
 	if len(systemOneReq.Questions) == 0 {
-		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
+		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"missing required field: questions",
-			"validation_error",
+			"invalid_request_error",
 			http.StatusBadRequest,
 		)
 	}
 
-	// Apply model mapping
 	systemOneReq.Model = meta.ActualModel
 
 	newBody, err := sonic.Marshal(systemOneReq)
 	if err != nil {
-		return adaptor.ConvertResult{}, WrapperSystemOneErrorWithMessage(
-			"failed to marshal request body: "+err.Error(),
-			"request_body_error",
+		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIError(
+			err,
+			"marshal_request_body_failed",
 			http.StatusInternalServerError,
 		)
 	}
@@ -142,23 +143,22 @@ func (a *Adaptor) DoResponse(
 	c *gin.Context,
 	resp *http.Response,
 ) (adaptor.DoResponseResult, adaptor.Error) {
-	if !IsSuccessfulResponseStatus(resp.StatusCode) {
+	if resp.StatusCode != http.StatusOK {
 		return adaptor.DoResponseResult{}, ErrorHanlder(resp)
 	}
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return adaptor.DoResponseResult{}, WrapperSystemOneError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"read_response_body_failed",
 			http.StatusInternalServerError,
 		)
 	}
 
-	// Parse usage from the response
 	var systemOneResp SystemOneResponse
 	if err := sonic.Unmarshal(responseBody, &systemOneResp); err != nil {
-		return adaptor.DoResponseResult{}, WrapperSystemOneError(
+		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
@@ -171,7 +171,6 @@ func (a *Adaptor) DoResponse(
 		TotalTokens:  model.ZeroNullInt64(systemOneResp.Usage.TotalTokens),
 	}
 
-	// Write raw response to gin context
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/json"

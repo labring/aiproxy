@@ -967,8 +967,12 @@ ${modelConfig?.config?.support_voices?.length
   "state": { "customer_message": "The package arrived with a broken screen." },
   "questions": {
     "damaged": {
-      "type": "predicate",
-      "instructions": "Does the customer report a damaged item?"
+      "type": "noul",
+      "instructions": "Does the customer report a damaged item?",
+      "criteria": {
+        "true": "A broken or damaged item is reported",
+        "false": "No damage is mentioned"
+      }
     }
   }
 }'`,
@@ -976,8 +980,9 @@ ${modelConfig?.config?.support_voices?.length
   "model": "${modelConfig.model}",
   "answers": {
     "damaged": {
-      "type": "predicate",
-      "confidence": 0.95
+      "type": "noul",
+      "noul": 0.95,
+      "confidence": 0.9
     }
   },
   "usage": {

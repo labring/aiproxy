@@ -1,74 +1,69 @@
 package typesafeai
 
 import (
-	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/relay/adaptor"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
-// SystemOneError represents an error returned by the Typesafe AI SystemOne API.
-type SystemOneError struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
+// maxRawErrorBodyLength bounds how much of an unrecognised error body is echoed back.
+const maxRawErrorBodyLength = 200
 
-// SystemOneErrorResponse is the full error response structure.
-type SystemOneErrorResponse struct {
-	Error SystemOneError `json:"error"`
-}
-
-// NewSystemOneError creates a new SystemOneError wrapped in SystemOneErrorResponse.
-func NewSystemOneError(statusCode int, err SystemOneError) adaptor.Error {
-	return adaptor.NewError(statusCode, SystemOneErrorResponse{
-		Error: err,
-	})
-}
-
-// WrapperSystemOneError wraps a generic error into a SystemOneError.
-func WrapperSystemOneError(err error, typ string, statusCode int) adaptor.Error {
-	return WrapperSystemOneErrorWithMessage(err.Error(), typ, statusCode)
-}
-
-// WrapperSystemOneErrorWithMessage wraps a message string into a SystemOneError.
-func WrapperSystemOneErrorWithMessage(message, typ string, statusCode int) adaptor.Error {
-	return NewSystemOneError(statusCode, SystemOneError{
-		Type:    typ,
-		Message: message,
-	})
-}
-
-// ErrorHanlder reads an HTTP response and converts it to a SystemOneError.
+// ErrorHanlder extracts the message from the TypeSafe error body, which reports
+// failures FastAPI-style: {"detail": "<text>"} or {"detail": [{"loc": [...],
+// "msg": "...", "type": "..."}]}. A body without a usable detail is reported
+// with the HTTP status and a truncated copy of the body, never as an empty
+// message.
 func ErrorHanlder(resp *http.Response) adaptor.Error {
-	if resp == nil {
-		return WrapperSystemOneErrorWithMessage(
-			"response is nil",
-			"invalid_response",
-			http.StatusInternalServerError,
-		)
-	}
+	defer resp.Body.Close()
 
-	body, err := common.GetResponseBody(resp)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return WrapperSystemOneError(
-			err,
-			"read_response_body_failed",
-			http.StatusInternalServerError,
-		)
+		return relaymodel.WrapperOpenAIError(err, "read_response_body_failed", resp.StatusCode)
 	}
 
-	var errResp SystemOneErrorResponse
-	if err := sonic.Unmarshal(body, &errResp); err != nil {
-		return WrapperSystemOneError(errors.New(string(body)), "bad_response", resp.StatusCode)
+	var parsed struct {
+		Detail any `json:"detail"`
 	}
 
-	return NewSystemOneError(resp.StatusCode, errResp.Error)
-}
+	var message string
 
-// IsSuccessfulResponseStatus checks if the response status code indicates success
-// for the SystemOne mode.
-func IsSuccessfulResponseStatus(statusCode int) bool {
-	return statusCode == http.StatusOK
+	if err := sonic.Unmarshal(body, &parsed); err == nil {
+		switch detail := parsed.Detail.(type) {
+		case string:
+			message = detail
+		case []any:
+			var parts []string
+
+			for _, item := range detail {
+				if fields, ok := item.(map[string]any); ok {
+					if msg, _ := fields["msg"].(string); msg != "" {
+						parts = append(parts, msg)
+					}
+				}
+			}
+
+			message = strings.Join(parts, "; ")
+		}
+	}
+
+	if message == "" {
+		raw := strings.TrimSpace(string(body))
+		if len(raw) > maxRawErrorBodyLength {
+			raw = raw[:maxRawErrorBodyLength]
+		}
+
+		message = fmt.Sprintf("typesafe returned HTTP %d: %s", resp.StatusCode, raw)
+	}
+
+	return relaymodel.NewOpenAIError(resp.StatusCode, relaymodel.OpenAIError{
+		Message: message,
+		Type:    relaymodel.ErrorTypeUpstream,
+		Code:    resp.StatusCode,
+	})
 }
