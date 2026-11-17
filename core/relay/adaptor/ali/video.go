@@ -577,7 +577,7 @@ func rejectAliVideoDangerousAliases(req *http.Request, request *aliVideoOpenAIRe
 		return nil
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return err
 	}

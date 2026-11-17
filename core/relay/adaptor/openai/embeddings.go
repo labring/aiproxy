@@ -21,7 +21,7 @@ func ConvertEmbeddingsRequest(
 	inputToSlices bool,
 	callback ...func(node *ast.Node) error,
 ) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(meta, err.Error())
 	}

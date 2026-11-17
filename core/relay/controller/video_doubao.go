@@ -49,7 +49,7 @@ func GetDoubaoVideoRequestUsage(c *gin.Context, mc model.ModelConfig) (RequestUs
 }
 
 func getDoubaoVideoRequestUsageParams(c *gin.Context) (doubaoVideoRequestUsageParams, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return doubaoVideoRequestUsageParams{}, NewBadRequestParamError(err.Error())
 	}

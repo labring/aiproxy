@@ -104,7 +104,7 @@ func ConvertTTSRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResul
 		return adaptor.ConvertResult{}, err
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

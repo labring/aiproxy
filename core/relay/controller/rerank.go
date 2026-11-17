@@ -12,7 +12,7 @@ import (
 )
 
 func getRerankRequestUsageFromNode(c *gin.Context) (RequestUsage, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return RequestUsage{}, err
 	}

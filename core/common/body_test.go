@@ -330,3 +330,43 @@ func TestGetResponseBodyLimitUnknownLengthTooLargeHidesLimit(t *testing.T) {
 		t.Fatalf("unexpected error: %q", got)
 	}
 }
+
+func TestUnmarshalRequest2ValidatedNode(t *testing.T) {
+	for name, body := range map[string]string{
+		"trailing garbage": `{"model":"m"} trailing`,
+		"scalar root":      `not json at all`,
+		"null root":        `null`,
+		"truncated":        `{"model":`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/",
+				strings.NewReader(body),
+			)
+
+			_, err := common.UnmarshalRequest2ValidatedNode(req)
+			if err == nil {
+				t.Fatal("expected malformed body to be rejected")
+			}
+		})
+	}
+
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/",
+		strings.NewReader(`{"model":"m"}`),
+	)
+
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
+	if err != nil {
+		t.Fatalf("valid body rejected: %v", err)
+	}
+
+	model, err := node.Get("model").String()
+	if err != nil || model != "m" {
+		t.Fatalf("model = %q, err = %v", model, err)
+	}
+}

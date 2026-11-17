@@ -23,7 +23,7 @@ func ConvertTTSRequest(
 	req *http.Request,
 	defaultVoice string,
 ) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

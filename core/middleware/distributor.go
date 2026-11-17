@@ -834,7 +834,7 @@ func getRequestBodyNode(c *gin.Context) (*ast.Node, error) {
 		return node, nil
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return nil, err
 	}

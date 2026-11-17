@@ -2,7 +2,6 @@ package typesafeai
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -81,27 +80,11 @@ func (a *Adaptor) ConvertRequest(
 	_ adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	requestBody, err := common.GetRequestBodyReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
-		return adaptor.ConvertResult{}, convertRequestError(meta, err.Error())
-	}
-
-	// Validate the complete JSON before editing it. The reusable AST shortcut
-	// skips validation and can silently normalize malformed request bodies.
-	var node ast.Node
-	if err := json.Unmarshal(requestBody, &node); err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(
 			meta,
 			"invalid request body: "+err.Error(),
-		)
-	}
-
-	// Get on a null root reports every field as missing, but Set would turn
-	// that same root into a valid object; reject it explicitly.
-	if node.TypeSafe() == ast.V_NULL {
-		return adaptor.ConvertResult{}, convertRequestError(
-			meta,
-			"invalid request body: request must be a JSON object",
 		)
 	}
 
