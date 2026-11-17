@@ -2,6 +2,8 @@ package voyage
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -13,6 +15,29 @@ import (
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
+// unmarshalRequest2Node parses the request body into an editable AST node.
+// The whole document is validated first: the plain AST shortcut skips
+// validation and can silently normalize malformed request bodies (dropping
+// trailing garbage, coercing scalars), and a null root would be turned into a
+// valid object by the first Set.
+func unmarshalRequest2Node(req *http.Request) (ast.Node, error) {
+	requestBody, err := common.GetRequestBodyReusable(req)
+	if err != nil {
+		return ast.Node{}, err
+	}
+
+	var node ast.Node
+	if err := json.Unmarshal(requestBody, &node); err != nil {
+		return ast.Node{}, err
+	}
+
+	if node.TypeSafe() == ast.V_NULL {
+		return ast.Node{}, errors.New("voyage request must be a JSON object")
+	}
+
+	return node, nil
+}
+
 // ConvertEmbeddingsRequest adapts an OpenAI-style embeddings request to
 // POST /v1/embeddings:
 //   - `input` is always sent as a list;
@@ -23,7 +48,7 @@ func ConvertEmbeddingsRequest(
 	meta *meta.Meta,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := unmarshalRequest2Node(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(err.Error())
 	}

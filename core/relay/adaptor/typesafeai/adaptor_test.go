@@ -200,6 +200,46 @@ func TestConvertRequestPassthrough(t *testing.T) {
 	assert.Equal(t, strconv.Itoa(len(convertedBody)), result.Header.Get("Content-Length"))
 }
 
+// Malformed bodies must be rejected, not silently normalized: the plain AST
+// shortcut tolerates trailing garbage and coerces scalars while forwarding.
+func TestConvertRequestRejectsMalformedBodies(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(nil, mode.SystemOne, "jev-latest", coremodel.ModelConfig{})
+
+	for name, body := range map[string]string{
+		"trailing garbage": `{"state":"s","questions":{"q1":{"type":"noul"}}} garbage`,
+		"scalar root":      `not json at all`,
+		"null root":        `null`,
+		"truncated":        `{"state":`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/systemone",
+				strings.NewReader(body),
+			)
+			assert.NoError(t, err)
+
+			_, err = a.ConvertRequest(m, nil, req)
+			assert.Error(t, err)
+
+			var sysErr adaptor.Error
+
+			ok := errors.As(err, &sysErr)
+			assert.True(t, ok)
+
+			if ok {
+				assert.Equal(t, http.StatusBadRequest, sysErr.StatusCode())
+
+				errorBody, marshalErr := sysErr.MarshalJSON()
+				assert.NoError(t, marshalErr)
+				assert.NotEqual(t, `{"detail":""}`, string(errorBody))
+			}
+		})
+	}
+}
+
 // Gateway-side request errors must reach the client in the SystemOne error
 // shape ({"detail": ...}), not the OpenAI envelope.
 func TestConvertRequestErrorShape(t *testing.T) {

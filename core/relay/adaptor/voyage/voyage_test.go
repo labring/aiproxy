@@ -179,6 +179,9 @@ func TestConvertEmbeddingsRequestRejectsBadInput(t *testing.T) {
 		"unknown encoding format": `{"input":["a"],"encoding_format":"int8"}`,
 		"non-string encoding":     `{"input":["a"],"encoding_format":1}`,
 		"missing input":           `{"model":"voyage-4"}`,
+		"trailing garbage":        `{"input":["a"]} trailing`,
+		"scalar root":             `not json at all`,
+		"null root":               `null`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
