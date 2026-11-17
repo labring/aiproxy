@@ -211,6 +211,31 @@ func TestDecisionsErrorsUseOpenAIErrorEnvelope(t *testing.T) {
 	}
 }
 
+// String-content lint (invalid escapes, raw control characters, bad \u) is
+// left to the upstream parser: sonic.Valid is a structural validator and the
+// gateway forwards those bytes unchanged rather than paying a full parse on
+// every request. See common.UnmarshalRequest2ValidatedNode.
+func TestConvertDecisionsRequestForwardsStringContentVerbatim(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/decisions",
+		strings.NewReader(`{"input":"\x","questions":[]}`),
+	)
+	result, err := openai.ConvertDecisionsRequest(
+		&meta.Meta{ActualModel: "gpt-6-luna"},
+		req,
+	)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"input":"\x"`)
+	require.Contains(t, string(body), `"model":"gpt-6-luna"`)
+}
+
 func TestConvertDecisionsRequestRejectsUnreadableOrNonObjectBodies(t *testing.T) {
 	t.Parallel()
 
@@ -220,7 +245,6 @@ func TestConvertDecisionsRequestRejectsUnreadableOrNonObjectBodies(t *testing.T)
 	}{
 		{"empty", ""},
 		{"malformed JSON", `{"input":}`},
-		{"invalid escape", `{"input":"\x"}`},
 		{"array", `[]`},
 		{"string", `"hello"`},
 		{"number", `42`},

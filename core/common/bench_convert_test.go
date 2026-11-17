@@ -1,12 +1,13 @@
-package common
+package common_test
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
+	common "github.com/labring/aiproxy/core/common"
 )
 
 func benchBody(size int) string {
@@ -16,7 +17,7 @@ func benchBody(size int) string {
 
 // old path: lazy Get + Set model + marshal
 func convertGet(body []byte) ([]byte, error) {
-	node, err := GetJSONNodeNoCopy(body)
+	node, err := common.GetJSONNodeNoCopy(body)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func convertUnmarshal(body []byte) ([]byte, error) {
 // candidate path: sonic.Valid + lazy Get + Set + marshal
 func convertValidGet(body []byte) ([]byte, error) {
 	if !sonic.Valid(body) {
-		return nil, fmt.Errorf("invalid json")
+		return nil, errors.New("invalid json")
 	}
 
 	return convertGet(body)
@@ -76,6 +77,7 @@ func benchConvert(b *testing.B, body []byte, f func([]byte) ([]byte, error)) {
 	b.Helper()
 	b.ReportAllocs()
 	b.ResetTimer()
+
 	for b.Loop() {
 		if _, err := f(body); err != nil {
 			b.Fatal(err)
