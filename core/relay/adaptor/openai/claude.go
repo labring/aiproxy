@@ -723,7 +723,7 @@ func convertFinishReasonToClaude(finishReason string) *string {
 		v := relaymodel.ClaudeStopReasonToolUse
 		return &v
 	case relaymodel.FinishReasonContentFilter:
-		v := relaymodel.ClaudeStopReasonStopSequence
+		v := relaymodel.ClaudeStopReasonRefusal
 		return &v
 	case "":
 		v := relaymodel.ClaudeStopReasonEndTurn

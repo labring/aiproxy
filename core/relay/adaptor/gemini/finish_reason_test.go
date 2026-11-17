@@ -21,8 +21,8 @@ func TestFinishReasonConversions(t *testing.T) {
 	}{
 		{"STOP", "stop", "end_turn", false},
 		{"MAX_TOKENS", "length", "max_tokens", false},
-		{"SAFETY", "content_filter", "end_turn", false},
-		{"RECITATION", "content_filter", "end_turn", false},
+		{"SAFETY", "content_filter", "refusal", false},
+		{"RECITATION", "content_filter", "refusal", false},
 		{"OTHER", "stop", "end_turn", false},
 		{"TOOL_CALLS", "tool_calls", "tool_use", false},
 		{"FUNCTION_CALL", "tool_calls", "tool_use", false},
@@ -61,7 +61,7 @@ func TestFinishReasonConversions(t *testing.T) {
 
 func TestClaudeStreamFinishReason(t *testing.T) {
 	for _, tt := range []struct{ name, chunks, want string }{
-		{"safety", `data: {"candidates":[{"finishReason":"SAFETY"}]}` + "\n\n", "end_turn"},
+		{"safety", `data: {"candidates":[{"finishReason":"SAFETY"}]}` + "\n\n", "refusal"},
 		{"tool in earlier chunk", `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"weather","args":{}}}]}}]}` + "\n\ndata: " + `{"candidates":[{"finishReason":"STOP"}]}` + "\n\n", "tool_use"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
