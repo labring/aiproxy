@@ -952,6 +952,46 @@ ${modelConfig?.config?.support_voices?.length
   }
 }`
             }
+        case 42:
+            return {
+                title: t('modeType.42'),
+                endpoint: '/systemone',
+                method: 'POST',
+                responseFormat: 'json',
+                requestExample: `curl --request POST \\
+--url ${apiEndpoint}/v1/systemone \\
+--header "Authorization: Bearer $token" \\
+--header 'Content-Type: application/json' \\
+--data '{
+  "model": "${modelConfig.model}",
+  "state": { "customer_message": "The package arrived with a broken screen." },
+  "questions": {
+    "damaged": {
+      "type": "noul",
+      "instructions": "Does the customer report a damaged item?",
+      "criteria": {
+        "true": "A broken or damaged item is reported",
+        "false": "No damage is mentioned"
+      }
+    }
+  }
+}'`,
+                responseExample: `{
+  "model": "${modelConfig.model}",
+  "answers": {
+    "damaged": {
+      "type": "noul",
+      "noul": 0.95,
+      "confidence": 0.9
+    }
+  },
+  "usage": {
+    "input_tokens": 42,
+    "output_tokens": 0,
+    "total_tokens": 42
+  }
+}`
+            }
         default:
             return {
                 title: t('modeType.0'),

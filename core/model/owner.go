@@ -37,4 +37,5 @@ const (
 	ModelOwnerJina        ModelOwner = "jina"
 	ModelOwnerVoyage      ModelOwner = "voyage"
 	ModelOwnerAntGroup    ModelOwner = "antgroup"
+	ModelOwnerTypeSafeAI  ModelOwner = "typesafeai"
 )

@@ -725,6 +725,25 @@ func AlphaSearch() []gin.HandlerFunc {
 	}
 }
 
+// SystemOne godoc
+//
+//	@Summary		Ask SystemOne questions
+//	@Description	Evaluate state with noul, choice, score and box questions using the native TypeSafe SystemOne API.
+//	@Tags			relay
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			request	body		model.SystemOneRequest	true	"Request"
+//	@Success		200		{object}	model.SystemOneResponse
+//	@Failure		400		{object}	model.OpenAIErrorResponse
+//	@Router			/v1/systemone [post]
+func SystemOne() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		middleware.NewDistribute(mode.SystemOne),
+		NewRelay(mode.SystemOne),
+	}
+}
+
 // GetResponse godoc
 //
 //	@Summary		Get response
