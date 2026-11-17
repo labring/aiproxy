@@ -150,7 +150,7 @@ func convertRequestToBytes(
 	callbacks ...func(node *ast.Node) error,
 ) ([]byte, error) {
 	// Parse request body into AST node
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return nil, err
 	}

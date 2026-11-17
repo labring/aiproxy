@@ -2,7 +2,6 @@ package typesafeai
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -74,34 +73,18 @@ func (a *Adaptor) SetupRequestHeader(
 	return nil
 }
 
-// ConvertRequest rewrites the model and validates the required fields, keeping
-// the rest of the request - including assets and unknown fields - as raw JSON.
+// ConvertRequest rewrites the model and checks the required fields, keeping
+// the rest of the body as raw JSON.
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
 	_ adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	requestBody, err := common.GetRequestBodyReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
-		return adaptor.ConvertResult{}, convertRequestError(meta, err.Error())
-	}
-
-	// Validate the complete JSON before editing it. The reusable AST shortcut
-	// skips validation and can silently normalize malformed request bodies.
-	var node ast.Node
-	if err := json.Unmarshal(requestBody, &node); err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(
 			meta,
 			"invalid request body: "+err.Error(),
-		)
-	}
-
-	// Get on a null root reports every field as missing, but Set would turn
-	// that same root into a valid object; reject it explicitly.
-	if node.TypeSafe() == ast.V_NULL {
-		return adaptor.ConvertResult{}, convertRequestError(
-			meta,
-			"invalid request body: request must be a JSON object",
 		)
 	}
 
@@ -118,8 +101,7 @@ func (a *Adaptor) ConvertRequest(
 		)
 	}
 
-	// sonic's Len counts array elements, so walk the object to check it has at
-	// least one named question.
+	// Len is array-only; walk the object instead.
 	questionCount := 0
 
 	_ = questionsNode.ForEach(func(_ ast.Sequence, _ *ast.Node) bool {

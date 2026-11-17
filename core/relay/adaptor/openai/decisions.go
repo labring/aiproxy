@@ -2,8 +2,6 @@ package openai
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -20,22 +18,9 @@ import (
 // ConvertDecisionsRequest only applies model mapping. Preserve native input items,
 // typed choices, cache controls, and future fields; OpenAI validates their contract.
 func ConvertDecisionsRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
-	requestBody, err := common.GetRequestBodyReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
-	}
-
-	// Validate the complete JSON before editing it. The reusable AST shortcut
-	// skips validation and can silently normalize malformed request bodies.
-	var node ast.Node
-	if err := json.Unmarshal(requestBody, &node); err != nil {
-		return adaptor.ConvertResult{}, err
-	}
-
-	// Set rejects arrays/scalars, but turns null into an object. Reject null
-	// explicitly so malformed root values cannot become valid mapped requests.
-	if node.TypeSafe() == ast.V_NULL {
-		return adaptor.ConvertResult{}, errors.New("decisions request must be a JSON object")
 	}
 
 	if _, err = node.Set("model", ast.NewString(meta.ActualModel)); err != nil {

@@ -31,7 +31,7 @@ func ConvertMultimodalEmbeddingsRequest(
 	meta *meta.Meta,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	node, err := unmarshalRequest2Node(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(err.Error())
 	}

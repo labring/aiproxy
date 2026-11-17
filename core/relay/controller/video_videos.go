@@ -73,7 +73,7 @@ func getVideosRequestUsageParams(c *gin.Context) (videosRequestUsageParams, erro
 		}, nil
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return videosRequestUsageParams{}, NewBadRequestParamError(err.Error())
 	}

@@ -211,6 +211,29 @@ func TestDecisionsErrorsUseOpenAIErrorEnvelope(t *testing.T) {
 	}
 }
 
+// Invalid escapes are the upstream parser's problem; the bytes are forwarded
+// unchanged.
+func TestConvertDecisionsRequestForwardsStringContentVerbatim(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/decisions",
+		strings.NewReader(`{"input":"\x","questions":[]}`),
+	)
+	result, err := openai.ConvertDecisionsRequest(
+		&meta.Meta{ActualModel: "gpt-6-luna"},
+		req,
+	)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"input":"\x"`)
+	require.Contains(t, string(body), `"model":"gpt-6-luna"`)
+}
+
 func TestConvertDecisionsRequestRejectsUnreadableOrNonObjectBodies(t *testing.T) {
 	t.Parallel()
 
@@ -220,7 +243,6 @@ func TestConvertDecisionsRequestRejectsUnreadableOrNonObjectBodies(t *testing.T)
 	}{
 		{"empty", ""},
 		{"malformed JSON", `{"input":}`},
-		{"invalid escape", `{"input":"\x"}`},
 		{"array", `[]`},
 		{"string", `"hello"`},
 		{"number", `42`},

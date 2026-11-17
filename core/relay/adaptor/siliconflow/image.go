@@ -42,7 +42,7 @@ type imageResponseImage struct {
 }
 
 func ConvertImageRequest(meta *meta.Meta, request *http.Request) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(request)
+	node, err := common.UnmarshalRequest2ValidatedNode(request)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}
