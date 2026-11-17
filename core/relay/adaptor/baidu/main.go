@@ -71,7 +71,9 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		if message.Role == "system" {
 			baiduRequest.System = message.StringContent()
 
-			request.Messages = append(request.Messages[:i], request.Messages[i+1:]...)
+			baiduRequest.Messages = make([]relaymodel.Message, 0, len(request.Messages)-1)
+			baiduRequest.Messages = append(baiduRequest.Messages, request.Messages[:i]...)
+			baiduRequest.Messages = append(baiduRequest.Messages, request.Messages[i+1:]...)
 			break
 		}
 	}
