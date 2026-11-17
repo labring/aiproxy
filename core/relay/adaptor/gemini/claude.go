@@ -475,6 +475,8 @@ func geminiFinishReason2Claude(reason string) string {
 	switch reason {
 	case relaymodel.GeminiFinishReasonStop:
 		return relaymodel.ClaudeStopReasonEndTurn
+	case relaymodel.GeminiFinishReasonSafety, relaymodel.GeminiFinishReasonRecitation:
+		return relaymodel.ClaudeStopReasonRefusal
 	case relaymodel.GeminiFinishReasonMaxTokens:
 		return relaymodel.ClaudeStopReasonMaxTokens
 	case relaymodel.GeminiFinishReasonToolCalls, relaymodel.GeminiFinishReasonFunctionCall:
