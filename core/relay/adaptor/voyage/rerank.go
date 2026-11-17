@@ -28,7 +28,7 @@ func ConvertRerankRequest(
 	meta *meta.Meta,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := unmarshalRequest2Node(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, convertRequestError(err.Error())
 	}
