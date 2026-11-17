@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/labring/aiproxy/core/relay/meta"
-
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 )
 
@@ -36,7 +35,13 @@ func TestConvertRequestSystemMessage(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/",
+				strings.NewReader(string(body)),
+			)
+
 			result, err := ConvertRequest(&meta.Meta{ActualModel: "ernie"}, req)
 			if err != nil {
 				t.Fatal(err)
@@ -50,6 +55,7 @@ func TestConvertRequestSystemMessage(t *testing.T) {
 			if got.System != tc.system {
 				t.Errorf("system = %q, want %q", got.System, tc.system)
 			}
+
 			if !reflect.DeepEqual(got.Messages, tc.want) {
 				t.Errorf("messages = %#v, want %#v", got.Messages, tc.want)
 			}
