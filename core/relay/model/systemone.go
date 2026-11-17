@@ -1,5 +1,7 @@
 package model
 
+import "github.com/labring/aiproxy/core/relay/adaptor"
+
 // SystemOneRequest is the native TypeSafe SystemOne request. The state is a
 // string, object or array and instructions and criteria are unions, so relay
 // conversion keeps their original JSON rather than coercing them.
@@ -42,4 +44,13 @@ type SystemOneUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	TotalTokens  int64 `json:"total_tokens"`
+}
+
+// SystemOneError matches the TypeSafe error contract: a FastAPI-style detail.
+type SystemOneError struct {
+	Detail string `json:"detail"`
+}
+
+func NewSystemOneError(statusCode int, err SystemOneError) adaptor.Error {
+	return adaptor.NewError(statusCode, err)
 }

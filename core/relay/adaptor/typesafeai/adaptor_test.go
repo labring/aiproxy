@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -163,6 +164,71 @@ func TestConvertRequestPreservesInstructions(t *testing.T) {
 	assert.Contains(t, converted.Questions, "is_urgent")
 	assert.Equal(t, "noul", converted.Questions["is_urgent"].Type)
 	assert.Equal(t, "Does this convey urgency?", converted.Questions["is_urgent"].Instructions)
+}
+
+// TestConvertRequestPassthrough keeps every field the relay does not touch:
+// assets (needed for image and box questions) and unknown future fields must
+// survive the model rewrite, and the converted request carries the JSON
+// headers the upstream expects.
+func TestConvertRequestPassthrough(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(nil, mode.SystemOne, "jev-latest", coremodel.ModelConfig{})
+
+	body := `{"state":"The package arrived with a broken screen.","model":"jev-latest",` +
+		`"assets":{"img1":"https://example.com/photo.png"},"future_field":{"nested":[1,2]},` +
+		`"questions":{"damaged":{"type":"noul","instructions":"Does the customer report a damaged item?"}}}`
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/systemone",
+		strings.NewReader(body),
+	)
+	assert.NoError(t, err)
+
+	result, err := a.ConvertRequest(m, nil, req)
+	assert.NoError(t, err)
+
+	convertedBody, err := io.ReadAll(result.Body)
+	assert.NoError(t, err)
+
+	assert.Contains(t, string(convertedBody), `"assets":{"img1":"https://example.com/photo.png"}`)
+	assert.Contains(t, string(convertedBody), `"future_field":{"nested":[1,2]}`)
+	assert.Contains(t, string(convertedBody), `"model":"jev-latest"`)
+
+	assert.Equal(t, "application/json", result.Header.Get("Content-Type"))
+	assert.Equal(t, strconv.Itoa(len(convertedBody)), result.Header.Get("Content-Length"))
+}
+
+// Gateway-side request errors must reach the client in the SystemOne error
+// shape ({"detail": ...}), not the OpenAI envelope.
+func TestConvertRequestErrorShape(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(nil, mode.SystemOne, "jev-latest", coremodel.ModelConfig{})
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/systemone",
+		strings.NewReader(`{"questions":{"q1":{"type":"noul"}}}`),
+	)
+	assert.NoError(t, err)
+
+	_, err = a.ConvertRequest(m, nil, req)
+	assert.Error(t, err)
+
+	var sysErr adaptor.Error
+
+	ok := errors.As(err, &sysErr)
+	assert.True(t, ok)
+
+	if ok {
+		assert.Equal(t, http.StatusBadRequest, sysErr.StatusCode())
+
+		body, marshalErr := sysErr.MarshalJSON()
+		assert.NoError(t, marshalErr)
+		assert.JSONEq(t, `{"detail":"missing required field: state"}`, string(body))
+	}
 }
 
 func TestConvertRequestMissingState(t *testing.T) {
@@ -369,7 +435,10 @@ func TestErrorHanlder(t *testing.T) {
 		err := typesafeai.ErrorHanlder(resp)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusBadRequest, err.StatusCode())
-		assert.Contains(t, err.Error(), "state must be provided")
+
+		body, marshalErr := err.MarshalJSON()
+		assert.NoError(t, marshalErr)
+		assert.JSONEq(t, `{"detail":"state must be provided"}`, string(body))
 	})
 
 	t.Run("validation detail array", func(t *testing.T) {
@@ -385,8 +454,14 @@ func TestErrorHanlder(t *testing.T) {
 		err := typesafeai.ErrorHanlder(resp)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusUnprocessableEntity, err.StatusCode())
-		assert.Contains(t, err.Error(), `"instructions" must be provided`)
-		assert.Contains(t, err.Error(), "field required")
+
+		body, marshalErr := err.MarshalJSON()
+		assert.NoError(t, marshalErr)
+		assert.JSONEq(
+			t,
+			`{"detail":"\"instructions\" must be provided; field required"}`,
+			string(body),
+		)
 	})
 
 	t.Run("unrecognized body falls back to raw copy", func(t *testing.T) {
@@ -399,8 +474,14 @@ func TestErrorHanlder(t *testing.T) {
 		err := typesafeai.ErrorHanlder(resp)
 		assert.NotNil(t, err)
 		assert.Equal(t, http.StatusInternalServerError, err.StatusCode())
-		assert.Contains(t, err.Error(), "HTTP 500")
-		assert.Contains(t, err.Error(), "upstream exploded")
+
+		body, marshalErr := err.MarshalJSON()
+		assert.NoError(t, marshalErr)
+		assert.JSONEq(
+			t,
+			`{"detail":"typesafe returned HTTP 500: upstream exploded"}`,
+			string(body),
+		)
 	})
 }
 

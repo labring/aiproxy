@@ -2,12 +2,12 @@ package typesafeai
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/bytedance/sonic"
+	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
@@ -73,58 +73,69 @@ func (a *Adaptor) SetupRequestHeader(
 	return nil
 }
 
+// ConvertRequest rewrites the model and validates the required fields, keeping
+// the rest of the request - including assets and unknown fields - as raw JSON.
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
 	_ adaptor.Store,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	body, err := io.ReadAll(req.Body)
+	node, err := common.UnmarshalRequest2NodeReusable(req)
 	if err != nil {
-		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIError(
-			err,
-			"read_request_body_failed",
-			http.StatusInternalServerError,
-		)
-	}
-
-	var systemOneReq relaymodel.SystemOneRequest
-	if err := sonic.Unmarshal(body, &systemOneReq); err != nil {
-		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+		return adaptor.ConvertResult{}, convertRequestError(
+			meta,
 			"invalid request body: "+err.Error(),
-			"invalid_request_error",
-			http.StatusBadRequest,
 		)
 	}
 
-	if systemOneReq.State == nil {
-		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
-			"missing required field: state",
-			"invalid_request_error",
-			http.StatusBadRequest,
-		)
+	stateNode := node.Get("state")
+	if !stateNode.Exists() || stateNode.TypeSafe() == ast.V_NULL {
+		return adaptor.ConvertResult{}, convertRequestError(meta, "missing required field: state")
 	}
 
-	if len(systemOneReq.Questions) == 0 {
-		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
+	questionsNode := node.Get("questions")
+	if !questionsNode.Exists() || questionsNode.TypeSafe() != ast.V_OBJECT {
+		return adaptor.ConvertResult{}, convertRequestError(
+			meta,
 			"missing required field: questions",
-			"invalid_request_error",
-			http.StatusBadRequest,
 		)
 	}
 
-	systemOneReq.Model = meta.ActualModel
+	// sonic's Len counts array elements, so walk the object to check it has at
+	// least one named question.
+	questionCount := 0
 
-	newBody, err := sonic.Marshal(systemOneReq)
-	if err != nil {
-		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIError(
-			err,
-			"marshal_request_body_failed",
-			http.StatusInternalServerError,
+	_ = questionsNode.ForEach(func(_ ast.Sequence, _ *ast.Node) bool {
+		questionCount++
+		return true
+	})
+
+	if questionCount == 0 {
+		return adaptor.ConvertResult{}, convertRequestError(
+			meta,
+			"missing required field: questions",
 		)
+	}
+
+	if _, err := node.Set("model", ast.NewString(meta.ActualModel)); err != nil {
+		return adaptor.ConvertResult{}, err
+	}
+
+	return marshalConvertResult(&node)
+}
+
+func marshalConvertResult(node *ast.Node) (adaptor.ConvertResult, error) {
+	jsonData, err := node.MarshalJSON()
+	if err != nil {
+		return adaptor.ConvertResult{}, err
 	}
 
 	return adaptor.ConvertResult{
-		Body: bytes.NewReader(newBody),
+		Header: http.Header{
+			"Content-Type":   {"application/json"},
+			"Content-Length": {strconv.Itoa(len(jsonData))},
+		},
+		Body: bytes.NewReader(jsonData),
 	}, nil
 }
 
@@ -149,19 +160,19 @@ func (a *Adaptor) DoResponse(
 
 	responseBody, err := common.GetResponseBody(resp)
 	if err != nil {
-		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
-			err,
-			"read_response_body_failed",
+		return adaptor.DoResponseResult{}, relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
 			http.StatusInternalServerError,
+			err.Error(),
 		)
 	}
 
 	var systemOneResp relaymodel.SystemOneResponse
 	if err := sonic.Unmarshal(responseBody, &systemOneResp); err != nil {
-		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
-			err,
-			"unmarshal_response_body_failed",
+		return adaptor.DoResponseResult{}, relaymodel.WrapperErrorWithMessage(
+			meta.Mode,
 			http.StatusInternalServerError,
+			"unmarshal response body failed: "+err.Error(),
 		)
 	}
 
