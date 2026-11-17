@@ -920,35 +920,43 @@ ${modelConfig?.config?.support_voices?.length
         case 41:
             return {
                 title: t('modeType.41'),
-                endpoint: '/decisions',
+                endpoint: '/v1/systemone',
                 method: 'POST',
-                responseFormat: 'json',
+                responseFormat: 'text',
                 requestExample: `curl --request POST \\
---url ${apiEndpoint}/v1/decisions \\
+--url ${apiEndpoint}/v1/systemone \\
 --header "Authorization: Bearer $token" \\
---header 'Content-Type: application/json' \\
+--header "Content-Type: application/json" \\
 --data '{
-  "model": "${modelConfig.model}",
-  "input": "The package arrived with a broken screen.",
-  "questions": [
+  "model": "systemone",
+  "messages": [
     {
-      "type": "predicate",
-      "name": "damaged",
-      "instructions": "Does the customer report a damaged item?"
+      "role": "user",
+      "content": "Hello"
     }
-  ]
-}'`,
+  ],
+  "stream": false
+}'
                 responseExample: `{
-  "model": "${modelConfig.model}",
-  "answers": [
-    { "type": "predicate", "name": "damaged", "probability": 0.95 }
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1700000000,
+  "model": "systemone",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
   ],
   "usage": {
-    "input_tokens": 42,
-    "input_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
-    "output_tokens": 0,
-    "output_tokens_details": { "reasoning_tokens": 0 },
-    "total_tokens": 42
+    "prompt_tokens": 9,
+    "completion_tokens": 12,
+    "total_tokens": 21
+}
   }
 }`
             }

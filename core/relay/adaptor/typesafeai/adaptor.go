@@ -42,13 +42,11 @@ func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 }
 
 func (a *Adaptor) GetRequestURL(
-	_ *meta.Meta,
+	meta *meta.Meta,
 	_ adaptor.Store,
 	_ *gin.Context,
 ) (adaptor.RequestURL, error) {
-	baseURL := "https://api.typesafe.ai/v1"
-
-	pu, err := url.Parse(baseURL)
+	pu, err := url.Parse(meta.Channel.BaseURL)
 	if err != nil {
 		return adaptor.RequestURL{}, err
 	}
