@@ -87,7 +87,7 @@ func (a *Adaptor) ConvertRequest(
 		)
 	}
 
-	var systemOneReq SystemOneRequest
+	var systemOneReq relaymodel.SystemOneRequest
 	if err := sonic.Unmarshal(body, &systemOneReq); err != nil {
 		return adaptor.ConvertResult{}, relaymodel.WrapperOpenAIErrorWithMessage(
 			"invalid request body: "+err.Error(),
@@ -156,7 +156,7 @@ func (a *Adaptor) DoResponse(
 		)
 	}
 
-	var systemOneResp SystemOneResponse
+	var systemOneResp relaymodel.SystemOneResponse
 	if err := sonic.Unmarshal(responseBody, &systemOneResp); err != nil {
 		return adaptor.DoResponseResult{}, relaymodel.WrapperOpenAIError(
 			err,

@@ -1567,6 +1567,7 @@ definitions:
     - 39
     - 40
     - 41
+    - 42
     type: integer
     x-enum-varnames:
     - Unknown
@@ -1611,6 +1612,7 @@ definitions:
     - ResponsesCompact
     - AlphaSearch
     - Decisions
+    - SystemOne
   model.Amount:
     properties:
       audio_input_amount:
@@ -1832,6 +1834,7 @@ definitions:
     - 58
     - 59
     - 60
+    - 61
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1882,6 +1885,7 @@ definitions:
     - ChannelTypeAIProxyUSW1
     - ChannelTypeTokenDance
     - ChannelTypeVoyage
+    - ChannelTypeTypeSafeAI
   model.ChartData:
     properties:
       audio_input_amount:
@@ -1936,15 +1940,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
+        type: integer
+      status_429_count:
         type: integer
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
-        type: integer
-      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -2174,6 +2178,8 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2181,8 +2187,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -3510,7 +3514,9 @@ definitions:
     - xai
     - doc2x
     - jina
+    - voyage
     - antgroup
+    - typesafeai
     type: string
     x-enum-varnames:
     - ModelOwnerOpenAI
@@ -3545,7 +3551,9 @@ definitions:
     - ModelOwnerXAI
     - ModelOwnerDoc2x
     - ModelOwnerJina
+    - ModelOwnerVoyage
     - ModelOwnerAntGroup
+    - ModelOwnerTypeSafeAI
   model.OpenAIError:
     properties:
       code: {}
@@ -4315,8 +4323,6 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -4324,6 +4330,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4346,6 +4354,75 @@ definitions:
       web_search_amount:
         type: number
       web_search_count:
+        type: integer
+    type: object
+  model.SystemOneAnswer:
+    properties:
+      box: {}
+      choice: {}
+      confidence:
+        type: number
+      legend:
+        additionalProperties:
+          type: string
+        type: object
+      noul:
+        type: number
+      probabilities:
+        additionalProperties:
+          format: float64
+          type: number
+        type: object
+      score:
+        type: number
+      type:
+        enum:
+        - noul
+        - choice
+        - score
+        - box
+        type: string
+    type: object
+  model.SystemOneQuestion:
+    properties:
+      criteria: {}
+      instructions: {}
+      type:
+        type: string
+    required:
+    - type
+    type: object
+  model.SystemOneRequest:
+    properties:
+      model:
+        type: string
+      questions:
+        additionalProperties:
+          $ref: '#/definitions/model.SystemOneQuestion'
+        type: object
+      state: {}
+    required:
+    - questions
+    - state
+    type: object
+  model.SystemOneResponse:
+    properties:
+      answers:
+        additionalProperties:
+          $ref: '#/definitions/model.SystemOneAnswer'
+        type: object
+      model:
+        type: string
+      usage:
+        $ref: '#/definitions/model.SystemOneUsage'
+    type: object
+  model.SystemOneUsage:
+    properties:
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      total_tokens:
         type: integer
     type: object
   model.TestConfig:
@@ -11089,6 +11166,7 @@ paths:
         - 58
         - 59
         - 60
+        - 61
         in: path
         name: type
         required: true
@@ -13826,6 +13904,35 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get response input items
+      tags:
+      - relay
+  /v1/systemone:
+    post:
+      consumes:
+      - application/json
+      description: Evaluate state with noul, choice, score and box questions using
+        the native TypeSafe SystemOne API.
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SystemOneRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SystemOneResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.OpenAIErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Ask SystemOne questions
       tags:
       - relay
   /v1/video/generations/{id}/content/video:

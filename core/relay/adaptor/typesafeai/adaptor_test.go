@@ -16,6 +16,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/adaptor/typesafeai"
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
+	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,6 +63,21 @@ func TestAdaptorGetRequestURLCustomBaseURL(t *testing.T) {
 	assert.Equal(t, "https://proxy.example.com/typesafeai/systemone", got.URL)
 }
 
+func TestAdaptorGetRequestURLDefaultBaseURL(t *testing.T) {
+	a := &typesafeai.Adaptor{}
+	m := meta.NewMeta(
+		&coremodel.Channel{},
+		mode.SystemOne,
+		"jev-latest",
+		coremodel.ModelConfig{},
+	)
+
+	got, err := a.GetRequestURL(m, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, http.MethodPost, got.Method)
+	assert.Equal(t, "https://api.typesafe.ai/v1/systemone", got.URL)
+}
+
 func TestConvertRequestValid(t *testing.T) {
 	a := &typesafeai.Adaptor{}
 	m := meta.NewMeta(
@@ -88,7 +104,7 @@ func TestConvertRequestValid(t *testing.T) {
 	convertedBody, err := io.ReadAll(result.Body)
 	assert.NoError(t, err)
 
-	var converted typesafeai.SystemOneRequest
+	var converted relaymodel.SystemOneRequest
 
 	err = sonic.Unmarshal(convertedBody, &converted)
 	assert.NoError(t, err)
@@ -139,7 +155,7 @@ func TestConvertRequestPreservesInstructions(t *testing.T) {
 	assert.Contains(t, string(convertedBody), `"instructions":"Does this convey urgency?"`)
 
 	// Verify by parsing the structure
-	var converted typesafeai.SystemOneRequest
+	var converted relaymodel.SystemOneRequest
 
 	err = sonic.Unmarshal(convertedBody, &converted)
 	assert.NoError(t, err)
@@ -264,16 +280,16 @@ func TestDoResponseUsageExtraction(t *testing.T) {
 		}
 	}`
 
-	var resp typesafeai.SystemOneResponse
+	var resp relaymodel.SystemOneResponse
 
 	err := sonic.Unmarshal([]byte(body), &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, 10, resp.Usage.InputTokens)
-	assert.Equal(t, 20, resp.Usage.OutputTokens)
-	assert.Equal(t, 30, resp.Usage.TotalTokens)
+	assert.EqualValues(t, 10, resp.Usage.InputTokens)
+	assert.EqualValues(t, 20, resp.Usage.OutputTokens)
+	assert.EqualValues(t, 30, resp.Usage.TotalTokens)
 	assert.Contains(t, resp.Answers, "q1")
 	assert.Equal(t, "a", resp.Answers["q1"].Choice)
-	assert.Equal(t, 0.95, resp.Answers["q1"].Confidence)
+	assert.EqualValues(t, 0.95, *resp.Answers["q1"].Confidence)
 }
 
 func TestDoResponseWritesRawBody(t *testing.T) {
@@ -390,10 +406,10 @@ func TestErrorHanlder(t *testing.T) {
 
 func TestSystemOneRequestTypes(t *testing.T) {
 	t.Run("choice question", func(t *testing.T) {
-		req := typesafeai.SystemOneRequest{
+		req := relaymodel.SystemOneRequest{
 			State: "context",
 			Model: "gpt-4o",
-			Questions: map[string]typesafeai.Question{
+			Questions: map[string]relaymodel.SystemOneQuestion{
 				"q1": {
 					Type:         "choice",
 					Instructions: "Which team should handle this?",
@@ -411,7 +427,7 @@ func TestSystemOneRequestTypes(t *testing.T) {
 	})
 
 	t.Run("score question", func(t *testing.T) {
-		question := typesafeai.Question{
+		question := relaymodel.SystemOneQuestion{
 			Type:         "score",
 			Instructions: "How frustrated is the customer?",
 			Criteria:     []string{"Calm", "Frustrated", "Very angry"},
@@ -424,7 +440,7 @@ func TestSystemOneRequestTypes(t *testing.T) {
 	})
 
 	t.Run("noul question", func(t *testing.T) {
-		question := typesafeai.Question{
+		question := relaymodel.SystemOneQuestion{
 			Type:         "noul",
 			Instructions: "Does this convey urgency?",
 			Criteria: map[string]string{
@@ -442,10 +458,10 @@ func TestSystemOneRequestTypes(t *testing.T) {
 
 func TestAnswerTypes(t *testing.T) {
 	t.Run("choice answer", func(t *testing.T) {
-		answer := typesafeai.Answer{
+		answer := relaymodel.SystemOneAnswer{
 			Type:       "choice",
 			Choice:     "a",
-			Confidence: 0.95,
+			Confidence: new(0.95),
 			Probabilities: map[string]float64{
 				"a": 0.9,
 				"b": 0.1,
@@ -453,15 +469,15 @@ func TestAnswerTypes(t *testing.T) {
 		}
 		assert.Equal(t, "choice", answer.Type)
 		assert.Equal(t, "a", answer.Choice)
-		assert.Equal(t, 0.95, answer.Confidence)
+		assert.Equal(t, 0.95, *answer.Confidence)
 		assert.Equal(t, 0.9, answer.Probabilities["a"])
 	})
 
 	t.Run("score answer", func(t *testing.T) {
-		answer := typesafeai.Answer{
+		answer := relaymodel.SystemOneAnswer{
 			Type:       "score",
-			Score:      1.05,
-			Confidence: 0.92,
+			Score:      new(1.05),
+			Confidence: new(0.92),
 			Legend: map[string]string{
 				"0": "Calm",
 				"1": "Frustrated",
@@ -474,18 +490,18 @@ func TestAnswerTypes(t *testing.T) {
 			},
 		}
 		assert.Equal(t, "score", answer.Type)
-		assert.Equal(t, 1.05, answer.Score)
+		assert.Equal(t, 1.05, *answer.Score)
 		assert.Equal(t, "Calm", answer.Legend["0"])
 		assert.Equal(t, 0.95, answer.Probabilities["1"])
 	})
 
 	t.Run("noul answer", func(t *testing.T) {
-		answer := typesafeai.Answer{
+		answer := relaymodel.SystemOneAnswer{
 			Type:       "noul",
-			Noul:       0.95,
-			Confidence: 0.99,
+			Noul:       new(0.95),
+			Confidence: new(0.99),
 		}
 		assert.Equal(t, "noul", answer.Type)
-		assert.Equal(t, 0.95, answer.Noul)
+		assert.Equal(t, 0.95, *answer.Noul)
 	})
 }

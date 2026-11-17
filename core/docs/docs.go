@@ -10068,7 +10068,8 @@ const docTemplate = `{
                             57,
                             58,
                             59,
-                            60
+                            60,
+                            61
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -14414,6 +14415,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/systemone": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Evaluate state with noul, choice, score and box questions using the native TypeSafe SystemOne API.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Ask SystemOne questions",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.SystemOneRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.SystemOneResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.OpenAIErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/video/generations/jobs": {
             "post": {
                 "security": [
@@ -17614,7 +17660,8 @@ const docTemplate = `{
                 38,
                 39,
                 40,
-                41
+                41,
+                42
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -17658,7 +17705,8 @@ const docTemplate = `{
                 "DoubaoVideoTasksDelete",
                 "ResponsesCompact",
                 "AlphaSearch",
-                "Decisions"
+                "Decisions",
+                "SystemOne"
             ]
         },
         "model.Amount": {
@@ -17966,7 +18014,8 @@ const docTemplate = `{
                 57,
                 58,
                 59,
-                60
+                60,
+                61
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -18016,7 +18065,8 @@ const docTemplate = `{
                 "ChannelTypeAIProxyHZH",
                 "ChannelTypeAIProxyUSW1",
                 "ChannelTypeTokenDance",
-                "ChannelTypeVoyage"
+                "ChannelTypeVoyage",
+                "ChannelTypeTypeSafeAI"
             ]
         },
         "model.ChartData": {
@@ -20433,7 +20483,9 @@ const docTemplate = `{
                 "xai",
                 "doc2x",
                 "jina",
-                "antgroup"
+                "voyage",
+                "antgroup",
+                "typesafeai"
             ],
             "x-enum-varnames": [
                 "ModelOwnerOpenAI",
@@ -20468,7 +20520,9 @@ const docTemplate = `{
                 "ModelOwnerXAI",
                 "ModelOwnerDoc2x",
                 "ModelOwnerJina",
-                "ModelOwnerAntGroup"
+                "ModelOwnerVoyage",
+                "ModelOwnerAntGroup",
+                "ModelOwnerTypeSafeAI"
             ]
         },
         "model.OpenAIError": {
@@ -21667,6 +21721,107 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "web_search_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.SystemOneAnswer": {
+            "type": "object",
+            "properties": {
+                "box": {},
+                "choice": {},
+                "confidence": {
+                    "type": "number"
+                },
+                "legend": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "noul": {
+                    "type": "number"
+                },
+                "probabilities": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "score": {
+                    "type": "number"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "noul",
+                        "choice",
+                        "score",
+                        "box"
+                    ]
+                }
+            }
+        },
+        "model.SystemOneQuestion": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "criteria": {},
+                "instructions": {},
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.SystemOneRequest": {
+            "type": "object",
+            "required": [
+                "questions",
+                "state"
+            ],
+            "properties": {
+                "model": {
+                    "type": "string"
+                },
+                "questions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/model.SystemOneQuestion"
+                    }
+                },
+                "state": {}
+            }
+        },
+        "model.SystemOneResponse": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/model.SystemOneAnswer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/model.SystemOneUsage"
+                }
+            }
+        },
+        "model.SystemOneUsage": {
+            "type": "object",
+            "properties": {
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "total_tokens": {
                     "type": "integer"
                 }
             }
