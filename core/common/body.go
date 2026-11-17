@@ -2,7 +2,6 @@ package common
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -281,12 +280,14 @@ func UnmarshalRequestReusable(req *http.Request, v any) error {
 }
 
 // UnmarshalRequest2ValidatedNode parses the request body into an editable AST
-// node after validating the complete document. The plain sonic Get shortcut
-// skips validation and can silently normalize malformed request bodies
-// (dropping trailing garbage, coercing scalar roots), and sonic's Set turns a
-// null root into a valid object; converters that edit and forward the body
-// use this stricter variant so malformed input is rejected instead of being
-// forwarded upstream as valid JSON.
+// node after validating the complete document. sonic's Get shortcut skips
+// validation and can silently normalize malformed request bodies (dropping
+// trailing garbage, coercing scalar roots), and sonic's Set turns a null root
+// into a valid object; converters that edit and forward the body use this
+// stricter variant so malformed input is rejected instead of being forwarded
+// upstream as valid JSON. sonic.Unmarshal into an ast.Node rejects the same
+// malformed documents as encoding/json while keeping the whole pipeline on
+// sonic.
 func UnmarshalRequest2ValidatedNode(req *http.Request) (ast.Node, error) {
 	requestBody, err := GetRequestBodyReusable(req)
 	if err != nil {
@@ -294,7 +295,7 @@ func UnmarshalRequest2ValidatedNode(req *http.Request) (ast.Node, error) {
 	}
 
 	var node ast.Node
-	if err := json.Unmarshal(requestBody, &node); err != nil {
+	if err := sonic.Unmarshal(requestBody, &node); err != nil {
 		return ast.Node{}, err
 	}
 
