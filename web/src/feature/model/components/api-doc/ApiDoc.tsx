@@ -920,43 +920,70 @@ ${modelConfig?.config?.support_voices?.length
         case 41:
             return {
                 title: t('modeType.41'),
-                endpoint: '/v1/systemone',
+                endpoint: '/decisions',
                 method: 'POST',
-                responseFormat: 'text',
+                responseFormat: 'json',
+                requestExample: `curl --request POST \\
+--url ${apiEndpoint}/v1/decisions \\
+--header "Authorization: Bearer $token" \\
+--header 'Content-Type: application/json' \\
+--data '{
+  "model": "${modelConfig.model}",
+  "input": "The package arrived with a broken screen.",
+  "questions": [
+    {
+      "type": "predicate",
+      "name": "damaged",
+      "instructions": "Does the customer report a damaged item?"
+    }
+  ]
+}'`,
+                responseExample: `{
+  "model": "${modelConfig.model}",
+  "answers": [
+    { "type": "predicate", "name": "damaged", "probability": 0.95 }
+  ],
+  "usage": {
+    "input_tokens": 42,
+    "input_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
+    "output_tokens": 0,
+    "output_tokens_details": { "reasoning_tokens": 0 },
+    "total_tokens": 42
+  }
+}`
+            }
+        case 42:
+            return {
+                title: t('modeType.42'),
+                endpoint: '/systemone',
+                method: 'POST',
+                responseFormat: 'json',
                 requestExample: `curl --request POST \\
 --url ${apiEndpoint}/v1/systemone \\
 --header "Authorization: Bearer $token" \\
---header "Content-Type: application/json" \\
+--header 'Content-Type: application/json' \\
 --data '{
-  "model": "systemone",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Hello"
+  "model": "${modelConfig.model}",
+  "state": { "customer_message": "The package arrived with a broken screen." },
+  "questions": {
+    "damaged": {
+      "type": "predicate",
+      "instructions": "Does the customer report a damaged item?"
     }
-  ],
-  "stream": false
-}'
+  }
+}'`,
                 responseExample: `{
-  "id": "chatcmpl-123",
-  "object": "chat.completion",
-  "created": 1700000000,
-  "model": "systemone",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! How can I help you today?"
-      },
-      "finish_reason": "stop"
+  "model": "${modelConfig.model}",
+  "answers": {
+    "damaged": {
+      "type": "predicate",
+      "confidence": 0.95
     }
-  ],
+  },
   "usage": {
-    "prompt_tokens": 9,
-    "completion_tokens": 12,
-    "total_tokens": 21
-}
+    "input_tokens": 42,
+    "output_tokens": 0,
+    "total_tokens": 42
   }
 }`
             }
