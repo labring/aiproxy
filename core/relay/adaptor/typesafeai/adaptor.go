@@ -73,8 +73,8 @@ func (a *Adaptor) SetupRequestHeader(
 	return nil
 }
 
-// ConvertRequest rewrites the model and validates the required fields, keeping
-// the rest of the request - including assets and unknown fields - as raw JSON.
+// ConvertRequest rewrites the model and checks the required fields, keeping
+// the rest of the body as raw JSON.
 func (a *Adaptor) ConvertRequest(
 	meta *meta.Meta,
 	_ adaptor.Store,
@@ -101,8 +101,7 @@ func (a *Adaptor) ConvertRequest(
 		)
 	}
 
-	// sonic's Len counts array elements, so walk the object to check it has at
-	// least one named question.
+	// Len is array-only; walk the object instead.
 	questionCount := 0
 
 	_ = questionsNode.ForEach(func(_ ast.Sequence, _ *ast.Node) bool {

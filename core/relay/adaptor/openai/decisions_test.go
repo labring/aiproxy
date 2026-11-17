@@ -211,10 +211,8 @@ func TestDecisionsErrorsUseOpenAIErrorEnvelope(t *testing.T) {
 	}
 }
 
-// String-content lint (invalid escapes, raw control characters, bad \u) is
-// left to the upstream parser: sonic.Valid is a structural validator and the
-// gateway forwards those bytes unchanged rather than paying a full parse on
-// every request. See common.UnmarshalRequest2ValidatedNode.
+// Invalid escapes are the upstream parser's problem; the bytes are forwarded
+// unchanged.
 func TestConvertDecisionsRequestForwardsStringContentVerbatim(t *testing.T) {
 	t.Parallel()
 

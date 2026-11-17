@@ -15,7 +15,7 @@ func benchBody(size int) string {
 	return `{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,` + img + `"}},{"type":"text","text":"hi"}]}],"stream":true}`
 }
 
-// old path: lazy Get + Set model + marshal
+// lazy Get + Set model + marshal
 func convertGet(body []byte) ([]byte, error) {
 	node, err := common.GetJSONNodeNoCopy(body)
 	if err != nil {
@@ -29,7 +29,7 @@ func convertGet(body []byte) ([]byte, error) {
 	return node.MarshalJSON()
 }
 
-// current path: sonic.Unmarshal + Set + marshal
+// full sonic.Unmarshal + Set + marshal
 func convertUnmarshal(body []byte) ([]byte, error) {
 	var node ast.Node
 	if err := sonic.Unmarshal(body, &node); err != nil {
@@ -43,7 +43,7 @@ func convertUnmarshal(body []byte) ([]byte, error) {
 	return node.MarshalJSON()
 }
 
-// candidate path: sonic.Valid + lazy Get + Set + marshal
+// sonic.Valid + lazy Get + Set + marshal
 func convertValidGet(body []byte) ([]byte, error) {
 	if !sonic.Valid(body) {
 		return nil, errors.New("invalid json")

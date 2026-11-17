@@ -279,16 +279,9 @@ func UnmarshalRequestReusable(req *http.Request, v any) error {
 	return sonic.Unmarshal(requestBody, &v)
 }
 
-// UnmarshalRequest2ValidatedNode parses the request body into an editable AST
-// node after validating the complete document. sonic's Get shortcut skips
-// validation and can silently normalize malformed request bodies (dropping
-// trailing garbage, coercing scalar roots), and sonic's Set turns a null root
-// into a valid object; converters that edit and forward the body use this
-// stricter variant so malformed input is rejected instead of being forwarded
-// upstream as valid JSON. Validation runs through sonic.Valid, a
-// non-allocating scanner, so the node itself stays lazily loaded like the
-// plain Get path (a full sonic.Unmarshal would materialize the whole tree,
-// which costs ~75% more time and ~3.5x the memory on megabyte bodies).
+// UnmarshalRequest2ValidatedNode validates the whole body before returning an
+// editable AST node: sonic's Get silently normalizes malformed documents, and
+// Set would turn a null root into an object.
 func UnmarshalRequest2ValidatedNode(req *http.Request) (ast.Node, error) {
 	requestBody, err := GetRequestBodyReusable(req)
 	if err != nil {
