@@ -91,6 +91,7 @@ const (
 	OneAPIAliBailian
 	OneAPIOpenAICompatible
 	OneAPIGeminiOpenAICompatible
+	OneAPITypeSafeAI
 )
 
 var OneAPIChannelType2AIProxyMap = map[int]model.ChannelType{
@@ -126,6 +127,7 @@ var OneAPIChannelType2AIProxyMap = map[int]model.ChannelType{
 	OneAPIAliBailian:             model.ChannelTypeAli,
 	OneAPIGeminiOpenAICompatible: model.ChannelTypeGoogleGeminiOpenAI,
 	OneAPIXAI:                    model.ChannelTypeXAI,
+	OneAPITypeSafeAI:             model.ChannelTypeTypeSafeAI,
 }
 
 type ImportChannelFromOneAPIRequest struct {

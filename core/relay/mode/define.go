@@ -54,6 +54,7 @@ var modeNames = map[Mode]string{
 	ResponsesCompact:        "ResponsesCompact",
 	AlphaSearch:             "AlphaSearch",
 	Decisions:               "Decisions",
+	SystemOne:               "SystemOne",
 	Gemini:                  "Gemini",
 }
 
@@ -100,4 +101,5 @@ const (
 	ResponsesCompact
 	AlphaSearch
 	Decisions
+	SystemOne
 )

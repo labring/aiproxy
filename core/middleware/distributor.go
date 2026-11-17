@@ -472,6 +472,8 @@ func CheckRelayMode(requestMode, modelMode mode.Mode) bool {
 	case mode.Decisions:
 		// Existing LLM configs can use the native endpoint when their channel supports it.
 		return containsMode(mode.ChatCompletions, mode.Responses, mode.Decisions)
+	case mode.SystemOne:
+		return containsMode(mode.ChatCompletions, mode.Responses, mode.SystemOne)
 	case mode.ResponsesGet, mode.ResponsesDelete, mode.ResponsesCancel, mode.ResponsesInputItems:
 		return containsMode(
 			mode.ChatCompletions,
