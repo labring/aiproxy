@@ -291,6 +291,11 @@
   },
   "token": {
     "management": "Key Management",
+    "rename": "Rename",
+    "renameDialog": {
+      "description": "You can keep using the same key after renaming.",
+      "nameTooLong": "The name must be at most 32 UTF-8 bytes."
+    },
     "name": "Name",
     "remark": "Remark",
     "key": "API Key",
