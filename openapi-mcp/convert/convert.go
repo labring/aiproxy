@@ -470,7 +470,10 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 				continue
 			}
 
-			property := c.processSchemaProperty(&openapi3.SchemaRef{Value: &schema}, make(map[string]bool))
+			property := c.processSchemaProperty(
+				&openapi3.SchemaRef{Value: &schema},
+				make(map[string]bool),
+			)
 
 			str, err := sonic.Marshal(property)
 			if err != nil {
@@ -888,9 +891,8 @@ func (c *Converter) buildPropertyMap(
 	// Add schema validations
 	c.addSchemaValidations(schema, property)
 
-	// Composition-only schemas (allOf/oneOf/anyOf) frequently omit "type", yet
-	// MCP clients expect an object input schema. Default it so the generated
-	// tool input stays a valid JSON Schema.
+	// Type-less schemas with properties stay valid JSON Schema but MCP clients
+	// expect an explicit type, so default them to object.
 	if _, ok := property["type"]; !ok && len(schema.Properties) > 0 {
 		property["type"] = openapi3.NewObjectSchema().Type
 	}
