@@ -131,3 +131,40 @@ func TestConvertRequestKeepsEarlierUserTurnsInHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestConvertRequestArrayContent(t *testing.T) {
+	t.Parallel()
+
+	parts := func(texts ...string) []any {
+		out := make([]any, 0, len(texts))
+		for _, s := range texts {
+			out = append(out, map[string]any{"type": "text", "text": s})
+		}
+
+		return out
+	}
+
+	req := ConvertRequest(&relaymodel.GeneralOpenAIRequest{
+		Model: "command-r",
+		Messages: []relaymodel.Message{
+			{Role: "system", Content: parts("be brief")},
+			{Role: "user", Content: parts("first question")},
+			{Role: "assistant", Content: parts("first answer")},
+			{Role: "user", Content: parts("Hello, ", "world")},
+		},
+	})
+
+	if got, want := req.Message, "Hello, \nworld"; got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+
+	if len(req.ChatHistory) != 3 {
+		t.Fatalf("chat_history len = %d, want 3", len(req.ChatHistory))
+	}
+
+	for i, want := range []string{"be brief", "first question", "first answer"} {
+		if got := req.ChatHistory[i].Message; got != want {
+			t.Fatalf("chat_history[%d] = %q, want %q", i, got, want)
+		}
+	}
+}
