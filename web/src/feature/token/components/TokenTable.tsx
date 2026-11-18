@@ -151,7 +151,6 @@ export function TokenTable() {
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateTokenStatus()
 
     const tokens = useMemo(() => data?.tokens || [], [data?.tokens])
-    const total = data?.total || 0
     const runtimeItems = useMemo(
         () =>
             tokens
@@ -498,6 +497,7 @@ export function TokenTable() {
         data: tokens,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
     })
 
     return (
@@ -554,7 +554,7 @@ export function TokenTable() {
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}
-                        total={total}
+                        total={data?.total}
                         onPageChange={setPage}
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />

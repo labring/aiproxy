@@ -90,7 +90,6 @@ export function GroupTable() {
     const { updateStatus, isLoading: isStatusUpdating } = useUpdateGroupStatus()
 
     const groups = useMemo(() => data?.groups || [], [data?.groups])
-    const total = data?.total || 0
     const { data: runtimeMetrics } = useGroupSummaryMetrics(
         {
             groups: groups.map((group) => group.id),
@@ -307,6 +306,7 @@ export function GroupTable() {
         data: groups,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
     })
 
     return (
@@ -374,7 +374,7 @@ export function GroupTable() {
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}
-                        total={total}
+                        total={data?.total}
                         onPageChange={setPage}
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />
