@@ -280,6 +280,11 @@
   },
   "token": {
     "management": "API Keys 管理",
+    "rename": "重命名",
+    "renameDialog": {
+      "description": "重命名后可继续使用原密钥。",
+      "nameTooLong": "名称最多支持 32 字节，中文通常每字占 3 字节。"
+    },
     "name": "名称",
     "remark": "备注",
     "key": "API Key",
