@@ -67,6 +67,39 @@ func TestConvertRequest_JsonObject(t *testing.T) {
 	assert.Equal(t, "json", ollamaReq.Format)
 }
 
+func TestConvertRequest_MultiPartTextContent(t *testing.T) {
+	meta := meta.NewMeta(
+		&model.Channel{
+			Type: model.ChannelTypeOllama,
+		},
+		0,
+		"llama2",
+		model.ModelConfig{},
+	)
+
+	body := `{"model":"llama2","messages":[{"role":"user","content":[` +
+		`{"type":"text","text":"Hello, "},{"type":"text","text":"world"}]}]}`
+
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost:11434/api/chat",
+		strings.NewReader(body),
+	)
+
+	result, err := ollama.ConvertRequest(meta, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var ollamaReq ollama.ChatRequest
+
+	err = json.Unmarshal(bodyBytes, &ollamaReq)
+	assert.NoError(t, err)
+	assert.Len(t, ollamaReq.Messages, 1)
+	assert.Equal(t, "Hello, world", ollamaReq.Messages[0].Content)
+}
+
 func TestStreamHandler_ToolCallIndexes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
