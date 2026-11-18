@@ -354,7 +354,7 @@ export function ConsumptionRankingPanel({
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}
-                        total={data?.total ?? 0}
+                        total={data?.total}
                         onPageChange={setPage}
                         onPageSizeChange={(size) => {
                             setPageSize(size)

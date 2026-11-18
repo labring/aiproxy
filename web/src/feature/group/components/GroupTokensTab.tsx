@@ -97,6 +97,8 @@ const formatAccessedAt = (timestamp: number, neverLabel: string): string => {
     return format(new Date(timestamp), 'yyyy-MM-dd HH:mm')
 }
 
+const EMPTY_TOKENS: Token[] = []
+
 interface GroupTokensTabProps {
     groupId: string
     onNavigateDashboard?: (tokenName: string) => void
@@ -151,8 +153,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
         },
     })
 
-    const tokens = data?.tokens || []
-    const total = data?.total || 0
+    const tokens = data?.tokens ?? EMPTY_TOKENS
     const { data: runtimeMetrics } = useGroupTokenMetrics(groupId, !!groupId && tokens.length > 0)
     const openDeleteDialog = (id: number) => {
         setSelectedTokenId(id)
@@ -408,6 +409,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
         data: tokens,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
     })
 
     return (
@@ -465,7 +467,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}
-                        total={total}
+                        total={data?.total}
                         onPageChange={setPage}
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />

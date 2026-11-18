@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
     ChevronLeft,
     ChevronRight,
@@ -11,7 +12,7 @@ import { useTranslation } from "react-i18next"
 interface ServerPaginationProps {
     page: number
     pageSize: number
-    total: number
+    total: number | undefined
     pageSizes?: number[]
     onPageChange: (page: number) => void
     onPageSizeChange: (pageSize: number) => void
@@ -26,7 +27,11 @@ export function ServerPagination({
     onPageSizeChange,
 }: ServerPaginationProps) {
     const { t } = useTranslation()
-    const totalPages = Math.ceil(total / pageSize) || 1
+    const totalPages = total === undefined ? page : Math.max(1, Math.ceil(total / pageSize))
+
+    useEffect(() => {
+        if (page > totalPages) onPageChange(totalPages)
+    }, [page, totalPages, onPageChange])
 
     return (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 py-3 text-xs">
