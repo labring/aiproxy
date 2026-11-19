@@ -139,6 +139,8 @@ func ConvertOpenAIToGeminiResponse(
 			candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
 		case relaymodel.FinishReasonToolCalls:
 			candidate.FinishReason = relaymodel.GeminiFinishReasonStop
+		case relaymodel.FinishReasonContentFilter:
+			candidate.FinishReason = relaymodel.GeminiFinishReasonSafety
 		default:
 			candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 		}
@@ -315,6 +317,8 @@ func (s *GeminiStreamState) ConvertOpenAIStreamToGemini(
 				candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
 			case relaymodel.FinishReasonToolCalls:
 				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
+			case relaymodel.FinishReasonContentFilter:
+				candidate.FinishReason = relaymodel.GeminiFinishReasonSafety
 			default:
 				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
 			}
