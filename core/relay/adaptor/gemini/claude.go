@@ -478,11 +478,11 @@ func geminiFinishReason2Claude(reason string) string {
 	case relaymodel.GeminiFinishReasonSafety,
 		relaymodel.GeminiFinishReasonRecitation,
 		relaymodel.GeminiFinishReasonBlocklist,
-		relaymodel.GeminiFinishReasonProhibited,
+		relaymodel.GeminiFinishReasonProhibitedContent,
 		relaymodel.GeminiFinishReasonSPII,
 		relaymodel.GeminiFinishReasonImageSafety,
-		relaymodel.GeminiFinishReasonImageProhib,
-		relaymodel.GeminiFinishReasonImageRecit:
+		relaymodel.GeminiFinishReasonImageProhibitedContent,
+		relaymodel.GeminiFinishReasonImageRecitation:
 		return relaymodel.ClaudeStopReasonRefusal
 	case relaymodel.GeminiFinishReasonMaxTokens:
 		return relaymodel.ClaudeStopReasonMaxTokens
