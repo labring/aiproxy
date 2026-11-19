@@ -790,9 +790,12 @@ func runResponsesToClaude(t *testing.T, body string) *httptest.ResponseRecorder 
 }
 
 func TestConvertResponsesToClaudeResponseFunctionCall(t *testing.T) {
-	w := runResponsesToClaude(t, `{"id":"resp_1","object":"response","status":"completed","model":"gpt-5-codex",
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_1","object":"response","status":"completed","model":"gpt-5-codex",
 "output":[{"id":"fc_1","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
-"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`)
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
 
 	var resp relaymodel.ClaudeResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -805,9 +808,14 @@ func TestConvertResponsesToClaudeResponseFunctionCall(t *testing.T) {
 }
 
 func TestConvertResponsesToClaudeResponseIncompleteStopReason(t *testing.T) {
-	w := runResponsesToClaude(t, `{"id":"resp_2","object":"response","status":"incomplete","model":"gpt-5-codex",
-"output":[{"id":"m1","type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}],
-"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`)
+	// A truncated response containing a function_call still reports max_tokens:
+	// a cut-off tool call must not look like a complete, executable invocation.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_2","object":"response","status":"incomplete","model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"ci"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
 
 	var resp relaymodel.ClaudeResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -840,7 +848,11 @@ func TestConvertResponsesToClaudeStreamResponseToolUseStopReason(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
 
-	_, err := openai.ConvertResponsesToClaudeStreamResponse(&meta.Meta{ActualModel: "gpt-5"}, c, httpResp)
+	_, err := openai.ConvertResponsesToClaudeStreamResponse(
+		&meta.Meta{ActualModel: "gpt-5"},
+		c,
+		httpResp,
+	)
 	require.Nil(t, err)
 	assert.Contains(t, w.Body.String(), `"stop_reason":"tool_use"`)
 	assert.NotContains(t, w.Body.String(), `"stop_reason":"end_turn"`)

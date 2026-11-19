@@ -906,7 +906,10 @@ func ConvertResponsesToClaudeResponse(
 				}
 			}
 		case relaymodel.InputItemTypeFunctionCall:
-			claudeResp.Content = append(claudeResp.Content, responsesFunctionCallToClaudeToolUse(outputItem))
+			claudeResp.Content = append(
+				claudeResp.Content,
+				responsesFunctionCallToClaudeToolUse(outputItem),
+			)
 		default:
 			// Handle regular message content
 			for _, content := range outputItem.Content {
@@ -987,12 +990,14 @@ func responsesOutputHasFunctionCall(output []relaymodel.OutputItem) bool {
 }
 
 // responsesStopReasonToClaude maps a Responses status to a Claude stop_reason.
+// Truncation wins over tool_use so a cut-off function call is not reported as
+// a complete, executable tool invocation.
 func responsesStopReasonToClaude(status relaymodel.ResponseStatus, hasToolUse bool) string {
 	switch {
-	case hasToolUse:
-		return relaymodel.ClaudeStopReasonToolUse
 	case status == relaymodel.ResponseStatusIncomplete:
 		return relaymodel.ClaudeStopReasonMaxTokens
+	case hasToolUse:
+		return relaymodel.ClaudeStopReasonToolUse
 	default:
 		return relaymodel.ClaudeStopReasonEndTurn
 	}
