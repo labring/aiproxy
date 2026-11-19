@@ -765,3 +765,95 @@ func TestConvertResponsesToClaudeStreamResponseReturnsErrorBeforeRealOutputAfter
 	assert.Equal(t, "resp_123", result.UpstreamID)
 	assert.Empty(t, w.Body.String())
 }
+
+func runResponsesToClaude(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	httpResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
+
+	_, err := openai.ConvertResponsesToClaudeResponse(&meta.Meta{
+		OriginModel: "client-claude",
+		ActualModel: "gpt-5-codex",
+	}, c, httpResp)
+	require.Nil(t, err)
+
+	return w
+}
+
+func TestConvertResponsesToClaudeResponseFunctionCall(t *testing.T) {
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_1","object":"response","status":"completed","model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Content, 1)
+	assert.Equal(t, "tool_use", resp.Content[0].Type)
+	assert.Equal(t, "call_1", resp.Content[0].ID)
+	assert.Equal(t, "get_weather", resp.Content[0].Name)
+	assert.Equal(t, map[string]any{"city": "Paris"}, resp.Content[0].Input)
+	assert.Equal(t, "tool_use", resp.StopReason)
+}
+
+func TestConvertResponsesToClaudeResponseIncompleteStopReason(t *testing.T) {
+	// A truncated response containing a function_call still reports max_tokens:
+	// a cut-off tool call must not look like a complete, executable invocation.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_2","object":"response","status":"incomplete","model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"ci"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "max_tokens", resp.StopReason)
+}
+
+func TestConvertResponsesToClaudeStreamResponseToolUseStopReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stream := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_3","object":"response","status":"in_progress","model":"gpt-5","output":[]}}`,
+		"",
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":""}}`,
+		"",
+		`data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"city\":\"Paris\"}"}`,
+		"",
+		`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}`,
+		"",
+		`data: {"type":"response.completed","response":{"id":"resp_3","object":"response","status":"completed","model":"gpt-5","output":[{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+		"",
+	}, "\n")
+
+	httpResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(stream)),
+		Header:     make(http.Header),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
+
+	_, err := openai.ConvertResponsesToClaudeStreamResponse(
+		&meta.Meta{ActualModel: "gpt-5"},
+		c,
+		httpResp,
+	)
+	require.Nil(t, err)
+	assert.Contains(t, w.Body.String(), `"stop_reason":"tool_use"`)
+	assert.NotContains(t, w.Body.String(), `"stop_reason":"end_turn"`)
+}

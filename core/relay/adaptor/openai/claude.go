@@ -905,6 +905,11 @@ func ConvertResponsesToClaudeResponse(
 					})
 				}
 			}
+		case relaymodel.InputItemTypeFunctionCall:
+			claudeResp.Content = append(
+				claudeResp.Content,
+				responsesFunctionCallToClaudeToolUse(outputItem),
+			)
 		default:
 			// Handle regular message content
 			for _, content := range outputItem.Content {
@@ -919,15 +924,11 @@ func ConvertResponsesToClaudeResponse(
 		}
 	}
 
-	// Set stop reason based on status
-	switch responsesResp.Status {
-	case relaymodel.ResponseStatusCompleted:
-		claudeResp.StopReason = relaymodel.ClaudeStopReasonEndTurn
-	case relaymodel.ResponseStatusIncomplete:
-		claudeResp.StopReason = relaymodel.ClaudeStopReasonMaxTokens
-	default:
-		claudeResp.StopReason = relaymodel.ClaudeStopReasonEndTurn
-	}
+	// Set stop reason based on status and output
+	claudeResp.StopReason = responsesStopReasonToClaude(
+		responsesResp.Status,
+		responsesOutputHasFunctionCall(responsesResp.Output),
+	)
 
 	// Convert usage
 	if responsesResp.Usage != nil {
@@ -953,6 +954,53 @@ func ConvertResponsesToClaudeResponse(
 		UpstreamID: responsesResp.ID,
 		AsyncUsage: responseNeedsAsyncUsage(&responsesResp),
 	}, nil
+}
+
+// responsesFunctionCallToClaudeToolUse converts a Responses function_call output item to a Claude tool_use block.
+func responsesFunctionCallToClaudeToolUse(item relaymodel.OutputItem) relaymodel.ClaudeContent {
+	id := item.CallID
+	if id == "" {
+		id = item.ID
+	}
+
+	input := map[string]any{}
+	if args := item.Arguments.String(); args != "" {
+		_ = sonic.UnmarshalString(args, &input)
+		if input == nil {
+			input = map[string]any{}
+		}
+	}
+
+	return relaymodel.ClaudeContent{
+		Type:  relaymodel.ClaudeContentTypeToolUse,
+		ID:    id,
+		Name:  item.Name,
+		Input: input,
+	}
+}
+
+func responsesOutputHasFunctionCall(output []relaymodel.OutputItem) bool {
+	for _, item := range output {
+		if item.Type == relaymodel.InputItemTypeFunctionCall {
+			return true
+		}
+	}
+
+	return false
+}
+
+// responsesStopReasonToClaude maps a Responses status to a Claude stop_reason.
+// Truncation wins over tool_use so a cut-off function call is not reported as
+// a complete, executable tool invocation.
+func responsesStopReasonToClaude(status relaymodel.ResponseStatus, hasToolUse bool) string {
+	switch {
+	case status == relaymodel.ResponseStatusIncomplete:
+		return relaymodel.ClaudeStopReasonMaxTokens
+	case hasToolUse:
+		return relaymodel.ClaudeStopReasonToolUse
+	default:
+		return relaymodel.ClaudeStopReasonEndTurn
+	}
 }
 
 // ConvertResponsesToClaudeStreamResponse converts Responses API stream to Claude stream
@@ -1104,6 +1152,7 @@ type claudeStreamState struct {
 	currentToolUseName   string
 	currentToolUseCallID string
 	toolUseInput         string
+	sawToolUse           bool
 	meta                 *meta.Meta
 	c                    *gin.Context
 }
@@ -1151,6 +1200,7 @@ func (s *claudeStreamState) handleOutputItemAdded(event *relaymodel.ResponseStre
 		})
 	case relaymodel.InputItemTypeFunctionCall:
 		s.currentContentType = relaymodel.ClaudeContentTypeToolUse
+		s.sawToolUse = true
 		s.currentToolUseID = event.Item.ID
 		s.currentToolUseName = event.Item.Name
 		s.currentToolUseCallID = event.Item.CallID
@@ -1282,7 +1332,10 @@ func (s *claudeStreamState) handleResponseCompleted(event *relaymodel.ResponseSt
 	}
 
 	// Send message_delta with stop reason
-	stopReason := relaymodel.ClaudeStopReasonEndTurn
+	stopReason := responsesStopReasonToClaude(
+		event.Response.Status,
+		s.sawToolUse || responsesOutputHasFunctionCall(event.Response.Output),
+	)
 	claudeUsage := event.Response.Usage.ToClaudeUsage()
 	_ = render.ClaudeObjectData(s.c, relaymodel.ClaudeStreamResponse{
 		Type: relaymodel.ClaudeStreamTypeMessageDelta,
