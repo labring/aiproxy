@@ -404,13 +404,19 @@ const (
 
 // Gemini Finish Reason constants
 const (
-	GeminiFinishReasonStop         = "STOP"
-	GeminiFinishReasonMaxTokens    = "MAX_TOKENS"
-	GeminiFinishReasonSafety       = "SAFETY"
-	GeminiFinishReasonRecitation   = "RECITATION"
-	GeminiFinishReasonOther        = "OTHER"
-	GeminiFinishReasonToolCalls    = "TOOL_CALLS"
-	GeminiFinishReasonFunctionCall = "FUNCTION_CALL"
+	GeminiFinishReasonStop                   = "STOP"
+	GeminiFinishReasonMaxTokens              = "MAX_TOKENS"
+	GeminiFinishReasonSafety                 = "SAFETY"
+	GeminiFinishReasonRecitation             = "RECITATION"
+	GeminiFinishReasonOther                  = "OTHER"
+	GeminiFinishReasonBlocklist              = "BLOCKLIST"
+	GeminiFinishReasonProhibitedContent      = "PROHIBITED_CONTENT"
+	GeminiFinishReasonSPII                   = "SPII"
+	GeminiFinishReasonImageSafety            = "IMAGE_SAFETY"
+	GeminiFinishReasonImageProhibitedContent = "IMAGE_PROHIBITED_CONTENT"
+	GeminiFinishReasonImageRecitation        = "IMAGE_RECITATION"
+	GeminiFinishReasonToolCalls              = "TOOL_CALLS"
+	GeminiFinishReasonFunctionCall           = "FUNCTION_CALL"
 )
 
 // Gemini FunctionCallingConfig Mode constants

@@ -1251,13 +1251,19 @@ func TTSHandler(
 
 // Type aliases for usage-related types to use unified definitions from relaymodel
 var finishReason2OpenAI = map[string]string{
-	relaymodel.GeminiFinishReasonStop:         relaymodel.FinishReasonStop,
-	relaymodel.GeminiFinishReasonMaxTokens:    relaymodel.FinishReasonLength,
-	relaymodel.GeminiFinishReasonSafety:       relaymodel.FinishReasonContentFilter,
-	relaymodel.GeminiFinishReasonRecitation:   relaymodel.FinishReasonContentFilter,
-	relaymodel.GeminiFinishReasonOther:        relaymodel.FinishReasonStop,
-	relaymodel.GeminiFinishReasonToolCalls:    relaymodel.FinishReasonToolCalls,
-	relaymodel.GeminiFinishReasonFunctionCall: relaymodel.FinishReasonToolCalls,
+	relaymodel.GeminiFinishReasonStop:                   relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonMaxTokens:              relaymodel.FinishReasonLength,
+	relaymodel.GeminiFinishReasonSafety:                 relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonRecitation:             relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonOther:                  relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonBlocklist:              relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonProhibitedContent:      relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonSPII:                   relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageSafety:            relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageProhibitedContent: relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageRecitation:        relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonToolCalls:              relaymodel.FinishReasonToolCalls,
+	relaymodel.GeminiFinishReasonFunctionCall:           relaymodel.FinishReasonToolCalls,
 }
 
 func FinishReason2OpenAI(reason string) string {
