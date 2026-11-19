@@ -409,6 +409,12 @@ const (
 	GeminiFinishReasonSafety       = "SAFETY"
 	GeminiFinishReasonRecitation   = "RECITATION"
 	GeminiFinishReasonOther        = "OTHER"
+	GeminiFinishReasonBlocklist    = "BLOCKLIST"
+	GeminiFinishReasonProhibited   = "PROHIBITED_CONTENT"
+	GeminiFinishReasonSPII         = "SPII"
+	GeminiFinishReasonImageSafety  = "IMAGE_SAFETY"
+	GeminiFinishReasonImageProhib  = "IMAGE_PROHIBITED_CONTENT"
+	GeminiFinishReasonImageRecit   = "IMAGE_RECITATION"
 	GeminiFinishReasonToolCalls    = "TOOL_CALLS"
 	GeminiFinishReasonFunctionCall = "FUNCTION_CALL"
 )

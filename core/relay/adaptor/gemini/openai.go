@@ -1256,6 +1256,12 @@ var finishReason2OpenAI = map[string]string{
 	relaymodel.GeminiFinishReasonSafety:       relaymodel.FinishReasonContentFilter,
 	relaymodel.GeminiFinishReasonRecitation:   relaymodel.FinishReasonContentFilter,
 	relaymodel.GeminiFinishReasonOther:        relaymodel.FinishReasonStop,
+	relaymodel.GeminiFinishReasonBlocklist:    relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonProhibited:   relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonSPII:         relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageSafety:  relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageProhib:  relaymodel.FinishReasonContentFilter,
+	relaymodel.GeminiFinishReasonImageRecit:   relaymodel.FinishReasonContentFilter,
 	relaymodel.GeminiFinishReasonToolCalls:    relaymodel.FinishReasonToolCalls,
 	relaymodel.GeminiFinishReasonFunctionCall: relaymodel.FinishReasonToolCalls,
 }
