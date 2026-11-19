@@ -70,8 +70,10 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 	}
 
 	for i, message := range textRequest.Messages {
-		// Content may be a plain string or an array of content parts.
+		// Content may be a plain string or an array of content parts;
+		// StringContent would prefer ReasoningContent, so clear it first.
 		message.ReasoningContent = ""
+
 		messageContent := strings.TrimSuffix(message.StringContent(), "\n")
 		if i == lastUser {
 			cohereRequest.Message = messageContent
