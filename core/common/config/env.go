@@ -32,6 +32,10 @@ var (
 	// X-Gateway-Secret header for its forwarding headers to be trusted.
 	GatewaySecret string
 
+	// MaskChannelKeys replaces channel keys with a preview in every API
+	// response when set.
+	MaskChannelKeys bool
+
 	// OnCall Lark configuration for urgent alerts
 	OnCallLarkAppID     string
 	OnCallLarkAppSecret string
@@ -58,6 +62,7 @@ func ReloadEnv() {
 	ConfigFilePath = env.String("CONFIG_FILE_PATH", "./config.yaml")
 	TrustedProxies = os.Getenv("TRUSTED_PROXIES")
 	GatewaySecret = os.Getenv("GATEWAY_SECRET")
+	MaskChannelKeys = env.Bool("MASK_CHANNEL_KEYS", false)
 
 	// OnCall Lark configuration
 	OnCallLarkAppID = os.Getenv("ON_CALL_LARK_APP_ID")

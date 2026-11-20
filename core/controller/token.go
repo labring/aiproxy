@@ -46,6 +46,7 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 type (
 	AddTokenRequest struct {
 		Name                 string   `json:"name"`
+		HashedKey            bool     `json:"hashed_key"`
 		Subnets              []string `json:"subnets"`
 		Models               []string `json:"models"`
 		Sets                 []string `json:"sets"`
@@ -64,6 +65,11 @@ type (
 
 	UpdateTokenNameRequest struct {
 		Name string `json:"name"`
+	}
+
+	RotateTokenRequest struct {
+		// One of model.TokenRotateMode*; empty keeps the current mode.
+		Mode string `json:"mode"`
 	}
 )
 
@@ -111,11 +117,24 @@ func validateSubnets(subnets []string) error {
 	return nil
 }
 
+// maskTokenKey hides the stored hash of hashed tokens; the raw key only
+// appears in the create/rotate response.
+func maskTokenKey(token *model.Token) *model.Token {
+	if !model.IsHashedTokenKey(token.Key) {
+		return token
+	}
+
+	masked := *token
+	masked.Key = token.KeyPreview
+
+	return &masked
+}
+
 func buildTokenResponse(token *model.Token) *TokenResponse {
 	lastRequestAt, _ := model.GetGroupTokenLastRequestTimeMinute(token.GroupID, string(token.Name))
 
 	return &TokenResponse{
-		Token:      token,
+		Token:      maskTokenKey(token),
 		AccessedAt: lastRequestAt,
 	}
 }
@@ -126,7 +145,7 @@ func buildTokenResponses(tokens []*model.Token) []*TokenResponse {
 	responses := make([]*TokenResponse, len(tokens))
 	for i, token := range tokens {
 		responses[i] = &TokenResponse{
-			Token:      token,
+			Token:      maskTokenKey(token),
 			AccessedAt: lastRequestTimes[tokenLastRequestTimeKey(token.GroupID, string(token.Name))],
 		}
 	}
@@ -433,6 +452,13 @@ func AddGroupToken(c *gin.Context) {
 	token := req.ToToken()
 	token.GroupID = group
 
+	rawKey := ""
+	if req.HashedKey {
+		rawKey = model.GenerateTokenKey()
+		token.Key = model.HashTokenKey(rawKey)
+		token.KeyPreview = model.TokenKeyPreview(rawKey)
+	}
+
 	if err := model.InsertToken(
 		token,
 		c.Query("auto_create_group") == "true",
@@ -442,7 +468,16 @@ func AddGroupToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	// ignore_exist may return an already stored token instead of ours; only
+	// reveal the fresh key when the stored key is the one we just generated.
+	if rawKey != "" && token.Key == model.HashTokenKey(rawKey) {
+		resp := *maskTokenKey(token)
+		resp.Key = rawKey
+		middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
+		return
+	}
+
+	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
 }
 
 // DeleteToken godoc
@@ -590,7 +625,7 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
 }
 
 // UpdateGroupToken godoc
@@ -634,7 +669,7 @@ func UpdateGroupToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: token})
+	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
 }
 
 // UpdateTokenStatus godoc
@@ -773,4 +808,98 @@ func UpdateGroupTokenName(c *gin.Context) {
 	}
 
 	middleware.SuccessResponse(c, nil)
+}
+
+func validateRotateMode(mode string) error {
+	switch mode {
+	case model.TokenRotateModeKeep, model.TokenRotateModeHash, model.TokenRotateModePlain:
+		return nil
+	default:
+		return fmt.Errorf("invalid rotate mode: %s", mode)
+	}
+}
+
+// RotateToken godoc
+//
+//	@Summary		Rotate token key
+//	@Description	Replaces the key with a fresh one and returns the new raw key; mode can switch between hash and plain storage
+//	@Tags			tokens
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			id		path		int					true	"Token ID"
+//	@Param			body	body		RotateTokenRequest	true	"Rotate mode"
+//	@Success		200		{object}	middleware.APIResponse{data=TokenResponse}
+//	@Router			/api/tokens/{id}/rotate [post]
+func RotateToken(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var req RotateTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := validateRotateMode(req.Mode); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "parameter error: "+err.Error())
+		return
+	}
+
+	token, rawKey, err := model.RotateToken(id, req.Mode)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := *maskTokenKey(token)
+	resp.Key = rawKey
+	middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
+}
+
+// RotateGroupToken godoc
+//
+//	@Summary		Rotate group token key
+//	@Description	Replaces the key with a fresh one and returns the new raw key; mode can switch between hash and plain storage
+//	@Tags			token
+//	@Accept			json
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group	path		string				true	"Group name"
+//	@Param			id		path		int					true	"Token ID"
+//	@Param			body	body		RotateTokenRequest	true	"Rotate mode"
+//	@Success		200		{object}	middleware.APIResponse{data=TokenResponse}
+//	@Router			/api/token/{group}/{id}/rotate [post]
+func RotateGroupToken(c *gin.Context) {
+	group := c.Param("group")
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var req RotateTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := validateRotateMode(req.Mode); err != nil {
+		middleware.ErrorResponse(c, http.StatusBadRequest, "parameter error: "+err.Error())
+		return
+	}
+
+	token, rawKey, err := model.RotateGroupToken(group, id, req.Mode)
+	if err != nil {
+		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := *maskTokenKey(token)
+	resp.Key = rawKey
+	middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
 }

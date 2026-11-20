@@ -32,18 +32,19 @@ const (
 
 type Token struct {
 	CreatedAt          time.Time       `json:"created_at"`
-	Group              *Group          `json:"-"                    gorm:"foreignKey:GroupID"`
-	Key                string          `json:"key"                  gorm:"type:char(48);uniqueIndex"`
-	Name               EmptyNullString `json:"name"                 gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
-	GroupID            string          `json:"group"                gorm:"size:64;index;uniqueIndex:idx_group_name"`
-	Scope              ChannelScope    `json:"scope"                gorm:"size:16;index"`
-	Subnets            []string        `json:"subnets"              gorm:"serializer:fastjson;type:text"`
-	Models             []string        `json:"models"               gorm:"serializer:fastjson;type:text"`
-	Sets               []string        `json:"sets"                 gorm:"serializer:fastjson;type:text"`
-	GroupChannelModels []string        `json:"group_channel_models" gorm:"serializer:fastjson;type:text"`
-	GroupChannelSets   []string        `json:"group_channel_sets"   gorm:"serializer:fastjson;type:text"`
-	Status             int             `json:"status"               gorm:"default:1;index"`
-	ID                 int             `json:"id"                   gorm:"primaryKey"`
+	Group              *Group          `json:"-"                     gorm:"foreignKey:GroupID"`
+	Key                string          `json:"key"                   gorm:"type:varchar(66);uniqueIndex"`
+	KeyPreview         string          `json:"key_preview,omitempty" gorm:"size:16"`
+	Name               EmptyNullString `json:"name"                  gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
+	GroupID            string          `json:"group"                 gorm:"size:64;index;uniqueIndex:idx_group_name"`
+	Scope              ChannelScope    `json:"scope"                 gorm:"size:16;index"`
+	Subnets            []string        `json:"subnets"               gorm:"serializer:fastjson;type:text"`
+	Models             []string        `json:"models"                gorm:"serializer:fastjson;type:text"`
+	Sets               []string        `json:"sets"                  gorm:"serializer:fastjson;type:text"`
+	GroupChannelModels []string        `json:"group_channel_models"  gorm:"serializer:fastjson;type:text"`
+	GroupChannelSets   []string        `json:"group_channel_sets"    gorm:"serializer:fastjson;type:text"`
+	Status             int             `json:"status"                gorm:"default:1;index"`
+	ID                 int             `json:"id"                    gorm:"primaryKey"`
 
 	UsedAmount               float64 `json:"used_amount"                 gorm:"index"`
 	RequestCount             int     `json:"request_count"               gorm:"index"`
@@ -58,7 +59,7 @@ type Token struct {
 }
 
 func (t *Token) BeforeCreate(_ *gorm.DB) error {
-	if t.Key == "" || len(t.Key) != 48 {
+	if t.Key == "" || (len(t.Key) != 48 && !IsHashedTokenKey(t.Key)) {
 		t.Key = generateKey()
 	}
 	// Initialize period start time to current time if period quota is set
@@ -176,6 +177,12 @@ func generateKey() string {
 	}
 
 	return conv.BytesToString(key)
+}
+
+// GenerateTokenKey returns a fresh raw key. Callers building hashed tokens
+// capture the raw value before storing HashTokenKey(raw).
+func GenerateTokenKey() string {
+	return generateKey()
 }
 
 func getTokenOrder(order string) string {
@@ -455,7 +462,13 @@ func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 		return nil, errors.New("no token provided")
 	}
 
-	token, err = CacheGetTokenByKey(key)
+	// Hashed tokens cache and look up under their hash; raw keys never
+	// contain ':' so the two slots cannot collide.
+	token, err = CacheGetTokenByKey(HashTokenKey(key))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		token, err = CacheGetTokenByKey(key)
+	}
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("invalid token")
@@ -686,6 +699,76 @@ func DeleteTokenByID(id int) (err error) {
 		Delete(&token)
 
 	return HandleUpdateResult(result, ErrTokenNotFound)
+}
+
+// Rotate modes accepted by RotateToken; the empty mode keeps the current one.
+const (
+	TokenRotateModeKeep  = ""
+	TokenRotateModeHash  = "hash"
+	TokenRotateModePlain = "plain"
+)
+
+func RotateToken(id int, mode string) (*Token, string, error) {
+	return rotateToken("id = ?", []any{id}, mode)
+}
+
+func RotateGroupToken(group string, id int, mode string) (*Token, string, error) {
+	return rotateToken("id = ? and group_id = ?", []any{id, group}, mode)
+}
+
+// rotateToken replaces the key with a fresh one, optionally switching the
+// storage mode, and returns the updated token together with the raw key. The
+// raw key is only available at rotation time for hashed tokens.
+func rotateToken(where string, args []any, mode string) (*Token, string, error) {
+	current := &Token{}
+	if err := DB.Where(where, args...).First(current).Error; err != nil {
+		return nil, "", HandleNotFound(err, ErrTokenNotFound)
+	}
+
+	hashed := IsHashedTokenKey(current.Key)
+
+	switch mode {
+	case TokenRotateModeKeep:
+	case TokenRotateModeHash:
+		hashed = true
+	case TokenRotateModePlain:
+		hashed = false
+	default:
+		return nil, "", fmt.Errorf("invalid rotate mode: %s", mode)
+	}
+
+	rawKey := generateKey()
+
+	updates := map[string]any{"key_preview": ""}
+	if hashed {
+		updates["key"] = HashTokenKey(rawKey)
+		updates["key_preview"] = TokenKeyPreview(rawKey)
+	} else {
+		updates["key"] = rawKey
+	}
+
+	token := &Token{ID: current.ID}
+	result := DB.
+		Model(token).
+		Clauses(clause.Returning{}).
+		Where(where, args...).
+		Updates(updates)
+
+	if err := HandleUpdateResult(result, ErrTokenNotFound); err != nil {
+		return nil, "", err
+	}
+
+	for _, cachedKey := range []string{current.Key, token.Key} {
+		if cachedKey == "" {
+			continue
+		}
+
+		if err := CacheDeleteToken(cachedKey); err != nil {
+			log.Error("delete token from cache failed: " + err.Error())
+		}
+	}
+
+	return token, rawKey, nil
 }
 
 func DeleteTokensByIDs(ids []int) (err error) {

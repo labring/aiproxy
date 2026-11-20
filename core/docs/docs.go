@@ -11989,6 +11989,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/token/{group}/{id}/rotate": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Replaces the key with a fresh one and returns the new raw key; mode can switch between hash and plain storage",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Rotate group token key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group name",
+                        "name": "group",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Rotate mode",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.RotateTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/token/{group}/{id}/status": {
             "post": {
                 "security": [
@@ -12453,6 +12518,64 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/middleware.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tokens/{id}/rotate": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Replaces the key with a fresh one and returns the new raw key; mode can switch between hash and plain storage",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tokens"
+                ],
+                "summary": "Rotate token key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Token ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Rotate mode",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.RotateTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -15609,6 +15732,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "hashed_key": {
+                    "type": "boolean"
+                },
                 "models": {
                     "type": "array",
                     "items": {
@@ -16641,6 +16767,15 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.RotateTokenRequest": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "One of model.TokenRotateMode*; empty keeps the current mode.",
+                    "type": "string"
+                }
+            }
+        },
         "controller.RuntimeChannelMetric": {
             "type": "object",
             "properties": {
@@ -17398,6 +17533,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "key": {
+                    "type": "string"
+                },
+                "key_preview": {
                     "type": "string"
                 },
                 "models": {

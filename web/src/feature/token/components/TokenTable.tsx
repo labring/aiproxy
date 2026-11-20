@@ -11,7 +11,7 @@ import { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Trash2, RefreshCcw,
-    PowerOff, Power, Copy, Settings, Search, Pencil, Network
+    PowerOff, Power, Copy, Settings, Search, Pencil, Network, RefreshCw
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { TokenQuotaDialog } from './TokenQuotaDialog'
 import { RenameTokenDialog } from './RenameTokenDialog'
 import { TokenSubnetsDialog } from './TokenSubnetsDialog'
+import { RotateTokenDialog } from './RotateTokenDialog'
 import { DataTable } from '@/components/table/motion-data-table'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteTokenDialog } from './DeleteTokenDialog'
@@ -35,6 +36,7 @@ import { useRef } from 'react'
 import { useBatchGroupTokenMetrics } from '@/feature/monitor/runtime-hooks'
 import { format } from 'date-fns'
 import { writeTextToClipboard } from '@/lib/clipboard'
+import { isHashedToken } from '@/types/token'
 
 // 遮蔽 API Key，只显示前缀和最后4位
 const maskApiKey = (key: string): string => {
@@ -120,6 +122,7 @@ export function TokenTable() {
     const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [tokenToRename, setTokenToRename] = useState<Token | null>(null)
     const [tokenToLimit, setTokenToLimit] = useState<Token | null>(null)
+    const [tokenToRotate, setTokenToRotate] = useState<Token | null>(null)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [groupDialogOpen, setGroupDialogOpen] = useState(false)
@@ -259,26 +262,37 @@ export function TokenTable() {
         {
             accessorKey: 'key',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.key")}</div>,
-            cell: ({ row }) => (
-                <div className="flex items-center space-x-2">
-                    <span
-                        className="font-mono cursor-pointer hover:text-primary transition-colors"
-                        onClick={() => copyToClipboard(row.original.key)}
-                    >
-                        {maskApiKey(row.original.key)}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 shrink-0"
-                        aria-label={t("token.copyKey")}
-                        title={t("token.copyKey")}
-                        onClick={() => copyToClipboard(row.original.key)}
-                    >
-                        <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const hashed = isHashedToken(row.original)
+                return (
+                    <div className="flex items-center space-x-2">
+                        <span
+                            className="font-mono cursor-pointer hover:text-primary transition-colors"
+                            title={hashed ? t("token.hashedKey") : undefined}
+                            onClick={() => {
+                                if (!hashed) copyToClipboard(row.original.key)
+                            }}
+                        >
+                            {hashed ? row.original.key_preview : maskApiKey(row.original.key)}
+                        </span>
+                        {!hashed && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 shrink-0"
+                                aria-label={t("token.copyKey")}
+                                title={t("token.copyKey")}
+                                onClick={() => copyToClipboard(row.original.key)}
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                        {hashed && (
+                            <Badge variant="secondary" className="text-xs">{t("token.hashModeBadge")}</Badge>
+                        )}
+                    </div>
+                )
+            },
         },
         {
             id: 'runtime',
@@ -460,9 +474,14 @@ export function TokenTable() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => copyToClipboard(row.original.key)}
+                            disabled={isHashedToken(row.original)}
                         >
                             <Copy className="mr-2 h-4 w-4" />
                             {t("token.copyKey")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setTokenToRotate(row.original)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            {t("token.rotate")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => openQuotaDialog(row.original)}
@@ -573,6 +592,10 @@ export function TokenTable() {
 
             {tokenToLimit && (
                 <TokenSubnetsDialog key={`subnets-${tokenToLimit.id}`} token={tokenToLimit} onClose={() => setTokenToLimit(null)} />
+            )}
+
+            {tokenToRotate && (
+                <RotateTokenDialog key={`rotate-${tokenToRotate.id}`} token={tokenToRotate} onClose={() => setTokenToRotate(null)} />
             )}
 
             {/* Token限额配置对话框 */}

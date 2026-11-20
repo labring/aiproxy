@@ -21,6 +21,7 @@ export const tokenCreateSchema = z.object({
         .min(1, '名称不能为空')
         .regex(/^[a-zA-Z0-9_]+$/, '名称只能包含字母、数字和下划线')
         .max(20, '名称长度不能超过20个字符'),
+    hashed_key: z.boolean().optional(),
     subnets: z.string()
         .refine(v => parseSubnets(v).invalid === undefined, '无效的 CIDR 格式')
         .optional(),

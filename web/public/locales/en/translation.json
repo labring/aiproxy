@@ -368,6 +368,30 @@
       "daysHours": "{{days}}d {{hours}}h",
       "hoursMinutes": "{{hours}}h {{minutes}}m",
       "minutes": "{{minutes}}m"
+    },
+    "hashedKey": "Secure mode (hash only)",
+    "hashedKeyHelp": "The database stores only a hash of the key. The plaintext is shown once on creation and can never be viewed again.",
+    "hashModeBadge": "hashed",
+    "rotate": "Rotate key",
+    "oneTimeKey": {
+      "title": "Key shown only once",
+      "description": "Copy and store it now. It cannot be viewed again after closing.",
+      "warning": "The server does not keep the plaintext in secure mode. If lost, rotate the key to generate a new one.",
+      "acknowledge": "I saved it"
+    },
+    "rotateDialog": {
+      "title": "Rotate key",
+      "description": "Generates a new key for {{name}}; the old key stops working immediately.",
+      "mode": "Storage mode",
+      "modeKeep": "Keep current mode",
+      "modeHash": "Switch to hashed storage",
+      "modePlain": "Switch to plaintext storage",
+      "currentHashed": "Currently stored hashed",
+      "currentPlain": "Currently stored plaintext",
+      "warning": "The new key is shown only once. Update applications using the old key.",
+      "submit": "Rotate",
+      "success": "Key rotated",
+      "failure": "Failed to rotate key"
     }
   },
   "model": {

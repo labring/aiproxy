@@ -69,7 +69,7 @@ func (c *GroupChannelResponse) MarshalJSON() ([]byte, error) {
 }
 
 func buildGroupChannelResponse(channel *model.GroupChannel) *GroupChannelResponse {
-	return &GroupChannelResponse{GroupChannel: channel}
+	return &GroupChannelResponse{GroupChannel: maskGroupChannel(channel)}
 }
 
 func buildGroupChannelResponses(channels []*model.GroupChannel) []*GroupChannelResponse {
@@ -958,8 +958,8 @@ func GetGlobalGroupChannel(c *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			group	path		string					true	"Group ID"
-//	@Param			id		path		int						true	"Group channel ID"
+//	@Param			group	path		string						true	"Group ID"
+//	@Param			id		path		int							true	"Group channel ID"
 //	@Param			channel	body		UpdateGroupChannelRequest	true	"Optional group channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.GroupChannel}
 //	@Router			/api/group/{group}/channel/{id} [put]
@@ -993,7 +993,7 @@ func UpdateGroupChannel(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, ch)
+	middleware.SuccessResponse(c, maskGroupChannel(ch))
 }
 
 // UpdateGlobalGroupChannel godoc
@@ -1004,7 +1004,7 @@ func UpdateGroupChannel(c *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			id		path		int						true	"Group channel ID"
+//	@Param			id		path		int							true	"Group channel ID"
 //	@Param			channel	body		UpdateGroupChannelRequest	true	"Optional group channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.GroupChannel}
 //	@Router			/api/group_channel/{id} [put]
@@ -1038,7 +1038,7 @@ func UpdateGlobalGroupChannel(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, updated)
+	middleware.SuccessResponse(c, maskGroupChannel(updated))
 }
 
 // DeleteGroupChannel godoc

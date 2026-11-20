@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import {
-    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, Search, Pencil, Network
+    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, RefreshCw, Search, Pencil, Network
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -25,6 +25,7 @@ import { ServerPagination } from '@/components/table/server-pagination'
 import { TokenQuotaDialog } from '@/feature/token/components/TokenQuotaDialog'
 import { RenameTokenDialog } from '@/feature/token/components/RenameTokenDialog'
 import { TokenSubnetsDialog } from '@/feature/token/components/TokenSubnetsDialog'
+import { RotateTokenDialog } from '@/feature/token/components/RotateTokenDialog'
 import { DeleteTokenDialog } from '@/feature/token/components/DeleteTokenDialog'
 import { CreateGroupTokenDialog } from './CreateGroupTokenDialog'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
@@ -33,6 +34,7 @@ import { toast } from 'sonner'
 import { useGroupTokenMetrics } from '@/feature/monitor/runtime-hooks'
 import { format } from 'date-fns'
 import { writeTextToClipboard } from '@/lib/clipboard'
+import { isHashedToken } from '@/types/token'
 
 // Mask API key - show prefix and last 4 chars
 const maskApiKey = (key: string): string => {
@@ -113,6 +115,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
     const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [tokenToRename, setTokenToRename] = useState<Token | null>(null)
     const [tokenToLimit, setTokenToLimit] = useState<Token | null>(null)
+    const [tokenToRotate, setTokenToRotate] = useState<Token | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
@@ -197,26 +200,37 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
         {
             accessorKey: 'key',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.key")}</div>,
-            cell: ({ row }) => (
-                <div className="flex items-center space-x-2">
-                    <span
-                        className="font-mono text-xs cursor-pointer hover:text-primary transition-colors"
-                        onClick={() => copyToClipboard(row.original.key)}
-                    >
-                        {maskApiKey(row.original.key)}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        aria-label={t("token.copyKey")}
-                        title={t("token.copyKey")}
-                        onClick={() => copyToClipboard(row.original.key)}
-                    >
-                        <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const hashed = isHashedToken(row.original)
+                return (
+                    <div className="flex items-center space-x-2">
+                        <span
+                            className="font-mono text-xs cursor-pointer hover:text-primary transition-colors"
+                            title={hashed ? t("token.hashedKey") : undefined}
+                            onClick={() => {
+                                if (!hashed) copyToClipboard(row.original.key)
+                            }}
+                        >
+                            {hashed ? row.original.key_preview : maskApiKey(row.original.key)}
+                        </span>
+                        {!hashed && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                aria-label={t("token.copyKey")}
+                                title={t("token.copyKey")}
+                                onClick={() => copyToClipboard(row.original.key)}
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                        {hashed && (
+                            <Badge variant="secondary" className="text-xs">{t("token.hashModeBadge")}</Badge>
+                        )}
+                    </div>
+                )
+            },
         },
         {
             id: 'runtime',
@@ -380,9 +394,16 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                             <Network className="mr-2 h-4 w-4" />
                             {t('token.ipLimit')}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => copyToClipboard(row.original.key)}>
+                        <DropdownMenuItem
+                            onClick={() => copyToClipboard(row.original.key)}
+                            disabled={isHashedToken(row.original)}
+                        >
                             <Copy className="mr-2 h-4 w-4" />
                             {t("token.copyKey")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setTokenToRotate(row.original)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            {t("token.rotate")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openQuotaDialog(row.original)}>
                             <Settings className="mr-2 h-4 w-4" />
@@ -500,6 +521,15 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
 
             {tokenToLimit && (
                 <TokenSubnetsDialog key={`subnets-${tokenToLimit.id}`} token={tokenToLimit} onClose={() => setTokenToLimit(null)} />
+            )}
+
+            {tokenToRotate && (
+                <RotateTokenDialog
+                    key={`rotate-${tokenToRotate.id}`}
+                    token={tokenToRotate}
+                    group={groupId}
+                    onClose={() => setTokenToRotate(null)}
+                />
             )}
 
             {/* Token quota dialog */}
