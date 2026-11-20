@@ -25,6 +25,8 @@ var (
 
 	// TrustedProxies is a comma-separated list of CIDRs the reverse proxy
 	// (e.g. Higress) connects from; X-Forwarded-For is only honored for them.
+	// Unset means loopback/private ranges only; "*" restores the trust-all
+	// default.
 	TrustedProxies string
 	// GatewaySecret, when set, must be sent by the gateway in the
 	// X-Gateway-Secret header for its forwarding headers to be trusted.
