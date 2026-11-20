@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/relay/mode"
+
 	// relay model used by swagger
 	_ "github.com/labring/aiproxy/core/relay/model"
 )
@@ -700,7 +701,7 @@ func CreateResponse() []gin.HandlerFunc {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request	body	model.DecisionRequest	true	"Request"
+//	@Param			request	body		model.DecisionRequest	true	"Request"
 //	@Success		200		{object}	model.DecisionResponse
 //	@Failure		400		{object}	model.OpenAIErrorResponse
 //	@Router			/v1/decisions [post]

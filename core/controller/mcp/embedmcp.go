@@ -14,6 +14,7 @@ import (
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
 	mcpservers "github.com/labring/aiproxy/mcp-servers"
+
 	// init embed mcp
 	_ "github.com/labring/aiproxy/mcp-servers/mcpregister"
 	"github.com/mark3labs/mcp-go/mcp"

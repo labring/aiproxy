@@ -82,7 +82,7 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		require.Error(t, err)
 
 		// keep mode
-		rotated, newRaw, err := RotateToken(token.ID, TokenRotateModeKeep)
+		rotated, newRaw, err := RotateToken(token.ID, TokenRotateModeKeep, nil)
 		require.NoError(t, err)
 		require.Len(t, newRaw, 48)
 		require.True(t, IsHashedTokenKey(rotated.Key))
@@ -96,7 +96,7 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		require.Equal(t, token.ID, got.ID)
 
 		// hash -> plain
-		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModePlain)
+		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModePlain, nil)
 		require.NoError(t, err)
 		require.Equal(t, newRaw, rotated.Key)
 		require.Empty(t, rotated.KeyPreview)
@@ -105,19 +105,19 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		require.NoError(t, err)
 
 		// plain -> hash
-		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModeHash)
+		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModeHash, nil)
 		require.NoError(t, err)
 		require.Equal(t, HashTokenKey(newRaw), rotated.Key)
 		require.Equal(t, TokenKeyPreview(newRaw), rotated.KeyPreview)
 		_, err = GetAndValidateToken(newRaw)
 		require.NoError(t, err)
 
-		_, _, err = RotateToken(token.ID, "invalid")
+		_, _, err = RotateToken(token.ID, "invalid", nil)
 		require.Error(t, err)
 
-		_, _, err = RotateGroupToken("missing-group", token.ID, "")
+		_, _, err = RotateGroupToken("missing-group", token.ID, "", nil)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
-		_, _, err = RotateToken(99999, "")
+		_, _, err = RotateToken(99999, "", nil)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	})
 }

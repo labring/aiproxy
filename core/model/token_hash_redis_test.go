@@ -44,7 +44,7 @@ func TestHashedTokenRedisNeverStoresRawKey(t *testing.T) {
 		}
 
 		// rotation moves the cache to the new slot and drops the old one
-		_, newRaw, err := RotateToken(token.ID, TokenRotateModeHash)
+		_, newRaw, err := RotateToken(token.ID, TokenRotateModeHash, nil)
 		require.NoError(t, err)
 
 		_, err = GetAndValidateToken(newRaw)
