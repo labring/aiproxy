@@ -15720,6 +15720,10 @@ const docTemplate = `{
         "controller.AddTokenRequest": {
             "type": "object",
             "properties": {
+                "expired_at": {
+                    "description": "Unix milliseconds, 0 means never expires",
+                    "type": "integer"
+                },
                 "group_channel_models": {
                     "type": "array",
                     "items": {
@@ -16770,6 +16774,10 @@ const docTemplate = `{
         "controller.RotateTokenRequest": {
             "type": "object",
             "properties": {
+                "expired_at": {
+                    "description": "Unix milliseconds; nil keeps the current expiry, 0 clears it",
+                    "type": "integer"
+                },
                 "mode": {
                     "description": "One of model.TokenRotateMode*; empty keeps the current mode.",
                     "type": "string"
@@ -17506,6 +17514,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "expired_at": {
+                    "description": "zero means never expires",
                     "type": "string"
                 },
                 "group": {
@@ -22445,6 +22457,10 @@ const docTemplate = `{
         "model.UpdateTokenRequest": {
             "type": "object",
             "properties": {
+                "expired_at": {
+                    "description": "Unix milliseconds; nil keeps the current value, 0 clears the expiry",
+                    "type": "integer"
+                },
                 "group_channel_models": {
                     "type": "array",
                     "items": {

@@ -33,11 +33,13 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 	return sonic.Marshal(&struct {
 		*Alias
 		CreatedAt            int64 `json:"created_at"`
+		ExpiredAt            int64 `json:"expired_at"`
 		PeriodLastUpdateTime int64 `json:"period_last_update_time"`
 		AccessedAt           int64 `json:"accessed_at"`
 	}{
 		Alias:                (*Alias)(t),
 		CreatedAt:            t.CreatedAt.UnixMilli(),
+		ExpiredAt:            t.ExpiredAt.UnixMilli(),
 		PeriodLastUpdateTime: t.PeriodLastUpdateTime.UnixMilli(),
 		AccessedAt:           accessedAt,
 	})
@@ -57,6 +59,8 @@ type (
 		PeriodQuota          float64  `json:"period_quota"`
 		PeriodType           string   `json:"period_type"`
 		PeriodLastUpdateTime int64    `json:"period_last_update_time"`
+		// Unix milliseconds, 0 means never expires
+		ExpiredAt int64 `json:"expired_at"`
 	}
 
 	UpdateTokenStatusRequest struct {
@@ -70,6 +74,8 @@ type (
 	RotateTokenRequest struct {
 		// One of model.TokenRotateMode*; empty keeps the current mode.
 		Mode string `json:"mode"`
+		// Unix milliseconds; nil keeps the current expiry, 0 clears it
+		ExpiredAt *int64 `json:"expired_at"`
 	}
 )
 
@@ -89,6 +95,10 @@ func (at *AddTokenRequest) ToToken() *model.Token {
 
 	if at.PeriodLastUpdateTime > 0 {
 		token.PeriodLastUpdateTime = time.UnixMilli(at.PeriodLastUpdateTime)
+	}
+
+	if at.ExpiredAt > 0 {
+		token.ExpiredAt = time.UnixMilli(at.ExpiredAt)
 	}
 
 	return token
@@ -819,6 +829,21 @@ func validateRotateMode(mode string) error {
 	}
 }
 
+// rotateExpiredAt maps the request field to a time; nil keeps the stored
+// expiry, non-positive clears it.
+func rotateExpiredAt(expiredAt *int64) *time.Time {
+	if expiredAt == nil {
+		return nil
+	}
+
+	t := time.Time{}
+	if *expiredAt > 0 {
+		t = time.UnixMilli(*expiredAt)
+	}
+
+	return &t
+}
+
 // RotateToken godoc
 //
 //	@Summary		Rotate token key
@@ -849,7 +874,7 @@ func RotateToken(c *gin.Context) {
 		return
 	}
 
-	token, rawKey, err := model.RotateToken(id, req.Mode)
+	token, rawKey, err := model.RotateToken(id, req.Mode, rotateExpiredAt(req.ExpiredAt))
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
@@ -893,7 +918,12 @@ func RotateGroupToken(c *gin.Context) {
 		return
 	}
 
-	token, rawKey, err := model.RotateGroupToken(group, id, req.Mode)
+	token, rawKey, err := model.RotateGroupToken(
+		group,
+		id,
+		req.Mode,
+		rotateExpiredAt(req.ExpiredAt),
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

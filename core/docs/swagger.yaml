@@ -112,6 +112,9 @@ definitions:
     type: object
   controller.AddTokenRequest:
     properties:
+      expired_at:
+        description: Unix milliseconds, 0 means never expires
+        type: integer
       group_channel_models:
         items:
           type: string
@@ -800,6 +803,9 @@ definitions:
     type: object
   controller.RotateTokenRequest:
     properties:
+      expired_at:
+        description: Unix milliseconds; nil keeps the current expiry, 0 clears it
+        type: integer
       mode:
         description: One of model.TokenRotateMode*; empty keeps the current mode.
         type: string
@@ -1292,6 +1298,9 @@ definitions:
       accessed_at:
         type: string
       created_at:
+        type: string
+      expired_at:
+        description: zero means never expires
         type: string
       group:
         type: string
@@ -2066,8 +2075,6 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
-      status_5xx_count:
-        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -2075,6 +2082,8 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
+        type: integer
+      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4356,13 +4365,13 @@ definitions:
         type: integer
       status_400_count:
         type: integer
+      status_429_count:
+        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
-        type: integer
-      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -4449,6 +4458,8 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_5xx_count:
+        type: integer
       status_400_count:
         type: integer
       status_429_count:
@@ -4456,8 +4467,6 @@ definitions:
       status_4xx_count:
         type: integer
       status_500_count:
-        type: integer
-      status_5xx_count:
         type: integer
       status_other_count:
         type: integer
@@ -4687,6 +4696,10 @@ definitions:
     type: object
   model.UpdateTokenRequest:
     properties:
+      expired_at:
+        description: Unix milliseconds; nil keeps the current value, 0 clears the
+          expiry
+        type: integer
       group_channel_models:
         items:
           type: string

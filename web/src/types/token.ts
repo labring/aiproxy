@@ -34,6 +34,8 @@ export interface TokenCreateRequest {
     quota?: number
     period_quota?: number
     period_type?: string
+    // Unix 毫秒，不传表示永不过期
+    expired_at?: number
 }
 
 export interface TokenUpdateRequest {
@@ -43,6 +45,8 @@ export interface TokenUpdateRequest {
     quota?: number
     period_quota?: number
     period_type?: string
+    // Unix 毫秒，0 表示清除到期时间
+    expired_at?: number
 }
 
 export interface TokenStatusRequest {

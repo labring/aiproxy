@@ -18,7 +18,7 @@ describe('RotateTokenDialog', () => {
     let container: HTMLDivElement
     let client: QueryClient
     const onClose = vi.fn()
-    const token = { id: 7, name: 'api-key', key: 'plain-key', key_preview: null }
+    const token = { id: 7, name: 'api-key', key: 'plain-key', key_preview: null, expired_at: 0 }
     const tokensQuery = ['tokens', 1]
     const groupTokensQuery = ['groupTokens', 'example-group']
 
@@ -58,11 +58,33 @@ describe('RotateTokenDialog', () => {
         await render()
         await rotate()
 
-        expect(tokenApi.rotateToken).toHaveBeenCalledExactlyOnceWith(token.id, '')
+        expect(tokenApi.rotateToken).toHaveBeenCalledExactlyOnceWith(token.id, '', undefined)
         expect(client.getQueryState(tokensQuery)?.isInvalidated).toBe(true)
         expect(client.getQueryState(groupTokensQuery)?.isInvalidated).toBe(true)
         expect(document.body.textContent).toContain(newKey)
         expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('sends the picked expiry and can clear it with the never-expires switch', async () => {
+        vi.mocked(tokenApi.rotateToken, { partial: true }).mockResolvedValue({ ...token, key: 'k' })
+        await render()
+
+        const input = document.querySelector<HTMLInputElement>('[type="datetime-local"]')!
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '2030-01-02T03:04')
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+        await rotate()
+        expect(tokenApi.rotateToken).toHaveBeenCalledExactlyOnceWith(
+            token.id, '', new Date('2030-01-02T03:04').getTime(),
+        )
+
+        await act(async () => {
+            document.querySelectorAll<HTMLElement>('[role="switch"]').forEach((toggle) => toggle.click())
+        })
+        await rotate()
+        expect(tokenApi.rotateToken).toHaveBeenLastCalledWith(token.id, '', 0)
     })
 
     it('closes only after the one-time key dialog is acknowledged', async () => {
@@ -87,7 +109,7 @@ describe('RotateTokenDialog', () => {
         await render({ group: 'example-group' })
         await rotate()
 
-        expect(tokenApi.rotateGroupToken).toHaveBeenCalledExactlyOnceWith('example-group', token.id, '')
+        expect(tokenApi.rotateGroupToken).toHaveBeenCalledExactlyOnceWith('example-group', token.id, '', undefined)
         expect(onClose).not.toHaveBeenCalled()
     })
 })

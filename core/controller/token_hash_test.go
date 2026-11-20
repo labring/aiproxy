@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
@@ -114,6 +115,55 @@ func TestAddGroupTokenHashedKeyRevealedOnce(t *testing.T) {
 	require.Contains(t, listRecorder.Body.String(), model.TokenKeyPreview(rawKey))
 	require.NotContains(t, listRecorder.Body.String(), rawKey)
 	require.NotContains(t, listRecorder.Body.String(), token.Key)
+}
+
+func TestTokenExpiredAtCreateAndRotate(t *testing.T) {
+	withTokenControllerDB(t)
+
+	expiredAt := time.Now().Add(48 * time.Hour)
+
+	recorder, c := tokenJSONRequest(
+		t,
+		http.MethodPost,
+		"/api/token/expire-group",
+		"expire-group",
+		"",
+		AddTokenRequest{Name: "expire-token", ExpiredAt: expiredAt.UnixMilli()},
+	)
+	AddGroupToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Data struct {
+			ID        int   `json:"id"`
+			ExpiredAt int64 `json:"expired_at"`
+		} `json:"data"`
+	}
+	require.NoError(t, sonic.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, expiredAt.UnixMilli(), response.Data.ExpiredAt)
+
+	token, err := model.GetTokenByID(response.Data.ID)
+	require.NoError(t, err)
+	require.WithinDuration(t, expiredAt, token.ExpiredAt, time.Second)
+
+	// rotate overrides the expiry in the same call
+	recorder, c = tokenJSONRequest(
+		t,
+		http.MethodPost,
+		"/api/tokens/"+strconv.Itoa(token.ID)+"/rotate",
+		"",
+		strconv.Itoa(token.ID),
+		RotateTokenRequest{ExpiredAt: new(time.Now().Add(-time.Minute).UnixMilli())},
+	)
+	RotateToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	rotated, err := model.GetTokenByID(token.ID)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now().Add(-time.Minute), rotated.ExpiredAt, time.Second)
+
+	_, err = model.GetAndValidateToken(extractTokenKey(t, recorder))
+	require.ErrorContains(t, err, "is expired")
 }
 
 func TestAddGroupTokenHashedKeyIgnoreExistReturnsStoredToken(t *testing.T) {

@@ -32,6 +32,7 @@ const (
 
 type Token struct {
 	CreatedAt          time.Time       `json:"created_at"`
+	ExpiredAt          time.Time       `json:"expired_at"` // zero means never expires
 	Group              *Group          `json:"-"                     gorm:"foreignKey:GroupID"`
 	Key                string          `json:"key"                   gorm:"type:varchar(66);uniqueIndex"`
 	KeyPreview         string          `json:"key_preview,omitempty" gorm:"size:16"`
@@ -483,6 +484,10 @@ func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 		return nil, fmt.Errorf("token (%s[%d]) is disabled", token.Name, token.ID)
 	}
 
+	if !time.Time(token.ExpiredAt).IsZero() && time.Time(token.ExpiredAt).Before(time.Now()) {
+		return nil, fmt.Errorf("token (%s[%d]) is expired", token.Name, token.ID)
+	}
+
 	return token, nil
 }
 
@@ -708,18 +713,29 @@ const (
 	TokenRotateModePlain = "plain"
 )
 
-func RotateToken(id int, mode string) (*Token, string, error) {
-	return rotateToken("id = ?", []any{id}, mode)
+func RotateToken(id int, mode string, expiredAt *time.Time) (*Token, string, error) {
+	return rotateToken("id = ?", []any{id}, mode, expiredAt)
 }
 
-func RotateGroupToken(group string, id int, mode string) (*Token, string, error) {
-	return rotateToken("id = ? and group_id = ?", []any{id, group}, mode)
+func RotateGroupToken(
+	group string,
+	id int,
+	mode string,
+	expiredAt *time.Time,
+) (*Token, string, error) {
+	return rotateToken("id = ? and group_id = ?", []any{id, group}, mode, expiredAt)
 }
 
 // rotateToken replaces the key with a fresh one, optionally switching the
-// storage mode, and returns the updated token together with the raw key. The
-// raw key is only available at rotation time for hashed tokens.
-func rotateToken(where string, args []any, mode string) (*Token, string, error) {
+// storage mode and setting the expiry, and returns the updated token together
+// with the raw key. The raw key is only available at rotation time for hashed
+// tokens.
+func rotateToken(
+	where string,
+	args []any,
+	mode string,
+	expiredAt *time.Time,
+) (*Token, string, error) {
 	current := &Token{}
 	if err := DB.Where(where, args...).First(current).Error; err != nil {
 		return nil, "", HandleNotFound(err, ErrTokenNotFound)
@@ -745,6 +761,10 @@ func rotateToken(where string, args []any, mode string) (*Token, string, error) 
 		updates["key_preview"] = TokenKeyPreview(rawKey)
 	} else {
 		updates["key"] = rawKey
+	}
+
+	if expiredAt != nil {
+		updates["expired_at"] = *expiredAt
 	}
 
 	token := &Token{ID: current.ID}
@@ -814,6 +834,8 @@ type UpdateTokenRequest struct {
 	PeriodQuota          *float64 `json:"period_quota"`
 	PeriodType           *string  `json:"period_type"`
 	PeriodLastUpdateTime *int64   `json:"period_last_update_time"`
+	// Unix milliseconds; nil keeps the current value, 0 clears the expiry
+	ExpiredAt *int64 `json:"expired_at"`
 }
 
 func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
@@ -878,6 +900,16 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 		token.PeriodLastUpdateTime = time.UnixMilli(*update.PeriodLastUpdateTime)
 
 		selects = append(selects, "period_last_update_time")
+	}
+
+	if update.ExpiredAt != nil {
+		if *update.ExpiredAt > 0 {
+			token.ExpiredAt = time.UnixMilli(*update.ExpiredAt)
+		} else {
+			token.ExpiredAt = time.Time{}
+		}
+
+		selects = append(selects, "expired_at")
 	}
 
 	if update.Subnets != nil {
@@ -1010,6 +1042,16 @@ func UpdateGroupToken(
 		token.PeriodLastUpdateTime = time.UnixMilli(*update.PeriodLastUpdateTime)
 
 		selects = append(selects, "period_last_update_time")
+	}
+
+	if update.ExpiredAt != nil {
+		if *update.ExpiredAt > 0 {
+			token.ExpiredAt = time.UnixMilli(*update.ExpiredAt)
+		} else {
+			token.ExpiredAt = time.Time{}
+		}
+
+		selects = append(selects, "expired_at")
 	}
 
 	if update.Subnets != nil {

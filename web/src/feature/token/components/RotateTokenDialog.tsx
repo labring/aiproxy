@@ -17,15 +17,18 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { tokenApi } from '@/api/token'
 import { TOKEN_ROTATE_MODES, TokenRotateMode, Token, isHashedToken } from '@/types/token'
+import { dateTimeLocalToTimestampMs, timestampMsToDateTimeLocal } from '@/lib/datetime'
 import { TokenOneTimeKeyDialog } from './TokenOneTimeKeyDialog'
 
 interface RotateTokenDialogProps {
-    token: Pick<Token, 'id' | 'name' | 'key_preview'>
+    token: Pick<Token, 'id' | 'name' | 'key_preview' | 'expired_at'>
     group?: string
     onClose: () => void
 }
@@ -34,13 +37,17 @@ export function RotateTokenDialog({ token, group, onClose }: RotateTokenDialogPr
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [mode, setMode] = useState<TokenRotateMode>(TOKEN_ROTATE_MODES.KEEP)
+    const [expiredAt, setExpiredAt] = useState(timestampMsToDateTimeLocal(token.expired_at))
+    const [neverExpires, setNeverExpires] = useState(false)
     const [newKey, setNewKey] = useState<string | null>(null)
 
     const mutation = useMutation({
         mutationFn: (rotateMode: TokenRotateMode) => {
+            // 留空保持当前到期时间，勾选永不过期清除，填了时间则覆盖
+            const nextExpiredAt = neverExpires ? 0 : dateTimeLocalToTimestampMs(expiredAt)
             return group
-                ? tokenApi.rotateGroupToken(group, token.id, rotateMode)
-                : tokenApi.rotateToken(token.id, rotateMode)
+                ? tokenApi.rotateGroupToken(group, token.id, rotateMode, nextExpiredAt)
+                : tokenApi.rotateToken(token.id, rotateMode, nextExpiredAt)
         },
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
@@ -91,6 +98,24 @@ export function RotateTokenDialog({ token, group, onClose }: RotateTokenDialogPr
                                     ? t('token.rotateDialog.currentHashed')
                                     : t('token.rotateDialog.currentPlain')}
                             </p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="rotate-expired-at">{t('token.expiredAt')}</Label>
+                            <Input
+                                id="rotate-expired-at"
+                                type="datetime-local"
+                                value={expiredAt}
+                                onChange={(e) => setExpiredAt(e.target.value)}
+                                disabled={mutation.isPending || neverExpires}
+                            />
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Switch
+                                    checked={neverExpires}
+                                    onCheckedChange={setNeverExpires}
+                                    disabled={mutation.isPending}
+                                />
+                                {t('token.neverExpires')}
+                            </label>
                         </div>
                         <p className="text-sm text-muted-foreground">
                             {t('token.rotateDialog.warning')}

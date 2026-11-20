@@ -700,7 +700,7 @@ func CreateResponse() []gin.HandlerFunc {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			request	body	model.DecisionRequest	true	"Request"
+//	@Param			request	body		model.DecisionRequest	true	"Request"
 //	@Success		200		{object}	model.DecisionResponse
 //	@Failure		400		{object}	model.OpenAIErrorResponse
 //	@Router			/v1/decisions [post]

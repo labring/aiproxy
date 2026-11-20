@@ -28,6 +28,7 @@ export const tokenCreateSchema = z.object({
     quota: z.number().min(0).optional(),
     period_quota: z.number().min(0).optional(),
     period_type: z.string().optional().nullable(),
+    expired_at: z.string().optional(),
 })
 
 export const tokenUpdateSchema = z.object({

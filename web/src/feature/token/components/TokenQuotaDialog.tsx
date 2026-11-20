@@ -31,11 +31,13 @@ import {
 import { useUpdateToken } from '../hooks'
 import { Token } from '@/types/token'
 import { Skeleton } from '@/components/ui/skeleton'
+import { timestampMsToDateTimeLocal, dateTimeLocalToTimestampMs } from '@/lib/datetime'
 
 const tokenQuotaSchema = z.object({
     quota: z.number().min(0).optional(),
     period_quota: z.number().min(0).optional(),
     period_type: z.string().optional().nullable(),
+    expired_at: z.string().optional(),
 })
 
 type TokenQuotaForm = z.infer<typeof tokenQuotaSchema>
@@ -56,6 +58,7 @@ export function TokenQuotaDialog({ open, onOpenChange, token }: TokenQuotaDialog
             quota: undefined,
             period_quota: undefined,
             period_type: null,
+            expired_at: '',
         },
     })
     const periodType = form.watch('period_type')
@@ -67,6 +70,7 @@ export function TokenQuotaDialog({ open, onOpenChange, token }: TokenQuotaDialog
                 quota: token.quota > 0 ? token.quota : undefined,
                 period_quota: token.period_quota > 0 ? token.period_quota : undefined,
                 period_type: token.period_type || (token.period_quota > 0 ? 'monthly' : null),
+                expired_at: timestampMsToDateTimeLocal(token.expired_at),
             })
         }
     }, [token, open, form])
@@ -84,6 +88,7 @@ export function TokenQuotaDialog({ open, onOpenChange, token }: TokenQuotaDialog
                 quota,
                 period_quota: periodQuota,
                 period_type: submittedPeriodType,
+                expired_at: dateTimeLocalToTimestampMs(data.expired_at ?? '') ?? 0,
             },
         }, {
             onSuccess: () => {
@@ -168,6 +173,28 @@ export function TokenQuotaDialog({ open, onOpenChange, token }: TokenQuotaDialog
                                                 <SelectItem value="monthly">{t("token.quota.monthly")}</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="expired_at"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>{t("token.expiredAt")}</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                type="datetime-local"
+                                                {...field}
+                                                value={field.value ?? ''}
+                                                disabled={isLoading}
+                                            />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t("token.expiredAtClearHelp")}
+                                        </p>
                                         <FormMessage />
                                     </FormItem>
                                 )}

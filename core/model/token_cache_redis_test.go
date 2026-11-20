@@ -34,9 +34,12 @@ func TestTokenCacheRedisRoundTrip(t *testing.T) {
 			GroupChannelSets:   redisStringSlice{"gcs-a"},
 			Status:             1,
 			UsedAmount:         1.25,
-			Quota:              100.5,
-			PeriodQuota:        50,
-			PeriodType:         "day",
+			ExpiredAt: redisTime(
+				time.Date(2027, time.February, 3, 4, 5, 6, 0, time.UTC),
+			),
+			Quota:       100.5,
+			PeriodQuota: 50,
+			PeriodType:  "day",
 			PeriodLastUpdateTime: redisTime(
 				time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
 			),
@@ -60,6 +63,7 @@ func TestTokenCacheRedisRoundTrip(t *testing.T) {
 		require.Equal(t, token.GroupChannelSets, got.GroupChannelSets)
 		require.Equal(t, token.Status, got.Status)
 		require.Equal(t, token.UsedAmount, got.UsedAmount)
+		require.Equal(t, token.ExpiredAt, got.ExpiredAt)
 		require.Equal(t, token.Quota, got.Quota)
 		require.Equal(t, token.PeriodQuota, got.PeriodQuota)
 		require.Equal(t, token.PeriodType, got.PeriodType)
