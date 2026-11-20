@@ -37,9 +37,9 @@ func TestTokenCacheRedisRoundTrip(t *testing.T) {
 			ExpiredAt: redisTime(
 				time.Date(2027, time.February, 3, 4, 5, 6, 0, time.UTC),
 			),
-			Quota: 100.5,
-			PeriodQuota:        50,
-			PeriodType:         "day",
+			Quota:       100.5,
+			PeriodQuota: 50,
+			PeriodType:  "day",
 			PeriodLastUpdateTime: redisTime(
 				time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
 			),

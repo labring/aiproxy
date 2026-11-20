@@ -17,10 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptr[T any](v T) *T {
-	return &v
-}
-
 func withTokenControllerDB(t *testing.T) {
 	t.Helper()
 
@@ -157,7 +153,7 @@ func TestTokenExpiredAtCreateAndRotate(t *testing.T) {
 		"/api/tokens/"+strconv.Itoa(token.ID)+"/rotate",
 		"",
 		strconv.Itoa(token.ID),
-		RotateTokenRequest{ExpiredAt: ptr(time.Now().Add(-time.Minute).UnixMilli())},
+		RotateTokenRequest{ExpiredAt: new(time.Now().Add(-time.Minute).UnixMilli())},
 	)
 	RotateToken(c)
 	require.Equal(t, http.StatusOK, recorder.Code)

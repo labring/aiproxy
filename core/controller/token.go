@@ -918,7 +918,12 @@ func RotateGroupToken(c *gin.Context) {
 		return
 	}
 
-	token, rawKey, err := model.RotateGroupToken(group, id, req.Mode, rotateExpiredAt(req.ExpiredAt))
+	token, rawKey, err := model.RotateGroupToken(
+		group,
+		id,
+		req.Mode,
+		rotateExpiredAt(req.ExpiredAt),
+	)
 	if err != nil {
 		middleware.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return

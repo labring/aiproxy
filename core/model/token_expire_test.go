@@ -11,9 +11,9 @@ import (
 func TestTokenExpiredAtAuth(t *testing.T) {
 	withTestModelCacheDB(t, func() {
 		expired := &Token{
-			Name:       "expired",
-			GroupID:    "expire-group",
-			ExpiredAt:  time.Now().Add(-time.Minute),
+			Name:      "expired",
+			GroupID:   "expire-group",
+			ExpiredAt: time.Now().Add(-time.Minute),
 		}
 		require.NoError(t, InsertToken(expired, true, false))
 
@@ -42,7 +42,7 @@ func TestTokenExpiredAtUpdateAndRotate(t *testing.T) {
 		require.NoError(t, InsertToken(token, true, false))
 
 		// set via update
-		update := UpdateTokenRequest{ExpiredAt: ptr(time.Now().Add(-time.Minute).UnixMilli())}
+		update := UpdateTokenRequest{ExpiredAt: new(time.Now().Add(-time.Minute).UnixMilli())}
 		updated, err := UpdateToken(token.ID, update)
 		require.NoError(t, err)
 		require.WithinDuration(t, time.Now().Add(-time.Minute), updated.ExpiredAt, time.Second)
@@ -51,7 +51,7 @@ func TestTokenExpiredAtUpdateAndRotate(t *testing.T) {
 		require.ErrorContains(t, err, "is expired")
 
 		// clear via update
-		updated, err = UpdateToken(token.ID, UpdateTokenRequest{ExpiredAt: ptr(int64(0))})
+		updated, err = UpdateToken(token.ID, UpdateTokenRequest{ExpiredAt: new(int64(0))})
 		require.NoError(t, err)
 		require.True(t, updated.ExpiredAt.IsZero())
 
@@ -89,8 +89,4 @@ func authError(t *testing.T, key string) error {
 	_, err := GetAndValidateToken(key)
 
 	return err
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }

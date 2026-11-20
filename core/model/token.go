@@ -717,7 +717,12 @@ func RotateToken(id int, mode string, expiredAt *time.Time) (*Token, string, err
 	return rotateToken("id = ?", []any{id}, mode, expiredAt)
 }
 
-func RotateGroupToken(group string, id int, mode string, expiredAt *time.Time) (*Token, string, error) {
+func RotateGroupToken(
+	group string,
+	id int,
+	mode string,
+	expiredAt *time.Time,
+) (*Token, string, error) {
 	return rotateToken("id = ? and group_id = ?", []any{id, group}, mode, expiredAt)
 }
 
@@ -725,7 +730,12 @@ func RotateGroupToken(group string, id int, mode string, expiredAt *time.Time) (
 // storage mode and setting the expiry, and returns the updated token together
 // with the raw key. The raw key is only available at rotation time for hashed
 // tokens.
-func rotateToken(where string, args []any, mode string, expiredAt *time.Time) (*Token, string, error) {
+func rotateToken(
+	where string,
+	args []any,
+	mode string,
+	expiredAt *time.Time,
+) (*Token, string, error) {
 	current := &Token{}
 	if err := DB.Where(where, args...).First(current).Error; err != nil {
 		return nil, "", HandleNotFound(err, ErrTokenNotFound)

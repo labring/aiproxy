@@ -11,7 +11,6 @@ import (
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/common/env"
-
 	// import fastjson serializer
 	_ "github.com/labring/aiproxy/core/common/fastJSONSerializer"
 	"github.com/labring/aiproxy/core/common/notify"
