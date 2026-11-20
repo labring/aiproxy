@@ -29,3 +29,12 @@ aiproxy:
   SAVE_ALL_LOG_DETAIL: "false"
   LOG_DETAIL_REQUEST_BODY_MAX_SIZE: "128"
   LOG_DETAIL_RESPONSE_BODY_MAX_SIZE: "128"
+
+networkPolicy:
+  # Requires the Cilium CNI (cilium.io/v2 CRDs); when enabled, only the
+  # Higress gateway, kubelet probes and pods in the release namespace can
+  # reach aiproxy.
+  enabled: false
+  higressNamespace: higress-system
+  higressPodLabels:
+    app: higress-gateway
