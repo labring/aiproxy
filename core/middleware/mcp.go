@@ -33,7 +33,7 @@ func MCPAuth(c *gin.Context) {
 	if config.AdminKey != "" && config.AdminKey == key ||
 		config.InternalToken != "" && config.InternalToken == key {
 		token = model.TokenCache{
-			Key: key,
+			KeyHash: model.HashTokenKey(key),
 		}
 		useInternalToken = true
 	} else {

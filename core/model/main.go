@@ -139,6 +139,12 @@ func InitDB() error {
 }
 
 func migrateDB() error {
+	// must run before AutoMigrate: backfilling key_hash after the unique
+	// index exists would fail on duplicate empty values
+	if err := migrateTokenKeyHash(); err != nil {
+		return err
+	}
+
 	err := DB.AutoMigrate(
 		&Channel{},
 		&ChannelTest{},
@@ -158,7 +164,148 @@ func migrateDB() error {
 		return err
 	}
 
+	// hashed tokens keep key empty, which the legacy unique index rejects;
+	// tolerate the multi-replica race where another instance dropped it first
+	migrator := DB.Migrator()
+	if migrator.HasIndex(&Token{}, "idx_tokens_key") {
+		if err := migrator.DropIndex(&Token{}, "idx_tokens_key"); err != nil &&
+			migrator.HasIndex(&Token{}, "idx_tokens_key") {
+			return err
+		}
+	}
+
 	return nil
+}
+
+// tokenKeyHashMigrationBatch bounds the per-statement work of the key_hash
+// backfill; one CASE update per batch instead of one update per row.
+const tokenKeyHashMigrationBatch = 500
+
+// tokenKeyHashNeedsBackfill reports whether any row still lacks key_hash. The
+// probe targets the key_hash index so completed deployments skip in O(log n)
+// on every restart instead of scanning the table.
+func tokenKeyHashNeedsBackfill(migrator gorm.Migrator) (bool, error) {
+	if !migrator.HasColumn(&Token{}, "key_hash") {
+		return true, nil
+	}
+
+	if !migrator.HasIndex(&Token{}, "idx_tokens_key_hash") {
+		// column exists but the migration did not finish (crash mid-run)
+		return true, nil
+	}
+
+	var id int
+
+	err := DB.Raw(
+		"SELECT id FROM tokens WHERE key_hash = '' AND key != '' LIMIT 1",
+	).Scan(&id).Error
+
+	return id != 0, err
+}
+
+// migrateTokenKeyHash backfills key_hash for tokens created before the
+// column existed. HMACs cannot be computed in portable SQL, so raw keys are
+// hashed in Go, batched through CASE updates. Everything is idempotent:
+// concurrent replicas write identical values, and a crash mid-run resumes on
+// the next start. Until the backfill finishes, the legacy unique index on
+// key is still in place, so key uniqueness holds while key_hash is built.
+func migrateTokenKeyHash() error {
+	migrator := DB.Migrator()
+	if !migrator.HasTable(&Token{}) {
+		return nil
+	}
+
+	needs, err := tokenKeyHashNeedsBackfill(migrator)
+	if err != nil {
+		return err
+	}
+
+	if !needs {
+		return nil
+	}
+
+	log.Info("token key_hash migration started")
+
+	if !migrator.HasColumn(&Token{}, "key_hash") {
+		err = DB.Exec(
+			"ALTER TABLE tokens ADD COLUMN key_hash varchar(64) NOT NULL DEFAULT ''",
+		).Error
+		if err != nil && !migrator.HasColumn(&Token{}, "key_hash") {
+			// another replica added the column first
+			return err
+		}
+	}
+
+	// development databases from the unreleased dual-form build stored the
+	// hash in key; move those rows so the raw-key backfill skips them
+	err = DB.Exec(
+		"UPDATE tokens SET key_hash = SUBSTR(key, 3), key = '' WHERE key LIKE 'h:%'",
+	).Error
+	if err != nil {
+		return err
+	}
+
+	var (
+		total  int
+		lastID int
+		batch  []*Token
+	)
+
+	for {
+		err = DB.Model(&Token{}).
+			Select("id", "key").
+			Where("id > ? AND key != '' AND key_hash = ''", lastID).
+			Order("id").
+			Limit(tokenKeyHashMigrationBatch).
+			Find(&batch).Error
+		if err != nil {
+			return err
+		}
+
+		if len(batch) == 0 {
+			break
+		}
+
+		if err = backfillTokenKeyHashBatch(batch); err != nil {
+			return err
+		}
+
+		lastID = batch[len(batch)-1].ID
+		total += len(batch)
+		batch = batch[:0]
+	}
+
+	if total > 0 {
+		log.Infof("token key_hash migration backfilled %d tokens", total)
+	}
+
+	return nil
+}
+
+// backfillTokenKeyHashBatch writes one CASE update for the whole batch.
+func backfillTokenKeyHashBatch(batch []*Token) error {
+	var (
+		statement strings.Builder
+		args      = make([]any, 0, len(batch)*2+len(batch))
+	)
+
+	statement.WriteString("UPDATE tokens SET key_hash = CASE id ")
+
+	for _, token := range batch {
+		statement.WriteString("WHEN ? THEN ? ")
+
+		args = append(args, token.ID, HashTokenKey(token.Key))
+	}
+
+	statement.WriteString("END WHERE id IN (")
+	statement.WriteString(strings.TrimSuffix(strings.Repeat("?,", len(batch)), ","))
+	statement.WriteString(")")
+
+	for _, token := range batch {
+		args = append(args, token.ID)
+	}
+
+	return DB.Exec(statement.String(), args...).Error
 }
 
 func InitLogDB(batchSize int) error {

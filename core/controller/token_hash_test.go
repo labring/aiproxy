@@ -101,20 +101,20 @@ func TestAddGroupTokenHashedKeyRevealedOnce(t *testing.T) {
 
 	token, err := model.GetTokenByID(response.Data.ID)
 	require.NoError(t, err)
-	require.True(t, model.IsHashedTokenKey(token.Key))
-	require.NotContains(t, token.Key, rawKey)
+	require.Empty(t, token.Key)
+	require.Equal(t, model.HashTokenKey(rawKey), token.KeyHash)
 	require.Equal(t, model.TokenKeyPreview(rawKey), token.KeyPreview)
 
 	_, err = model.GetAndValidateToken(rawKey)
 	require.NoError(t, err)
 
-	// list and detail responses only ever show the preview
+	// list and detail responses never contain the raw key or the hash
 	listRecorder, listC := tokenJSONRequest(t, http.MethodGet, "/api/tokens/", "", "", nil)
 	GetTokens(listC)
 	require.Equal(t, http.StatusOK, listRecorder.Code)
 	require.Contains(t, listRecorder.Body.String(), model.TokenKeyPreview(rawKey))
 	require.NotContains(t, listRecorder.Body.String(), rawKey)
-	require.NotContains(t, listRecorder.Body.String(), token.Key)
+	require.NotContains(t, listRecorder.Body.String(), token.KeyHash)
 }
 
 func TestTokenExpiredAtCreateAndRotate(t *testing.T) {
@@ -216,7 +216,7 @@ func TestRotateTokenHandler(t *testing.T) {
 	token := &model.Token{
 		Name:       "rotate-me",
 		GroupID:    "rotate-group",
-		Key:        model.HashTokenKey(rawKey),
+		KeyHash:    model.HashTokenKey(rawKey),
 		KeyPreview: model.TokenKeyPreview(rawKey),
 	}
 	require.NoError(t, model.InsertToken(token, true, false))
@@ -259,6 +259,7 @@ func TestRotateTokenHandler(t *testing.T) {
 	stored, err := model.GetTokenByID(token.ID)
 	require.NoError(t, err)
 	require.Equal(t, newKey, stored.Key)
+	require.Equal(t, model.HashTokenKey(newKey), stored.KeyHash)
 	require.Empty(t, stored.KeyPreview)
 
 	// group variant rotates the same token
