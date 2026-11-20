@@ -24,7 +24,7 @@ func TestTokenCacheRedisRoundTrip(t *testing.T) {
 		token := &TokenCache{
 			ID:                 1,
 			Group:              "round-trip-group",
-			Key:                "sk-token-cache-round-trip",
+			KeyHash:            HashTokenKey("sk-token-cache-round-trip"),
 			Name:               "round-trip",
 			Scope:              ChannelScopeGroup,
 			Subnets:            redisStringSlice{"127.0.0.1/32"},
@@ -50,7 +50,7 @@ func TestTokenCacheRedisRoundTrip(t *testing.T) {
 
 		modelLocalCache.Flush()
 
-		got, err := CacheGetTokenByKey(token.Key)
+		got, err := CacheGetTokenByHash(token.KeyHash)
 		require.NoError(t, err)
 		require.Equal(t, token.Scope, got.Scope)
 		require.Equal(t, token.ID, got.ID)

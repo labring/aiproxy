@@ -2,13 +2,14 @@
 package model
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
-func TestHashTokenKeyStableAndMarked(t *testing.T) {
+func TestHashTokenKeyStableFormat(t *testing.T) {
 	raw := GenerateTokenKey()
 
 	require.Len(t, raw, 48)
@@ -19,13 +20,11 @@ func TestHashTokenKeyStableAndMarked(t *testing.T) {
 	}
 
 	hashed := HashTokenKey(raw)
-	require.Len(t, hashed, len(hashedKeyPrefix)+64)
+	require.Len(t, hashed, 64)
+	_, err := hex.DecodeString(hashed)
+	require.NoError(t, err)
 	require.Equal(t, hashed, HashTokenKey(raw))
 	require.NotEqual(t, raw, hashed)
-	require.True(t, IsHashedTokenKey(hashed))
-	require.False(t, IsHashedTokenKey(raw))
-	require.False(t, IsHashedTokenKey("h:"))
-	require.False(t, IsHashedTokenKey(""))
 }
 
 func TestHashTokenKeyDiffersPerKey(t *testing.T) {
@@ -37,23 +36,24 @@ func TestTokenKeyPreview(t *testing.T) {
 	require.Equal(t, "short", TokenKeyPreview("short"))
 }
 
-func TestTokenBeforeCreateKeepsPresetHash(t *testing.T) {
+func TestTokenBeforeCreateFillsKeyAndHash(t *testing.T) {
 	withTestModelCacheDB(t, func() {
-		raw := GenerateTokenKey()
+		plain := &Token{Name: "plain", GroupID: "hash-group"}
+		require.NoError(t, InsertToken(plain, true, false))
+		require.Len(t, plain.Key, 48)
+		require.Equal(t, HashTokenKey(plain.Key), plain.KeyHash)
+		require.Empty(t, plain.KeyPreview)
 
+		raw := GenerateTokenKey()
 		hashed := &Token{
-			Name:       "preset-hash",
+			Name:       "hashed",
 			GroupID:    "hash-group",
-			Key:        HashTokenKey(raw),
+			KeyHash:    HashTokenKey(raw),
 			KeyPreview: TokenKeyPreview(raw),
 		}
-		require.NoError(t, InsertToken(hashed, true, false))
-		require.Equal(t, HashTokenKey(raw), hashed.Key)
-
-		plain := &Token{Name: "preset-plain", GroupID: "hash-group"}
-		require.NoError(t, InsertToken(plain, false, false))
-		require.Len(t, plain.Key, 48)
-		require.Empty(t, plain.KeyPreview)
+		require.NoError(t, InsertToken(hashed, false, false))
+		require.Empty(t, hashed.Key)
+		require.Equal(t, HashTokenKey(raw), hashed.KeyHash)
 	})
 }
 
@@ -63,7 +63,7 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		token := &Token{
 			Name:       "hashed",
 			GroupID:    "hash-group",
-			Key:        HashTokenKey(raw),
+			KeyHash:    HashTokenKey(raw),
 			KeyPreview: TokenKeyPreview(raw),
 		}
 		require.NoError(t, InsertToken(token, true, false))
@@ -85,7 +85,8 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		rotated, newRaw, err := RotateToken(token.ID, TokenRotateModeKeep, nil)
 		require.NoError(t, err)
 		require.Len(t, newRaw, 48)
-		require.True(t, IsHashedTokenKey(rotated.Key))
+		require.Empty(t, rotated.Key)
+		require.Equal(t, HashTokenKey(newRaw), rotated.KeyHash)
 		require.Equal(t, TokenKeyPreview(newRaw), rotated.KeyPreview)
 		require.Equal(t, token.Name, rotated.Name)
 
@@ -99,6 +100,7 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModePlain, nil)
 		require.NoError(t, err)
 		require.Equal(t, newRaw, rotated.Key)
+		require.Equal(t, HashTokenKey(newRaw), rotated.KeyHash)
 		require.Empty(t, rotated.KeyPreview)
 
 		_, err = GetAndValidateToken(newRaw)
@@ -107,8 +109,10 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		// plain -> hash
 		rotated, newRaw, err = RotateToken(token.ID, TokenRotateModeHash, nil)
 		require.NoError(t, err)
-		require.Equal(t, HashTokenKey(newRaw), rotated.Key)
+		require.Empty(t, rotated.Key)
+		require.Equal(t, HashTokenKey(newRaw), rotated.KeyHash)
 		require.Equal(t, TokenKeyPreview(newRaw), rotated.KeyPreview)
+
 		_, err = GetAndValidateToken(newRaw)
 		require.NoError(t, err)
 
@@ -128,7 +132,7 @@ func TestSearchTokensHashAware(t *testing.T) {
 		hashed := &Token{
 			Name:       "search-hashed",
 			GroupID:    "hash-group",
-			Key:        HashTokenKey(raw),
+			KeyHash:    HashTokenKey(raw),
 			KeyPreview: TokenKeyPreview(raw),
 		}
 		require.NoError(t, InsertToken(hashed, true, false))

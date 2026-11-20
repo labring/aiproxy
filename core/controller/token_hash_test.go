@@ -101,20 +101,20 @@ func TestAddGroupTokenHashedKeyRevealedOnce(t *testing.T) {
 
 	token, err := model.GetTokenByID(response.Data.ID)
 	require.NoError(t, err)
-	require.True(t, model.IsHashedTokenKey(token.Key))
-	require.NotContains(t, token.Key, rawKey)
+	require.Empty(t, token.Key)
+	require.Equal(t, model.HashTokenKey(rawKey), token.KeyHash)
 	require.Equal(t, model.TokenKeyPreview(rawKey), token.KeyPreview)
 
 	_, err = model.GetAndValidateToken(rawKey)
 	require.NoError(t, err)
 
-	// list and detail responses only ever show the preview
+	// list and detail responses never contain the raw key or the hash
 	listRecorder, listC := tokenJSONRequest(t, http.MethodGet, "/api/tokens/", "", "", nil)
 	GetTokens(listC)
 	require.Equal(t, http.StatusOK, listRecorder.Code)
 	require.Contains(t, listRecorder.Body.String(), model.TokenKeyPreview(rawKey))
 	require.NotContains(t, listRecorder.Body.String(), rawKey)
-	require.NotContains(t, listRecorder.Body.String(), token.Key)
+	require.NotContains(t, listRecorder.Body.String(), token.KeyHash)
 }
 
 func TestTokenExpiredAtCreateAndRotate(t *testing.T) {
@@ -209,6 +209,40 @@ func extractTokenKey(t *testing.T, recorder *httptest.ResponseRecorder) string {
 	return response.Data.Key
 }
 
+// TestPlainTokenResponseIncludesPreview: plain tokens derive key_preview
+// from the raw key so every response exposes the same fragment.
+func TestPlainTokenResponseIncludesPreview(t *testing.T) {
+	withTokenControllerDB(t)
+
+	recorder, c := tokenJSONRequest(
+		t,
+		http.MethodPost,
+		"/api/token/preview-group",
+		"preview-group",
+		"",
+		AddTokenRequest{Name: "plain-preview"},
+	)
+	AddGroupToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Data struct {
+			Key        string `json:"key"`
+			KeyPreview string `json:"key_preview"`
+			ExpiredAt  int64  `json:"expired_at"`
+		} `json:"data"`
+	}
+	require.NoError(t, sonic.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Key, 48)
+	require.Equal(t, model.TokenKeyPreview(response.Data.Key), response.Data.KeyPreview)
+	require.Zero(t, response.Data.ExpiredAt)
+
+	listRecorder, listC := tokenJSONRequest(t, http.MethodGet, "/api/tokens/", "", "", nil)
+	GetTokens(listC)
+	require.Equal(t, http.StatusOK, listRecorder.Code)
+	require.Contains(t, listRecorder.Body.String(), model.TokenKeyPreview(response.Data.Key))
+}
+
 func TestRotateTokenHandler(t *testing.T) {
 	withTokenControllerDB(t)
 
@@ -216,7 +250,7 @@ func TestRotateTokenHandler(t *testing.T) {
 	token := &model.Token{
 		Name:       "rotate-me",
 		GroupID:    "rotate-group",
-		Key:        model.HashTokenKey(rawKey),
+		KeyHash:    model.HashTokenKey(rawKey),
 		KeyPreview: model.TokenKeyPreview(rawKey),
 	}
 	require.NoError(t, model.InsertToken(token, true, false))
@@ -259,6 +293,7 @@ func TestRotateTokenHandler(t *testing.T) {
 	stored, err := model.GetTokenByID(token.ID)
 	require.NoError(t, err)
 	require.Equal(t, newKey, stored.Key)
+	require.Equal(t, model.HashTokenKey(newKey), stored.KeyHash)
 	require.Empty(t, stored.KeyPreview)
 
 	// group variant rotates the same token

@@ -28,7 +28,7 @@ import { dateTimeLocalToTimestampMs, timestampMsToDateTimeLocal } from '@/lib/da
 import { TokenOneTimeKeyDialog } from './TokenOneTimeKeyDialog'
 
 interface RotateTokenDialogProps {
-    token: Pick<Token, 'id' | 'name' | 'key_preview' | 'expired_at'>
+    token: Pick<Token, 'id' | 'name' | 'key' | 'key_preview' | 'expired_at'>
     group?: string
     onClose: () => void
 }

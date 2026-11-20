@@ -67,7 +67,7 @@ func AdminAuth(c *gin.Context) {
 	}
 
 	c.Set(Token, &model.TokenCache{
-		Key: config.AdminKey,
+		KeyHash: model.HashTokenKey(config.AdminKey),
 	})
 
 	group := c.Param("group")
@@ -104,7 +104,7 @@ func TokenAuth(c *gin.Context) {
 	if config.AdminKey != "" && config.AdminKey == key ||
 		config.InternalToken != "" && config.InternalToken == key {
 		token = model.TokenCache{
-			Key: key,
+			KeyHash: model.HashTokenKey(key),
 		}
 		useInternalToken = true
 	} else {
@@ -626,8 +626,8 @@ func SetLogTokenFields(fields logrus.Fields, token model.TokenCache, internal bo
 		fields["kname"] = token.Name
 	}
 
-	if token.Key != "" {
-		fields["key"] = maskTokenKey(token.Key)
+	if token.KeyHash != "" {
+		fields["key"] = maskTokenKey(token.KeyHash)
 	}
 
 	if internal {

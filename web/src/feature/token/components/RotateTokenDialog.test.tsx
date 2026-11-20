@@ -18,7 +18,7 @@ describe('RotateTokenDialog', () => {
     let container: HTMLDivElement
     let client: QueryClient
     const onClose = vi.fn()
-    const token = { id: 7, name: 'api-key', key: 'plain-key', key_preview: null, expired_at: 0 }
+    const token = { id: 7, name: 'api-key', key: 'plain-key', key_preview: 'plain…-key', expired_at: 0 }
     const tokensQuery = ['tokens', 1]
     const groupTokensQuery = ['groupTokens', 'example-group']
 

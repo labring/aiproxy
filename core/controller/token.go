@@ -30,16 +30,30 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 		accessedAt = t.AccessedAt.UnixMilli()
 	}
 
+	expiredAt := int64(0)
+	if !t.ExpiredAt.IsZero() {
+		expiredAt = t.ExpiredAt.UnixMilli()
+	}
+
+	// plain tokens derive the preview from the raw key so every response
+	// carries the same recognizable fragment
+	keyPreview := t.KeyPreview
+	if keyPreview == "" && t.Key != "" {
+		keyPreview = model.TokenKeyPreview(t.Key)
+	}
+
 	return sonic.Marshal(&struct {
 		*Alias
-		CreatedAt            int64 `json:"created_at"`
-		ExpiredAt            int64 `json:"expired_at"`
-		PeriodLastUpdateTime int64 `json:"period_last_update_time"`
-		AccessedAt           int64 `json:"accessed_at"`
+		KeyPreview           string `json:"key_preview"`
+		CreatedAt            int64  `json:"created_at"`
+		ExpiredAt            int64  `json:"expired_at"`
+		PeriodLastUpdateTime int64  `json:"period_last_update_time"`
+		AccessedAt           int64  `json:"accessed_at"`
 	}{
 		Alias:                (*Alias)(t),
+		KeyPreview:           keyPreview,
 		CreatedAt:            t.CreatedAt.UnixMilli(),
-		ExpiredAt:            t.ExpiredAt.UnixMilli(),
+		ExpiredAt:            expiredAt,
 		PeriodLastUpdateTime: t.PeriodLastUpdateTime.UnixMilli(),
 		AccessedAt:           accessedAt,
 	})
@@ -127,24 +141,13 @@ func validateSubnets(subnets []string) error {
 	return nil
 }
 
-// maskTokenKey hides the stored hash of hashed tokens; the raw key only
-// appears in the create/rotate response.
-func maskTokenKey(token *model.Token) *model.Token {
-	if !model.IsHashedTokenKey(token.Key) {
-		return token
-	}
-
-	masked := *token
-	masked.Key = token.KeyPreview
-
-	return &masked
-}
-
+// buildTokenResponse never exposes a raw key for hashed tokens: their Key
+// column is empty and KeyHash is not serialized.
 func buildTokenResponse(token *model.Token) *TokenResponse {
 	lastRequestAt, _ := model.GetGroupTokenLastRequestTimeMinute(token.GroupID, string(token.Name))
 
 	return &TokenResponse{
-		Token:      maskTokenKey(token),
+		Token:      token,
 		AccessedAt: lastRequestAt,
 	}
 }
@@ -155,7 +158,7 @@ func buildTokenResponses(tokens []*model.Token) []*TokenResponse {
 	responses := make([]*TokenResponse, len(tokens))
 	for i, token := range tokens {
 		responses[i] = &TokenResponse{
-			Token:      maskTokenKey(token),
+			Token:      token,
 			AccessedAt: lastRequestTimes[tokenLastRequestTimeKey(token.GroupID, string(token.Name))],
 		}
 	}
@@ -465,7 +468,7 @@ func AddGroupToken(c *gin.Context) {
 	rawKey := ""
 	if req.HashedKey {
 		rawKey = model.GenerateTokenKey()
-		token.Key = model.HashTokenKey(rawKey)
+		token.KeyHash = model.HashTokenKey(rawKey)
 		token.KeyPreview = model.TokenKeyPreview(rawKey)
 	}
 
@@ -479,15 +482,15 @@ func AddGroupToken(c *gin.Context) {
 	}
 
 	// ignore_exist may return an already stored token instead of ours; only
-	// reveal the fresh key when the stored key is the one we just generated.
-	if rawKey != "" && token.Key == model.HashTokenKey(rawKey) {
-		resp := *maskTokenKey(token)
+	// reveal the fresh key when the stored hash is the one we just generated.
+	if rawKey != "" && token.KeyHash == model.HashTokenKey(rawKey) {
+		resp := *token
 		resp.Key = rawKey
 		middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
+	middleware.SuccessResponse(c, &TokenResponse{Token: token})
 }
 
 // DeleteToken godoc
@@ -635,7 +638,7 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
+	middleware.SuccessResponse(c, &TokenResponse{Token: token})
 }
 
 // UpdateGroupToken godoc
@@ -679,7 +682,7 @@ func UpdateGroupToken(c *gin.Context) {
 		return
 	}
 
-	middleware.SuccessResponse(c, &TokenResponse{Token: maskTokenKey(token)})
+	middleware.SuccessResponse(c, &TokenResponse{Token: token})
 }
 
 // UpdateTokenStatus godoc
@@ -880,7 +883,7 @@ func RotateToken(c *gin.Context) {
 		return
 	}
 
-	resp := *maskTokenKey(token)
+	resp := *token
 	resp.Key = rawKey
 	middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
 }
@@ -929,7 +932,7 @@ func RotateGroupToken(c *gin.Context) {
 		return
 	}
 
-	resp := *maskTokenKey(token)
+	resp := *token
 	resp.Key = rawKey
 	middleware.SuccessResponse(c, &TokenResponse{Token: &resp})
 }

@@ -255,17 +255,17 @@ func TestCacheUpdateGroupStatusUpdatesLocalCache(t *testing.T) {
 func TestCacheUpdateTokenStatusUpdatesLocalCache(t *testing.T) {
 	withTestModelCacheDB(t, func() {
 		cache := &TokenCache{
-			Key:    "token-local-update",
-			ID:     1,
-			Group:  "g1",
-			Name:   "token",
-			Status: TokenStatusEnabled,
+			KeyHash: HashTokenKey("token-local-update"),
+			ID:      1,
+			Group:   "g1",
+			Name:    "token",
+			Status:  TokenStatusEnabled,
 		}
 		require.NoError(t, CacheSetToken(cache))
 
-		require.NoError(t, CacheUpdateTokenStatus(cache.Key, TokenStatusDisabled))
+		require.NoError(t, CacheUpdateTokenStatus(cache.KeyHash, TokenStatusDisabled))
 
-		got, err := CacheGetTokenByKey(cache.Key)
+		got, err := CacheGetTokenByHash(cache.KeyHash)
 		require.NoError(t, err)
 		assert.Equal(t, TokenStatusDisabled, got.Status)
 	})

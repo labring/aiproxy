@@ -66,8 +66,8 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
             expired_at: dateTimeLocalToTimestampMs(data.expired_at ?? ''),
         }, {
             onSuccess: (token) => {
-                // 哈希模式密钥仅此一次可见，先展示再关闭
-                if (token?.key_preview) {
+                // 哈希模式密钥仅此一次可见，先展示再关闭（明文模式两种字段都有，按请求标志判断）
+                if (data.hashed_key) {
                     setCreatedToken(token)
                     return
                 }

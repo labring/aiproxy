@@ -34,7 +34,8 @@ type Token struct {
 	CreatedAt          time.Time       `json:"created_at"`
 	ExpiredAt          time.Time       `json:"expired_at"` // zero means never expires
 	Group              *Group          `json:"-"                     gorm:"foreignKey:GroupID"`
-	Key                string          `json:"key"                   gorm:"type:varchar(66);uniqueIndex"`
+	Key                string          `json:"key"                   gorm:"type:varchar(48)"`
+	KeyHash            string          `json:"-"                     gorm:"type:varchar(64);uniqueIndex"`
 	KeyPreview         string          `json:"key_preview,omitempty" gorm:"size:16"`
 	Name               EmptyNullString `json:"name"                  gorm:"size:32;index;uniqueIndex:idx_group_name;not null"`
 	GroupID            string          `json:"group"                 gorm:"size:64;index;uniqueIndex:idx_group_name"`
@@ -60,9 +61,16 @@ type Token struct {
 }
 
 func (t *Token) BeforeCreate(_ *gorm.DB) error {
-	if t.Key == "" || (len(t.Key) != 48 && !IsHashedTokenKey(t.Key)) {
+	if t.Key == "" && t.KeyHash == "" {
 		t.Key = generateKey()
 	}
+
+	// every token stores its hash; hashed tokens leave Key empty so the raw
+	// value only exists in the create/rotate response
+	if t.Key != "" && t.KeyHash == "" {
+		t.KeyHash = HashTokenKey(t.Key)
+	}
+
 	// Initialize period start time to current time if period quota is set
 	if t.PeriodQuota > 0 && t.PeriodLastUpdateTime.IsZero() {
 		t.PeriodLastUpdateTime = time.Now()
@@ -301,7 +309,7 @@ func SearchTokens(
 
 	if key != "" {
 		// hashed tokens store the hash, so match either form
-		tx = tx.Where("key = ? OR key = ?", key, HashTokenKey(key))
+		tx = tx.Where("key_hash = ?", HashTokenKey(key))
 	}
 
 	if keyword != "" {
@@ -395,7 +403,7 @@ func SearchGroupTokens(
 	}
 
 	if key != "" {
-		tx = tx.Where("key = ? OR key = ?", key, HashTokenKey(key))
+		tx = tx.Where("key_hash = ?", HashTokenKey(key))
 	}
 
 	if status != 0 {
@@ -465,14 +473,14 @@ func SearchGroupTokens(
 	return tokens, total, err
 }
 
-func GetTokenByKey(key string) (*Token, error) {
-	if key == "" {
-		return nil, errors.New("key is empty")
+func GetTokenByKeyHash(keyHash string) (*Token, error) {
+	if keyHash == "" {
+		return nil, errors.New("key hash is empty")
 	}
 
 	var token Token
 
-	err := DB.Where("key = ?", key).First(&token).Error
+	err := DB.Where("key_hash = ?", keyHash).First(&token).Error
 
 	return &token, HandleNotFound(err, ErrTokenNotFound)
 }
@@ -482,14 +490,8 @@ func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 		return nil, errors.New("no token provided")
 	}
 
-	// Plain keys are the default, so try the raw slot first and only fall
-	// back to the hash slot for hashed tokens; raw keys never contain ':'
-	// so the two slots cannot collide.
-	token, err = CacheGetTokenByKey(key)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		token, err = CacheGetTokenByKey(HashTokenKey(key))
-	}
-
+	// Both storage modes cache and look up under the KeyHash slot.
+	token, err = CacheGetTokenByHash(HashTokenKey(key))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("invalid token")
@@ -586,7 +588,7 @@ func UpdateTokenStatus(id, status int) (err error) {
 	token := Token{ID: id}
 	defer func() {
 		if err == nil {
-			if err := CacheUpdateTokenStatus(token.Key, status); err != nil {
+			if err := CacheUpdateTokenStatus(token.KeyHash, status); err != nil {
 				log.Error("update token status in cache failed: " + err.Error())
 			}
 		}
@@ -596,7 +598,7 @@ func UpdateTokenStatus(id, status int) (err error) {
 		Model(&token).
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where("id = ?", id).
@@ -617,7 +619,7 @@ func UpdateGroupTokenStatus(group string, id, status int) (err error) {
 	token := Token{}
 	defer func() {
 		if err == nil {
-			if err := CacheUpdateTokenStatus(token.Key, status); err != nil {
+			if err := CacheUpdateTokenStatus(token.KeyHash, status); err != nil {
 				log.Error("update token status in cache failed: " + err.Error())
 			}
 		}
@@ -627,7 +629,7 @@ func UpdateGroupTokenStatus(group string, id, status int) (err error) {
 		Model(&token).
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where("id = ? and group_id = ?", id, group).
@@ -648,7 +650,7 @@ func DeleteGroupTokenByID(groupID string, id int) (err error) {
 	token := Token{ID: id, GroupID: groupID}
 	defer func() {
 		if err == nil {
-			if err := CacheDeleteToken(token.Key); err != nil {
+			if err := CacheDeleteToken(token.KeyHash); err != nil {
 				log.Error("delete token from cache failed: " + err.Error())
 			}
 		}
@@ -657,7 +659,7 @@ func DeleteGroupTokenByID(groupID string, id int) (err error) {
 	result := DB.
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where(token).
@@ -679,7 +681,7 @@ func DeleteGroupTokensByIDs(group string, ids []int) (err error) {
 	defer func() {
 		if err == nil {
 			for _, token := range tokens {
-				if err := CacheDeleteToken(token.Key); err != nil {
+				if err := CacheDeleteToken(token.KeyHash); err != nil {
 					log.Error("delete token from cache failed: " + err.Error())
 				}
 			}
@@ -690,7 +692,7 @@ func DeleteGroupTokensByIDs(group string, ids []int) (err error) {
 		return tx.
 			Clauses(clause.Returning{
 				Columns: []clause.Column{
-					{Name: "key"},
+					{Name: "key_hash"},
 				},
 			}).
 			Where("group_id = ?", group).
@@ -708,7 +710,7 @@ func DeleteTokenByID(id int) (err error) {
 	token := Token{ID: id}
 	defer func() {
 		if err == nil {
-			if err := CacheDeleteToken(token.Key); err != nil {
+			if err := CacheDeleteToken(token.KeyHash); err != nil {
 				log.Error("delete token from cache failed: " + err.Error())
 			}
 		}
@@ -717,7 +719,7 @@ func DeleteTokenByID(id int) (err error) {
 	result := DB.
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where(token).
@@ -761,7 +763,7 @@ func rotateToken(
 		return nil, "", HandleNotFound(err, ErrTokenNotFound)
 	}
 
-	hashed := IsHashedTokenKey(current.Key)
+	hashed := current.Key == ""
 
 	switch mode {
 	case TokenRotateModeKeep:
@@ -775,9 +777,12 @@ func rotateToken(
 
 	rawKey := generateKey()
 
-	updates := map[string]any{"key_preview": ""}
+	updates := map[string]any{
+		"key_hash":    HashTokenKey(rawKey),
+		"key_preview": "",
+	}
 	if hashed {
-		updates["key"] = HashTokenKey(rawKey)
+		updates["key"] = ""
 		updates["key_preview"] = TokenKeyPreview(rawKey)
 	} else {
 		updates["key"] = rawKey
@@ -798,12 +803,12 @@ func rotateToken(
 		return nil, "", err
 	}
 
-	for _, cachedKey := range []string{current.Key, token.Key} {
-		if cachedKey == "" {
+	for _, keyHash := range []string{current.KeyHash, token.KeyHash} {
+		if keyHash == "" {
 			continue
 		}
 
-		if err := CacheDeleteToken(cachedKey); err != nil {
+		if err := CacheDeleteToken(keyHash); err != nil {
 			log.Error("delete token from cache failed: " + err.Error())
 		}
 	}
@@ -820,7 +825,7 @@ func DeleteTokensByIDs(ids []int) (err error) {
 	defer func() {
 		if err == nil {
 			for _, token := range tokens {
-				if err := CacheDeleteToken(token.Key); err != nil {
+				if err := CacheDeleteToken(token.KeyHash); err != nil {
 					log.Error("delete token from cache failed: " + err.Error())
 				}
 			}
@@ -831,7 +836,7 @@ func DeleteTokensByIDs(ids []int) (err error) {
 		return tx.
 			Clauses(clause.Returning{
 				Columns: []clause.Column{
-					{Name: "key"},
+					{Name: "key_hash"},
 				},
 			}).
 			Where("id IN (?)", ids).
@@ -876,7 +881,7 @@ func UpdateToken(id int, update UpdateTokenRequest) (token *Token, err error) {
 
 	defer func() {
 		if err == nil {
-			if err := CacheDeleteToken(token.Key); err != nil {
+			if err := CacheDeleteToken(token.KeyHash); err != nil {
 				log.Error("delete token from cache failed: " + err.Error())
 			}
 		}
@@ -1018,7 +1023,7 @@ func UpdateGroupToken(
 
 	defer func() {
 		if err == nil {
-			if err := CacheDeleteToken(token.Key); err != nil {
+			if err := CacheDeleteToken(token.KeyHash); err != nil {
 				log.Error("delete token from cache failed: " + err.Error())
 			}
 		}
@@ -1142,7 +1147,7 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 	defer func() {
 		if amount > 0 && err == nil && (token.Quota > 0 || token.PeriodQuota > 0) {
 			if err := CacheUpdateTokenUsedAmountOnlyIncrease(
-				token.Key,
+				token.KeyHash,
 				token.UsedAmount,
 			); err != nil {
 				log.Error("update token used amount in cache failed: " + err.Error())
@@ -1154,7 +1159,7 @@ func UpdateTokenUsedAmount(id int, amount float64, requestCount int) (err error)
 		Model(token).
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 				{Name: "quota"},
 				{Name: "used_amount"},
 				{Name: "period_quota"},
@@ -1299,7 +1304,7 @@ func ResetTokenPeriodUsage(id int) error {
 			Model(token).
 			Clauses(clause.Returning{
 				Columns: []clause.Column{
-					{Name: "key"},
+					{Name: "key_hash"},
 				},
 			}).
 			Where("id = ?", id).
@@ -1316,9 +1321,9 @@ func ResetTokenPeriodUsage(id int) error {
 	})
 
 	// Update cache only if database update succeeded
-	if err == nil && token.Key != "" && !newPeriodStartTime.IsZero() {
+	if err == nil && token.KeyHash != "" && !newPeriodStartTime.IsZero() {
 		if cacheErr := CacheResetTokenPeriodUsage(
-			token.Key,
+			token.KeyHash,
 			newPeriodStartTime,
 			token.UsedAmount,
 		); cacheErr != nil {
@@ -1333,7 +1338,7 @@ func UpdateTokenName(id int, name string) (err error) {
 	token := &Token{ID: id}
 	defer func() {
 		if err == nil {
-			if err := CacheUpdateTokenName(token.Key, name); err != nil {
+			if err := CacheUpdateTokenName(token.KeyHash, name); err != nil {
 				log.Error("update token name in cache failed: " + err.Error())
 			}
 		}
@@ -1343,7 +1348,7 @@ func UpdateTokenName(id int, name string) (err error) {
 		Model(token).
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where("id = ?", id).
@@ -1359,7 +1364,7 @@ func UpdateGroupTokenName(group string, id int, name string) (err error) {
 	token := &Token{ID: id, GroupID: group}
 	defer func() {
 		if err == nil {
-			if err := CacheUpdateTokenName(token.Key, name); err != nil {
+			if err := CacheUpdateTokenName(token.KeyHash, name); err != nil {
 				log.Error("update token name in cache failed: " + err.Error())
 			}
 		}
@@ -1369,7 +1374,7 @@ func UpdateGroupTokenName(group string, id int, name string) (err error) {
 		Model(token).
 		Clauses(clause.Returning{
 			Columns: []clause.Column{
-				{Name: "key"},
+				{Name: "key_hash"},
 			},
 		}).
 		Where("id = ? and group_id = ?", id, group).
