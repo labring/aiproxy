@@ -381,7 +381,12 @@
       "submit": "轮转",
       "success": "密钥已轮转",
       "failure": "轮转密钥失败"
-    }
+    },
+    "expiredAt": "到期时间",
+    "expiredAtHelp": "留空表示永不过期。",
+    "expiredAtClearHelp": "留空表示清除到期时间（永不过期）。",
+    "neverExpires": "永不过期（清除到期时间）",
+    "expired": "已过期"
   },
   "model": {
     "management": "模型管理",

@@ -28,6 +28,7 @@ export const tokenApi = {
             quota: data.quota,
             period_quota: data.period_quota,
             period_type: data.period_type,
+            expired_at: data.expired_at,
         })
         return response
     },
@@ -67,18 +68,31 @@ export const tokenApi = {
             quota: data.quota,
             period_quota: data.period_quota,
             period_type: data.period_type,
+            expired_at: data.expired_at,
         })
         return response
     },
 
-    // 轮转密钥；响应中的 key 是新密钥的明文，仅此一次可见
-    rotateToken: async (id: number, mode: TokenRotateMode): Promise<Token> => {
-        const response = await post<Token>(`tokens/${id}/rotate`, { mode })
+    // 轮转密钥；响应中的 key 是新密钥的明文，仅此一次可见。
+    // expiredAt 不传保持当前到期时间，0 清除，正数为新的到期时间
+    rotateToken: async (id: number, mode: TokenRotateMode, expiredAt?: number): Promise<Token> => {
+        const response = await post<Token>(`tokens/${id}/rotate`, {
+            mode,
+            expired_at: expiredAt,
+        })
         return response
     },
 
-    rotateGroupToken: async (group: string, id: number, mode: TokenRotateMode): Promise<Token> => {
-        const response = await post<Token>(`token/${group}/${id}/rotate`, { mode })
+    rotateGroupToken: async (
+        group: string,
+        id: number,
+        mode: TokenRotateMode,
+        expiredAt?: number,
+    ): Promise<Token> => {
+        const response = await post<Token>(`token/${group}/${id}/rotate`, {
+            mode,
+            expired_at: expiredAt,
+        })
         return response
     }
 }

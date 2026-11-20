@@ -361,6 +361,22 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
             ),
         },
         {
+            accessorKey: 'expired_at',
+            header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.expiredAt")}</div>,
+            cell: ({ row }) => {
+                const expiredAt = row.original.expired_at
+                if (!expiredAt) {
+                    return <div className="text-sm text-muted-foreground">-</div>
+                }
+                const expired = expiredAt <= Date.now()
+                return (
+                    <div className={cn("text-sm", expired ? "text-destructive" : "text-muted-foreground")}>
+                        {formatTimestamp(expiredAt)}{expired ? ` (${t("token.expired")})` : ''}
+                    </div>
+                )
+            },
+        },
+        {
             accessorKey: 'accessed_at',
             header: () => <div className="font-medium py-3.5 whitespace-nowrap">{t("token.accessedAt")}</div>,
             cell: ({ row }) => (

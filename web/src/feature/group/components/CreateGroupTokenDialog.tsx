@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { Switch } from '@/components/ui/switch'
 import { Token } from '@/types/token'
+import { dateTimeLocalToTimestampMs } from '@/lib/datetime'
 import { TokenOneTimeKeyDialog } from '@/feature/token/components/TokenOneTimeKeyDialog'
 
 interface CreateGroupTokenDialogProps {
@@ -48,16 +49,18 @@ export function CreateGroupTokenDialog({
     const [quota, setQuota] = useState<number | undefined>(undefined)
     const [periodQuota, setPeriodQuota] = useState<number | undefined>(undefined)
     const [periodType, setPeriodType] = useState<string | null>(null)
+    const [expiredAt, setExpiredAt] = useState('')
     const [createdToken, setCreatedToken] = useState<Token | null>(null)
 
     const mutation = useMutation({
-        mutationFn: (data: { group: string; name: string; hashedKey: boolean; quota?: number; periodQuota?: number; periodType: string | null }) => {
+        mutationFn: (data: { group: string; name: string; hashedKey: boolean; quota?: number; periodQuota?: number; periodType: string | null; expiredAt: string }) => {
             return tokenApi.createGroupToken(data.group, {
                 name: data.name,
                 hashed_key: data.hashedKey,
                 quota: data.quota,
                 period_quota: data.periodType ? data.periodQuota : undefined,
                 period_type: data.periodType || undefined,
+                expired_at: dateTimeLocalToTimestampMs(data.expiredAt),
             })
         },
         onSuccess: (data) => {
@@ -99,6 +102,7 @@ export function CreateGroupTokenDialog({
         setQuota(undefined)
         setPeriodQuota(undefined)
         setPeriodType(null)
+        setExpiredAt('')
     }
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -111,6 +115,7 @@ export function CreateGroupTokenDialog({
             quota,
             periodQuota,
             periodType,
+            expiredAt,
         })
     }
 
@@ -154,6 +159,19 @@ export function CreateGroupTokenDialog({
                                 onCheckedChange={setHashedKey}
                                 disabled={mutation.isPending}
                             />
+                        </div>
+
+                        {/* Expiry */}
+                        <div className="space-y-2">
+                            <Label htmlFor="token-expired-at">{t('token.expiredAt')}</Label>
+                            <Input
+                                id="token-expired-at"
+                                type="datetime-local"
+                                value={expiredAt}
+                                onChange={(e) => setExpiredAt(e.target.value)}
+                                disabled={mutation.isPending}
+                            />
+                            <p className="text-xs text-muted-foreground">{t('token.expiredAtHelp')}</p>
                         </div>
                         {/* Total Quota */}
                         <div className="space-y-2">

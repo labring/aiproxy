@@ -27,6 +27,7 @@ import {
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { parseSubnets } from '@/validation/token'
 import { Token } from '@/types/token'
+import { dateTimeLocalToTimestampMs } from '@/lib/datetime'
 import { TokenOneTimeKeyDialog } from './TokenOneTimeKeyDialog'
 
 interface TokenFormProps {
@@ -48,6 +49,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
             quota: undefined,
             period_quota: undefined,
             period_type: null,
+            expired_at: '',
         },
     })
     const periodType = form.watch('period_type')
@@ -61,6 +63,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
             quota: data.quota,
             period_quota: data.period_type ? data.period_quota : undefined,
             period_type: data.period_type || undefined,
+            expired_at: dateTimeLocalToTimestampMs(data.expired_at ?? ''),
         }, {
             onSuccess: (token) => {
                 // 哈希模式密钥仅此一次可见，先展示再关闭
@@ -139,6 +142,28 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                                     disabled={isLoading}
                                 />
                             </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="expired_at"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>{t("token.expiredAt")}</FormLabel>
+                            <FormControl>
+                                <Input
+                                    type="datetime-local"
+                                    disabled={isLoading}
+                                    {...field}
+                                    value={field.value ?? ''}
+                                />
+                            </FormControl>
+                            <FormDescription>
+                                {t("token.expiredAtHelp")}
+                            </FormDescription>
                             <FormMessage />
                         </FormItem>
                     )}

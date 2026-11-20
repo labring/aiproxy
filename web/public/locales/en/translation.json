@@ -392,7 +392,12 @@
       "submit": "Rotate",
       "success": "Key rotated",
       "failure": "Failed to rotate key"
-    }
+    },
+    "expiredAt": "Expires at",
+    "expiredAtHelp": "Leave empty for no expiry.",
+    "expiredAtClearHelp": "Leave empty to clear the expiry (never expires).",
+    "neverExpires": "Never expires (clear expiry)",
+    "expired": "expired"
   },
   "model": {
     "management": "Model Management",
