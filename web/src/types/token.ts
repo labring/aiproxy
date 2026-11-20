@@ -27,6 +27,7 @@ export interface TokensResponse {
 
 export interface TokenCreateRequest {
     name: string
+    subnets?: string[]
     quota?: number
     period_quota?: number
     period_type?: string
