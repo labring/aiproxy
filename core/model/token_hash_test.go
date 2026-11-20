@@ -121,3 +121,47 @@ func TestTokenHashAuthAndRotate(t *testing.T) {
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	})
 }
+
+func TestSearchTokensHashAware(t *testing.T) {
+	withTestModelCacheDB(t, func() {
+		raw := GenerateTokenKey()
+		hashed := &Token{
+			Name:       "search-hashed",
+			GroupID:    "hash-group",
+			Key:        HashTokenKey(raw),
+			KeyPreview: TokenKeyPreview(raw),
+		}
+		require.NoError(t, InsertToken(hashed, true, false))
+
+		plain := &Token{Name: "search-plain", GroupID: "hash-group"}
+		require.NoError(t, InsertToken(plain, false, false))
+
+		tokens, total, err := SearchTokens("hash-group", "", 1, 20, "", 0, "", raw)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Len(t, tokens, 1)
+		require.Equal(t, hashed.ID, tokens[0].ID)
+
+		tokens, total, err = SearchTokens("hash-group", "", 1, 20, "", 0, "", plain.Key)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Equal(t, plain.ID, tokens[0].ID)
+
+		// the visible fragment of a hashed key is its preview
+		previewPrefix := TokenKeyPreview(raw)[:6]
+		tokens, total, err = SearchTokens("hash-group", previewPrefix, 1, 20, "", 0, "", "")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Equal(t, hashed.ID, tokens[0].ID)
+
+		tokens, total, err = SearchGroupTokens("hash-group", previewPrefix, 1, 20, "", 0, "", "")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Equal(t, hashed.ID, tokens[0].ID)
+
+		tokens, total, err = SearchGroupTokens("hash-group", "", 1, 20, "", 0, "", raw)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, total)
+		require.Equal(t, hashed.ID, tokens[0].ID)
+	})
+}
