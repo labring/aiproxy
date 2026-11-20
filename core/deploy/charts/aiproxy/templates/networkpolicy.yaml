@@ -14,9 +14,21 @@ specs:
       matchLabels:
         {{ include "aiproxy.selectorLabels" . | nindent 8 }}
     ingress:
-      # kubelet startup probes originate from the pod's node
+      # kubelet probes and hostNetwork gateway pods carry node identities
       - fromEntities:
           - host
+          - remote-node
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP
+      # non-hostNetwork gateway pods
+      - fromEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": {{ .Values.networkPolicy.higressNamespace }}
+              {{- range $key, $value := .Values.networkPolicy.higressPodLabels }}
+              "k8s:{{ $key }}": {{ $value | quote }}
+              {{- end }}
         toPorts:
           - ports:
               - port: "3000"
@@ -24,16 +36,6 @@ specs:
       - fromEndpoints:
           - matchLabels:
               "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace }}
-        toPorts:
-          - ports:
-              - port: "3000"
-                protocol: TCP
-      - fromEndpoints:
-          - matchLabels:
-              "k8s:io.kubernetes.pod.namespace": {{ .Values.networkPolicy.higressNamespace }}
-              {{- range $key, $value := .Values.networkPolicy.higressPodLabels }}
-              "k8s:{{ $key }}": {{ $value | quote }}
-              {{- end }}
         toPorts:
           - ports:
               - port: "3000"
