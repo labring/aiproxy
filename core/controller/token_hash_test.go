@@ -229,11 +229,13 @@ func TestPlainTokenResponseIncludesPreview(t *testing.T) {
 		Data struct {
 			Key        string `json:"key"`
 			KeyPreview string `json:"key_preview"`
+			ExpiredAt  int64  `json:"expired_at"`
 		} `json:"data"`
 	}
 	require.NoError(t, sonic.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Len(t, response.Data.Key, 48)
 	require.Equal(t, model.TokenKeyPreview(response.Data.Key), response.Data.KeyPreview)
+	require.Zero(t, response.Data.ExpiredAt)
 
 	listRecorder, listC := tokenJSONRequest(t, http.MethodGet, "/api/tokens/", "", "", nil)
 	GetTokens(listC)

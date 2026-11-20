@@ -30,6 +30,11 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 		accessedAt = t.AccessedAt.UnixMilli()
 	}
 
+	expiredAt := int64(0)
+	if !t.ExpiredAt.IsZero() {
+		expiredAt = t.ExpiredAt.UnixMilli()
+	}
+
 	// plain tokens derive the preview from the raw key so every response
 	// carries the same recognizable fragment
 	keyPreview := t.KeyPreview
@@ -48,7 +53,7 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 		Alias:                (*Alias)(t),
 		KeyPreview:           keyPreview,
 		CreatedAt:            t.CreatedAt.UnixMilli(),
-		ExpiredAt:            t.ExpiredAt.UnixMilli(),
+		ExpiredAt:            expiredAt,
 		PeriodLastUpdateTime: t.PeriodLastUpdateTime.UnixMilli(),
 		AccessedAt:           accessedAt,
 	})
