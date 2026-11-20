@@ -300,7 +300,8 @@ func SearchTokens(
 	}
 
 	if key != "" {
-		tx = tx.Where("key = ?", key)
+		// hashed tokens store the hash, so match either form
+		tx = tx.Where("key = ? OR key = ?", key, HashTokenKey(key))
 	}
 
 	if keyword != "" {
@@ -338,6 +339,15 @@ func SearchTokens(
 
 			values = append(values, "%"+keyword+"%")
 		}
+
+		// the only searchable fragment of a hashed key is its preview
+		if !common.UsingSQLite {
+			conditions = append(conditions, "key_preview ILIKE ?")
+		} else {
+			conditions = append(conditions, "key_preview LIKE ?")
+		}
+
+		values = append(values, "%"+keyword+"%")
 
 		if !common.UsingSQLite {
 			conditions = append(conditions, "models ILIKE ?")
@@ -385,7 +395,7 @@ func SearchGroupTokens(
 	}
 
 	if key != "" {
-		tx = tx.Where("key = ?", key)
+		tx = tx.Where("key = ? OR key = ?", key, HashTokenKey(key))
 	}
 
 	if status != 0 {
@@ -417,6 +427,15 @@ func SearchGroupTokens(
 
 			values = append(values, "%"+keyword+"%")
 		}
+
+		// the only searchable fragment of a hashed key is its preview
+		if !common.UsingSQLite {
+			conditions = append(conditions, "key_preview ILIKE ?")
+		} else {
+			conditions = append(conditions, "key_preview LIKE ?")
+		}
+
+		values = append(values, "%"+keyword+"%")
 
 		if !common.UsingSQLite {
 			conditions = append(conditions, "models ILIKE ?")
@@ -463,11 +482,12 @@ func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 		return nil, errors.New("no token provided")
 	}
 
-	// Hashed tokens cache and look up under their hash; raw keys never
-	// contain ':' so the two slots cannot collide.
-	token, err = CacheGetTokenByKey(HashTokenKey(key))
+	// Plain keys are the default, so try the raw slot first and only fall
+	// back to the hash slot for hashed tokens; raw keys never contain ':'
+	// so the two slots cannot collide.
+	token, err = CacheGetTokenByKey(key)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		token, err = CacheGetTokenByKey(key)
+		token, err = CacheGetTokenByKey(HashTokenKey(key))
 	}
 
 	if err != nil {
