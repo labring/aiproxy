@@ -52,8 +52,10 @@ func (a *Adaptor) ListModels(
 			OwnedBy          string          `json:"owned_by"`
 			MaxContextLength *int64          `json:"max_context_length"`
 			Aliases          []string        `json:"aliases"`
-			Type             string          `json:"TYPE"`
-			Archived         *bool           `json:"archived"`
+			Type             string          `json:"type"`
+			// The platform API has returned both spellings of this field.
+			TypeLegacy string `json:"TYPE"`
+			Archived   *bool  `json:"archived"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(
@@ -111,8 +113,13 @@ func (a *Adaptor) ListModels(
 			item["aliases"] = upstreamModel.Aliases
 		}
 
-		if upstreamModel.Type != "" {
-			item["type"] = upstreamModel.Type
+		modelType := upstreamModel.Type
+		if modelType == "" {
+			modelType = upstreamModel.TypeLegacy
+		}
+
+		if modelType != "" {
+			item["type"] = modelType
 		}
 
 		if upstreamModel.Archived != nil {

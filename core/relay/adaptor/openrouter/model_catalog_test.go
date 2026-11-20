@@ -72,7 +72,7 @@ func TestListModelsPaginatesAllModalities(t *testing.T) {
 	require.Equal(t, 2, page)
 	require.Equal(t, "provider/model", models[500]["id"])
 	require.Equal(t, "Provider model", models[500]["name"])
-	require.NotContains(t, models[500], "pricing")
+	require.Equal(t, map[string]any{"prompt": "0.000001"}, models[500]["pricing"])
 	require.NotContains(t, models[500], "provider_metadata")
 
 	encoded, err := json.Marshal(models[500])

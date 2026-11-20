@@ -14,6 +14,7 @@ var openRouterModelFields = []string{
 	"description",
 	"context_length",
 	"architecture",
+	"pricing",
 	"top_provider",
 	"per_request_limits",
 	"supported_parameters",
@@ -24,6 +25,23 @@ var openRouterModelFields = []string{
 var openRouterNestedModelFields = map[string][]string{
 	"architecture": {
 		"modality", "input_modalities", "output_modalities", "tokenizer", "instruct_type",
+	},
+	"pricing": {
+		"prompt",
+		"completion",
+		"request",
+		"image",
+		"image_output",
+		"image_token",
+		"audio",
+		"audio_output",
+		"discount",
+		"input_audio_cache",
+		"input_cache_read",
+		"input_cache_write",
+		"input_cache_write_1h",
+		"internal_reasoning",
+		"web_search",
 	},
 	"top_provider":       {"context_length", "max_completion_tokens", "is_moderated"},
 	"per_request_limits": {"prompt_tokens", "completion_tokens"},
@@ -92,6 +110,27 @@ func decodeModelField(field string, raw json.RawMessage) (any, bool) {
 		}
 
 		return value, true
+	case "prompt",
+		"completion",
+		"request",
+		"image",
+		"image_output",
+		"image_token",
+		"audio",
+		"audio_output",
+		"discount",
+		"input_audio_cache",
+		"input_cache_read",
+		"input_cache_write",
+		"input_cache_write_1h",
+		"internal_reasoning",
+		"web_search":
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, false
+		}
+
+		return value, true
 	case "created", "context_length", "max_completion_tokens", "top_k":
 		var value int64
 		if err := json.Unmarshal(raw, &value); err != nil {
@@ -126,7 +165,7 @@ func decodeModelField(field string, raw json.RawMessage) (any, bool) {
 		}
 
 		return value, true
-	case "architecture", "top_provider", "per_request_limits", "default_parameters":
+	case "architecture", "pricing", "top_provider", "per_request_limits", "default_parameters":
 		return decodeModelObject(field, raw)
 	case "input_modalities", "output_modalities":
 		var value []string

@@ -145,7 +145,12 @@ func TestOpenAIModelsFiltersUnrecognizedNestedFields(t *testing.T) {
 		"input_modalities": []string{"text"},
 		"tokenizer":        "GPT",
 	}, models[0]["architecture"])
-	require.NotContains(t, models[0], "pricing")
+	require.Equal(t, map[string]any{
+		"prompt":     "0.1",
+		"completion": "0.2",
+		"request":    "0.01",
+		"discount":   "0.25",
+	}, models[0]["pricing"])
 	require.Equal(t, map[string]any{
 		"context_length":        int64(32000),
 		"max_completion_tokens": int64(4000),
@@ -185,7 +190,7 @@ func TestOpenAIModelsRestrictsArchitectureModality(t *testing.T) {
 	}, models[0]["architecture"])
 }
 
-func TestOpenRouterModelItemOmitsPricingAndNullFields(t *testing.T) {
+func TestOpenRouterModelItemSkipsNullFields(t *testing.T) {
 	item, err := modelcatalog.OpenRouterModelItem([]byte(`{
 		"id": "provider/model",
 		"name": null,
@@ -197,7 +202,10 @@ func TestOpenRouterModelItemOmitsPricingAndNullFields(t *testing.T) {
 		"supported_parameters": null
 	}`))
 	require.NoError(t, err)
-	require.Equal(t, adaptor.ModelCatalogItem{"id": "provider/model"}, item)
+	require.Equal(t, adaptor.ModelCatalogItem{
+		"id":      "provider/model",
+		"pricing": map[string]any{"completion": "0.2"},
+	}, item)
 
 	_, err = modelcatalog.OpenRouterModelItem([]byte(`{"id": null}`))
 	require.ErrorIs(t, err, modelcatalog.ErrInvalidResponse)
