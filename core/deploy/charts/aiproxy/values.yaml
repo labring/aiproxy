@@ -33,7 +33,9 @@ aiproxy:
 networkPolicy:
   # Requires the Cilium CNI (cilium.io/v2 CRDs); when enabled, only the
   # Higress gateway, kubelet probes and pods in the release namespace can
-  # reach aiproxy.
+  # reach aiproxy. A hostNetwork gateway is allowed through the node
+  # entities; the pod labels below only matter for non-hostNetwork
+  # gateways.
   enabled: false
   higressNamespace: higress-system
   higressPodLabels:
