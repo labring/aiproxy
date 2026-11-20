@@ -1,0 +1,41 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "aiproxy.fullname" . }}
+  labels:
+    {{ include "aiproxy.labels" . | nindent 4 }}
+specs:
+  - description: >-
+      Only accept the Higress gateway, kubelet probes and pods in this
+      namespace.
+    endpointSelector:
+      matchLabels:
+        {{ include "aiproxy.selectorLabels" . | nindent 8 }}
+    ingress:
+      # kubelet startup probes originate from the pod's node
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP
+      - fromEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace }}
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP
+      - fromEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": {{ .Values.networkPolicy.higressNamespace }}
+              {{- range $key, $value := .Values.networkPolicy.higressPodLabels }}
+              "k8s:{{ $key }}": {{ $value | quote }}
+              {{- end }}
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP
+{{- end }}
