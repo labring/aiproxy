@@ -33,6 +33,12 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 		Example:     "017576662512468239146:omuauf_lfve",
 		Description: "Google Custom Search Engine ID",
 	},
+	"google_base_url": {
+		Name:        "Google Base URL",
+		Required:    mcpservers.ConfigRequiredTypeInitOptional,
+		Example:     "https://www.googleapis.com/customsearch/v1",
+		Description: "Custom Search JSON API endpoint (default: https://www.googleapis.com/customsearch/v1)",
+	},
 
 	// Bing Search Configuration
 	"bing_api_key": {
@@ -40,6 +46,12 @@ var configTemplates = map[string]mcpservers.ConfigTemplate{
 		Required:    mcpservers.ConfigRequiredTypeInitOptional,
 		Example:     "1234567890abcdef",
 		Description: "Bing Search API key",
+	},
+	"bing_base_url": {
+		Name:        "Bing Base URL",
+		Required:    mcpservers.ConfigRequiredTypeInitOptional,
+		Example:     "https://api.bing.microsoft.com/v7.0/search",
+		Description: "Bing Web Search v7 endpoint (default: https://api.bing.microsoft.com/v7.0/search)",
 	},
 
 	// Common Configuration
@@ -134,13 +146,13 @@ func initializeEngines(config map[string]string) (map[string]engine.Engine, stri
 	// Google Search
 	if apiKey := config["google_api_key"]; apiKey != "" {
 		if cx := config["google_cx"]; cx != "" {
-			engines["google"] = engine.NewGoogleEngine(apiKey, cx)
+			engines["google"] = engine.NewGoogleEngine(apiKey, cx, config["google_base_url"])
 		}
 	}
 
 	// Bing Search
 	if apiKey := config["bing_api_key"]; apiKey != "" {
-		engines["bing"] = engine.NewBingEngine(apiKey)
+		engines["bing"] = engine.NewBingEngine(apiKey, config["bing_base_url"])
 	}
 
 	// Bing CN Search

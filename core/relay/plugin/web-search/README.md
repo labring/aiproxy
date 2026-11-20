@@ -99,6 +99,7 @@ Each search engine configuration contains the following fields:
 |-------|------|----------|-------------|
 | `api_key` | string | Yes | Google Custom Search API key |
 | `cx` | string | Yes | Google Custom Search Engine ID |
+| `base_url` | string | No | Custom Search JSON API endpoint, default `https://www.googleapis.com/customsearch/v1` |
 
 ##### Bing Search Engine Configuration (`spec`)
 
@@ -114,6 +115,7 @@ Each search engine configuration contains the following fields:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `api_key` | string | Yes | Bing Search API key |
+| `base_url` | string | No | Bing Web Search v7 endpoint, default `https://api.bing.microsoft.com/v7.0/search` |
 
 ##### BingCN Search Engine Configuration (`spec`)
 

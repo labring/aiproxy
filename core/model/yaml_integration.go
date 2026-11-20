@@ -108,6 +108,7 @@ func ChannelTypeNameToType(typeName string) int {
 		"fake-error":                            55,
 		"fake error":                            55,
 		"fakeerror":                             55,
+		"voyage":                                60,
 	}
 
 	if typ, ok := typeMap[typeName]; ok {
@@ -199,6 +200,7 @@ func ModelTypeNameToType(typeName string) mode.Mode {
 		"responsescompact":          mode.ResponsesCompact,
 		"responses_compact":         mode.ResponsesCompact,
 		"responses-compact":         mode.ResponsesCompact,
+		"decisions":                 mode.Decisions,
 	}
 
 	if typ, ok := typeMap[typeName]; ok {

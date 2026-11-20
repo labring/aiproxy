@@ -110,6 +110,8 @@ export const logApi = {
         const url = queryString ? `logs/export?${queryString}` : 'logs/export'
         const response = await apiClient.get<Blob>(url, {
             responseType: 'blob',
+            // Large exports stream for minutes; the default API_TIMEOUT aborts them
+            timeout: 0,
         })
 
         const filename = getFilenameFromDisposition(
@@ -126,6 +128,7 @@ export const logApi = {
         const url = queryString ? `log/${group}/export?${queryString}` : `log/${group}/export`
         const response = await apiClient.get<Blob>(url, {
             responseType: 'blob',
+            timeout: 0,
         })
 
         const filename = getFilenameFromDisposition(

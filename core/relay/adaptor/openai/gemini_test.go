@@ -973,3 +973,32 @@ func TestConvertGeminiRequest_ToolsWithRequiredField(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertOpenAIToGeminiResponse_ContentFilterMapsToSafety(t *testing.T) {
+	resp := openai.ConvertOpenAIToGeminiResponse(
+		&meta.Meta{ActualModel: "gpt-4o"},
+		&relaymodel.TextResponse{
+			Choices: []*relaymodel.TextResponseChoice{
+				{Index: 0, FinishReason: relaymodel.FinishReasonContentFilter},
+			},
+		},
+	)
+
+	require.Len(t, resp.Candidates, 1)
+	assert.Equal(t, relaymodel.GeminiFinishReasonSafety, resp.Candidates[0].FinishReason)
+}
+
+func TestConvertOpenAIStreamToGemini_ContentFilterMapsToSafety(t *testing.T) {
+	state := openai.NewGeminiStreamState()
+	chunk := &relaymodel.ChatCompletionsStreamResponse{
+		Choices: []*relaymodel.ChatCompletionsStreamResponseChoice{
+			{Index: 0, FinishReason: relaymodel.FinishReasonContentFilter},
+		},
+	}
+
+	resp := state.ConvertOpenAIStreamToGemini(&meta.Meta{ActualModel: "gpt-4o"}, chunk)
+
+	require.NotNil(t, resp)
+	require.Len(t, resp.Candidates, 1)
+	assert.Equal(t, relaymodel.GeminiFinishReasonSafety, resp.Candidates[0].FinishReason)
+}

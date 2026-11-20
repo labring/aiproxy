@@ -104,7 +104,6 @@ export const useUpdateTokenStatus = () => {
 // 更新Token（包括限额配置）
 export const useUpdateToken = () => {
     const queryClient = useQueryClient()
-    const [error, setError] = useState<ApiError | null>(null)
 
     const mutation = useMutation({
         mutationFn: ({ id, data }: { id: number, data: TokenUpdateRequest }) => {
@@ -114,11 +113,9 @@ export const useUpdateToken = () => {
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
             queryClient.invalidateQueries({ queryKey: ['groupTokens'] })
             queryClient.invalidateQueries({ queryKey: ['groups'] })
-            setError(null)
             toast.success('Token更新成功')
         },
         onError: (err: ApiError) => {
-            setError(err)
             toast.error(err.message || 'Token更新失败')
         },
     })
@@ -126,7 +123,6 @@ export const useUpdateToken = () => {
     return {
         updateToken: mutation.mutate,
         isLoading: mutation.isPending,
-        error,
-        clearError: () => setError(null),
+        error: mutation.error,
     }
 }

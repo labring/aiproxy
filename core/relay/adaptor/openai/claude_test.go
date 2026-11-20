@@ -60,6 +60,18 @@ func TestConvertClaudeToResponsesRequest(t *testing.T) {
 			validateContent:  true,
 		},
 		{
+			name: "claude request with string system prompt",
+			inputRequest: `{
+				"model": "gpt-5-codex",
+				"system": "You are a helpful assistant.",
+				"messages": [{"role": "user", "content": "Hello"}],
+				"max_tokens": 1024
+			}`,
+			expectedModel:    "gpt-5-codex",
+			expectedMessages: 2,
+			validateContent:  true,
+		},
+		{
 			name: "claude request with system and user messages",
 			inputRequest: `{
 				"model": "gpt-5-codex",
@@ -167,6 +179,65 @@ func TestConvertClaudeToResponsesRequest(t *testing.T) {
 			} else {
 				t.Errorf("Input is not an array, got type %T", responsesReq.Input)
 			}
+		})
+	}
+}
+
+func TestConvertClaudeRequestSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		system string
+		want   string
+	}{
+		{
+			name:   "string",
+			system: `"You are a helpful assistant."`,
+			want:   "You are a helpful assistant.",
+		},
+		{
+			name: "content blocks",
+			system: `[
+				{"type":"text","text":"First instruction"},
+				{"type":"text","text":"Second instruction"}
+			]`,
+			want: "First instruction\nSecond instruction",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages",
+				strings.NewReader(`{
+					"model":"claude",
+					"system":`+tt.system+`,
+					"messages":[{"role":"user","content":"Hello"}],
+					"max_tokens":128,
+					"stream":true
+				}`),
+			)
+			req.Header.Set("Content-Type", "application/json")
+
+			result, err := openai.ConvertClaudeRequest(
+				&meta.Meta{ActualModel: "upstream-model"},
+				req,
+			)
+			require.NoError(t, err)
+
+			var request relaymodel.GeneralOpenAIRequest
+
+			require.NoError(t, json.NewDecoder(result.Body).Decode(&request))
+			require.Len(t, request.Messages, 2)
+			assert.Equal(t, relaymodel.RoleSystem, request.Messages[0].Role)
+			assert.Equal(t, tt.want, request.Messages[0].Content)
+			assert.Equal(t, relaymodel.RoleUser, request.Messages[1].Role)
+			assert.Equal(t, "Hello", request.Messages[1].Content)
+			assert.Equal(t, "upstream-model", request.Model)
+			assert.Equal(t, 128, request.MaxTokens)
+			assert.True(t, request.Stream)
 		})
 	}
 }
@@ -693,4 +764,96 @@ func TestConvertResponsesToClaudeStreamResponseReturnsErrorBeforeRealOutputAfter
 	assert.Equal(t, http.StatusBadGateway, err.StatusCode())
 	assert.Equal(t, "resp_123", result.UpstreamID)
 	assert.Empty(t, w.Body.String())
+}
+
+func runResponsesToClaude(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	httpResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
+
+	_, err := openai.ConvertResponsesToClaudeResponse(&meta.Meta{
+		OriginModel: "client-claude",
+		ActualModel: "gpt-5-codex",
+	}, c, httpResp)
+	require.Nil(t, err)
+
+	return w
+}
+
+func TestConvertResponsesToClaudeResponseFunctionCall(t *testing.T) {
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_1","object":"response","status":"completed","model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Content, 1)
+	assert.Equal(t, "tool_use", resp.Content[0].Type)
+	assert.Equal(t, "call_1", resp.Content[0].ID)
+	assert.Equal(t, "get_weather", resp.Content[0].Name)
+	assert.Equal(t, map[string]any{"city": "Paris"}, resp.Content[0].Input)
+	assert.Equal(t, "tool_use", resp.StopReason)
+}
+
+func TestConvertResponsesToClaudeResponseIncompleteStopReason(t *testing.T) {
+	// A truncated response containing a function_call still reports max_tokens:
+	// a cut-off tool call must not look like a complete, executable invocation.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_2","object":"response","status":"incomplete","model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"ci"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "max_tokens", resp.StopReason)
+}
+
+func TestConvertResponsesToClaudeStreamResponseToolUseStopReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stream := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_3","object":"response","status":"in_progress","model":"gpt-5","output":[]}}`,
+		"",
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":""}}`,
+		"",
+		`data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"city\":\"Paris\"}"}`,
+		"",
+		`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}`,
+		"",
+		`data: {"type":"response.completed","response":{"id":"resp_3","object":"response","status":"completed","model":"gpt-5","output":[{"id":"fc_1","type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+		"",
+	}, "\n")
+
+	httpResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(stream)),
+		Header:     make(http.Header),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
+
+	_, err := openai.ConvertResponsesToClaudeStreamResponse(
+		&meta.Meta{ActualModel: "gpt-5"},
+		c,
+		httpResp,
+	)
+	require.Nil(t, err)
+	assert.Contains(t, w.Body.String(), `"stop_reason":"tool_use"`)
+	assert.NotContains(t, w.Body.String(), `"stop_reason":"end_turn"`)
 }

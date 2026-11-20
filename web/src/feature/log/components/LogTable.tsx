@@ -25,7 +25,7 @@ const NON_EXPAND_COLUMNS = new Set(['details', 'group', 'token_name', 'model'])
 
 interface LogTableProps {
     data: LogRecord[]
-    total: number
+    total: number | undefined
     loading?: boolean
     page: number
     pageSize: number
@@ -259,7 +259,6 @@ export function LogTable({
         columns,
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
-        pageCount: Math.ceil(total / pageSize),
     })
 
     return (

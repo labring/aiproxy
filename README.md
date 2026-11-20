@@ -23,6 +23,7 @@ AI Proxy is a powerful, production-ready AI gateway that provides intelligent re
 - **Smart Retry Logic**: Intelligent retry strategies with automatic error recovery
 - **Priority-based Channel Selection**: Route requests based on channel priority and error rates
 - **Load Balancing**: Efficiently distribute traffic across multiple AI providers
+- **OpenAI Decisions**: Native `/v1/decisions` relay for classification, predicates, and scoring, including conversation history and prompt caching. See [setup and examples](docs/DECISIONS.md).
 - **Protocol Conversion**: Seamless protocol conversion between OpenAI Chat Completions, Claude Messages, Gemini, and OpenAI Responses API
   - Chat/Claude/Gemini → Responses API: Use responses-only models with any protocol
 

@@ -119,11 +119,18 @@ func (u ChatUsage) ToResponseUsage() ResponseUsage {
 	return usage
 }
 
-// ToGeminiUsage converts ChatUsage to GeminiUsageMetadata (Google Gemini format)
+// ToGeminiUsage converts ChatUsage to GeminiUsageMetadata (Google Gemini format).
+// OpenAI completion_tokens include reasoning_tokens. Gemini candidatesTokenCount
+// does not include thoughtsTokenCount, and ToUsage adds them back together.
 func (u ChatUsage) ToGeminiUsage() GeminiUsageMetadata {
+	var reasoningTokens int64
+	if u.CompletionTokensDetails != nil {
+		reasoningTokens = u.CompletionTokensDetails.ReasoningTokens
+	}
+
 	usage := GeminiUsageMetadata{
 		PromptTokenCount:     u.PromptTokens,
-		CandidatesTokenCount: u.CompletionTokens,
+		CandidatesTokenCount: max(0, u.CompletionTokens-reasoningTokens),
 		TotalTokenCount:      u.TotalTokens,
 	}
 
@@ -131,8 +138,8 @@ func (u ChatUsage) ToGeminiUsage() GeminiUsageMetadata {
 		usage.CachedContentTokenCount = u.PromptTokensDetails.CachedTokens
 	}
 
-	if u.CompletionTokensDetails != nil && u.CompletionTokensDetails.ReasoningTokens > 0 {
-		usage.ThoughtsTokenCount = u.CompletionTokensDetails.ReasoningTokens
+	if reasoningTokens > 0 {
+		usage.ThoughtsTokenCount = reasoningTokens
 	}
 
 	return usage

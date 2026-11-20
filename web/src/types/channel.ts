@@ -36,6 +36,7 @@ export interface ChannelConfigSchema {
     description?: string
     enum?: string[]
     properties?: Record<string, ChannelConfigSchema>
+    additionalProperties?: ChannelConfigSchema
     items?: ChannelConfigSchema
     required?: string[]
     default?: unknown

@@ -103,7 +103,7 @@ export default function LogPage() {
             <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 sm:px-6">
                 <LogTable
                     data={logData?.logs || []}
-                    total={logData?.total || 0}
+                    total={logData?.total}
                     loading={isLoading}
                     page={filters.page || 1}
                     pageSize={filters.per_page || 10}

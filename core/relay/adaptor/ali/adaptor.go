@@ -128,7 +128,9 @@ func (a *Adaptor) GetRequestURL(
 			Method: http.MethodPost,
 			URL:    url,
 		}, nil
-	case mode.AudioSpeech, mode.AudioTranscription:
+	case mode.AudioTranscription:
+		return sttRequestURL(meta)
+	case mode.AudioSpeech:
 		url, err := url.JoinPath(u, "/api-ws/v1/inference")
 		if err != nil {
 			return adaptor.RequestURL{}, err
@@ -283,7 +285,7 @@ func (a *Adaptor) ConvertRequest(
 	case mode.AudioSpeech:
 		return ConvertTTSRequest(meta, req)
 	case mode.AudioTranscription:
-		return ConvertSTTRequest(meta, req)
+		return convertSTTRequest(meta, req)
 	case mode.AliVideo:
 		return ConvertAliNativeVideoRequest(meta, req)
 	case mode.AliVideoTasks:
@@ -333,7 +335,7 @@ func (a *Adaptor) DoRequest(
 	case mode.AudioSpeech:
 		return TTSDoRequest(meta, req)
 	case mode.AudioTranscription:
-		return STTDoRequest(meta, req)
+		return sttDoRequest(meta, req)
 	default:
 		return utils.DoRequestWithMeta(req, meta)
 	}
@@ -379,7 +381,7 @@ func (a *Adaptor) DoResponse(
 	case mode.AudioSpeech:
 		return TTSDoResponse(meta, c, resp)
 	case mode.AudioTranscription:
-		return STTDoResponse(meta, c, resp)
+		return sttResponse(meta, c, resp)
 	case mode.Anthropic:
 		if utils.IsStreamResponse(resp) {
 			return anthropic.StreamHandler(meta, c, resp)
@@ -420,8 +422,8 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		Readme:       "OpenAI compatibility\nNative Responses API support\nNetwork search metering support\nImage generation/edit support: https://help.aliyun.com/zh/model-studio/qwen-image-api and https://help.aliyun.com/zh/model-studio/qwen-image-edit-api\nVideo generation support: DashScope /api/v1/services/aigc/video-generation/video-synthesis\nRerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api\nSTT support: https://help.aliyun.com/zh/model-studio/sambert-speech-synthesis/\nAnthropic support: /api/v2/apps/claude-code-proxy\nGemini support",
-		ConfigSchema: openai.ConfigSchema(),
+		Readme:       "OpenAI compatibility\nNative Responses API support\nNetwork search metering support\nImage generation/edit support: https://help.aliyun.com/zh/model-studio/qwen-image-api and https://help.aliyun.com/zh/model-studio/qwen-image-edit-api\nVideo generation support: DashScope /api/v1/services/aigc/video-generation/video-synthesis\nRerank support: https://help.aliyun.com/zh/model-studio/text-rerank-api\nSTT: Whisper-compatible uploads adapted to DashScope realtime or Qwen3-ASR chat audio; enable FFMPEG_ENABLED for browser audio. See docs/stt.md.\nAnthropic support: /api/v2/apps/claude-code-proxy\nGemini support",
+		ConfigSchema: sttConfigSchema(),
 		Models:       ModelList,
 	}
 }

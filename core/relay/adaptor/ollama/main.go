@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -59,13 +60,13 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 
 		var (
 			imageUrls   []string
-			contentText string
+			contentText strings.Builder
 		)
 
 		for _, part := range openaiContent {
 			switch part.Type {
 			case relaymodel.ContentTypeText:
-				contentText = part.Text
+				contentText.WriteString(part.Text)
 			case relaymodel.ContentTypeImageURL:
 				_, data, err := image.GetImageFromURL(req.Context(), part.ImageURL.URL)
 				if err != nil {
@@ -78,7 +79,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 
 		m := Message{
 			Role:       message.Role,
-			Content:    contentText,
+			Content:    contentText.String(),
 			Images:     imageUrls,
 			ToolCallID: message.ToolCallID,
 			ToolCalls:  make([]*Tool, 0, len(message.ToolCalls)),

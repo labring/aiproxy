@@ -10164,7 +10164,9 @@ const docTemplate = `{
                             56,
                             57,
                             58,
-                            59
+                            59,
+                            60,
+                            61
                         ],
                         "type": "integer",
                         "description": "Channel type",
@@ -13580,6 +13582,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/decisions": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Evaluate text, images, JSON, or conversation history with predicate, choice, and score questions using the native OpenAI Decisions API.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Create decision",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.DecisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.DecisionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.OpenAIErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/embeddings": {
             "post": {
                 "security": [
@@ -14460,6 +14507,51 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/model.InputItemList"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/systemone": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Evaluate state with noul, choice, score and box questions using the native TypeSafe SystemOne API.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relay"
+                ],
+                "summary": "Ask SystemOne questions",
+                "parameters": [
+                    {
+                        "description": "Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.SystemOneRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.SystemOneResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.OpenAIErrorResponse"
                         }
                     }
                 }
@@ -17841,7 +17933,9 @@ const docTemplate = `{
                 37,
                 38,
                 39,
-                40
+                40,
+                41,
+                42
             ],
             "x-enum-varnames": [
                 "Unknown",
@@ -17884,7 +17978,9 @@ const docTemplate = `{
                 "DoubaoVideoTasks",
                 "DoubaoVideoTasksDelete",
                 "ResponsesCompact",
-                "AlphaSearch"
+                "AlphaSearch",
+                "Decisions",
+                "SystemOne"
             ]
         },
         "model.Amount": {
@@ -18191,7 +18287,9 @@ const docTemplate = `{
                 56,
                 57,
                 58,
-                59
+                59,
+                60,
+                61
             ],
             "x-enum-varnames": [
                 "ChannelTypeOpenAI",
@@ -18240,7 +18338,9 @@ const docTemplate = `{
                 "ChannelTypeQwenCloud",
                 "ChannelTypeAIProxyHZH",
                 "ChannelTypeAIProxyUSW1",
-                "ChannelTypeTokenDance"
+                "ChannelTypeTokenDance",
+                "ChannelTypeVoyage",
+                "ChannelTypeTypeSafeAI"
             ]
         },
         "model.ChartData": {
@@ -18756,6 +18856,221 @@ const docTemplate = `{
                     }
                 },
                 "tpm": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionAnswer": {
+            "type": "object",
+            "properties": {
+                "choice": {},
+                "confidence": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "probabilities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionProbability"
+                    }
+                },
+                "probability": {
+                    "type": "number"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "predicate",
+                        "choice",
+                        "score",
+                        "refusal"
+                    ]
+                }
+            }
+        },
+        "model.DecisionChoice": {
+            "type": "object",
+            "required": [
+                "value"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "value": {}
+            }
+        },
+        "model.DecisionInputTokensDetails": {
+            "type": "object",
+            "properties": {
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionOutputTokensDetails": {
+            "type": "object",
+            "properties": {
+                "reasoning_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.DecisionProbability": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "probability": {
+                    "type": "number"
+                },
+                "value": {}
+            }
+        },
+        "model.DecisionPromptCacheOptions": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "implicit",
+                        "explicit"
+                    ]
+                },
+                "ttl": {
+                    "type": "string",
+                    "enum": [
+                        "30m"
+                    ]
+                }
+            }
+        },
+        "model.DecisionQuestion": {
+            "type": "object",
+            "required": [
+                "instructions",
+                "type"
+            ],
+            "properties": {
+                "choices": {
+                    "type": "array",
+                    "maxItems": 255,
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionChoice"
+                    }
+                },
+                "instructions": {},
+                "levels": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionScoreLevel"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "predicate",
+                        "choice",
+                        "score"
+                    ]
+                }
+            }
+        },
+        "model.DecisionRequest": {
+            "type": "object",
+            "required": [
+                "input",
+                "model",
+                "questions"
+            ],
+            "properties": {
+                "input": {
+                    "description": "Text or an ordered array of messages, function/custom tool calls and outputs."
+                },
+                "model": {
+                    "type": "string"
+                },
+                "prompt_cache_key": {
+                    "type": "string"
+                },
+                "prompt_cache_options": {
+                    "$ref": "#/definitions/model.DecisionPromptCacheOptions"
+                },
+                "questions": {
+                    "type": "array",
+                    "maxItems": 400,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionQuestion"
+                    }
+                },
+                "safety_identifier": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DecisionResponse": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.DecisionAnswer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/model.DecisionUsage"
+                }
+            }
+        },
+        "model.DecisionScoreLevel": {
+            "type": "object",
+            "required": [
+                "label"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DecisionUsage": {
+            "type": "object",
+            "properties": {
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "input_tokens_details": {
+                    "$ref": "#/definitions/model.DecisionInputTokensDetails"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens_details": {
+                    "$ref": "#/definitions/model.DecisionOutputTokensDetails"
+                },
+                "total_tokens": {
                     "type": "integer"
                 }
             }
@@ -20442,7 +20757,9 @@ const docTemplate = `{
                 "xai",
                 "doc2x",
                 "jina",
-                "antgroup"
+                "voyage",
+                "antgroup",
+                "typesafeai"
             ],
             "x-enum-varnames": [
                 "ModelOwnerOpenAI",
@@ -20477,8 +20794,33 @@ const docTemplate = `{
                 "ModelOwnerXAI",
                 "ModelOwnerDoc2x",
                 "ModelOwnerJina",
-                "ModelOwnerAntGroup"
+                "ModelOwnerVoyage",
+                "ModelOwnerAntGroup",
+                "ModelOwnerTypeSafeAI"
             ]
+        },
+        "model.OpenAIError": {
+            "type": "object",
+            "properties": {
+                "code": {},
+                "message": {
+                    "type": "string"
+                },
+                "param": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OpenAIErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/model.OpenAIError"
+                }
+            }
         },
         "model.Option": {
             "type": "object",
@@ -21653,6 +21995,107 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "web_search_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.SystemOneAnswer": {
+            "type": "object",
+            "properties": {
+                "box": {},
+                "choice": {},
+                "confidence": {
+                    "type": "number"
+                },
+                "legend": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "noul": {
+                    "type": "number"
+                },
+                "probabilities": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "score": {
+                    "type": "number"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "noul",
+                        "choice",
+                        "score",
+                        "box"
+                    ]
+                }
+            }
+        },
+        "model.SystemOneQuestion": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "criteria": {},
+                "instructions": {},
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.SystemOneRequest": {
+            "type": "object",
+            "required": [
+                "questions",
+                "state"
+            ],
+            "properties": {
+                "model": {
+                    "type": "string"
+                },
+                "questions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/model.SystemOneQuestion"
+                    }
+                },
+                "state": {}
+            }
+        },
+        "model.SystemOneResponse": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/model.SystemOneAnswer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/model.SystemOneUsage"
+                }
+            }
+        },
+        "model.SystemOneUsage": {
+            "type": "object",
+            "properties": {
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "total_tokens": {
                     "type": "integer"
                 }
             }

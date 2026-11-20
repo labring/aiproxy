@@ -42,7 +42,7 @@ func validateImageGenerationCount(n, maxCount int) error {
 }
 
 func getImagesRequestN(c *gin.Context) (int, bool, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return 0, false, err
 	}

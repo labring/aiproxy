@@ -469,6 +469,11 @@ func CheckRelayMode(requestMode, modelMode mode.Mode) bool {
 		return containsMode(mode.ChatCompletions, mode.Responses, mode.ResponsesCompact)
 	case mode.AlphaSearch:
 		return containsMode(mode.ChatCompletions, mode.Responses, mode.AlphaSearch)
+	case mode.Decisions:
+		// Existing LLM configs can use the native endpoint when their channel supports it.
+		return containsMode(mode.ChatCompletions, mode.Responses, mode.Decisions)
+	case mode.SystemOne:
+		return containsMode(mode.ChatCompletions, mode.Responses, mode.SystemOne)
 	case mode.ResponsesGet, mode.ResponsesDelete, mode.ResponsesCancel, mode.ResponsesInputItems:
 		return containsMode(
 			mode.ChatCompletions,
@@ -829,7 +834,7 @@ func getRequestBodyNode(c *gin.Context) (*ast.Node, error) {
 		return node, nil
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return nil, err
 	}
@@ -1347,7 +1352,7 @@ func GetPreviousResponseIDFromJSON(body []byte) (string, error) {
 
 func getPromptCacheKey(c *gin.Context, m mode.Mode) (string, error) {
 	switch m {
-	case mode.Responses, mode.ResponsesCompact, mode.ChatCompletions:
+	case mode.Responses, mode.ResponsesCompact, mode.ChatCompletions, mode.Decisions:
 	default:
 		return "", nil
 	}

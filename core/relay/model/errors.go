@@ -79,6 +79,10 @@ func WrapperErrorWithMessage(
 		return NewOpenAIVideoError(statusCode, OpenAIVideoError{
 			Detail: message,
 		})
+	case mode.SystemOne:
+		return NewSystemOneError(statusCode, SystemOneError{
+			Detail: message,
+		})
 	case mode.Gemini,
 		mode.GeminiFiles,
 		mode.GeminiVideo,

@@ -933,7 +933,7 @@ func getInitialChannel(c *gin.Context, modelName string, m mode.Mode) (*initialC
 
 func supportsPromptCacheKeyMode(m mode.Mode) bool {
 	switch m {
-	case mode.Responses, mode.ResponsesCompact, mode.ChatCompletions:
+	case mode.Responses, mode.ResponsesCompact, mode.ChatCompletions, mode.Decisions:
 		return true
 	default:
 		return false
@@ -944,6 +944,7 @@ func supportsCacheFollowMode(m mode.Mode) bool {
 	switch m {
 	case mode.Responses,
 		mode.ResponsesCompact,
+		mode.Decisions,
 		mode.ChatCompletions,
 		mode.Gemini,
 		mode.GeminiVideo,

@@ -19,7 +19,7 @@ func ConvertDoubaoNativeVideoRequest(
 	meta *meta.Meta,
 	req *http.Request,
 ) (adaptor.ConvertResult, error) {
-	body, err := common.UnmarshalRequest2NodeReusable(req)
+	body, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

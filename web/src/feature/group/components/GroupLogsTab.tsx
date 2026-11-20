@@ -76,7 +76,7 @@ export function GroupLogsTab({ groupId, initialTokenName }: GroupLogsTabProps) {
             <div className="flex-1 min-h-0">
                 <LogTable
                     data={data?.logs || []}
-                    total={data?.total || 0}
+                    total={data?.total}
                     loading={isLoading}
                     page={filters.page || 1}
                     pageSize={filters.per_page || 10}

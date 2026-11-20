@@ -776,6 +776,7 @@ export function ChannelTable() {
         data: channels,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
     })
 
     return (
@@ -929,7 +930,7 @@ export function ChannelTable() {
                     <ServerPagination
                         page={page}
                         pageSize={pageSize}
-                        total={total}
+                        total={data?.total}
                         onPageChange={setPage}
                         onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                     />

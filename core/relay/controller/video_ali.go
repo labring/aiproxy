@@ -49,7 +49,7 @@ func GetAliVideoRequestUsage(c *gin.Context, mc model.ModelConfig) (RequestUsage
 }
 
 func getAliVideoRequestUsageParams(c *gin.Context) (aliVideoRequestUsageParams, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return aliVideoRequestUsageParams{}, NewBadRequestParamError(err.Error())
 	}

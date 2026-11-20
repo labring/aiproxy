@@ -76,7 +76,7 @@ func validateGeminiNativeVideoResolutionFormat(
 }
 
 func getGeminiVideoRequestUsageParams(c *gin.Context) (geminiVideoRequestUsageParams, error) {
-	node, err := common.UnmarshalRequest2NodeReusable(c.Request)
+	node, err := common.UnmarshalRequest2ValidatedNode(c.Request)
 	if err != nil {
 		return geminiVideoRequestUsageParams{}, NewBadRequestParamError(err.Error())
 	}

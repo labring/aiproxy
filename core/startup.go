@@ -102,8 +102,35 @@ func startSyncServices(ctx context.Context, wg *sync.WaitGroup) {
 func setupHTTPServer(listen string) (*http.Server, *gin.Engine) {
 	server := gin.New()
 
+	switch {
+	case config.TrustedProxies == "*":
+		log.Warn(
+			"TRUSTED_PROXIES=* trusts forwarding headers from any address, " +
+				"so X-Forwarded-For can be spoofed",
+		)
+	case config.TrustedProxies != "":
+		proxies := strings.Split(config.TrustedProxies, ",")
+		for i := range proxies {
+			proxies[i] = strings.TrimSpace(proxies[i])
+		}
+
+		if err := server.SetTrustedProxies(proxies); err != nil {
+			panic(fmt.Sprintf("invalid TRUSTED_PROXIES %q: %v", config.TrustedProxies, err))
+		}
+	default:
+		if err := server.SetTrustedProxies(config.DefaultTrustedProxies); err != nil {
+			panic(fmt.Sprintf("invalid default trusted proxies: %v", err))
+		}
+
+		log.Info(
+			"TRUSTED_PROXIES is not set: trusting forwarding headers only from " +
+				"loopback and private ranges; set it to the gateway CIDRs for exact control",
+		)
+	}
+
 	server.Use(
 		middleware.GinRecoveryHandler,
+		middleware.GuardForwardedHeaders(),
 		middleware.NewLog(log.StandardLogger()),
 		middleware.RequestIDMiddleware,
 		middleware.CORS(),

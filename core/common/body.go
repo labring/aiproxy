@@ -279,13 +279,29 @@ func UnmarshalRequestReusable(req *http.Request, v any) error {
 	return sonic.Unmarshal(requestBody, &v)
 }
 
-func UnmarshalRequest2NodeReusable(req *http.Request, path ...any) (ast.Node, error) {
+// UnmarshalRequest2ValidatedNode validates the whole body before returning an
+// editable AST node: sonic's Get silently normalizes malformed documents, and
+// Set would turn a null root into an object.
+func UnmarshalRequest2ValidatedNode(req *http.Request) (ast.Node, error) {
 	requestBody, err := GetRequestBodyReusable(req)
 	if err != nil {
 		return ast.Node{}, err
 	}
 
-	return GetJSONNodeNoCopy(requestBody, path...)
+	if !sonic.Valid(requestBody) {
+		return ast.Node{}, errors.New("request body is not valid JSON")
+	}
+
+	node, err := GetJSONNodeNoCopy(requestBody)
+	if err != nil {
+		return ast.Node{}, err
+	}
+
+	if node.TypeSafe() == ast.V_NULL {
+		return ast.Node{}, errors.New("request body must be a JSON object")
+	}
+
+	return node, nil
 }
 
 func GetJSONNodeNoCopy(data []byte, path ...any) (ast.Node, error) {

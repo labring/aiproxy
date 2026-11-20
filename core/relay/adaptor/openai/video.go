@@ -63,7 +63,7 @@ func convertOpenAIVideoRequest(
 		return convertMultipartOpenAIVideoRequest(meta, req)
 	}
 
-	node, err := common.UnmarshalRequest2NodeReusable(req)
+	node, err := common.UnmarshalRequest2ValidatedNode(req)
 	if err != nil {
 		return adaptor.ConvertResult{}, err
 	}

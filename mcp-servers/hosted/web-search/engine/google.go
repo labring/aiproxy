@@ -13,19 +13,29 @@ import (
 	"github.com/bytedance/sonic"
 )
 
+// DefaultGoogleBaseURL is the Custom Search JSON API endpoint used when no base URL is set
+const DefaultGoogleBaseURL = "https://www.googleapis.com/customsearch/v1"
+
 // https://developers.google.com/custom-search/v1/overview?hl=zh-cn
 // https://programmablesearchengine.google.com/controlpanel/create
 // https://zhuanlan.zhihu.com/p/174666017
 type GoogleEngine struct {
-	apiKey string
-	cx     string
-	client *http.Client
+	apiKey  string
+	cx      string
+	baseURL string
+	client  *http.Client
 }
 
-func NewGoogleEngine(apiKey, cx string) *GoogleEngine {
+// NewGoogleEngine creates a Google engine; an empty baseURL uses DefaultGoogleBaseURL
+func NewGoogleEngine(apiKey, cx, baseURL string) *GoogleEngine {
+	if baseURL == "" {
+		baseURL = DefaultGoogleBaseURL
+	}
+
 	return &GoogleEngine{
-		apiKey: apiKey,
-		cx:     cx,
+		apiKey:  apiKey,
+		cx:      cx,
+		baseURL: strings.TrimRight(baseURL, "/"),
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -60,7 +70,7 @@ func (g *GoogleEngine) Search(ctx context.Context, query SearchQuery) ([]SearchR
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		"https://www.googleapis.com/customsearch/v1?"+querys.Encode(),
+		g.baseURL+"?"+querys.Encode(),
 		nil,
 	)
 	if err != nil {

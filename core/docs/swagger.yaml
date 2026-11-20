@@ -1682,6 +1682,8 @@ definitions:
     - 38
     - 39
     - 40
+    - 41
+    - 42
     type: integer
     x-enum-varnames:
     - Unknown
@@ -1725,6 +1727,8 @@ definitions:
     - DoubaoVideoTasksDelete
     - ResponsesCompact
     - AlphaSearch
+    - Decisions
+    - SystemOne
   model.Amount:
     properties:
       audio_input_amount:
@@ -1945,6 +1949,8 @@ definitions:
     - 57
     - 58
     - 59
+    - 60
+    - 61
     type: integer
     x-enum-varnames:
     - ChannelTypeOpenAI
@@ -1994,6 +2000,8 @@ definitions:
     - ChannelTypeAIProxyHZH
     - ChannelTypeAIProxyUSW1
     - ChannelTypeTokenDance
+    - ChannelTypeVoyage
+    - ChannelTypeTypeSafeAI
   model.ChartData:
     properties:
       audio_input_amount:
@@ -2337,6 +2345,153 @@ definitions:
           $ref: '#/definitions/model.TimeSummaryDataV2'
         type: array
       tpm:
+        type: integer
+    type: object
+  model.DecisionAnswer:
+    properties:
+      choice: {}
+      confidence:
+        type: number
+      name:
+        type: string
+      probabilities:
+        items:
+          $ref: '#/definitions/model.DecisionProbability'
+        type: array
+      probability:
+        type: number
+      score:
+        type: number
+      type:
+        enum:
+        - predicate
+        - choice
+        - score
+        - refusal
+        type: string
+    type: object
+  model.DecisionChoice:
+    properties:
+      description:
+        type: string
+      value: {}
+    required:
+    - value
+    type: object
+  model.DecisionInputTokensDetails:
+    properties:
+      cache_write_tokens:
+        type: integer
+      cached_tokens:
+        type: integer
+    type: object
+  model.DecisionOutputTokensDetails:
+    properties:
+      reasoning_tokens:
+        type: integer
+    type: object
+  model.DecisionProbability:
+    properties:
+      label:
+        type: string
+      probability:
+        type: number
+      value: {}
+    type: object
+  model.DecisionPromptCacheOptions:
+    properties:
+      mode:
+        enum:
+        - implicit
+        - explicit
+        type: string
+      ttl:
+        enum:
+        - 30m
+        type: string
+    type: object
+  model.DecisionQuestion:
+    properties:
+      choices:
+        items:
+          $ref: '#/definitions/model.DecisionChoice'
+        maxItems: 255
+        minItems: 2
+        type: array
+      instructions: {}
+      levels:
+        items:
+          $ref: '#/definitions/model.DecisionScoreLevel'
+        maxItems: 10
+        minItems: 2
+        type: array
+      name:
+        type: string
+      type:
+        enum:
+        - predicate
+        - choice
+        - score
+        type: string
+    required:
+    - instructions
+    - type
+    type: object
+  model.DecisionRequest:
+    properties:
+      input:
+        description: Text or an ordered array of messages, function/custom tool calls
+          and outputs.
+      model:
+        type: string
+      prompt_cache_key:
+        type: string
+      prompt_cache_options:
+        $ref: '#/definitions/model.DecisionPromptCacheOptions'
+      questions:
+        items:
+          $ref: '#/definitions/model.DecisionQuestion'
+        maxItems: 400
+        minItems: 1
+        type: array
+      safety_identifier:
+        type: string
+    required:
+    - input
+    - model
+    - questions
+    type: object
+  model.DecisionResponse:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/model.DecisionAnswer'
+        type: array
+      model:
+        type: string
+      usage:
+        $ref: '#/definitions/model.DecisionUsage'
+    type: object
+  model.DecisionScoreLevel:
+    properties:
+      description:
+        type: string
+      label:
+        type: string
+    required:
+    - label
+    type: object
+  model.DecisionUsage:
+    properties:
+      input_tokens:
+        type: integer
+      input_tokens_details:
+        $ref: '#/definitions/model.DecisionInputTokensDetails'
+      output_tokens:
+        type: integer
+      output_tokens_details:
+        $ref: '#/definitions/model.DecisionOutputTokensDetails'
+      total_tokens:
         type: integer
     type: object
   model.Document:
@@ -3475,7 +3630,9 @@ definitions:
     - xai
     - doc2x
     - jina
+    - voyage
     - antgroup
+    - typesafeai
     type: string
     x-enum-varnames:
     - ModelOwnerOpenAI
@@ -3510,7 +3667,24 @@ definitions:
     - ModelOwnerXAI
     - ModelOwnerDoc2x
     - ModelOwnerJina
+    - ModelOwnerVoyage
     - ModelOwnerAntGroup
+    - ModelOwnerTypeSafeAI
+  model.OpenAIError:
+    properties:
+      code: {}
+      message:
+        type: string
+      param:
+        type: string
+      type:
+        type: string
+    type: object
+  model.OpenAIErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/model.OpenAIError'
+    type: object
   model.Option:
     properties:
       key:
@@ -4296,6 +4470,75 @@ definitions:
       web_search_amount:
         type: number
       web_search_count:
+        type: integer
+    type: object
+  model.SystemOneAnswer:
+    properties:
+      box: {}
+      choice: {}
+      confidence:
+        type: number
+      legend:
+        additionalProperties:
+          type: string
+        type: object
+      noul:
+        type: number
+      probabilities:
+        additionalProperties:
+          format: float64
+          type: number
+        type: object
+      score:
+        type: number
+      type:
+        enum:
+        - noul
+        - choice
+        - score
+        - box
+        type: string
+    type: object
+  model.SystemOneQuestion:
+    properties:
+      criteria: {}
+      instructions: {}
+      type:
+        type: string
+    required:
+    - type
+    type: object
+  model.SystemOneRequest:
+    properties:
+      model:
+        type: string
+      questions:
+        additionalProperties:
+          $ref: '#/definitions/model.SystemOneQuestion'
+        type: object
+      state: {}
+    required:
+    - questions
+    - state
+    type: object
+  model.SystemOneResponse:
+    properties:
+      answers:
+        additionalProperties:
+          $ref: '#/definitions/model.SystemOneAnswer'
+        type: object
+      model:
+        type: string
+      usage:
+        $ref: '#/definitions/model.SystemOneUsage'
+    type: object
+  model.SystemOneUsage:
+    properties:
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      total_tokens:
         type: integer
     type: object
   model.TestConfig:
@@ -11100,6 +11343,8 @@ paths:
         - 57
         - 58
         - 59
+        - 60
+        - 61
         in: path
         name: type
         required: true
@@ -13216,6 +13461,35 @@ paths:
       summary: Get usage
       tags:
       - relay
+  /v1/decisions:
+    post:
+      consumes:
+      - application/json
+      description: Evaluate text, images, JSON, or conversation history with predicate,
+        choice, and score questions using the native OpenAI Decisions API.
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.DecisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.DecisionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.OpenAIErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create decision
+      tags:
+      - relay
   /v1/embeddings:
     post:
       description: Embeddings
@@ -13808,6 +14082,35 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get response input items
+      tags:
+      - relay
+  /v1/systemone:
+    post:
+      consumes:
+      - application/json
+      description: Evaluate state with noul, choice, score and box questions using
+        the native TypeSafe SystemOne API.
+      parameters:
+      - description: Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SystemOneRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SystemOneResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.OpenAIErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Ask SystemOne questions
       tags:
       - relay
   /v1/video/generations/{id}/content/video:

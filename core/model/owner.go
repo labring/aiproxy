@@ -35,5 +35,7 @@ const (
 	ModelOwnerXAI         ModelOwner = "xai"
 	ModelOwnerDoc2x       ModelOwner = "doc2x"
 	ModelOwnerJina        ModelOwner = "jina"
+	ModelOwnerVoyage      ModelOwner = "voyage"
 	ModelOwnerAntGroup    ModelOwner = "antgroup"
+	ModelOwnerTypeSafeAI  ModelOwner = "typesafeai"
 )
