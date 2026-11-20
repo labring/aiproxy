@@ -30,14 +30,23 @@ func (t *TokenResponse) MarshalJSON() ([]byte, error) {
 		accessedAt = t.AccessedAt.UnixMilli()
 	}
 
+	// plain tokens derive the preview from the raw key so every response
+	// carries the same recognizable fragment
+	keyPreview := t.KeyPreview
+	if keyPreview == "" && t.Key != "" {
+		keyPreview = model.TokenKeyPreview(t.Key)
+	}
+
 	return sonic.Marshal(&struct {
 		*Alias
-		CreatedAt            int64 `json:"created_at"`
-		ExpiredAt            int64 `json:"expired_at"`
-		PeriodLastUpdateTime int64 `json:"period_last_update_time"`
-		AccessedAt           int64 `json:"accessed_at"`
+		KeyPreview           string `json:"key_preview"`
+		CreatedAt            int64  `json:"created_at"`
+		ExpiredAt            int64  `json:"expired_at"`
+		PeriodLastUpdateTime int64  `json:"period_last_update_time"`
+		AccessedAt           int64  `json:"accessed_at"`
 	}{
 		Alias:                (*Alias)(t),
+		KeyPreview:           keyPreview,
 		CreatedAt:            t.CreatedAt.UnixMilli(),
 		ExpiredAt:            t.ExpiredAt.UnixMilli(),
 		PeriodLastUpdateTime: t.PeriodLastUpdateTime.UnixMilli(),

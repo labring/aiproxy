@@ -209,6 +209,38 @@ func extractTokenKey(t *testing.T, recorder *httptest.ResponseRecorder) string {
 	return response.Data.Key
 }
 
+// TestPlainTokenResponseIncludesPreview: plain tokens derive key_preview
+// from the raw key so every response exposes the same fragment.
+func TestPlainTokenResponseIncludesPreview(t *testing.T) {
+	withTokenControllerDB(t)
+
+	recorder, c := tokenJSONRequest(
+		t,
+		http.MethodPost,
+		"/api/token/preview-group",
+		"preview-group",
+		"",
+		AddTokenRequest{Name: "plain-preview"},
+	)
+	AddGroupToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Data struct {
+			Key        string `json:"key"`
+			KeyPreview string `json:"key_preview"`
+		} `json:"data"`
+	}
+	require.NoError(t, sonic.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Key, 48)
+	require.Equal(t, model.TokenKeyPreview(response.Data.Key), response.Data.KeyPreview)
+
+	listRecorder, listC := tokenJSONRequest(t, http.MethodGet, "/api/tokens/", "", "", nil)
+	GetTokens(listC)
+	require.Equal(t, http.StatusOK, listRecorder.Code)
+	require.Contains(t, listRecorder.Body.String(), model.TokenKeyPreview(response.Data.Key))
+}
+
 func TestRotateTokenHandler(t *testing.T) {
 	withTokenControllerDB(t)
 
