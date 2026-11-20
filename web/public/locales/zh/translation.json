@@ -285,6 +285,13 @@
       "description": "重命名后可继续使用原密钥。",
       "nameTooLong": "名称最多支持 32 字节，中文通常每字占 3 字节。"
     },
+    "ipLimit": "IP 限制",
+    "ipLimitHelp": "限制密钥仅允许指定 IP 段（CIDR）访问，多个用逗号分隔，留空不限制。",
+    "ipLimitDialog": {
+      "description": "限制密钥仅允许指定 IP 段（CIDR）访问，留空表示不限制。",
+      "placeholder": "例如：192.168.1.0/24, 2001:db8::/32",
+      "invalid": "无效的 CIDR：{{invalid}}"
+    },
     "name": "名称",
     "remark": "备注",
     "key": "API Key",

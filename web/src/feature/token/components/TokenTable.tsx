@@ -11,7 +11,7 @@ import { Token } from '@/types/token'
 import { Button } from '@/components/ui/button'
 import {
     MoreHorizontal, Trash2, RefreshCcw,
-    PowerOff, Power, Copy, Settings, Search, Pencil
+    PowerOff, Power, Copy, Settings, Search, Pencil, Network
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { TokenQuotaDialog } from './TokenQuotaDialog'
 import { RenameTokenDialog } from './RenameTokenDialog'
+import { TokenSubnetsDialog } from './TokenSubnetsDialog'
 import { DataTable } from '@/components/table/motion-data-table'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { DeleteTokenDialog } from './DeleteTokenDialog'
@@ -118,6 +119,7 @@ export function TokenTable() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [tokenToRename, setTokenToRename] = useState<Token | null>(null)
+    const [tokenToLimit, setTokenToLimit] = useState<Token | null>(null)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [groupDialogOpen, setGroupDialogOpen] = useState(false)
@@ -452,6 +454,10 @@ export function TokenTable() {
                             <Pencil className="mr-2 h-4 w-4" />
                             {t('token.rename')}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setTokenToLimit(row.original)}>
+                            <Network className="mr-2 h-4 w-4" />
+                            {t('token.ipLimit')}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => copyToClipboard(row.original.key)}
                         >
@@ -563,6 +569,10 @@ export function TokenTable() {
 
             {tokenToRename && (
                 <RenameTokenDialog key={tokenToRename.id} token={tokenToRename} onClose={() => setTokenToRename(null)} />
+            )}
+
+            {tokenToLimit && (
+                <TokenSubnetsDialog key={`subnets-${tokenToLimit.id}`} token={tokenToLimit} onClose={() => setTokenToLimit(null)} />
             )}
 
             {/* Token限额配置对话框 */}

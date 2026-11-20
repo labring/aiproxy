@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
+import { parseSubnets } from '@/validation/token'
 
 interface TokenFormProps {
     onSuccess?: () => void
@@ -37,6 +38,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
         resolver: zodResolver(tokenCreateSchema),
         defaultValues: {
             name: '',
+            subnets: '',
             quota: undefined,
             period_quota: undefined,
             period_type: null,
@@ -48,6 +50,7 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
     const onSubmit = (data: TokenCreateForm) => {
         createToken({
             name: data.name,
+            subnets: parseSubnets(data.subnets ?? '').subnets,
             quota: data.quota,
             period_quota: data.period_type ? data.period_quota : undefined,
             period_type: data.period_type || undefined,
@@ -74,6 +77,27 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                                     {...field}
                                 />
                             </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="subnets"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>{t("token.ipLimit")}</FormLabel>
+                            <FormControl>
+                                <Input
+                                    placeholder={t("token.ipLimitDialog.placeholder")}
+                                    disabled={isLoading}
+                                    {...field}
+                                />
+                            </FormControl>
+                            <FormDescription>
+                                {t("token.ipLimitHelp")}
+                            </FormDescription>
                             <FormMessage />
                         </FormItem>
                     )}

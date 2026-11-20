@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import {
-    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, Search, Pencil
+    MoreHorizontal, Power, PowerOff, Trash2, Plus, Copy, Settings, RefreshCcw, Search, Pencil, Network
 } from 'lucide-react'
 import {
     DropdownMenu, DropdownMenuContent,
@@ -24,6 +24,7 @@ import { DataTable } from '@/components/table/motion-data-table'
 import { ServerPagination } from '@/components/table/server-pagination'
 import { TokenQuotaDialog } from '@/feature/token/components/TokenQuotaDialog'
 import { RenameTokenDialog } from '@/feature/token/components/RenameTokenDialog'
+import { TokenSubnetsDialog } from '@/feature/token/components/TokenSubnetsDialog'
 import { DeleteTokenDialog } from '@/feature/token/components/DeleteTokenDialog'
 import { CreateGroupTokenDialog } from './CreateGroupTokenDialog'
 import { AnimatedIcon } from '@/components/ui/animation/components/animated-icon'
@@ -111,6 +112,7 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
     const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
     const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
     const [tokenToRename, setTokenToRename] = useState<Token | null>(null)
+    const [tokenToLimit, setTokenToLimit] = useState<Token | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedToken, setSelectedToken] = useState<Token | null>(null)
     const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
@@ -374,6 +376,10 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
                             <Pencil className="mr-2 h-4 w-4" />
                             {t('token.rename')}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setTokenToLimit(row.original)}>
+                            <Network className="mr-2 h-4 w-4" />
+                            {t('token.ipLimit')}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => copyToClipboard(row.original.key)}>
                             <Copy className="mr-2 h-4 w-4" />
                             {t("token.copyKey")}
@@ -490,6 +496,10 @@ export function GroupTokensTab({ groupId, onNavigateDashboard }: GroupTokensTabP
 
             {tokenToRename && (
                 <RenameTokenDialog key={tokenToRename.id} token={tokenToRename} onClose={() => setTokenToRename(null)} />
+            )}
+
+            {tokenToLimit && (
+                <TokenSubnetsDialog key={`subnets-${tokenToLimit.id}`} token={tokenToLimit} onClose={() => setTokenToLimit(null)} />
             )}
 
             {/* Token quota dialog */}

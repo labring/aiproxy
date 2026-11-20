@@ -23,6 +23,13 @@ var (
 	RedisKeyPrefix                     string
 	ConfigFilePath                     string
 
+	// TrustedProxies is a comma-separated list of CIDRs the reverse proxy
+	// (e.g. Higress) connects from; X-Forwarded-For is only honored for them.
+	TrustedProxies string
+	// GatewaySecret, when set, must be sent by the gateway in the
+	// X-Gateway-Secret header for its forwarding headers to be trusted.
+	GatewaySecret string
+
 	// OnCall Lark configuration for urgent alerts
 	OnCallLarkAppID     string
 	OnCallLarkAppSecret string
@@ -47,6 +54,8 @@ func ReloadEnv() {
 	Redis = env.String("REDIS", os.Getenv("REDIS_CONN_STRING"))
 	RedisKeyPrefix = os.Getenv("REDIS_KEY_PREFIX")
 	ConfigFilePath = env.String("CONFIG_FILE_PATH", "./config.yaml")
+	TrustedProxies = os.Getenv("TRUSTED_PROXIES")
+	GatewaySecret = os.Getenv("GATEWAY_SECRET")
 
 	// OnCall Lark configuration
 	OnCallLarkAppID = os.Getenv("ON_CALL_LARK_APP_ID")

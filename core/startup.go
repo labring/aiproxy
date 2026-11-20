@@ -102,8 +102,26 @@ func startSyncServices(ctx context.Context, wg *sync.WaitGroup) {
 func setupHTTPServer(listen string) (*http.Server, *gin.Engine) {
 	server := gin.New()
 
+	if config.TrustedProxies != "" {
+		proxies := strings.Split(config.TrustedProxies, ",")
+		for i := range proxies {
+			proxies[i] = strings.TrimSpace(proxies[i])
+		}
+
+		if err := server.SetTrustedProxies(proxies); err != nil {
+			panic(fmt.Sprintf("invalid TRUSTED_PROXIES %q: %v", config.TrustedProxies, err))
+		}
+	} else {
+		log.Warn(
+			"TRUSTED_PROXIES is not set: all proxies are trusted, so X-Forwarded-For " +
+				"can be spoofed and subnet limits see the forged IP; set it to the " +
+				"gateway CIDRs, or set GATEWAY_SECRET and have the gateway send it",
+		)
+	}
+
 	server.Use(
 		middleware.GinRecoveryHandler,
+		middleware.GuardForwardedHeaders(),
 		middleware.NewLog(log.StandardLogger()),
 		middleware.RequestIDMiddleware,
 		middleware.CORS(),

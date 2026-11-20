@@ -296,6 +296,13 @@
       "description": "You can keep using the same key after renaming.",
       "nameTooLong": "The name must be at most 32 UTF-8 bytes."
     },
+    "ipLimit": "IP Restriction",
+    "ipLimitHelp": "Restrict the key to the given CIDRs, comma-separated. Empty means unrestricted.",
+    "ipLimitDialog": {
+      "description": "Restrict this key to the given IP ranges (CIDR). Leave empty for no restriction.",
+      "placeholder": "e.g. 192.168.1.0/24, 2001:db8::/32",
+      "invalid": "Invalid CIDR: {{invalid}}"
+    },
     "name": "Name",
     "remark": "Remark",
     "key": "API Key",
