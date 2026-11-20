@@ -1,4 +1,5 @@
 // src/feature/token/components/TokenForm.tsx
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { tokenCreateSchema, TokenCreateForm } from '@/validation/token'
@@ -15,6 +16,7 @@ import {
     FormDescription,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
     Select,
     SelectContent,
@@ -24,6 +26,8 @@ import {
 } from '@/components/ui/select'
 import { AnimatedButton } from '@/components/ui/animation/components/animated-button'
 import { parseSubnets } from '@/validation/token'
+import { Token } from '@/types/token'
+import { TokenOneTimeKeyDialog } from './TokenOneTimeKeyDialog'
 
 interface TokenFormProps {
     onSuccess?: () => void
@@ -32,12 +36,14 @@ interface TokenFormProps {
 export function TokenForm({ onSuccess }: TokenFormProps) {
     const { t } = useTranslation()
     const { createToken, isLoading } = useCreateToken()
+    const [createdToken, setCreatedToken] = useState<Token | null>(null)
 
     // 初始化表单
     const form = useForm<TokenCreateForm>({
         resolver: zodResolver(tokenCreateSchema),
         defaultValues: {
             name: '',
+            hashed_key: false,
             subnets: '',
             quota: undefined,
             period_quota: undefined,
@@ -50,16 +56,28 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
     const onSubmit = (data: TokenCreateForm) => {
         createToken({
             name: data.name,
+            hashed_key: data.hashed_key,
             subnets: parseSubnets(data.subnets ?? '').subnets,
             quota: data.quota,
             period_quota: data.period_type ? data.period_quota : undefined,
             period_type: data.period_type || undefined,
         }, {
-            onSuccess: () => {
+            onSuccess: (token) => {
+                // 哈希模式密钥仅此一次可见，先展示再关闭
+                if (token?.key_preview) {
+                    setCreatedToken(token)
+                    return
+                }
                 onSuccess?.()
                 form.reset()
             }
         })
+    }
+
+    const closeOneTimeKey = () => {
+        setCreatedToken(null)
+        onSuccess?.()
+        form.reset()
     }
 
     return (
@@ -98,6 +116,29 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                             <FormDescription>
                                 {t("token.ipLimitHelp")}
                             </FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="hashed_key"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 sm:col-span-2">
+                            <div className="space-y-0.5">
+                                <FormLabel>{t("token.hashedKey")}</FormLabel>
+                                <FormDescription>
+                                    {t("token.hashedKeyHelp")}
+                                </FormDescription>
+                            </div>
+                            <FormControl>
+                                <Switch
+                                    checked={!!field.value}
+                                    onCheckedChange={field.onChange}
+                                    disabled={isLoading}
+                                />
+                            </FormControl>
                             <FormMessage />
                         </FormItem>
                     )}
@@ -204,6 +245,13 @@ export function TokenForm({ onSuccess }: TokenFormProps) {
                     </AnimatedButton>
                 </div>
             </form>
+            {createdToken && (
+                <TokenOneTimeKeyDialog
+                    open
+                    onOpenChange={(open) => { if (!open) closeOneTimeKey() }}
+                    tokenKey={createdToken.key}
+                />
+            )}
         </Form>
     )
 }

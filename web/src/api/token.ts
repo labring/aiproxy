@@ -1,6 +1,6 @@
 // src/api/token.ts
 import { get, post, del, put } from './index'
-import { TokensResponse, Token, TokenStatusRequest, TokenUpdateRequest, TokenCreateRequest } from '@/types/token'
+import { TokensResponse, Token, TokenStatusRequest, TokenUpdateRequest, TokenCreateRequest, TokenRotateMode } from '@/types/token'
 
 export const tokenApi = {
     getTokens: async (page: number, perPage: number, keyword?: string): Promise<TokensResponse> => {
@@ -24,6 +24,7 @@ export const tokenApi = {
         // 重要：group的值与name保持一致，创建时使用auto_create_group=true
         const response = await post<Token>(`token/${data.name}?auto_create_group=true`, {
             name: data.name,
+            hashed_key: data.hashed_key,
             quota: data.quota,
             period_quota: data.period_quota,
             period_type: data.period_type,
@@ -62,10 +63,22 @@ export const tokenApi = {
     createGroupToken: async (group: string, data: TokenCreateRequest): Promise<Token> => {
         const response = await post<Token>(`token/${group}`, {
             name: data.name,
+            hashed_key: data.hashed_key,
             quota: data.quota,
             period_quota: data.period_quota,
             period_type: data.period_type,
         })
+        return response
+    },
+
+    // 轮转密钥；响应中的 key 是新密钥的明文，仅此一次可见
+    rotateToken: async (id: number, mode: TokenRotateMode): Promise<Token> => {
+        const response = await post<Token>(`tokens/${id}/rotate`, { mode })
+        return response
+    },
+
+    rotateGroupToken: async (group: string, id: number, mode: TokenRotateMode): Promise<Token> => {
+        const response = await post<Token>(`token/${group}/${id}/rotate`, { mode })
         return response
     }
 }

@@ -24,6 +24,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { tokenApi } from '@/api/token'
 import { toast } from 'sonner'
 import { writeTextToClipboard } from '@/lib/clipboard'
+import { Switch } from '@/components/ui/switch'
+import { Token } from '@/types/token'
+import { TokenOneTimeKeyDialog } from '@/feature/token/components/TokenOneTimeKeyDialog'
 
 interface CreateGroupTokenDialogProps {
     open: boolean
@@ -41,14 +44,17 @@ export function CreateGroupTokenDialog({
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const [name, setName] = useState('')
+    const [hashedKey, setHashedKey] = useState(false)
     const [quota, setQuota] = useState<number | undefined>(undefined)
     const [periodQuota, setPeriodQuota] = useState<number | undefined>(undefined)
     const [periodType, setPeriodType] = useState<string | null>(null)
+    const [createdToken, setCreatedToken] = useState<Token | null>(null)
 
     const mutation = useMutation({
-        mutationFn: (data: { group: string; name: string; quota?: number; periodQuota?: number; periodType: string | null }) => {
+        mutationFn: (data: { group: string; name: string; hashedKey: boolean; quota?: number; periodQuota?: number; periodType: string | null }) => {
             return tokenApi.createGroupToken(data.group, {
                 name: data.name,
+                hashed_key: data.hashedKey,
                 quota: data.quota,
                 period_quota: data.periodType ? data.periodQuota : undefined,
                 period_type: data.periodType || undefined,
@@ -59,6 +65,11 @@ export function CreateGroupTokenDialog({
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
             queryClient.invalidateQueries({ queryKey: ['groups'] })
             toast.success(t('common.success'))
+            // 哈希模式密钥仅此一次可见，先展示再关闭
+            if (data?.key_preview) {
+                setCreatedToken(data)
+                return
+            }
             if (data?.key) {
                 writeTextToClipboard(data.key).then(() => {
                     toast.success(t('common.copied'))
@@ -75,8 +86,16 @@ export function CreateGroupTokenDialog({
         },
     })
 
+    const finishCreated = () => {
+        setCreatedToken(null)
+        resetForm()
+        onOpenChange(false)
+        onCreated?.()
+    }
+
     const resetForm = () => {
         setName('')
+        setHashedKey(false)
         setQuota(undefined)
         setPeriodQuota(undefined)
         setPeriodType(null)
@@ -88,6 +107,7 @@ export function CreateGroupTokenDialog({
         mutation.mutate({
             group: groupId,
             name: name.trim(),
+            hashedKey,
             quota,
             periodQuota,
             periodType,
@@ -122,6 +142,19 @@ export function CreateGroupTokenDialog({
                             />
                         </div>
 
+                        {/* Hashed key */}
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="token-hashed-key">{t('token.hashedKey')}</Label>
+                                <p className="text-xs text-muted-foreground">{t('token.hashedKeyHelp')}</p>
+                            </div>
+                            <Switch
+                                id="token-hashed-key"
+                                checked={hashedKey}
+                                onCheckedChange={setHashedKey}
+                                disabled={mutation.isPending}
+                            />
+                        </div>
                         {/* Total Quota */}
                         <div className="space-y-2">
                             <Label htmlFor="token-quota">{t('token.quota.total')}</Label>
@@ -204,6 +237,13 @@ export function CreateGroupTokenDialog({
                         </Button>
                     </DialogFooter>
                 </form>
+                {createdToken && (
+                    <TokenOneTimeKeyDialog
+                        open
+                        onOpenChange={(open) => { if (!open) finishCreated() }}
+                        tokenKey={createdToken.key}
+                    />
+                )}
             </DialogContent>
         </Dialog>
     )

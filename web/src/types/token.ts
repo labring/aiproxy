@@ -1,6 +1,8 @@
 // src/types/token.ts
 export interface Token {
     key: string
+    // 仅哈希模式的密钥返回预览，key 本身不可再取回
+    key_preview?: string | null
     name: string
     group: string
     subnets: string[] | null
@@ -27,6 +29,7 @@ export interface TokensResponse {
 
 export interface TokenCreateRequest {
     name: string
+    hashed_key?: boolean
     subnets?: string[]
     quota?: number
     period_quota?: number
@@ -45,6 +48,17 @@ export interface TokenUpdateRequest {
 export interface TokenStatusRequest {
     status: number
 }
+
+// 轮转模式：keep 保持当前存储模式，hash/plain 切换存储模式
+export const TOKEN_ROTATE_MODES = {
+    KEEP: '',
+    HASH: 'hash',
+    PLAIN: 'plain',
+} as const
+
+export type TokenRotateMode = typeof TOKEN_ROTATE_MODES[keyof typeof TOKEN_ROTATE_MODES]
+
+export const isHashedToken = (token: Pick<Token, 'key_preview'>): boolean => !!token.key_preview
 
 // Period type constants
 export const PERIOD_TYPES = {

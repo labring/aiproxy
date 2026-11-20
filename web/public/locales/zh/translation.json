@@ -357,6 +357,30 @@
       "daysHours": "{{days}}天 {{hours}}小时",
       "hoursMinutes": "{{hours}}小时 {{minutes}}分钟",
       "minutes": "{{minutes}}分钟"
+    },
+    "hashedKey": "安全模式（仅存储哈希）",
+    "hashedKeyHelp": "开启后数据库只保存密钥哈希，明文仅在创建成功时展示一次，之后无法再次查看或复制。",
+    "hashModeBadge": "哈希",
+    "rotate": "轮转密钥",
+    "oneTimeKey": {
+      "title": "密钥仅显示一次",
+      "description": "请立即复制保存，关闭后将无法再次查看。",
+      "warning": "安全模式下服务器不保存明文，忘记保存只能通过“轮转密钥”重新生成。",
+      "acknowledge": "我已保存"
+    },
+    "rotateDialog": {
+      "title": "轮转密钥",
+      "description": "为 {{name}} 生成新密钥，旧密钥立即失效。",
+      "mode": "存储模式",
+      "modeKeep": "保持当前模式",
+      "modeHash": "切换为哈希存储",
+      "modePlain": "切换为明文存储",
+      "currentHashed": "当前为哈希存储",
+      "currentPlain": "当前为明文存储",
+      "warning": "轮转后新密钥仅显示一次，请及时更新使用该密钥的应用。",
+      "submit": "轮转",
+      "success": "密钥已轮转",
+      "failure": "轮转密钥失败"
     }
   },
   "model": {
