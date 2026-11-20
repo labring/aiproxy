@@ -16,8 +16,19 @@ const (
 	TokenCacheKey = "token:%s"
 )
 
+// tokenCacheSlot maps any key form to the single cache slot: raw keys are
+// always stored under their hash so the raw value never reaches redis (or
+// the local cache), regardless of the token's storage mode.
+func tokenCacheSlot(key string) string {
+	if IsHashedTokenKey(key) {
+		return key
+	}
+
+	return HashTokenKey(key)
+}
+
 func getTokenCacheKey(key string) string {
-	return common.RedisKeyf(TokenCacheKey, key)
+	return common.RedisKeyf(TokenCacheKey, tokenCacheSlot(key))
 }
 
 func updateTokenLocalCache(key string, update func(*TokenCache) bool) {

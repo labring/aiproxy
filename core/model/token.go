@@ -472,7 +472,15 @@ func GetTokenByKey(key string) (*Token, error) {
 
 	var token Token
 
-	err := DB.Where("key = ?", key).First(&token).Error
+	tx := DB
+	if IsHashedTokenKey(key) {
+		tx = tx.Where("key = ?", key)
+	} else {
+		// the token may store this raw key or its hash
+		tx = tx.Where("key = ? OR key = ?", key, HashTokenKey(key))
+	}
+
+	err := tx.First(&token).Error
 
 	return &token, HandleNotFound(err, ErrTokenNotFound)
 }
@@ -482,14 +490,9 @@ func GetTokenByKeyForAuth(key string) (token *TokenCache, err error) {
 		return nil, errors.New("no token provided")
 	}
 
-	// Plain keys are the default, so try the raw slot first and only fall
-	// back to the hash slot for hashed tokens; raw keys never contain ':'
-	// so the two slots cannot collide.
+	// Both storage modes cache under the single hash slot; the DB fallback
+	// matches the raw form or its hash.
 	token, err = CacheGetTokenByKey(key)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		token, err = CacheGetTokenByKey(HashTokenKey(key))
-	}
-
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("invalid token")
