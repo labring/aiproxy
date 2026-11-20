@@ -120,6 +120,8 @@ definitions:
         items:
           type: string
         type: array
+      hashed_key:
+        type: boolean
       models:
         items:
           type: string
@@ -796,6 +798,12 @@ definitions:
       update_at:
         type: string
     type: object
+  controller.RotateTokenRequest:
+    properties:
+      mode:
+        description: One of model.TokenRotateMode*; empty keeps the current mode.
+        type: string
+    type: object
   controller.RuntimeChannelMetric:
     properties:
       banned_models:
@@ -1302,6 +1310,8 @@ definitions:
       id:
         type: integer
       key:
+        type: string
+      key_preview:
         type: string
       models:
         items:
@@ -2294,15 +2304,15 @@ definitions:
         $ref: '#/definitions/model.SummaryDataSet'
       status_2xx_count:
         type: integer
+      status_4xx_count:
+        type: integer
+      status_500_count:
+        type: integer
       status_5xx_count:
         type: integer
       status_400_count:
         type: integer
       status_429_count:
-        type: integer
-      status_4xx_count:
-        type: integer
-      status_500_count:
         type: integer
       status_other_count:
         type: integer
@@ -4346,13 +4356,13 @@ definitions:
         type: integer
       status_400_count:
         type: integer
-      status_429_count:
-        type: integer
       status_4xx_count:
         type: integer
       status_500_count:
         type: integer
       status_5xx_count:
+        type: integer
+      status_429_count:
         type: integer
       status_other_count:
         type: integer
@@ -12339,6 +12349,46 @@ paths:
       summary: Update group token name
       tags:
       - token
+  /api/token/{group}/{id}/rotate:
+    post:
+      consumes:
+      - application/json
+      description: Replaces the key with a fresh one and returns the new raw key;
+        mode can switch between hash and plain storage
+      parameters:
+      - description: Group name
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Rotate mode
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/controller.RotateTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.TokenResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Rotate group token key
+      tags:
+      - token
   /api/token/{group}/{id}/status:
     post:
       consumes:
@@ -12626,6 +12676,41 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Update token name
+      tags:
+      - tokens
+  /api/tokens/{id}/rotate:
+    post:
+      consumes:
+      - application/json
+      description: Replaces the key with a fresh one and returns the new raw key;
+        mode can switch between hash and plain storage
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Rotate mode
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/controller.RotateTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.TokenResponse'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Rotate token key
       tags:
       - tokens
   /api/tokens/{id}/status:

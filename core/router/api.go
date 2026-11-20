@@ -262,6 +262,7 @@ func SetAPIRouter(router *gin.Engine) {
 			tokensRoute.PUT("/:id", controller.UpdateToken)
 			tokensRoute.POST("/:id/status", controller.UpdateTokenStatus)
 			tokensRoute.POST("/:id/name", controller.UpdateTokenName)
+			tokensRoute.POST("/:id/rotate", controller.RotateToken)
 			tokensRoute.DELETE("/:id", controller.DeleteToken)
 			tokensRoute.GET("/search", controller.SearchTokens)
 			tokensRoute.POST("/batch_delete", controller.DeleteTokens)
@@ -277,6 +278,7 @@ func SetAPIRouter(router *gin.Engine) {
 			tokenRoute.PUT("/:group/:id", controller.UpdateGroupToken)
 			tokenRoute.POST("/:group/:id/status", controller.UpdateGroupTokenStatus)
 			tokenRoute.POST("/:group/:id/name", controller.UpdateGroupTokenName)
+			tokenRoute.POST("/:group/:id/rotate", controller.RotateGroupToken)
 			tokenRoute.DELETE("/:group/:id", controller.DeleteGroupToken)
 		}
 

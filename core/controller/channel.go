@@ -11,6 +11,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
+	"github.com/labring/aiproxy/core/common/config"
 	"github.com/labring/aiproxy/core/controller/utils"
 	"github.com/labring/aiproxy/core/middleware"
 	"github.com/labring/aiproxy/core/model"
@@ -64,11 +65,46 @@ func (c *ChannelResponse) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// channelKeyPreview never returns enough of the key to be usable.
+func channelKeyPreview(key string) string {
+	if len(key) > 10 {
+		return key[:6] + "…" + key[len(key)-4:]
+	}
+
+	if len(key) > 4 {
+		return key[:2] + "…"
+	}
+
+	return "…"
+}
+
+func maskChannel(channel *model.Channel) *model.Channel {
+	if channel == nil || channel.Key == "" || !config.MaskChannelKeys {
+		return channel
+	}
+
+	masked := *channel
+	masked.Key = channelKeyPreview(masked.Key)
+
+	return &masked
+}
+
+func maskGroupChannel(channel *model.GroupChannel) *model.GroupChannel {
+	if channel == nil || channel.Key == "" || !config.MaskChannelKeys {
+		return channel
+	}
+
+	masked := *channel
+	masked.Key = channelKeyPreview(masked.Key)
+
+	return &masked
+}
+
 func buildChannelResponse(channel *model.Channel) *ChannelResponse {
 	lastRequestAt, _ := model.GetChannelLastRequestTimeMinute(channel.ID)
 
 	return &ChannelResponse{
-		Channel:    channel,
+		Channel:    maskChannel(channel),
 		AccessedAt: lastRequestAt,
 	}
 }
@@ -597,7 +633,7 @@ func GetChannelBatchInfo(c *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Security		ApiKeyAuth
-//	@Param			id		path		int					true	"Channel ID"
+//	@Param			id		path		int						true	"Channel ID"
 //	@Param			channel	body		UpdateChannelRequest	true	"Optional channel fields to update"
 //	@Success		200		{object}	middleware.APIResponse{data=model.Channel}
 //	@Router			/api/channel/{id} [put]
@@ -645,7 +681,7 @@ func UpdateChannel(c *gin.Context) {
 		log.Errorf("failed to clear channel all model errors: %+v", err)
 	}
 
-	middleware.SuccessResponse(c, ch)
+	middleware.SuccessResponse(c, maskChannel(ch))
 }
 
 // UpdateChannelStatusRequest represents the request body for updating a channel's status
