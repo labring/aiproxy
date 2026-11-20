@@ -62,7 +62,8 @@ export const TOKEN_ROTATE_MODES = {
 
 export type TokenRotateMode = typeof TOKEN_ROTATE_MODES[keyof typeof TOKEN_ROTATE_MODES]
 
-export const isHashedToken = (token: Pick<Token, 'key_preview'>): boolean => !!token.key_preview
+// 哈希模式 ⟺ 列表/详情响应中 key 为空（完整明文仅在创建/轮转响应中出现）
+export const isHashedToken = (token: Pick<Token, 'key'>): boolean => !token.key
 
 // Period type constants
 export const PERIOD_TYPES = {

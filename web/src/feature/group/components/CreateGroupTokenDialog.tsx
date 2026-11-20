@@ -63,13 +63,13 @@ export function CreateGroupTokenDialog({
                 expired_at: dateTimeLocalToTimestampMs(data.expiredAt),
             })
         },
-        onSuccess: (data) => {
+        onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['groupTokens'] })
             queryClient.invalidateQueries({ queryKey: ['tokens'] })
             queryClient.invalidateQueries({ queryKey: ['groups'] })
             toast.success(t('common.success'))
-            // 哈希模式密钥仅此一次可见，先展示再关闭
-            if (data?.key_preview) {
+            // 哈希模式密钥仅此一次可见，先展示再关闭（明文模式两种字段都有，按请求标志判断）
+            if (variables.hashedKey) {
                 setCreatedToken(data)
                 return
             }
