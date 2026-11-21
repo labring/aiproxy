@@ -55,6 +55,8 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		}
 	}
 
+	ollamaRequest.Think = convertThink(request.ReasoningEffort)
+
 	for _, message := range request.Messages {
 		openaiContent := message.ParseContent()
 
@@ -124,6 +126,27 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		},
 		Body: bytes.NewReader(data),
 	}, nil
+}
+
+// convertThink maps OpenAI reasoning_effort to Ollama's think parameter.
+// It returns nil (field omitted) when no effort is requested or it is unknown.
+func convertThink(effort *string) any {
+	if effort == nil {
+		return nil
+	}
+
+	switch relaymodel.NormalizeReasoningEffort(*effort) {
+	case relaymodel.ReasoningEffortNone:
+		return false
+	case relaymodel.ReasoningEffortMinimal, relaymodel.ReasoningEffortLow:
+		return "low"
+	case relaymodel.ReasoningEffortMedium:
+		return "medium"
+	case relaymodel.ReasoningEffortHigh, relaymodel.ReasoningEffortXHigh:
+		return "high"
+	default:
+		return nil
+	}
 }
 
 // getToolCalls converts Ollama tool calls to OpenAI ones. indexOffset is the
