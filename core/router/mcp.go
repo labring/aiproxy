@@ -24,9 +24,4 @@ func SetMCPRouter(router *gin.Engine) {
 	router.GET("/mcp", middleware.MCPAuth, mcp.HostMCPStreamable)
 	router.POST("/mcp", middleware.MCPAuth, mcp.HostMCPStreamable)
 	router.DELETE("/mcp", middleware.MCPAuth, mcp.HostMCPStreamable)
-
-	publicMcpTestRoute := router.Group("/test-publicmcp")
-	{
-		publicMcpTestRoute.GET("/:group/:id/sse", mcp.TestPublicMCPSSEServer)
-	}
 }
