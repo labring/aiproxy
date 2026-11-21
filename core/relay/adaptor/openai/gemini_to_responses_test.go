@@ -418,6 +418,32 @@ func TestConvertResponsesToGeminiResponse(t *testing.T) {
 			hasReasoning:    false,
 		},
 		{
+			name: "incomplete max_output_tokens maps to MAX_TOKENS",
+			responsesResp: relaymodel.Response{
+				ID:                "resp_inc_len",
+				Model:             "gpt-5-codex",
+				Status:            relaymodel.ResponseStatusIncomplete,
+				IncompleteDetails: &relaymodel.IncompleteDetails{Reason: "max_output_tokens"},
+				Output:            []relaymodel.OutputItem{{Role: "assistant", Content: []relaymodel.OutputContent{{Type: "text", Text: "cut"}}}},
+				Usage:             &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
+			},
+			expectedContent: "cut",
+			expectedFinish:  "MAX_TOKENS",
+		},
+		{
+			name: "incomplete content_filter maps to SAFETY",
+			responsesResp: relaymodel.Response{
+				ID:                "resp_inc_cf",
+				Model:             "gpt-5-codex",
+				Status:            relaymodel.ResponseStatusIncomplete,
+				IncompleteDetails: &relaymodel.IncompleteDetails{Reason: "content_filter"},
+				Output:            []relaymodel.OutputItem{{Role: "assistant", Content: []relaymodel.OutputContent{{Type: "text", Text: "part"}}}},
+				Usage:             &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
+			},
+			expectedContent: "part",
+			expectedFinish:  "SAFETY",
+		},
+		{
 			name: "gemini response with reasoning",
 			responsesResp: relaymodel.Response{
 				ID:        "resp_gemini_reasoning",

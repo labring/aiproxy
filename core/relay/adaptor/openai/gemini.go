@@ -1048,14 +1048,7 @@ func ConvertResponsesToGeminiResponse(
 		// Only add candidate if it has content
 		if len(candidate.Content.Parts) > 0 {
 			// Set finish reason
-			switch responsesResp.Status {
-			case relaymodel.ResponseStatusCompleted:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-			case relaymodel.ResponseStatusIncomplete:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonMaxTokens
-			default:
-				candidate.FinishReason = relaymodel.GeminiFinishReasonStop
-			}
+			candidate.FinishReason = responseToGeminiFinishReason(&responsesResp)
 
 			geminiResp.Candidates = append(geminiResp.Candidates, candidate)
 		}
@@ -1177,7 +1170,9 @@ func ConvertResponsesToGeminiStreamResponse(
 			if state.handleFunctionCallArgumentsDone(&event) {
 				wroteStream = true
 			}
-		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
+		case relaymodel.EventResponseCompleted,
+			relaymodel.EventResponseDone,
+			relaymodel.EventResponseIncomplete:
 			if state.handleResponseCompleted(&event) {
 				wroteStream = true
 			}
@@ -1307,7 +1302,7 @@ func (s *geminiStreamState) handleResponseCompleted(event *relaymodel.ResponseSt
 		Candidates: []*relaymodel.GeminiChatCandidate{
 			{
 				Index:        0,
-				FinishReason: relaymodel.GeminiFinishReasonStop,
+				FinishReason: responseToGeminiFinishReason(event.Response),
 				Content: relaymodel.GeminiChatContent{
 					Role:  relaymodel.GeminiRoleModel,
 					Parts: []*relaymodel.GeminiPart{},
@@ -1319,4 +1314,17 @@ func (s *geminiStreamState) handleResponseCompleted(event *relaymodel.ResponseSt
 	_ = render.GeminiObjectData(s.c, geminiResp)
 
 	return true
+}
+
+// responseToGeminiFinishReason maps a Responses API result to a Gemini finish reason,
+// honoring incomplete_details.reason like responseToChatFinishReason does.
+func responseToGeminiFinishReason(response *relaymodel.Response) string {
+	switch responseToChatFinishReason(response) {
+	case relaymodel.FinishReasonLength:
+		return relaymodel.GeminiFinishReasonMaxTokens
+	case relaymodel.FinishReasonContentFilter:
+		return relaymodel.GeminiFinishReasonSafety
+	default:
+		return relaymodel.GeminiFinishReasonStop
+	}
 }
