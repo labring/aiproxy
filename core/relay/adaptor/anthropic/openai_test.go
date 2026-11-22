@@ -683,3 +683,42 @@ func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAIConvertRequest_AssistantReasoningDoesNotReplaceContent(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{},
+		mode.ChatCompletions,
+		"claude-sonnet-4-20250514",
+		model.ModelConfig{},
+	)
+
+	reqBody := relaymodel.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []relaymodel.Message{
+			{Role: "user", Content: "hi"},
+			{
+				Role:             "assistant",
+				Content:          "final answer",
+				ReasoningContent: "private chain of thought",
+			},
+			{Role: "user", Content: "thanks"},
+		},
+	}
+
+	data, err := sonic.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(data),
+	)
+	require.NoError(t, err)
+
+	claudeReq, err := anthropic.OpenAIConvertRequest(m, req)
+	require.NoError(t, err)
+	require.Len(t, claudeReq.Messages, 3)
+	require.Len(t, claudeReq.Messages[1].Content, 1)
+	require.Equal(t, "final answer", claudeReq.Messages[1].Content[0].Text)
+}
