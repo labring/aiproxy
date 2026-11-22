@@ -84,7 +84,7 @@ jobs:
           path: core/public/dist
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: "core/go.mod"
 
