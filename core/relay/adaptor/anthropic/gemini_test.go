@@ -357,7 +357,7 @@ func TestClaudeGeminiUsageIncludesCache(t *testing.T) {
 		resp := state.ConvertClaudeStreamToGemini(m, &relaymodel.ClaudeStreamResponse{
 			Type:  relaymodel.ClaudeStreamTypeMessageDelta,
 			Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
-			Usage: &usage,
+			Usage: usage.ToStreamUsage(),
 		})
 
 		if resp == nil || resp.UsageMetadata == nil {
@@ -386,7 +386,7 @@ func TestClaudeGeminiUsageIncludesCache(t *testing.T) {
 		resp := state.ConvertClaudeStreamToGemini(m, &relaymodel.ClaudeStreamResponse{
 			Type:  relaymodel.ClaudeStreamTypeMessageDelta,
 			Delta: &relaymodel.ClaudeDelta{StopReason: &stop},
-			Usage: &relaymodel.ClaudeUsage{OutputTokens: 5},
+			Usage: &relaymodel.ClaudeStreamUsage{OutputTokens: new(int64(5))},
 		})
 
 		if resp == nil || resp.UsageMetadata == nil {
@@ -408,9 +408,9 @@ func TestGeminiStreamHandlerBillsLikeNonStream(t *testing.T) {
 	start := `{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":10,` +
 		`"cache_read_input_tokens":100,"cache_creation_input_tokens":20,` +
 		`"server_tool_use":{"web_search_requests":2}}}}`
-	delta := `{"type":"message_delta","delta":{"stop_reason":"end_turn"},` +
-		`"usage":{"output_tokens":5}}`
-	body := "data: " + start + "\n\ndata: " + delta + "\n\ndata: [DONE]\n\n"
+	update := `{"type":"message_delta","usage":{"cache_read_input_tokens":0,"cache_creation_input_tokens":25}}`
+	final := `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}`
+	body := "data: " + start + "\n\ndata: " + update + "\n\ndata: " + final + "\n\ndata: [DONE]\n\n"
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -427,15 +427,10 @@ func TestGeminiStreamHandlerBillsLikeNonStream(t *testing.T) {
 	want := relaymodel.ClaudeUsage{
 		InputTokens:              10,
 		OutputTokens:             5,
-		CacheReadInputTokens:     100,
-		CacheCreationInputTokens: 20,
+		CacheCreationInputTokens: 25,
 		ServerToolUse:            &relaymodel.ClaudeServerToolUse{WebSearchRequests: 2},
 	}
 	exp := want.ToOpenAIUsage().ToModelUsage()
-
-	if int64(got.Usage.CacheCreationTokens) != 20 || int64(got.Usage.WebSearchCount) != 2 {
-		t.Fatalf("stream usage lost cache creation/web search: %+v", got.Usage)
-	}
 
 	if got.Usage != exp {
 		t.Fatalf("stream usage %+v != non-stream usage %+v", got.Usage, exp)

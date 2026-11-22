@@ -581,7 +581,7 @@ func ClaudeStreamHandler(
 		Delta: &relaymodel.ClaudeDelta{
 			StopReason: &stopReason,
 		},
-		Usage: &claudeUsage,
+		Usage: claudeUsage.ToStreamUsage(),
 	})
 
 	// Send message_stop
@@ -1342,7 +1342,7 @@ func (s *claudeStreamState) handleResponseCompleted(event *relaymodel.ResponseSt
 		Delta: &relaymodel.ClaudeDelta{
 			StopReason: &stopReason,
 		},
-		Usage: &claudeUsage,
+		Usage: claudeUsage.ToStreamUsage(),
 	})
 
 	// Send message_stop

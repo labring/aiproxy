@@ -646,11 +646,16 @@ func TestResponse2OpenAI_StopReasonMapping(t *testing.T) {
 func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
 	for _, tc := range []struct {
 		name                              string
-		delta                             string
+		deltas                            []string
 		input, cached, creation, searches int64
 	}{
-		{"output only", `{"output_tokens":5}`, 100, 30, 20, 2},
-		{"updated usage", `{"input_tokens":110,"output_tokens":5,"cache_read_input_tokens":40,"cache_creation_input_tokens":25,"server_tool_use":{"web_search_requests":3}}`, 110, 40, 25, 3},
+		{"output only", []string{`{"output_tokens":5}`}, 100, 30, 20, 2},
+		{"updated usage", []string{`{"input_tokens":110,"output_tokens":5,"cache_read_input_tokens":40,"cache_creation_input_tokens":25,"server_tool_use":{"web_search_requests":3}}`}, 110, 40, 25, 3},
+		{"explicit zeros", []string{`{"input_tokens":0,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}`}, 0, 0, 0, 2},
+		{"successive partial deltas", []string{
+			`{"input_tokens":110,"output_tokens":5,"cache_creation_input_tokens":25,"server_tool_use":{"web_search_requests":3}}`,
+			`{"cache_read_input_tokens":40}`,
+		}, 110, 40, 25, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := anthropic.NewStreamState()
@@ -664,14 +669,18 @@ func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, start.Usage)
 
-			final, err := state.StreamResponse2OpenAI(
-				m,
-				[]byte(
-					`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+tc.delta+`}`,
-				),
-			)
-			require.NoError(t, err)
-			require.NotNil(t, final.Usage)
+			var final *relaymodel.ChatCompletionsStreamResponse
+			for _, delta := range tc.deltas {
+				final, err = state.StreamResponse2OpenAI(
+					m,
+					[]byte(
+						`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+delta+`}`,
+					),
+				)
+				require.NoError(t, err)
+				require.NotNil(t, final.Usage)
+			}
+
 			assert.Equal(t, tc.input+tc.cached+tc.creation, final.Usage.PromptTokens)
 			assert.EqualValues(t, 5, final.Usage.CompletionTokens)
 			assert.Equal(t, tc.input+tc.cached+tc.creation+5, final.Usage.TotalTokens)
