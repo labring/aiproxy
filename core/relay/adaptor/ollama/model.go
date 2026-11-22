@@ -42,6 +42,8 @@ type ChatRequest struct {
 	Stream   bool      `json:"stream"`
 	Format   any       `json:"format,omitempty"`
 	Tools    []*Tool   `json:"tools,omitempty"`
+	// Think is a bool, or "low"/"medium"/"high" for models such as gpt-oss.
+	Think any `json:"think,omitempty"`
 }
 
 type ChatResponse struct {

@@ -156,3 +156,53 @@ func TestStreamHandler_ToolCallIndexes(t *testing.T) {
 
 	assert.Equal(t, map[string]int{"a": 0, "b": 1, "c": 2}, got)
 }
+
+func TestConvertRequest_ReasoningEffortToThink(t *testing.T) {
+	cases := []struct {
+		effort string
+		want   any
+	}{
+		{"low", "low"},
+		{"medium", "medium"},
+		{"high", "high"},
+		{"none", false},
+		{"bogus", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.effort, func(t *testing.T) {
+			m := meta.NewMeta(
+				&model.Channel{Type: model.ChannelTypeOllama},
+				0,
+				"gpt-oss:20b",
+				model.ModelConfig{},
+			)
+			effort := tc.effort
+			data, _ := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+				Model:           "gpt-oss:20b",
+				Messages:        []relaymodel.Message{{Role: "user", Content: "hi"}},
+				ReasoningEffort: &effort,
+			})
+			req, _ := http.NewRequestWithContext(
+				t.Context(), http.MethodPost, "http://localhost:11434/api/chat",
+				bytes.NewBuffer(data),
+			)
+
+			result, err := ollama.ConvertRequest(m, req)
+			assert.NoError(t, err)
+
+			body, _ := io.ReadAll(result.Body)
+
+			var got map[string]any
+
+			assert.NoError(t, json.Unmarshal(body, &got))
+
+			think, ok := got["think"]
+			if tc.want == nil {
+				assert.False(t, ok)
+				return
+			}
+
+			assert.Equal(t, tc.want, think)
+		})
+	}
+}
