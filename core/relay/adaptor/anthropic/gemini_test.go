@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -481,5 +482,44 @@ func TestClaudeStopReasonToGeminiFinishReason(t *testing.T) {
 				t.Fatalf("finish reason = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestConvertGeminiRequestToStruct_StopSequences(t *testing.T) {
+	requestJSON := `{
+		"contents": [
+			{
+				"parts": [{"text": "test"}],
+				"role": "user"
+			}
+		],
+		"generationConfig": {
+			"stopSequences": ["END", "STOP"]
+		}
+	}`
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1beta/models/gemini-pro:generateContent",
+		strings.NewReader(requestJSON),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	meta := &meta.Meta{
+		ActualModel: "claude-3-sonnet-20240229",
+	}
+
+	claudeReq, err := anthropic.ConvertGeminiRequestToStruct(meta, req)
+	if err != nil {
+		t.Fatalf("ConvertGeminiRequestToStruct failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(claudeReq.StopSequences, []string{"END", "STOP"}) {
+		t.Fatalf("expected stop sequences [END STOP], got %#v", claudeReq.StopSequences)
 	}
 }

@@ -1002,3 +1002,41 @@ func TestConvertOpenAIStreamToGemini_ContentFilterMapsToSafety(t *testing.T) {
 	require.Len(t, resp.Candidates, 1)
 	assert.Equal(t, relaymodel.GeminiFinishReasonSafety, resp.Candidates[0].FinishReason)
 }
+
+func TestConvertGeminiRequest_StopSequences(t *testing.T) {
+	requestJSON := `{
+		"contents": [{"role":"user","parts":[{"text":"hello"}]}],
+		"generationConfig": {
+			"stopSequences": ["END", "STOP"]
+		}
+	}`
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1beta/models/gemini-pro:generateContent",
+		strings.NewReader(requestJSON),
+	)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	meta := &meta.Meta{ActualModel: "gpt-4o"}
+
+	result, err := openai.ConvertGeminiRequest(meta, req)
+	if err != nil {
+		t.Fatalf("ConvertGeminiRequest failed: %v", err)
+	}
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var openAIReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
+		t.Fatalf("failed to unmarshal result body: %v", err)
+	}
+
+	stop, ok := openAIReq.Stop.([]any)
+	if !ok || len(stop) != 2 || stop[0] != "END" || stop[1] != "STOP" {
+		t.Fatalf("expected stop [END STOP], got %#v", openAIReq.Stop)
+	}
+}

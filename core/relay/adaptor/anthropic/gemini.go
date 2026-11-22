@@ -106,6 +106,8 @@ func ConvertGeminiRequestToStruct(
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
 			claudeReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
 		}
+
+		claudeReq.StopSequences = geminiReq.GenerationConfig.StopSequences
 	}
 
 	reasoning := utils.ParseGeminiReasoning(nil)

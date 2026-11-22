@@ -722,3 +722,53 @@ func TestOpenAIConvertRequest_AssistantReasoningDoesNotReplaceContent(t *testing
 	require.Len(t, claudeReq.Messages[1].Content, 1)
 	require.Equal(t, "final answer", claudeReq.Messages[1].Content[0].Text)
 }
+
+func TestOpenAIConvertRequest_StopSequences(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{},
+		mode.ChatCompletions,
+		"claude-sonnet-4-20250514",
+		model.ModelConfig{},
+	)
+
+	newRequest := func(stop any) *http.Request {
+		reqBody := relaymodel.GeneralOpenAIRequest{
+			Model: "claude-sonnet-4-20250514",
+			Messages: []relaymodel.Message{
+				{Role: "user", Content: "hi"},
+			},
+			Stop: stop,
+		}
+
+		data, err := sonic.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req, err := http.NewRequestWithContext(
+			t.Context(),
+			http.MethodPost,
+			"http://localhost/v1/chat/completions",
+			bytes.NewBuffer(data),
+		)
+		require.NoError(t, err)
+
+		return req
+	}
+
+	t.Run("array", func(t *testing.T) {
+		claudeReq, err := anthropic.OpenAIConvertRequest(m, newRequest([]any{"END", "STOP"}))
+		require.NoError(t, err)
+		require.Equal(t, []string{"END", "STOP"}, claudeReq.StopSequences)
+	})
+
+	t.Run("string", func(t *testing.T) {
+		claudeReq, err := anthropic.OpenAIConvertRequest(m, newRequest("END"))
+		require.NoError(t, err)
+		require.Equal(t, []string{"END"}, claudeReq.StopSequences)
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		claudeReq, err := anthropic.OpenAIConvertRequest(m, newRequest(nil))
+		require.NoError(t, err)
+		require.Empty(t, claudeReq.StopSequences)
+	})
+}

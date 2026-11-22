@@ -221,6 +221,10 @@ func buildGenerationConfig(
 		config.MaxOutputTokens = &textRequest.MaxTokens
 	}
 
+	if len(config.StopSequences) == 0 {
+		config.StopSequences = utils.ParseOpenAIStopSequences(textRequest.Stop)
+	}
+
 	if len(config.ResponseModalities) == 0 &&
 		isGeminiImageModel(meta) {
 		config.ResponseModalities = []string{

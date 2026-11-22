@@ -529,6 +529,10 @@ func convertGeminiGenerationConfigToOpenAI(
 			openaiReq.MaxTokens = *geminiReq.GenerationConfig.MaxOutputTokens
 		}
 
+		if len(geminiReq.GenerationConfig.StopSequences) > 0 {
+			openaiReq.Stop = geminiReq.GenerationConfig.StopSequences
+		}
+
 		// Handle response format
 		if geminiReq.GenerationConfig.ResponseMimeType != "" {
 			switch geminiReq.GenerationConfig.ResponseMimeType {
