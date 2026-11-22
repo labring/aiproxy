@@ -96,6 +96,9 @@ func (a *Adaptor) ConvertRequest(
 		BotID:  strings.TrimPrefix(meta.ActualModel, "bot-"),
 	}
 	for i, message := range request.Messages {
+		// StringContent would prefer ReasoningContent, so clear it first.
+		message.ReasoningContent = ""
+
 		if i == len(request.Messages)-1 {
 			cozeRequest.Query = message.StringContent()
 			continue

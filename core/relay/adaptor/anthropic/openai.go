@@ -206,6 +206,10 @@ func openAIConvertRequest(
 	hasToolCalls := false
 
 	for _, message := range textRequest.Messages {
+		// StringContent would prefer ReasoningContent over Content, so clear it
+		// on this copy: reasoning must not replace the visible message text.
+		message.ReasoningContent = ""
+
 		if message.Role == relaymodel.RoleSystem {
 			claudeRequest.System = append(claudeRequest.System, relaymodel.ClaudeContent{
 				Type:         relaymodel.ClaudeContentTypeText,
