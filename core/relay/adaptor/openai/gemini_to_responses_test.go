@@ -424,8 +424,13 @@ func TestConvertResponsesToGeminiResponse(t *testing.T) {
 				Model:             "gpt-5-codex",
 				Status:            relaymodel.ResponseStatusIncomplete,
 				IncompleteDetails: &relaymodel.IncompleteDetails{Reason: "max_output_tokens"},
-				Output:            []relaymodel.OutputItem{{Role: "assistant", Content: []relaymodel.OutputContent{{Type: "text", Text: "cut"}}}},
-				Usage:             &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
+				Output: []relaymodel.OutputItem{{
+					Role: "assistant",
+					Content: []relaymodel.OutputContent{{
+						Type: "text", Text: "cut",
+					}},
+				}},
+				Usage: &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
 			},
 			expectedContent: "cut",
 			expectedFinish:  "MAX_TOKENS",
@@ -437,8 +442,13 @@ func TestConvertResponsesToGeminiResponse(t *testing.T) {
 				Model:             "gpt-5-codex",
 				Status:            relaymodel.ResponseStatusIncomplete,
 				IncompleteDetails: &relaymodel.IncompleteDetails{Reason: "content_filter"},
-				Output:            []relaymodel.OutputItem{{Role: "assistant", Content: []relaymodel.OutputContent{{Type: "text", Text: "part"}}}},
-				Usage:             &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
+				Output: []relaymodel.OutputItem{{
+					Role: "assistant",
+					Content: []relaymodel.OutputContent{{
+						Type: "text", Text: "part",
+					}},
+				}},
+				Usage: &relaymodel.ResponseUsage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2},
 			},
 			expectedContent: "part",
 			expectedFinish:  "SAFETY",
