@@ -23,7 +23,7 @@ require (
 	github.com/klauspost/compress v1.20.1
 	github.com/labring/aiproxy/mcp-servers v0.0.0-20261010031239-b9f99684350e
 	github.com/labring/aiproxy/openapi-mcp v0.0.0-20261010031239-b9f99684350e
-	github.com/larksuite/oapi-sdk-go/v3 v3.12.0
+	github.com/larksuite/oapi-sdk-go/v3 v3.13.0
 	github.com/mark3labs/mcp-go v1.2.1
 	github.com/maruel/natural v1.3.0
 	github.com/mattn/go-isatty v0.0.24

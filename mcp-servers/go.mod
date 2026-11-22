@@ -65,7 +65,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
-	github.com/larksuite/oapi-sdk-go/v3 v3.12.0 // indirect
+	github.com/larksuite/oapi-sdk-go/v3 v3.13.0 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/maruel/natural v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
