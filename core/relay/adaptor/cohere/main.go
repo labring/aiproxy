@@ -61,6 +61,8 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 		cohereRequest.Connectors = append(cohereRequest.Connectors, WebSearchConnector)
 	}
 
+	cohereRequest.StopSequences = stopSequences(textRequest.Stop)
+
 	lastUser := -1
 
 	for i, message := range textRequest.Messages {
@@ -96,6 +98,39 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 	}
 
 	return &cohereRequest
+}
+
+// stopSequences maps the OpenAI stop field onto Cohere stop_sequences.
+// OpenAI accepts a string or an array; non-strings inside an array are ignored.
+func stopSequences(stop any) []string {
+	switch v := stop.(type) {
+	case string:
+		return []string{v}
+	case []string:
+		if len(v) == 0 {
+			return nil
+		}
+
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+
+			out = append(out, s)
+		}
+
+		if len(out) == 0 {
+			return nil
+		}
+
+		return out
+	default:
+		return nil
+	}
 }
 
 func StreamResponse2OpenAI(

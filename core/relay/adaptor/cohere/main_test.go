@@ -168,3 +168,73 @@ func TestConvertRequestArrayContent(t *testing.T) {
 		}
 	}
 }
+
+func TestConvertRequestStopSequences(t *testing.T) {
+	t.Parallel()
+
+	convert := func(stop any) *Request {
+		return ConvertRequest(&relaymodel.GeneralOpenAIRequest{
+			Model: "command-r",
+			Messages: []relaymodel.Message{
+				{Role: "user", Content: "hi"},
+			},
+			Stop: stop,
+		})
+	}
+
+	assertStop := func(t *testing.T, got []string, want ...string) {
+		t.Helper()
+
+		if len(got) != len(want) {
+			t.Fatalf("StopSequences = %#v, want %#v", got, want)
+		}
+
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("StopSequences = %#v, want %#v", got, want)
+			}
+		}
+	}
+
+	t.Run("string", func(t *testing.T) {
+		t.Parallel()
+
+		got := convert("END")
+		if got.Message != "hi" {
+			t.Fatalf("Message = %q, want %q", got.Message, "hi")
+		}
+
+		assertStop(t, got.StopSequences, "END")
+	})
+
+	t.Run("array", func(t *testing.T) {
+		t.Parallel()
+		assertStop(t, convert([]any{"END", "STOP"}).StopSequences, "END", "STOP")
+	})
+
+	t.Run("string slice", func(t *testing.T) {
+		t.Parallel()
+		assertStop(t, convert([]string{"END", "STOP"}).StopSequences, "END", "STOP")
+	})
+
+	t.Run("skip non-strings", func(t *testing.T) {
+		t.Parallel()
+		assertStop(t, convert([]any{"END", 3, "STOP"}).StopSequences, "END", "STOP")
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		t.Parallel()
+
+		if got := convert(nil).StopSequences; got != nil {
+			t.Fatalf("StopSequences = %#v, want nil", got)
+		}
+
+		if got := convert([]any{}).StopSequences; got != nil {
+			t.Fatalf("StopSequences = %#v, want nil", got)
+		}
+
+		if got := convert([]any{1, true}).StopSequences; got != nil {
+			t.Fatalf("StopSequences = %#v, want nil", got)
+		}
+	})
+}
