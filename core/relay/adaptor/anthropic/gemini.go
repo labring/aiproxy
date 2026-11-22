@@ -337,22 +337,16 @@ type GeminiStreamState struct {
 	CurrentToolName string
 	CurrentToolID   string
 	CurrentToolArgs strings.Builder
-	// startUsage keeps the input/cache counters from message_start, because
-	// message_delta usually only carries output_tokens.
-	startUsage relaymodel.ClaudeUsage
-	// finalUsage is the message_delta usage merged with startUsage (cache
-	// counters and server tool use), used for billing.
-	finalUsage *relaymodel.ClaudeUsage
+	usage           *relaymodel.ClaudeUsage
 }
 
-// BilledUsage returns the usage to bill for the stream, built the same way as
-// the non-stream Gemini handler (cache creation and web search included).
+// BilledUsage returns the latest usage, including cache creation and web search.
 func (s *GeminiStreamState) BilledUsage() (model.Usage, bool) {
-	if s.finalUsage == nil {
+	if s.usage == nil {
 		return model.Usage{}, false
 	}
 
-	return s.finalUsage.ToOpenAIUsage().ToModelUsage(), true
+	return s.usage.ToOpenAIUsage().ToModelUsage(), true
 }
 
 func NewGeminiStreamState() *GeminiStreamState {
@@ -380,14 +374,13 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 	switch claudeResp.Type {
 	case relaymodel.ClaudeStreamTypeMessageStart:
 		if claudeResp.Message != nil {
-			s.startUsage = claudeResp.Message.Usage
-		}
-
-		if claudeResp.Message != nil && claudeResp.Message.Usage.InputTokens > 0 {
-			usage := claudeResp.Message.Usage.ToGeminiUsage()
-			geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
-				PromptTokenCount:        usage.PromptTokenCount,
-				CachedContentTokenCount: usage.CachedContentTokenCount,
+			s.usage = new(claudeResp.Message.Usage)
+			usage := s.usage.ToGeminiUsage()
+			if usage.PromptTokenCount > 0 {
+				geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
+					PromptTokenCount:        usage.PromptTokenCount,
+					CachedContentTokenCount: usage.CachedContentTokenCount,
+				}
 			}
 		}
 
@@ -458,26 +451,12 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 		}
 
 		if claudeResp.Usage != nil {
-			merged := *claudeResp.Usage
-			if merged.InputTokens == 0 {
-				merged.InputTokens = s.startUsage.InputTokens
+			if s.usage == nil {
+				s.usage = &relaymodel.ClaudeUsage{}
 			}
 
-			if merged.CacheReadInputTokens == 0 {
-				merged.CacheReadInputTokens = s.startUsage.CacheReadInputTokens
-			}
-
-			if merged.CacheCreationInputTokens == 0 {
-				merged.CacheCreationInputTokens = s.startUsage.CacheCreationInputTokens
-			}
-
-			if merged.ServerToolUse == nil {
-				merged.ServerToolUse = s.startUsage.ServerToolUse
-			}
-
-			s.finalUsage = &merged
-
-			usage := merged.ToGeminiUsage()
+			s.usage.ApplyStreamUsage(claudeResp.Usage)
+			usage := s.usage.ToGeminiUsage()
 			geminiResp.UsageMetadata = &usage
 		}
 

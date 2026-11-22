@@ -347,7 +347,7 @@ func batchPatchImage2Base64(ctx context.Context, imageTasks []*relaymodel.Claude
 
 // StreamState maintains state during streaming response conversion
 type StreamState struct {
-	startUsage relaymodel.ClaudeUsage
+	usage relaymodel.ClaudeUsage
 	// claudeIndexToToolCallIndex maps Claude's content block index to OpenAI tool call index
 	// Claude's index includes all content blocks (text, thinking, tool_use), but OpenAI only counts tool calls
 	claudeIndexToToolCallIndex map[int]int
@@ -455,31 +455,14 @@ func (s *StreamState) StreamResponse2OpenAI(
 			return nil, nil
 		}
 
-		s.startUsage = claudeResponse.Message.Usage
-		openAIUsage := s.startUsage.ToOpenAIUsage()
+		s.usage = claudeResponse.Message.Usage
+		openAIUsage := s.usage.ToOpenAIUsage()
 		usage = &openAIUsage
 		upstreamID = claudeResponse.Message.ID
 	case "message_delta":
 		if claudeResponse.Usage != nil {
-			merged := *claudeResponse.Usage
-
-			if merged.InputTokens == 0 {
-				merged.InputTokens = s.startUsage.InputTokens
-			}
-
-			if merged.CacheReadInputTokens == 0 {
-				merged.CacheReadInputTokens = s.startUsage.CacheReadInputTokens
-			}
-
-			if merged.CacheCreationInputTokens == 0 {
-				merged.CacheCreationInputTokens = s.startUsage.CacheCreationInputTokens
-			}
-
-			if merged.ServerToolUse == nil {
-				merged.ServerToolUse = s.startUsage.ServerToolUse
-			}
-
-			openAIUsage := merged.ToOpenAIUsage()
+			s.usage.ApplyStreamUsage(claudeResponse.Usage)
+			openAIUsage := s.usage.ToOpenAIUsage()
 			usage = &openAIUsage
 		}
 

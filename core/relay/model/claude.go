@@ -231,6 +231,55 @@ type ClaudeUsage struct {
 	ServerToolUse            *ClaudeServerToolUse `json:"server_tool_use,omitempty"`
 }
 
+// ClaudeStreamUsage carries partial, cumulative counters from a message_delta.
+type ClaudeStreamUsage struct {
+	InputTokens              *int64               `json:"input_tokens,omitempty"`
+	OutputTokens             *int64               `json:"output_tokens,omitempty"`
+	CacheCreationInputTokens *int64               `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     *int64               `json:"cache_read_input_tokens,omitempty"`
+	CacheCreation            *ClaudeCacheCreation `json:"cache_creation,omitempty"`
+	ServerToolUse            *ClaudeServerToolUse `json:"server_tool_use,omitempty"`
+}
+
+// ApplyStreamUsage updates only the counters present in the event, including explicit zeros.
+func (u *ClaudeUsage) ApplyStreamUsage(delta *ClaudeStreamUsage) {
+	if delta.InputTokens != nil {
+		u.InputTokens = *delta.InputTokens
+	}
+
+	if delta.OutputTokens != nil {
+		u.OutputTokens = *delta.OutputTokens
+	}
+
+	if delta.CacheCreationInputTokens != nil {
+		u.CacheCreationInputTokens = *delta.CacheCreationInputTokens
+	}
+
+	if delta.CacheReadInputTokens != nil {
+		u.CacheReadInputTokens = *delta.CacheReadInputTokens
+	}
+
+	if delta.CacheCreation != nil {
+		u.CacheCreation = delta.CacheCreation
+	}
+
+	if delta.ServerToolUse != nil {
+		u.ServerToolUse = delta.ServerToolUse
+	}
+}
+
+// ToStreamUsage serializes a complete usage snapshot as a message_delta.
+func (u ClaudeUsage) ToStreamUsage() *ClaudeStreamUsage {
+	return &ClaudeStreamUsage{
+		InputTokens:              &u.InputTokens,
+		OutputTokens:             &u.OutputTokens,
+		CacheCreationInputTokens: &u.CacheCreationInputTokens,
+		CacheReadInputTokens:     &u.CacheReadInputTokens,
+		CacheCreation:            u.CacheCreation,
+		ServerToolUse:            u.ServerToolUse,
+	}
+}
+
 type ClaudeServerToolUse struct {
 	// https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/web-search-tool
 	WebSearchRequests int64 `json:"web_search_requests,omitempty"`
@@ -336,12 +385,12 @@ type ClaudeDelta struct {
 }
 
 type ClaudeStreamResponse struct {
-	Message      *ClaudeResponse `json:"message,omitempty"`
-	ContentBlock *ClaudeContent  `json:"content_block,omitempty"`
-	Delta        *ClaudeDelta    `json:"delta,omitempty"`
-	Usage        *ClaudeUsage    `json:"usage,omitempty"`
-	Type         string          `json:"type"`
-	Index        int             `json:"index"`
+	Message      *ClaudeResponse    `json:"message,omitempty"`
+	ContentBlock *ClaudeContent     `json:"content_block,omitempty"`
+	Delta        *ClaudeDelta       `json:"delta,omitempty"`
+	Usage        *ClaudeStreamUsage `json:"usage,omitempty"`
+	Type         string             `json:"type"`
+	Index        int                `json:"index"`
 }
 
 // Claude StopReason constants

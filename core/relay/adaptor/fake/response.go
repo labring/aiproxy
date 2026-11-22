@@ -331,7 +331,7 @@ func writeAnthropic(
 		})
 		_ = render.ClaudeEventObjectData(c, "message_delta", relaymodel.ClaudeStreamResponse{
 			Type:  relaymodel.ClaudeStreamTypeMessageDelta,
-			Usage: new(relaymodel.ClaudeFromModelUsage(usage)),
+			Usage: relaymodel.ClaudeFromModelUsage(usage).ToStreamUsage(),
 			Delta: &relaymodel.ClaudeDelta{StopReason: new(resp.StopReason)},
 		})
 		_ = render.ClaudeEventObjectData(c, "message_stop", relaymodel.ClaudeStreamResponse{
