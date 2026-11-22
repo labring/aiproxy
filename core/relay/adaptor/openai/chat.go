@@ -564,26 +564,62 @@ func patchStreamOptions(node *ast.Node) error {
 	return err
 }
 
+// getChatUsageFromNode maps Alibaba Model Studio's cache creation alias to the
+// OpenAI field in both the forwarded response and the internal usage record.
+func getChatUsageFromNode(usageNode *ast.Node) (*relaymodel.ChatUsage, error) {
+	if usageNode == nil || usageNode.TypeSafe() == ast.V_NULL {
+		return nil, nil
+	}
+
+	raw, err := usageNode.Raw()
+	if errors.Is(err, ast.ErrNotExist) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	var usage relaymodel.ChatUsage
+	if err := sonic.UnmarshalString(raw, &usage); err != nil {
+		return nil, err
+	}
+
+	if usage.PromptTokensDetails == nil {
+		return &usage, nil
+	}
+
+	details := usageNode.Get("prompt_tokens_details")
+	cacheWrite := details.Get("cache_write_tokens")
+
+	// An explicit OpenAI count, including zero, takes precedence over its alias.
+	if cacheWrite.Exists() && cacheWrite.TypeSafe() != ast.V_NULL {
+		return &usage, nil
+	}
+
+	creation, err := details.Get("cache_creation_input_tokens").StrictInt64()
+	if err != nil || creation < 0 {
+		return &usage, nil
+	}
+
+	if _, err := details.Set(
+		"cache_write_tokens",
+		ast.NewNumber(strconv.FormatInt(creation, 10)),
+	); err != nil {
+		return nil, err
+	}
+
+	usage.PromptTokensDetails.CacheWriteTokens = creation
+
+	return &usage, nil
+}
+
 func GetUsageOrChatChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.ChatCompletionsStreamResponseChoice, error) {
-	usageNode := node.Get("usage")
-	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
-		usageRaw, err := usageNode.Raw()
-		if err != nil {
-			if !errors.Is(err, ast.ErrNotExist) {
-				return nil, nil, err
-			}
-		} else {
-			var usage relaymodel.ChatUsage
-
-			err = sonic.UnmarshalString(usageRaw, &usage)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			return &usage, nil, nil
-		}
+	usage, err := getChatUsageFromNode(node.Get("usage"))
+	if err != nil || usage != nil {
+		return usage, nil, err
 	}
 
 	var choices []*relaymodel.ChatCompletionsStreamResponseChoice
@@ -730,23 +766,9 @@ func StreamHandler(
 func GetUsageOrChoicesResponseFromNode(
 	node *ast.Node,
 ) (*relaymodel.ChatUsage, []*relaymodel.TextResponseChoice, error) {
-	usageNode := node.Get("usage")
-	if usageNode != nil && usageNode.TypeSafe() != ast.V_NULL {
-		usageRaw, err := usageNode.Raw()
-		if err != nil {
-			if !errors.Is(err, ast.ErrNotExist) {
-				return nil, nil, err
-			}
-		} else {
-			var usage relaymodel.ChatUsage
-
-			err = sonic.UnmarshalString(usageRaw, &usage)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			return &usage, nil, nil
-		}
+	usage, err := getChatUsageFromNode(node.Get("usage"))
+	if err != nil || usage != nil {
+		return usage, nil, err
 	}
 
 	var choices []*relaymodel.TextResponseChoice
