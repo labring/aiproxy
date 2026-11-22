@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/bytedance/sonic"
@@ -1445,4 +1446,78 @@ func TestFinishReason2OpenAI(t *testing.T) {
 			assert.Equal(t, tt.want, gemini.FinishReason2OpenAI(tt.reason))
 		})
 	}
+}
+
+func TestConvertRequest_StopSequences(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.0-flash",
+		model.ModelConfig{},
+	)
+
+	newRequest := func(body string) *http.Request {
+		req, _ := http.NewRequestWithContext(
+			t.Context(),
+			http.MethodPost,
+			"http://localhost/v1/chat/completions",
+			strings.NewReader(body),
+		)
+
+		return req
+	}
+
+	convert := func(t *testing.T, body string) *relaymodel.GeminiChatRequest {
+		t.Helper()
+
+		result, err := gemini.ConvertRequest(meta, newRequest(body))
+		assert.NoError(t, err)
+
+		bodyBytes, _ := io.ReadAll(result.Body)
+
+		var geminiReq relaymodel.GeminiChatRequest
+
+		assert.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+
+		return &geminiReq
+	}
+
+	t.Run("openai array stop maps to stopSequences", func(t *testing.T) {
+		geminiReq := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"stop": ["END", "STOP"]
+		}`)
+		assert.Equal(t, []string{"END", "STOP"}, geminiReq.GenerationConfig.StopSequences)
+	})
+
+	t.Run("openai string stop maps to one sequence", func(t *testing.T) {
+		geminiReq := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"stop": "END"
+		}`)
+		assert.Equal(t, []string{"END"}, geminiReq.GenerationConfig.StopSequences)
+	})
+
+	t.Run("native generationConfig stopSequences wins", func(t *testing.T) {
+		geminiReq := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"stop": ["A"],
+			"generationConfig": {"stopSequences": ["B"]}
+		}`)
+		assert.Equal(t, []string{"B"}, geminiReq.GenerationConfig.StopSequences)
+	})
+
+	t.Run("absent stop leaves sequences unset", func(t *testing.T) {
+		geminiReq := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}]
+		}`)
+		assert.Empty(t, geminiReq.GenerationConfig.StopSequences)
+	})
 }

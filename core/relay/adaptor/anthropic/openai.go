@@ -131,6 +131,8 @@ func openAIConvertRequest(
 		claudeRequest.MaxTokens = ModelDefaultMaxTokens(resolvedModel)
 	}
 
+	claudeRequest.StopSequences = utils.ParseOpenAIStopSequences(textRequest.Stop)
+
 	if reasoning.Specified {
 		utils.ApplyReasoningToClaudeRequest(
 			resolvedModel,
