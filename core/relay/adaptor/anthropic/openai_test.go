@@ -680,6 +680,7 @@ func TestStreamResponse2OpenAIUsageMerge(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, final.Usage)
 			}
+
 			assert.Equal(t, tc.input+tc.cached+tc.creation, final.Usage.PromptTokens)
 			assert.EqualValues(t, 5, final.Usage.CompletionTokens)
 			assert.Equal(t, tc.input+tc.cached+tc.creation+5, final.Usage.TotalTokens)

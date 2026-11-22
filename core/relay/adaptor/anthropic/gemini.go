@@ -353,7 +353,6 @@ func NewGeminiStreamState() *GeminiStreamState {
 	return &GeminiStreamState{}
 }
 
-//nolint:gocyclo
 func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 	meta *meta.Meta,
 	claudeResp *relaymodel.ClaudeStreamResponse,
@@ -375,6 +374,7 @@ func (s *GeminiStreamState) ConvertClaudeStreamToGemini(
 	case relaymodel.ClaudeStreamTypeMessageStart:
 		if claudeResp.Message != nil {
 			s.usage = new(claudeResp.Message.Usage)
+
 			usage := s.usage.ToGeminiUsage()
 			if usage.PromptTokenCount > 0 {
 				geminiResp.UsageMetadata = &relaymodel.GeminiUsageMetadata{
