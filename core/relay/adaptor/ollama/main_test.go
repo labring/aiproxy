@@ -166,6 +166,7 @@ func TestConvertRequest_ReasoningEffortToThink(t *testing.T) {
 		{"medium", "medium"},
 		{"high", "high"},
 		{"none", false},
+		{"off", false},
 		{"bogus", nil},
 	}
 	for _, tc := range cases {

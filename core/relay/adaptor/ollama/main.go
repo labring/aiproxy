@@ -55,7 +55,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		}
 	}
 
-	ollamaRequest.Think = convertThink(request.ReasoningEffort)
+	ollamaRequest.Think = thinkFromReasoning(utils.ParseOpenAIReasoning(&request))
 
 	for _, message := range request.Messages {
 		openaiContent := message.ParseContent()
@@ -128,14 +128,15 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 	}, nil
 }
 
-// convertThink maps OpenAI reasoning_effort to Ollama's think parameter.
+// thinkFromReasoning maps the normalized reasoning effort to Ollama's think
+// parameter: false disables thinking, "low"/"medium"/"high" set the effort.
 // It returns nil (field omitted) when no effort is requested or it is unknown.
-func convertThink(effort *string) any {
-	if effort == nil {
+func thinkFromReasoning(reasoning relaymodel.NormalizedReasoning) any {
+	if !reasoning.Specified {
 		return nil
 	}
 
-	switch relaymodel.NormalizeReasoningEffort(*effort) {
+	switch utils.ReasoningToOpenAIEffort(reasoning) {
 	case relaymodel.ReasoningEffortNone:
 		return false
 	case relaymodel.ReasoningEffortMinimal, relaymodel.ReasoningEffortLow:
