@@ -236,15 +236,6 @@ func migrateTokenKeyHash() error {
 		}
 	}
 
-	// development databases from the unreleased dual-form build stored the
-	// hash in key; move those rows so the raw-key backfill skips them
-	err = DB.Exec(
-		"UPDATE tokens SET key_hash = SUBSTR(key, 3), key = '' WHERE key LIKE 'h:%'",
-	).Error
-	if err != nil {
-		return err
-	}
-
 	var (
 		total  int
 		lastID int
