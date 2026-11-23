@@ -207,3 +207,35 @@ func TestConvertRequest_ReasoningEffortToThink(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertRequest_MaxCompletionTokens(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{Type: model.ChannelTypeOllama},
+		0,
+		"llama2",
+		model.ModelConfig{},
+	)
+
+	jsonData, _ := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+		Model:               "llama2",
+		Messages:            []relaymodel.Message{{Role: "user", Content: "hi"}},
+		MaxCompletionTokens: 55,
+	})
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost:11434/api/chat",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := ollama.ConvertRequest(m, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var ollamaReq ollama.ChatRequest
+
+	assert.NoError(t, json.Unmarshal(bodyBytes, &ollamaReq))
+	assert.NotNil(t, ollamaReq.Options)
+	assert.Equal(t, 55, ollamaReq.Options.NumPredict)
+}

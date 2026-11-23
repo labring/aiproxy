@@ -50,7 +50,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		Stream:          request.Stream,
 		DisableSearch:   false,
 		EnableCitation:  false,
-		MaxOutputTokens: request.MaxTokens,
+		MaxOutputTokens: request.OutputTokenLimit(),
 		UserID:          request.User,
 		Stop:            utils.ParseOpenAIStopSequences(request.Stop),
 	}

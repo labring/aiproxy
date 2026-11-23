@@ -20,6 +20,18 @@ type ClaudeOpenAIRequest struct {
 	MaxTokens       int                    `json:"max_tokens,omitempty"`
 	TopK            int                    `json:"top_k,omitempty"`
 	Stream          bool                   `json:"stream,omitempty"`
+
+	MaxCompletionTokens int `json:"max_completion_tokens,omitempty"`
+}
+
+// OutputTokenLimit returns the requested output token cap: max_completion_tokens
+// (newer OpenAI clients) takes precedence over the legacy max_tokens. Zero means unset.
+func (r ClaudeOpenAIRequest) OutputTokenLimit() int {
+	if r.MaxCompletionTokens > 0 {
+		return r.MaxCompletionTokens
+	}
+
+	return r.MaxTokens
 }
 
 type ClaudeOpenaiMessage struct {

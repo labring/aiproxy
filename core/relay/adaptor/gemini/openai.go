@@ -217,8 +217,8 @@ func buildGenerationConfig(
 	}
 
 	// Convert MaxTokens (int) to MaxOutputTokens (*int)
-	if config.MaxOutputTokens == nil && textRequest.MaxTokens != 0 {
-		config.MaxOutputTokens = &textRequest.MaxTokens
+	if limit := textRequest.OutputTokenLimit(); config.MaxOutputTokens == nil && limit != 0 {
+		config.MaxOutputTokens = &limit
 	}
 
 	if len(config.StopSequences) == 0 {

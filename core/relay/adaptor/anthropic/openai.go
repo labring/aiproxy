@@ -119,7 +119,7 @@ func openAIConvertRequest(
 
 	claudeRequest := relaymodel.ClaudeRequest{
 		Model:       meta.ActualModel,
-		MaxTokens:   textRequest.MaxTokens,
+		MaxTokens:   textRequest.OutputTokenLimit(),
 		Temperature: textRequest.Temperature,
 		TopP:        textRequest.TopP,
 		TopK:        textRequest.TopK,

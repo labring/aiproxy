@@ -239,3 +239,17 @@ func TestConvertRequestStopSequences(t *testing.T) {
 		}
 	})
 }
+
+func TestConvertRequestMaxCompletionTokens(t *testing.T) {
+	t.Parallel()
+
+	req := &relaymodel.GeneralOpenAIRequest{
+		Model:               "command-r",
+		Messages:            []relaymodel.Message{{Role: "user", Content: "hi"}},
+		MaxCompletionTokens: 123,
+	}
+
+	if got := ConvertRequest(req).MaxTokens; got != 123 {
+		t.Fatalf("MaxTokens = %d, want 123", got)
+	}
+}

@@ -43,7 +43,7 @@ func ConvertRequest(textRequest *relaymodel.GeneralOpenAIRequest) *Request {
 	cohereRequest := Request{
 		Model:            textRequest.Model,
 		Message:          "",
-		MaxTokens:        textRequest.MaxTokens,
+		MaxTokens:        textRequest.OutputTokenLimit(),
 		Temperature:      textRequest.Temperature,
 		P:                textRequest.TopP,
 		K:                textRequest.TopK,

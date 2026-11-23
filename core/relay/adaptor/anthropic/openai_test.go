@@ -781,3 +781,30 @@ func TestOpenAIConvertRequest_StopSequences(t *testing.T) {
 		require.Empty(t, claudeReq.StopSequences)
 	})
 }
+
+func TestOpenAIConvertRequest_MaxCompletionTokens(t *testing.T) {
+	m := &meta.Meta{
+		ActualModel: "claude-sonnet-4-20250514",
+		OriginModel: "claude-sonnet-4-20250514",
+		Mode:        mode.ChatCompletions,
+	}
+
+	data, err := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+		Model:               "claude-sonnet-4-20250514",
+		Messages:            []relaymodel.Message{{Role: "user", Content: "hello"}},
+		MaxCompletionTokens: 777,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(data),
+	)
+	require.NoError(t, err)
+
+	claudeReq, err := anthropic.OpenAIConvertRequest(m, req)
+	require.NoError(t, err)
+	assert.Equal(t, 777, claudeReq.MaxTokens)
+}

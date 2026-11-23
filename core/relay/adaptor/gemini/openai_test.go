@@ -19,6 +19,7 @@ import (
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertRequest_JsonObject(t *testing.T) {
@@ -1520,4 +1521,37 @@ func TestConvertRequest_StopSequences(t *testing.T) {
 		}`)
 		assert.Empty(t, geminiReq.GenerationConfig.StopSequences)
 	})
+}
+
+func TestConvertRequest_MaxCompletionTokens(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{Type: model.ChannelTypeGoogleGemini},
+		mode.Gemini,
+		"gemini-1.5-pro",
+		model.ModelConfig{},
+	)
+
+	jsonData, _ := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+		Model:               "gemini-1.5-pro",
+		Messages:            []relaymodel.Message{{Role: "user", Content: "hi"}},
+		MaxCompletionTokens: 321,
+	})
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(m, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	assert.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	assert.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.MaxOutputTokens)
+	assert.Equal(t, 321, *geminiReq.GenerationConfig.MaxOutputTokens)
 }
