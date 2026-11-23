@@ -26,7 +26,7 @@ func stopReasonCohere2OpenAI(reason *string) string {
 	}
 
 	switch *reason {
-	case "COMPLETE":
+	case "COMPLETE", "STOP_SEQUENCE":
 		return relaymodel.FinishReasonStop
 	case "MAX_TOKENS":
 		return relaymodel.FinishReasonLength
