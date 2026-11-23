@@ -62,3 +62,47 @@ func TestConvertRequestSystemMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertRequestStop(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		stop any
+		want []string
+	}{
+		{"string", "END", []string{"END"}},
+		{"array", []any{"a", "b"}, []string{"a", "b"}},
+		{"mixed array", []any{"a", 1, "b"}, []string{"a", "b"}},
+		{"absent", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(relaymodel.GeneralOpenAIRequest{
+				Messages: []relaymodel.Message{{Role: "user", Content: "hello"}},
+				Stop:     tc.stop,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/",
+				strings.NewReader(string(body)),
+			)
+
+			result, err := ConvertRequest(&meta.Meta{ActualModel: "ernie"}, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var got ChatRequest
+			if err := json.NewDecoder(result.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(got.Stop, tc.want) {
+				t.Errorf("stop = %#v, want %#v", got.Stop, tc.want)
+			}
+		})
+	}
+}

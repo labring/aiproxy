@@ -33,6 +33,7 @@ type ChatRequest struct {
 	Stream          bool                 `json:"stream,omitempty"`
 	DisableSearch   bool                 `json:"disable_search,omitempty"`
 	EnableCitation  bool                 `json:"enable_citation,omitempty"`
+	Stop            []string             `json:"stop,omitempty"`
 }
 
 func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, error) {
@@ -51,6 +52,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 		EnableCitation:  false,
 		MaxOutputTokens: request.MaxTokens,
 		UserID:          request.User,
+		Stop:            utils.ParseOpenAIStopSequences(request.Stop),
 	}
 	// Convert frequency penalty to penalty score range [1.0, 2.0]
 	if request.FrequencyPenalty != nil {
