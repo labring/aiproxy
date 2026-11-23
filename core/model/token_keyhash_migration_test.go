@@ -23,8 +23,7 @@ type legacyToken struct {
 func (*legacyToken) TableName() string { return "tokens" }
 
 // TestMigrateTokenKeyHash exercises the startup migration on a database with
-// the legacy shape: raw keys without key_hash plus (from the unreleased
-// dual-form build) an h:-prefixed row.
+// the legacy shape: raw keys without key_hash.
 func TestMigrateTokenKeyHash(t *testing.T) {
 	db, err := OpenSQLite(filepath.Join(t.TempDir(), "token_migration.db"))
 	require.NoError(t, err)
@@ -39,7 +38,6 @@ func TestMigrateTokenKeyHash(t *testing.T) {
 	}
 	insert(plainKey, "legacy-plain")
 	insert(GenerateTokenKey(), "legacy-plain-2")
-	insert("h:"+HashTokenKey("dual-form-key"), "dual-form")
 
 	oldDB := DB
 	DB = db
@@ -50,7 +48,7 @@ func TestMigrateTokenKeyHash(t *testing.T) {
 
 	var migrated []*Token
 	require.NoError(t, DB.Order("id").Find(&migrated).Error)
-	require.Len(t, migrated, 3)
+	require.Len(t, migrated, 2)
 
 	for _, token := range migrated {
 		require.NotEmpty(t, token.KeyHash)
@@ -58,10 +56,6 @@ func TestMigrateTokenKeyHash(t *testing.T) {
 
 	require.Equal(t, plainKey, migrated[0].Key)
 	require.Equal(t, HashTokenKey(plainKey), migrated[0].KeyHash)
-
-	// the dual-form row moved its hash out of key
-	require.Empty(t, migrated[2].Key)
-	require.Equal(t, HashTokenKey("dual-form-key"), migrated[2].KeyHash)
 
 	// the legacy unique index on key is gone, so hashed tokens (empty key)
 	// can be inserted
