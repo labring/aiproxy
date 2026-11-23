@@ -21,6 +21,8 @@ import (
 	"github.com/labring/aiproxy/core/relay/meta"
 	"github.com/labring/aiproxy/core/relay/mode"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type aliTestStore struct {
@@ -3986,5 +3988,101 @@ func TestAdaptorConvertCompletionsReasoning(t *testing.T) {
 	enableThinking, ok := payload["enable_thinking"].(bool)
 	if !ok || !enableThinking {
 		t.Fatalf("expected enable_thinking=true, got %#v", payload["enable_thinking"])
+	}
+}
+
+func TestChatHandlerNormalizesQwenCacheCreationTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		details    string
+		wantWrites *int64
+	}{
+		{"Qwen alias only", `"cache_creation_input_tokens":300`, new(int64(300))},
+		{
+			"both aliases",
+			`"cache_creation_input_tokens":300,"cache_write_tokens":300`,
+			new(int64(300)),
+		},
+		{
+			"explicit canonical zero",
+			`"cache_creation_input_tokens":300,"cache_write_tokens":0`,
+			new(int64(0)),
+		},
+		{
+			"canonical field null",
+			`"cache_creation_input_tokens":300,"cache_write_tokens":null`,
+			new(int64(300)),
+		},
+		{"no writes", `"text_tokens":1500`, nil},
+		{"invalid provider alias", `"cache_creation_input_tokens":"300"`, nil},
+	}
+
+	for _, transport := range []string{"json", "sse"} {
+		t.Run(transport, func(t *testing.T) {
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					body := `{"id":"qwen-response","choices":[],"usage":{` +
+						`"prompt_tokens":1500,"completion_tokens":20,"total_tokens":1520,` +
+						`"prompt_tokens_details":{"cached_tokens":1200,` + tc.details + `}}}`
+
+					contentType := "application/json"
+					if transport == "sse" {
+						contentType = "text/event-stream"
+						body = "data: " + body + "\n\ndata: [DONE]\n\n"
+					}
+
+					recorder := httptest.NewRecorder()
+					c, _ := gin.CreateTestContext(recorder)
+					c.Request = httptest.NewRequestWithContext(
+						t.Context(),
+						http.MethodPost,
+						"/v1/chat/completions",
+						strings.NewReader(
+							`{"model":"qwen3.8-flash","messages":[{"role":"user","content":"hi"}]}`,
+						),
+					)
+					m := &meta.Meta{
+						OriginModel: "qwen3.8-flash", ActualModel: "qwen3.8-flash",
+						Mode: mode.ChatCompletions,
+					}
+					a := &Adaptor{}
+					result, err := a.DoResponse(m, nil, c, &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": []string{contentType}},
+						Body:       io.NopCloser(strings.NewReader(body)),
+					})
+
+					require.NoError(t, err)
+					assert.EqualValues(t, 1500, result.Usage.InputTokens)
+					assert.EqualValues(t, 1200, result.Usage.CachedTokens)
+
+					payload := recorder.Body.String()
+					if transport == "sse" {
+						firstFrame, _, _ := strings.Cut(payload, "\n")
+						payload = strings.TrimPrefix(firstFrame, "data: ")
+					}
+
+					var response struct {
+						Usage struct {
+							Details struct {
+								Reads  int64  `json:"cached_tokens"`
+								Writes *int64 `json:"cache_write_tokens"`
+							} `json:"prompt_tokens_details"`
+						} `json:"usage"`
+					}
+					require.NoError(t, json.Unmarshal([]byte(payload), &response))
+					assert.EqualValues(t, 1200, response.Usage.Details.Reads)
+					assert.Equal(t, tc.wantWrites, response.Usage.Details.Writes)
+
+					if tc.wantWrites == nil {
+						assert.Zero(t, result.Usage.CacheCreationTokens)
+					} else {
+						assert.EqualValues(t, *tc.wantWrites, result.Usage.CacheCreationTokens)
+					}
+				})
+			}
+		})
 	}
 }

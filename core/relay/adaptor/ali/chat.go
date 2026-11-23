@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic/ast"
@@ -181,7 +182,9 @@ func ChatHandler(
 		)
 	}
 
-	result, e := openai.DoResponse(meta, store, c, resp)
+	result, e := openai.DoResponse(meta, store, c, resp, openai.DoResponseOptions{
+		ChatNodePreHandler: patchQwenCacheCreationUsage,
+	})
 	if e != nil {
 		return adaptor.DoResponseResult{}, e
 	}
@@ -197,6 +200,31 @@ func ChatHandler(
 	)
 
 	return result, nil
+}
+
+// patchQwenCacheCreationUsage mirrors Model Studio's cache write alias
+// (usage.prompt_tokens_details.cache_creation_input_tokens) into the canonical
+// cache_write_tokens so the forwarded response and usage accounting carry one
+// name. An explicitly supplied canonical count, including zero, wins.
+func patchQwenCacheCreationUsage(_ *meta.Meta, node *ast.Node) error {
+	details := node.Get("usage").Get("prompt_tokens_details")
+	if !details.Exists() {
+		return nil
+	}
+
+	cacheWrite := details.Get("cache_write_tokens")
+	if cacheWrite.Exists() && cacheWrite.TypeSafe() != ast.V_NULL {
+		return nil
+	}
+
+	creation, err := details.Get("cache_creation_input_tokens").StrictInt64()
+	if err != nil || creation < 0 {
+		return nil
+	}
+
+	_, err = details.Set("cache_write_tokens", ast.NewNumber(strconv.FormatInt(creation, 10)))
+
+	return err
 }
 
 func aliChatUsageContext(usage coremodel.Usage) coremodel.UsageContext {

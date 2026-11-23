@@ -16,9 +16,15 @@ type Config struct {
 	ResponsesFirstEventTimeout     uint32 `json:"responses_first_event_timeout"`
 }
 
-// DoResponseOptions contains the response handling options needed by the OpenAI Responses path.
+// DoResponseOptions contains the response handling options needed by the
+// OpenAI Responses path and Chat Completions response customization.
 type DoResponseOptions struct {
 	ResponsesFirstEventTimeout time.Duration
+	// ChatNodePreHandler runs on every Chat Completions response node after
+	// the channel-config prehandlers and before usage extraction, letting
+	// adaptor-owned response normalization reach both the forwarded body and
+	// the internal usage record.
+	ChatNodePreHandler PreHandler
 }
 
 func defaultConfig() Config {

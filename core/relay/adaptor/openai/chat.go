@@ -1972,3 +1972,30 @@ func responseStreamErrorMessage(event *relaymodel.ResponseStreamEvent) string {
 
 	return "response stream failed"
 }
+
+func chainPreHandlers(handlers ...PreHandler) PreHandler {
+	filtered := make([]PreHandler, 0, len(handlers))
+	for _, handler := range handlers {
+		if handler != nil {
+			filtered = append(filtered, handler)
+		}
+	}
+
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+
+	return func(m *meta.Meta, node *ast.Node) error {
+		for _, handler := range filtered {
+			if err := handler(m, node); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+}

@@ -635,9 +635,15 @@ func doResponse(
 			}
 		} else {
 			if utils.IsStreamResponse(resp) {
-				result, err = StreamHandler(meta, c, resp, streamPreHandler)
+				result, err = StreamHandler(
+					meta, c, resp,
+					chainPreHandlers(streamPreHandler, options.ChatNodePreHandler),
+				)
 			} else {
-				result, err = Handler(meta, c, resp, handlerPreHandler)
+				result, err = Handler(
+					meta, c, resp,
+					chainPreHandlers(handlerPreHandler, options.ChatNodePreHandler),
+				)
 			}
 		}
 	case mode.Anthropic:
