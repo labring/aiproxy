@@ -56,6 +56,7 @@ func TestStopReasonCohere2OpenAI(t *testing.T) {
 		{new("MAX_TOKENS"), relaymodel.FinishReasonLength},
 		{new("ERROR"), relaymodel.FinishReasonStop},
 		{new("ERROR_TOXIC"), relaymodel.FinishReasonContentFilter},
+		{new("STOP_SEQUENCE"), relaymodel.FinishReasonStop},
 		{new("COMPLETE_UNEXPECTED"), "COMPLETE_UNEXPECTED"},
 	} {
 		if got := stopReasonCohere2OpenAI(tt.reason); got != tt.want {
