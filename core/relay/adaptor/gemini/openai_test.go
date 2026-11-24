@@ -1603,3 +1603,188 @@ func TestConvertRequest_TemperatureAndTopPAreForwarded(t *testing.T) {
 	assert.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
 	assert.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
 }
+
+func TestConvertRequest_TemperatureAndTopPPrecedence(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.0-flash",
+		model.ModelConfig{},
+	)
+
+	convert := func(t *testing.T, body string) *relaymodel.GeminiChatGenerationConfig {
+		t.Helper()
+
+		req, _ := http.NewRequestWithContext(
+			t.Context(),
+			http.MethodPost,
+			"http://localhost/v1/chat/completions",
+			strings.NewReader(body),
+		)
+
+		result, err := gemini.ConvertRequest(meta, req)
+		require.NoError(t, err)
+
+		bodyBytes, _ := io.ReadAll(result.Body)
+
+		var geminiReq relaymodel.GeminiChatRequest
+
+		require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+		require.NotNil(t, geminiReq.GenerationConfig)
+
+		return geminiReq.GenerationConfig
+	}
+
+	t.Run("native generationConfig values are kept", func(t *testing.T) {
+		config := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"generationConfig": {"temperature": 0.9, "topP": 0.5}
+		}`)
+		require.NotNil(t, config.Temperature)
+		require.NotNil(t, config.TopP)
+		assert.InDelta(t, 0.9, *config.Temperature, 1e-9)
+		assert.InDelta(t, 0.5, *config.TopP, 1e-9)
+	})
+
+	t.Run("openai-style values override native generationConfig", func(t *testing.T) {
+		config := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"temperature": 0.3,
+			"top_p": 0.8,
+			"generationConfig": {"temperature": 0.9, "topP": 0.5}
+		}`)
+		require.NotNil(t, config.Temperature)
+		require.NotNil(t, config.TopP)
+		assert.InDelta(t, 0.3, *config.Temperature, 1e-9)
+		assert.InDelta(t, 0.8, *config.TopP, 1e-9)
+	})
+
+	t.Run("absent values leave sampling unset", func(t *testing.T) {
+		config := convert(t, `{
+			"model": "gemini-2.0-flash",
+			"messages": [{"role": "user", "content": "hi"}]
+		}`)
+		assert.Nil(t, config.Temperature)
+		assert.Nil(t, config.TopP)
+	})
+}
+
+func TestConvertRequest_TemperatureAndTopPByModel(t *testing.T) {
+	tests := []struct {
+		name      string
+		origin    string
+		actual    string
+		forwarded bool
+	}{
+		{name: "gemini 1.5", origin: "gemini-1.5-pro", forwarded: true},
+		{name: "gemini 2.0", origin: "gemini-2.0-flash", forwarded: true},
+		{name: "gemini 2.5", origin: "gemini-2.5-flash", forwarded: true},
+		{name: "gemini 3 preview", origin: "gemini-3-flash-preview"},
+		{name: "gemini 3.1 pro", origin: "gemini-3.1-pro-preview"},
+		{name: "gemini 3.6", origin: "gemini-3.6-flash"},
+		{name: "gemini 3.8", origin: "gemini-3.8-flash"},
+		{name: "gemini 4", origin: "gemini-4-carbon"},
+		{
+			name:   "alias mapped to gemini 3.8",
+			origin: "gemini-2.5-flash",
+			actual: "gemini-3.8-flash",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.actual
+			if actual == "" {
+				actual = tc.origin
+			}
+
+			m := meta.NewMeta(
+				&model.Channel{Type: model.ChannelTypeGoogleGemini},
+				mode.ChatCompletions,
+				tc.origin,
+				model.ModelConfig{},
+			)
+			m.ActualModel = actual
+
+			temperature, topP := 0.3, 0.8
+			jsonData, _ := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+				Model:       tc.origin,
+				Messages:    []relaymodel.Message{{Role: "user", Content: "hi"}},
+				Temperature: &temperature,
+				TopP:        &topP,
+			})
+			req, _ := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost/v1/chat/completions",
+				bytes.NewBuffer(jsonData),
+			)
+
+			result, err := gemini.ConvertRequest(m, req)
+			require.NoError(t, err)
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var geminiReq relaymodel.GeminiChatRequest
+
+			require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+			require.NotNil(t, geminiReq.GenerationConfig)
+
+			if !tc.forwarded {
+				assert.Nil(t, geminiReq.GenerationConfig.Temperature)
+				assert.Nil(t, geminiReq.GenerationConfig.TopP)
+
+				return
+			}
+
+			require.NotNil(t, geminiReq.GenerationConfig.Temperature)
+			require.NotNil(t, geminiReq.GenerationConfig.TopP)
+			assert.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
+			assert.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
+		})
+	}
+}
+
+func TestConvertRequest_Gemini3KeepsNativeGenerationConfig(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-3.8-flash",
+		model.ModelConfig{},
+	)
+
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		strings.NewReader(`{
+			"model": "gemini-3.8-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"temperature": 0.3,
+			"top_p": 0.8,
+			"generationConfig": {"temperature": 0.9, "topP": 0.5}
+		}`),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	require.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.Temperature)
+	require.NotNil(t, geminiReq.GenerationConfig.TopP)
+	assert.InDelta(t, 0.9, *geminiReq.GenerationConfig.Temperature, 1e-9)
+	assert.InDelta(t, 0.5, *geminiReq.GenerationConfig.TopP, 1e-9)
+}

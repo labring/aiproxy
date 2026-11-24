@@ -93,6 +93,39 @@ func shouldAutoIncludeThoughts(modelName string) bool {
 	return true
 }
 
+// geminiManagesSampling reports whether any of the model names belongs to
+// Gemini 3 or later. Those models pick their own sampling values: Google no
+// longer recommends a custom temperature and topP for them and ignores the
+// values from Gemini 3.6 on, so OpenAI-style values are not mapped into
+// generationConfig.
+func geminiManagesSampling(modelNames ...string) bool {
+	for _, modelName := range modelNames {
+		if major, ok := geminiMajorVersion(modelName); ok && major >= 3 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// geminiMajorVersion returns the leading version number of a model name such
+// as gemini-3.8-flash.
+func geminiMajorVersion(modelName string) (int, bool) {
+	_, version, ok := strings.Cut(strings.ToLower(modelName), "gemini-")
+	if !ok {
+		return 0, false
+	}
+
+	end := strings.IndexFunc(version, func(r rune) bool { return r < '0' || r > '9' })
+	if end >= 0 {
+		version = version[:end]
+	}
+
+	major, err := strconv.Atoi(version)
+
+	return major, err == nil
+}
+
 func resolveGeminiFeatureModel(meta *meta.Meta) string {
 	if meta == nil {
 		return ""
@@ -207,13 +240,16 @@ func buildGenerationConfig(
 		config = *reqWithConfig.GenerationConfig
 	}
 
-	// Override with OpenAI-style parameters if provided
-	if textRequest.Temperature != nil {
-		config.Temperature = textRequest.Temperature
-	}
+	// Override with OpenAI-style parameters if provided. Gemini 3 and later
+	// sample on their own, so the values are only mapped for earlier models.
+	if !geminiManagesSampling(meta.OriginModel, meta.ActualModel) {
+		if textRequest.Temperature != nil {
+			config.Temperature = textRequest.Temperature
+		}
 
-	if textRequest.TopP != nil {
-		config.TopP = textRequest.TopP
+		if textRequest.TopP != nil {
+			config.TopP = textRequest.TopP
+		}
 	}
 
 	// Convert MaxTokens (int) to MaxOutputTokens (*int)
