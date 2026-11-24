@@ -1040,3 +1040,126 @@ func TestConvertGeminiRequest_StopSequences(t *testing.T) {
 		t.Fatalf("expected stop [END STOP], got %#v", openAIReq.Stop)
 	}
 }
+
+func TestConvertGeminiRequest_TopK(t *testing.T) {
+	t.Parallel()
+
+	const requestWithTopK = `{
+		"contents": [{"role":"user","parts":[{"text":"hello"}]}],
+		"generationConfig": {"topK": 40}
+	}`
+
+	tests := []struct {
+		name     string
+		body     string
+		forward  bool
+		wantTopK any
+	}{
+		{
+			name:     "left out by default",
+			body:     requestWithTopK,
+			wantTopK: nil,
+		},
+		{
+			name:     "forwarded for an upstream that documents it",
+			body:     requestWithTopK,
+			forward:  true,
+			wantTopK: float64(40),
+		},
+		{
+			name: "absent in the Gemini request",
+			body: `{
+				"contents": [{"role":"user","parts":[{"text":"hello"}]}],
+				"generationConfig": {"temperature": 0.5}
+			}`,
+			forward:  true,
+			wantTopK: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			httpReq := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1beta/models/gemini-pro:generateContent",
+				strings.NewReader(tt.body),
+			)
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			var hooks []openai.OpenAIRequestHook
+			if tt.forward {
+				hooks = append(hooks, openai.ForwardGeminiTopK(httpReq))
+			}
+
+			m := &meta.Meta{
+				ActualModel: "gpt-4o",
+			}
+
+			result, err := openai.ConvertGeminiRequest(m, httpReq, hooks...)
+			require.NoError(t, err)
+
+			var openAIReq map[string]any
+			require.NoError(t, json.NewDecoder(result.Body).Decode(&openAIReq))
+			assert.Equal(t, tt.wantTopK, openAIReq["top_k"])
+		})
+	}
+}
+
+func TestForwardTopK(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		hook     func(*http.Request) openai.OpenAIRequestHook
+		body     string
+		wantTopK int
+	}{
+		{
+			name: "claude top_k is not a number",
+			hook: openai.ForwardClaudeTopK,
+			body: `{"top_k":"40"}`,
+		},
+		{
+			name: "claude top_k is too large for an int",
+			hook: openai.ForwardClaudeTopK,
+			body: `{"top_k":1e300}`,
+		},
+		{
+			name: "gemini without generation config",
+			hook: openai.ForwardGeminiTopK,
+			body: `{"contents":[]}`,
+		},
+		{
+			name: "gemini topK is null",
+			hook: openai.ForwardGeminiTopK,
+			body: `{"generationConfig":{"topK":null}}`,
+		},
+		{
+			name:     "gemini topK written as a float",
+			hook:     openai.ForwardGeminiTopK,
+			body:     `{"generationConfig":{"topK":40.0}}`,
+			wantTopK: 40,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			httpReq := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/messages",
+				strings.NewReader(tt.body),
+			)
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			openAIRequest := &relaymodel.GeneralOpenAIRequest{}
+			require.NoError(t, tt.hook(httpReq)(openAIRequest))
+			assert.Equal(t, tt.wantTopK, openAIRequest.TopK)
+		})
+	}
+}

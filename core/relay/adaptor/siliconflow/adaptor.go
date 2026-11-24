@@ -143,9 +143,21 @@ func (a *Adaptor) ConvertRequest(
 	case mode.VideosContent:
 		return ConvertVideosStatusRequest(meta, req)
 	case mode.Anthropic:
-		return openai.ConvertClaudeRequest(meta, req, patchSiliconFlowMultimodalContent)
+		// SiliconFlow documents top_k, unlike the OpenAI API the conversion
+		// targets.
+		return openai.ConvertClaudeRequest(
+			meta,
+			req,
+			patchSiliconFlowMultimodalContent,
+			openai.ForwardClaudeTopK(req),
+		)
 	case mode.Gemini:
-		return openai.ConvertGeminiRequest(meta, req, patchSiliconFlowMultimodalContent)
+		return openai.ConvertGeminiRequest(
+			meta,
+			req,
+			patchSiliconFlowMultimodalContent,
+			openai.ForwardGeminiTopK(req),
+		)
 	default:
 		return a.Adaptor.ConvertRequest(meta, store, req)
 	}

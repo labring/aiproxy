@@ -53,6 +53,14 @@ func ConvertClaudeRequest(
 	}, nil
 }
 
+// ForwardClaudeTopK returns a hook that copies the top_k of the Claude request
+// into the converted request. top_k is not part of the OpenAI API, so
+// ConvertClaudeRequest leaves it out; pass the hook for upstreams whose API
+// documents top_k.
+func ForwardClaudeTopK(req *http.Request) OpenAIRequestHook {
+	return forwardTopK(req, "top_k")
+}
+
 func ConvertClaudeRequestModel(
 	meta *meta.Meta,
 	req *http.Request,
