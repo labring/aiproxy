@@ -84,6 +84,22 @@ type GeneralOpenAIRequest struct {
 	Thinking *GeneralThinking `json:"thinking,omitempty"`
 }
 
+// OutputTokenLimit returns the requested output token cap. OpenAI-format clients
+// may send either max_tokens (legacy) or max_completion_tokens (newer models);
+// the former takes precedence when both are set, matching the Responses
+// conversion. Zero means unset.
+func (r GeneralOpenAIRequest) OutputTokenLimit() int {
+	if r.MaxTokens > 0 {
+		return r.MaxTokens
+	}
+
+	if r.MaxCompletionTokens > 0 {
+		return r.MaxCompletionTokens
+	}
+
+	return 0
+}
+
 func (r GeneralOpenAIRequest) ParseInput() []string {
 	if r.Input == nil {
 		return nil

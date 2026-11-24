@@ -2,6 +2,11 @@
 package baidu
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/labring/aiproxy/core/relay/meta"
@@ -71,5 +76,40 @@ func TestStreamResponse2OpenAI_FinishReason(t *testing.T) {
 	})
 	if fr := got.Choices[0].FinishReason; fr != relaymodel.FinishReasonContentFilter {
 		t.Fatalf("need_clear_history finish_reason = %q, want content_filter", fr)
+	}
+}
+
+func TestConvertRequestMaxCompletionTokens(t *testing.T) {
+	t.Parallel()
+
+	body := `{"model":"ernie","messages":[{"role":"user","content":"hi"}],"max_completion_tokens":123}`
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(body),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ConvertRequest(&meta.Meta{ActualModel: "ernie"}, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got ChatRequest
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.MaxOutputTokens != 123 {
+		t.Fatalf("MaxOutputTokens = %d, want 123", got.MaxOutputTokens)
 	}
 }

@@ -8,18 +8,35 @@ import (
 )
 
 type ClaudeOpenAIRequest struct {
-	ToolChoice      any                    `json:"tool_choice,omitempty"`
-	Stop            any                    `json:"stop,omitempty"`
-	Temperature     *float64               `json:"temperature,omitempty"`
-	TopP            *float64               `json:"top_p,omitempty"`
-	ReasoningEffort *string                `json:"reasoning_effort,omitempty"`
-	Model           string                 `json:"model,omitempty"`
-	Messages        []*ClaudeOpenaiMessage `json:"messages,omitempty"`
-	Tools           []*ClaudeOpenaiTool    `json:"tools,omitempty"`
-	Seed            float64                `json:"seed,omitempty"`
-	MaxTokens       int                    `json:"max_tokens,omitempty"`
-	TopK            int                    `json:"top_k,omitempty"`
-	Stream          bool                   `json:"stream,omitempty"`
+	ToolChoice          any                    `json:"tool_choice,omitempty"`
+	Stop                any                    `json:"stop,omitempty"`
+	Temperature         *float64               `json:"temperature,omitempty"`
+	TopP                *float64               `json:"top_p,omitempty"`
+	ReasoningEffort     *string                `json:"reasoning_effort,omitempty"`
+	Model               string                 `json:"model,omitempty"`
+	Messages            []*ClaudeOpenaiMessage `json:"messages,omitempty"`
+	Tools               []*ClaudeOpenaiTool    `json:"tools,omitempty"`
+	Seed                float64                `json:"seed,omitempty"`
+	MaxTokens           int                    `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                    `json:"max_completion_tokens,omitempty"`
+	TopK                int                    `json:"top_k,omitempty"`
+	Stream              bool                   `json:"stream,omitempty"`
+}
+
+// OutputTokenLimit returns the requested output token cap. OpenAI-format clients
+// may send either max_tokens (legacy) or max_completion_tokens (newer models);
+// the former takes precedence when both are set, matching the Responses
+// conversion. Zero means unset.
+func (r ClaudeOpenAIRequest) OutputTokenLimit() int {
+	if r.MaxTokens > 0 {
+		return r.MaxTokens
+	}
+
+	if r.MaxCompletionTokens > 0 {
+		return r.MaxCompletionTokens
+	}
+
+	return 0
 }
 
 type ClaudeOpenaiMessage struct {

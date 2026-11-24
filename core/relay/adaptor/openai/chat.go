@@ -1386,10 +1386,8 @@ func ConvertChatCompletionToResponsesRequest(
 		)
 	}
 
-	if chatReq.MaxTokens > 0 {
-		responsesReq.MaxOutputTokens = &chatReq.MaxTokens
-	} else if chatReq.MaxCompletionTokens > 0 {
-		responsesReq.MaxOutputTokens = &chatReq.MaxCompletionTokens
+	if limit := chatReq.OutputTokenLimit(); limit > 0 {
+		responsesReq.MaxOutputTokens = &limit
 	}
 
 	// Map tools
