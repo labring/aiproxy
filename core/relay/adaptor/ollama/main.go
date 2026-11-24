@@ -37,12 +37,15 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 			PresencePenalty:  request.PresencePenalty,
 			NumPredict:       request.MaxTokens,
 			NumCtx:           request.NumCtx,
-			Stop:             request.Stop,
 		},
 		Stream:   request.Stream,
 		Messages: make([]Message, 0, len(request.Messages)),
 		Prompt:   request.Prompt,
 		Tools:    make([]*Tool, 0, len(request.Tools)),
+	}
+
+	if stop := utils.ParseOpenAIStopSequences(request.Stop); len(stop) > 0 {
+		ollamaRequest.Options.Stop = stop
 	}
 
 	if request.ResponseFormat != nil {
