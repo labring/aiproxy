@@ -283,3 +283,32 @@ func TestConvertRequest_StopSequences(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertRequest_ForwardsTopK(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{Type: model.ChannelTypeOllama},
+		0,
+		"llama2",
+		model.ModelConfig{},
+	)
+
+	body := `{"model":"llama2","messages":[{"role":"user","content":"hi"}],"top_k":40}`
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost:11434/api/chat",
+		strings.NewReader(body),
+	)
+
+	result, err := ollama.ConvertRequest(m, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var got map[string]any
+	assert.NoError(t, json.Unmarshal(bodyBytes, &got))
+
+	options, ok := got["options"].(map[string]any)
+	assert.True(t, ok)
+	assert.EqualValues(t, 40, options["top_k"])
+}
