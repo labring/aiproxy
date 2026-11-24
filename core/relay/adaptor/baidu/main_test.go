@@ -85,7 +85,11 @@ func TestConvertRequestMaxCompletionTokens(t *testing.T) {
 	body := `{"model":"ernie","messages":[{"role":"user","content":"hi"}],"max_completion_tokens":123}`
 
 	req, err := http.NewRequestWithContext(
-		context.Background(), http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		context.Background(),
+		http.MethodPost,
+		"/v1/chat/completions",
+		strings.NewReader(body),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

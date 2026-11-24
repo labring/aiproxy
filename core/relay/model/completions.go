@@ -86,13 +86,18 @@ type GeneralOpenAIRequest struct {
 
 // OutputTokenLimit returns the requested output token cap. OpenAI-format clients
 // may send either max_tokens (legacy) or max_completion_tokens (newer models);
-// the latter takes precedence when both are set. Zero means unset.
+// the former takes precedence when both are set, matching the Responses
+// conversion. Zero means unset.
 func (r GeneralOpenAIRequest) OutputTokenLimit() int {
+	if r.MaxTokens > 0 {
+		return r.MaxTokens
+	}
+
 	if r.MaxCompletionTokens > 0 {
 		return r.MaxCompletionTokens
 	}
 
-	return r.MaxTokens
+	return 0
 }
 
 func (r GeneralOpenAIRequest) ParseInput() []string {
