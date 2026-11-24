@@ -8,7 +8,7 @@ replace github.com/labring/aiproxy/openapi-mcp => ../openapi-mcp
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
-	github.com/PuerkitoBio/goquery v1.13.0
+	github.com/PuerkitoBio/goquery v1.14.0
 	github.com/bytedance/sonic v1.15.4
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/labring/aiproxy/core v0.0.0-20261010031239-b9f99684350e
