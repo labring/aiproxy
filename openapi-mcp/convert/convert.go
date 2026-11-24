@@ -68,7 +68,7 @@ func (c *Converter) Convert() (*server.MCPServer, error) {
 	defaultServer := c.options.ServerAddr
 	// Use custom server address if provided
 	if defaultServer == "" {
-		servers := c.parser.GetServers()
+		servers := nonNilServers(c.parser.GetServers())
 		if len(servers) == 1 {
 			server, err := getServerURL(c.options.OpenAPIFrom, servers[0].URL)
 			if err != nil {
@@ -118,6 +118,20 @@ func getServerURL(from, dir string) (string, error) {
 	result.RawQuery = ""
 
 	return result.String(), nil
+}
+
+// nonNilServers drops null server entries, which a YAML document carries when
+// a list item has no value.
+func nonNilServers(servers []*openapi3.Server) []*openapi3.Server {
+	usable := make([]*openapi3.Server, 0, len(servers))
+
+	for _, server := range servers {
+		if server != nil {
+			usable = append(usable, server)
+		}
+	}
+
+	return usable
 }
 
 // TODO: valid operation
@@ -307,6 +321,11 @@ func getArgs(args map[string]any) Args {
 // getOperations returns a map of HTTP method to operation
 func getOperations(pathItem *openapi3.PathItem) map[string]*openapi3.Operation {
 	operations := make(map[string]*openapi3.Operation)
+	// A Swagger 2.0 document can list a path without a value, which leaves a
+	// null path item after the conversion to OpenAPI 3.
+	if pathItem == nil {
+		return operations
+	}
 
 	if pathItem.Get != nil {
 		operations[http.MethodGet] = pathItem.Get
@@ -360,7 +379,7 @@ func (c *Converter) convertOperation(path, method string, operation *openapi3.Op
 	}
 
 	// Add server address parameter
-	servers := c.parser.GetServers()
+	servers := nonNilServers(c.parser.GetServers())
 	switch {
 	case c.options.ServerAddr != "":
 		// Use custom server address from options
@@ -485,7 +504,7 @@ func (c *Converter) generateResponseDescription(responses openapi3.Responses) st
 
 		if len(response.Content) > 0 {
 			for contentType, mediaType := range response.Content {
-				if mediaType.Schema != nil && mediaType.Schema.Value != nil {
+				if mediaType != nil && mediaType.Schema != nil && mediaType.Schema.Value != nil {
 					property := c.processSchemaProperty(
 						mediaType.Schema,
 						make(map[string]bool),
@@ -583,7 +602,10 @@ func (c *Converter) convertRequestBody(requestBody *openapi3.RequestBody) []mcp.
 	args := []mcp.ToolOption{}
 
 	for contentType, mediaType := range requestBody.Content {
-		if mediaType.Schema == nil || mediaType.Schema.Value == nil {
+		// A document carries a null media type when a content type has no
+		// value, as in the YAML `application/json:` form or a JSON null. There
+		// is no schema to expose for it.
+		if mediaType == nil || mediaType.Schema == nil || mediaType.Schema.Value == nil {
 			continue
 		}
 

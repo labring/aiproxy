@@ -2,14 +2,16 @@ package convert_test
 
 import (
 	"encoding/json"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/labring/aiproxy/openapi-mcp/convert"
 )
 
-// newConverter parses the given OpenAPI document and returns a converter for it.
-func newConverter(t *testing.T, document string) *convert.Converter {
+// parseDocument parses the given OpenAPI document.
+func parseDocument(t *testing.T, document string) *convert.Parser {
 	t.Helper()
 
 	parser := convert.NewParser()
@@ -17,17 +19,32 @@ func newConverter(t *testing.T, document string) *convert.Converter {
 		t.Fatalf("parse OpenAPI document: %v", err)
 	}
 
-	return convert.NewConverter(parser, convert.Options{
+	return parser
+}
+
+// newConverter parses the given OpenAPI document and returns a converter for it.
+func newConverter(t *testing.T, document string) *convert.Converter {
+	t.Helper()
+
+	return convert.NewConverter(parseDocument(t, document), convert.Options{
 		ServerAddr: "http://localhost:3000",
 	})
 }
 
-// convertToolSchemas runs Convert and returns the input schema of every tool
-// keyed by tool name. Convert must terminate for the test to reach this point.
+// convertToolSchemas converts the given OpenAPI document and returns the input
+// schema of every tool keyed by tool name.
 func convertToolSchemas(t *testing.T, document string) map[string]map[string]any {
 	t.Helper()
 
-	mcpServer, err := newConverter(t, document).Convert()
+	return toolSchemas(t, newConverter(t, document))
+}
+
+// toolSchemas runs Convert and returns the input schema of every tool keyed by
+// tool name. Convert must terminate for the test to reach this point.
+func toolSchemas(t *testing.T, converter *convert.Converter) map[string]map[string]any {
+	t.Helper()
+
+	mcpServer, err := converter.Convert()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
@@ -65,6 +82,25 @@ func toolSchema(t *testing.T, schemas map[string]map[string]any) map[string]any 
 	// Every document built in this file declares exactly one operation.
 	const toolName = "post_items"
 
+	properties := toolProperties(t, schemas, toolName)
+
+	body, ok := properties["body|application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool %q has no JSON body property: %v", toolName, properties)
+	}
+
+	return body
+}
+
+// toolProperties returns the properties of the named tool, failing the test
+// when the tool or its properties are missing.
+func toolProperties(
+	t *testing.T,
+	schemas map[string]map[string]any,
+	toolName string,
+) map[string]any {
+	t.Helper()
+
 	schema, ok := schemas[toolName]
 	if !ok {
 		t.Fatalf("tool %q not found, got %v", toolName, schemaNames(schemas))
@@ -75,12 +111,7 @@ func toolSchema(t *testing.T, schemas map[string]map[string]any) map[string]any 
 		t.Fatalf("tool %q has no properties: %v", toolName, schema)
 	}
 
-	body, ok := properties["body|application/json"].(map[string]any)
-	if !ok {
-		t.Fatalf("tool %q has no JSON body property: %v", toolName, properties)
-	}
-
-	return body
+	return properties
 }
 
 func schemaNames(schemas map[string]map[string]any) []string {
@@ -477,5 +508,221 @@ func TestConvertPlainSchema(t *testing.T) {
 
 	if item := itemsOf(t, tags); item["type"] != "string" {
 		t.Fatalf("unexpected tags items schema: %v", item)
+	}
+}
+
+const nullMediaTypeDocument = `{
+  "openapi": "3.0.0",
+  "info": {"title": "test", "version": "1.0.0"},
+  "paths": {
+    "/items": {
+      "post": {
+        "operationId": "post_items",
+        "requestBody": {"content": {
+          "application/json": null,
+          "text/plain": {"schema": {"type": "string"}}
+        }},
+        "responses": {"200": {"description": "ok"}}
+      }
+    }
+  }
+}`
+
+// TestConvertSkipsNullMediaTypes covers request bodies that list a content type
+// without a value, as in the YAML `application/json:` form. A null media type
+// has no schema, so only the other content types become tool arguments.
+func TestConvertSkipsNullMediaTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		document string
+		want     map[string]string
+	}{
+		{
+			name: "yaml content type without a value",
+			document: `openapi: 3.0.0
+info:
+  title: test
+  version: 1.0.0
+paths:
+  /items:
+    post:
+      operationId: post_items
+      requestBody:
+        content:
+          application/json:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: ok
+`,
+			want: map[string]string{"body|text/plain": "string"},
+		},
+		{
+			name:     "json null media type",
+			document: nullMediaTypeDocument,
+			want:     map[string]string{"body|text/plain": "string"},
+		},
+		{
+			name:     "openapi 3.1 null media type",
+			document: strings.Replace(nullMediaTypeDocument, "3.0.0", "3.1.0", 1),
+			want:     map[string]string{"body|text/plain": "string"},
+		},
+		{
+			name: "yaml with only a content type without a value",
+			document: `openapi: 3.0.0
+info:
+  title: test
+  version: 1.0.0
+paths:
+  /items:
+    post:
+      operationId: post_items
+      requestBody:
+        content:
+          application/json:
+      responses:
+        "200":
+          description: ok
+`,
+			want: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			properties := toolProperties(t, convertToolSchemas(t, tt.document), "post_items")
+
+			bodies := make(map[string]string)
+			for name, value := range properties {
+				if !strings.HasPrefix(name, "body|") {
+					continue
+				}
+
+				property, _ := value.(map[string]any)
+				bodies[name], _ = property["type"].(string)
+			}
+
+			if !reflect.DeepEqual(bodies, tt.want) {
+				t.Fatalf("unexpected body arguments: got %v, want %v", bodies, tt.want)
+			}
+		})
+	}
+}
+
+// TestConvertSkipsNullPathItem covers a Swagger 2.0 document that lists a path
+// without a value.
+func TestConvertSkipsNullPathItem(t *testing.T) {
+	t.Parallel()
+
+	const document = `{
+  "swagger": "2.0",
+  "info": {"title": "test", "version": "1.0.0"},
+  "paths": {
+    "/items": null,
+    "/pets": {"get": {"operationId": "list_pets", "responses": {"200": {"description": "ok"}}}}
+  }
+}`
+
+	parser := convert.NewParser()
+	if err := parser.ParseV2([]byte(document)); err != nil {
+		t.Fatalf("parse Swagger document: %v", err)
+	}
+
+	schemas := toolSchemas(t, convert.NewConverter(parser, convert.Options{
+		ServerAddr: "http://localhost:3000",
+	}))
+	if names := schemaNames(schemas); len(names) != 1 || names[0] != "list_pets" {
+		t.Fatalf("expected only the list_pets tool, got %v", names)
+	}
+}
+
+// TestConvertSkipsNullServerEntries covers documents whose servers list holds an
+// item without a value. The remaining servers define the server address
+// argument of the tools, and a list without any server behaves like no list.
+func TestConvertSkipsNullServerEntries(t *testing.T) {
+	t.Parallel()
+
+	const header = `openapi: 3.0.0
+info:
+  title: test
+  version: 1.0.0
+`
+
+	const paths = `paths:
+  /items:
+    post:
+      operationId: post_items
+      responses:
+        "200":
+          description: ok
+`
+
+	const serverAddrArg = "openapi|server_addr"
+
+	tests := []struct {
+		name     string
+		document string
+		want     map[string]any
+		required bool
+	}{
+		{
+			name: "only an item without a value",
+			document: header + "servers:\n" +
+				"  -\n" + paths,
+			want: map[string]any{
+				"description": "Server address to connect to, example: http://localhost:3000",
+			},
+			required: true,
+		},
+		{
+			name: "single server after an item without a value",
+			document: header + "servers:\n" +
+				"  -\n" +
+				"  - url: http://localhost:3000\n" + paths,
+			want:     map[string]any{"default": "http://localhost:3000"},
+			required: false,
+		},
+		{
+			name: "item without a value among several servers",
+			document: header + "servers:\n" +
+				"  - url: http://a.example.com\n" +
+				"  -\n" +
+				"  - url: http://b.example.com\n" + paths,
+			want: map[string]any{
+				"enum": []any{"http://a.example.com", "http://b.example.com"},
+			},
+			required: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			schemas := toolSchemas(t, convert.NewConverter(
+				parseDocument(t, tt.document),
+				convert.Options{OpenAPIFrom: "http://localhost:3000/openapi.json"},
+			))
+			properties := toolProperties(t, schemas, "post_items")
+
+			serverAddr, _ := properties[serverAddrArg].(map[string]any)
+			for key, want := range tt.want {
+				if got := serverAddr[key]; !reflect.DeepEqual(got, want) {
+					t.Fatalf("unexpected %s of the server address argument: got %v, want %v",
+						key, got, want)
+				}
+			}
+
+			required, _ := schemas["post_items"]["required"].([]any)
+			if got := slices.Contains(required, serverAddrArg); got != tt.required {
+				t.Fatalf("unexpected required flag of the server address argument: got %v", got)
+			}
+		})
 	}
 }
