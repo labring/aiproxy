@@ -40,3 +40,35 @@ func TestGeminiChatResponseWebSearchCountUsesSearchQueriesForGemini3(t *testing.
 		t.Fatalf("expected two search queries, got %d", got)
 	}
 }
+
+func TestGeminiUsageMetadataIncludesToolUsePromptTokens(t *testing.T) {
+	t.Parallel()
+
+	usage := GeminiUsageMetadata{
+		PromptTokenCount:        100,
+		ToolUsePromptTokenCount: 40,
+		CandidatesTokenCount:    10,
+		ThoughtsTokenCount:      5,
+		TotalTokenCount:         155,
+	}
+
+	chatUsage := usage.ToUsage()
+	if chatUsage.PromptTokens != 140 {
+		t.Errorf("ToUsage PromptTokens = %d, want 140", chatUsage.PromptTokens)
+	}
+
+	responseUsage := usage.ToResponseUsage()
+	if responseUsage.InputTokens != 140 {
+		t.Errorf("ToResponseUsage InputTokens = %d, want 140", responseUsage.InputTokens)
+	}
+
+	claudeUsage := usage.ToClaudeUsage()
+	if claudeUsage.InputTokens != 140 {
+		t.Errorf("ToClaudeUsage InputTokens = %d, want 140", claudeUsage.InputTokens)
+	}
+
+	modelUsage := usage.ToModelUsage()
+	if int64(modelUsage.InputTokens) != 140 {
+		t.Errorf("ToModelUsage InputTokens = %d, want 140", modelUsage.InputTokens)
+	}
+}

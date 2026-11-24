@@ -275,7 +275,7 @@ func (u *GeminiUsageMetadata) GetAudioOutputTokens() int64 {
 // ToUsage converts GeminiUsageMetadata to ChatUsage format
 func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 	chatUsage := ChatUsage{
-		PromptTokens: u.PromptTokenCount,
+		PromptTokens: u.PromptTokenCount + u.ToolUsePromptTokenCount,
 		CompletionTokens: u.CandidatesTokenCount +
 			u.ThoughtsTokenCount,
 		TotalTokens: u.TotalTokenCount,
@@ -319,7 +319,7 @@ func (u *GeminiUsageMetadata) ToModelUsage() model.Usage {
 // ToResponseUsage converts GeminiUsageMetadata to ResponseUsage (OpenAI Responses API format)
 func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 	usage := ResponseUsage{
-		InputTokens:  u.PromptTokenCount,
+		InputTokens:  u.PromptTokenCount + u.ToolUsePromptTokenCount,
 		OutputTokens: u.CandidatesTokenCount + u.ThoughtsTokenCount,
 		TotalTokens:  u.TotalTokenCount,
 	}
@@ -357,7 +357,7 @@ func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 // ToClaudeUsage converts GeminiUsageMetadata to ClaudeUsage (Anthropic Claude format)
 func (u *GeminiUsageMetadata) ToClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{
-		InputTokens:  u.PromptTokenCount,
+		InputTokens:  u.PromptTokenCount + u.ToolUsePromptTokenCount,
 		OutputTokens: u.CandidatesTokenCount,
 	}
 
