@@ -1400,6 +1400,56 @@ func TestResponseChat2OpenAIConvertsAudioInlineDataAndUsage(t *testing.T) {
 	)
 }
 
+func TestResponseChat2OpenAICountsToolUsePromptTokensAsInput(t *testing.T) {
+	t.Parallel()
+
+	meta := meta.NewMeta(
+		&model.Channel{Type: model.ChannelTypeGoogleGemini},
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+	response := &relaymodel.GeminiChatResponse{
+		Candidates: []*relaymodel.GeminiChatCandidate{
+			{
+				Content: relaymodel.GeminiChatContent{
+					Parts: []*relaymodel.GeminiPart{{Text: "answer"}},
+				},
+				FinishReason: relaymodel.GeminiFinishReasonStop,
+			},
+		},
+		UsageMetadata: &relaymodel.GeminiUsageMetadata{
+			PromptTokenCount:        12,
+			ToolUsePromptTokenCount: 34,
+			CandidatesTokenCount:    5,
+			TotalTokenCount:         51,
+		},
+	}
+
+	// The handler bills the usage it reports to the client.
+	check := func(usage *relaymodel.ChatUsage) {
+		t.Helper()
+
+		assert.Equal(t, int64(46), usage.PromptTokens)
+		assert.Equal(
+			t,
+			usage.TotalTokens,
+			usage.PromptTokens+usage.CompletionTokens,
+		)
+		assert.Equal(
+			t,
+			model.ZeroNullInt64(46),
+			usage.ToModelUsage().InputTokens,
+		)
+	}
+
+	check(&gemini.ResponseChat2OpenAIForTest(meta, response).Usage)
+
+	streamResponse := gemini.StreamResponseChat2OpenAIForTest(meta, response)
+	require.NotNil(t, streamResponse.Usage)
+	check(streamResponse.Usage)
+}
+
 func TestStreamResponseChat2OpenAIConvertsAudioInlineDataToDeltaAudio(t *testing.T) {
 	t.Parallel()
 

@@ -272,10 +272,16 @@ func (u *GeminiUsageMetadata) GetAudioOutputTokens() int64 {
 	return 0
 }
 
+// GetInputTokens returns the tokens of the prompt plus the tokens of the
+// tool-use prompts, which the API reports in a field of their own.
+func (u *GeminiUsageMetadata) GetInputTokens() int64 {
+	return u.PromptTokenCount + u.ToolUsePromptTokenCount
+}
+
 // ToUsage converts GeminiUsageMetadata to ChatUsage format
 func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 	chatUsage := ChatUsage{
-		PromptTokens: u.PromptTokenCount,
+		PromptTokens: u.GetInputTokens(),
 		CompletionTokens: u.CandidatesTokenCount +
 			u.ThoughtsTokenCount,
 		TotalTokens: u.TotalTokenCount,
@@ -297,11 +303,8 @@ func (u *GeminiUsageMetadata) ToUsage() ChatUsage {
 
 // ToModelUsage converts GeminiUsageMetadata to model.Usage format with image token support
 func (u *GeminiUsageMetadata) ToModelUsage() model.Usage {
-	// Input tokens should include both prompt tokens and tool use prompt tokens
-	inputTokens := u.PromptTokenCount + u.ToolUsePromptTokenCount
-
 	usage := model.Usage{
-		InputTokens:       model.ZeroNullInt64(inputTokens),
+		InputTokens:       model.ZeroNullInt64(u.GetInputTokens()),
 		ImageInputTokens:  model.ZeroNullInt64(u.GetImageInputTokens()),
 		AudioInputTokens:  model.ZeroNullInt64(u.GetAudioInputTokens()),
 		VideoInputTokens:  model.ZeroNullInt64(u.GetVideoInputTokens()),
@@ -319,7 +322,7 @@ func (u *GeminiUsageMetadata) ToModelUsage() model.Usage {
 // ToResponseUsage converts GeminiUsageMetadata to ResponseUsage (OpenAI Responses API format)
 func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 	usage := ResponseUsage{
-		InputTokens:  u.PromptTokenCount,
+		InputTokens:  u.GetInputTokens(),
 		OutputTokens: u.CandidatesTokenCount + u.ThoughtsTokenCount,
 		TotalTokens:  u.TotalTokenCount,
 	}
@@ -357,7 +360,7 @@ func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 // ToClaudeUsage converts GeminiUsageMetadata to ClaudeUsage (Anthropic Claude format)
 func (u *GeminiUsageMetadata) ToClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{
-		InputTokens:  u.PromptTokenCount,
+		InputTokens:  u.GetInputTokens(),
 		OutputTokens: u.CandidatesTokenCount,
 	}
 
