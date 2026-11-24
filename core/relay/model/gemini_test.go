@@ -57,6 +57,15 @@ func TestGeminiUsageMetadataIncludesToolUsePromptTokens(t *testing.T) {
 		t.Errorf("ToUsage PromptTokens = %d, want 140", chatUsage.PromptTokens)
 	}
 
+	// The API defines the total as prompt + tool-use prompt + thoughts + candidates.
+	if got := chatUsage.PromptTokens + chatUsage.CompletionTokens; got != chatUsage.TotalTokens {
+		t.Errorf("prompt + completion tokens = %d, want total %d", got, chatUsage.TotalTokens)
+	}
+
+	if got := usage.GetInputTokens(); got != 140 {
+		t.Errorf("GetInputTokens = %d, want 140", got)
+	}
+
 	responseUsage := usage.ToResponseUsage()
 	if responseUsage.InputTokens != 140 {
 		t.Errorf("ToResponseUsage InputTokens = %d, want 140", responseUsage.InputTokens)
