@@ -239,3 +239,47 @@ func TestConvertRequest_MaxCompletionTokens(t *testing.T) {
 	assert.NotNil(t, ollamaReq.Options)
 	assert.Equal(t, 55, ollamaReq.Options.NumPredict)
 }
+
+func TestConvertRequest_StopSequences(t *testing.T) {
+	tests := []struct {
+		name string
+		stop any
+		want []any
+	}{
+		{name: "string", stop: "END", want: []any{"END"}},
+		{name: "array", stop: []string{"a", "b"}, want: []any{"a", "b"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := meta.NewMeta(
+				&model.Channel{Type: model.ChannelTypeOllama},
+				0,
+				"llama2",
+				model.ModelConfig{},
+			)
+
+			jsonData, _ := sonic.Marshal(relaymodel.GeneralOpenAIRequest{
+				Model:    "llama2",
+				Messages: []relaymodel.Message{{Role: "user", Content: "hi"}},
+				Stop:     tt.stop,
+			})
+			req, _ := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost:11434/api/chat",
+				bytes.NewBuffer(jsonData),
+			)
+
+			result, err := ollama.ConvertRequest(m, req)
+			assert.NoError(t, err)
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var ollamaReq ollama.ChatRequest
+
+			assert.NoError(t, json.Unmarshal(bodyBytes, &ollamaReq))
+			assert.Equal(t, tt.want, ollamaReq.Options.Stop)
+		})
+	}
+}
