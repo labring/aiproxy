@@ -1886,3 +1886,286 @@ func TestConvertRequest_ZeroPenaltiesAreNotForwarded(t *testing.T) {
 	assert.Nil(t, geminiReq.GenerationConfig.PresencePenalty)
 	assert.Nil(t, geminiReq.GenerationConfig.FrequencyPenalty)
 }
+
+func TestConvertRequest_PenaltiesOnlyForModelsThatAcceptThem(t *testing.T) {
+	t.Parallel()
+
+	presence := 0.4
+	frequency := 0.6
+
+	tests := []struct {
+		name        string
+		channelType model.ChannelType
+		originModel string
+		actualModel string
+		wantPenalty bool
+	}{
+		{
+			name:        "gemini 2.0 on the Gemini API",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "gemini-2.0-flash",
+			wantPenalty: true,
+		},
+		{
+			name:        "gemini 2.5 on the Gemini API",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "gemini-2.5-flash",
+		},
+		{
+			name:        "gemini 2.5 on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-2.5-flash",
+			wantPenalty: true,
+		},
+		{
+			name:        "gemini 3 on the Gemini API",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "gemini-3-pro-preview",
+		},
+		{
+			name:        "gemini 3 on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-3-pro-preview",
+			wantPenalty: true,
+		},
+		{
+			name:        "gemini 3.5 on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-3.5-flash",
+			wantPenalty: true,
+		},
+		{
+			name:        "gemini 3.6 on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-3.6-flash",
+		},
+		{
+			name:        "gemini 3.8 on the Gemini API",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "gemini-3.8-flash",
+		},
+		{
+			name:        "gemini 4 on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-4-neon",
+		},
+		{
+			name:        "model without a version",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "gemini-flash-latest",
+		},
+		{
+			name:        "alias of gemini 2.0",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "fast-alias",
+			actualModel: "gemini-2.0-flash",
+			wantPenalty: true,
+		},
+		{
+			name:        "alias of gemini 3.8",
+			channelType: model.ChannelTypeGoogleGemini,
+			originModel: "fast-alias",
+			actualModel: "gemini-3.8-flash",
+		},
+		{
+			name:        "gemini 2.5 mapped to gemini 3.8",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-2.5-flash",
+			actualModel: "gemini-3.8-flash",
+		},
+		{
+			name:        "gemini 2.5 image model on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-2.5-flash-image",
+		},
+		{
+			name:        "gemini 2.5 TTS model on Vertex AI",
+			channelType: model.ChannelTypeVertexAI,
+			originModel: "gemini-2.5-flash-preview-tts",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			meta := meta.NewMeta(
+				&model.Channel{Type: tt.channelType},
+				mode.ChatCompletions,
+				tt.originModel,
+				model.ModelConfig{},
+			)
+			if tt.actualModel != "" {
+				meta.ActualModel = tt.actualModel
+			}
+
+			openAIReq := relaymodel.GeneralOpenAIRequest{
+				Model: tt.originModel,
+				Messages: []relaymodel.Message{
+					{
+						Role:    "user",
+						Content: "Hello",
+					},
+				},
+				Seed:             42,
+				PresencePenalty:  &presence,
+				FrequencyPenalty: &frequency,
+			}
+
+			jsonData, err := sonic.Marshal(openAIReq)
+			require.NoError(t, err)
+
+			req, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost/v1/chat/completions",
+				bytes.NewBuffer(jsonData),
+			)
+			require.NoError(t, err)
+
+			result, err := gemini.ConvertRequest(meta, req)
+			require.NoError(t, err)
+
+			bodyBytes, err := io.ReadAll(result.Body)
+			require.NoError(t, err)
+
+			var geminiReq relaymodel.GeminiChatRequest
+
+			require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+			require.NotNil(t, geminiReq.GenerationConfig)
+
+			config := geminiReq.GenerationConfig
+
+			// Every model takes a seed.
+			require.NotNil(t, config.Seed)
+			assert.Equal(t, 42, *config.Seed)
+
+			if !tt.wantPenalty {
+				assert.Nil(t, config.PresencePenalty)
+				assert.Nil(t, config.FrequencyPenalty)
+
+				return
+			}
+
+			require.NotNil(t, config.PresencePenalty)
+			require.NotNil(t, config.FrequencyPenalty)
+			assert.InDelta(t, 0.4, *config.PresencePenalty, 1e-9)
+			assert.InDelta(t, 0.6, *config.FrequencyPenalty, 1e-9)
+		})
+	}
+}
+
+func TestConvertRequest_NativePenaltiesAreKept(t *testing.T) {
+	t.Parallel()
+
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-3.8-flash",
+		model.ModelConfig{},
+	)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		strings.NewReader(`{
+			"model": "gemini-3.8-flash",
+			"messages": [{"role": "user", "content": "hi"}],
+			"presence_penalty": 0.4,
+			"generationConfig": {"presencePenalty": 0.5}
+		}`),
+	)
+	require.NoError(t, err)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	require.NoError(t, err)
+
+	bodyBytes, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.PresencePenalty)
+	assert.InDelta(t, 0.5, *geminiReq.GenerationConfig.PresencePenalty, 1e-9)
+	assert.Nil(t, geminiReq.GenerationConfig.FrequencyPenalty)
+}
+
+func TestConvertRequest_SeedIsForwardedOnlyAsInt32(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		seed     float64
+		wantSeed int
+	}{
+		{name: "integer", seed: 42, wantSeed: 42},
+		{name: "negative integer", seed: -7, wantSeed: -7},
+		{name: "largest int32", seed: 2147483647, wantSeed: 2147483647},
+		{name: "fractional", seed: 42.5},
+		{name: "larger than int32", seed: 3000000000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			channel := &model.Channel{
+				Type: model.ChannelTypeGoogleGemini,
+			}
+			meta := meta.NewMeta(
+				channel,
+				mode.ChatCompletions,
+				"gemini-2.0-flash",
+				model.ModelConfig{},
+			)
+
+			openAIReq := relaymodel.GeneralOpenAIRequest{
+				Model: "gemini-2.0-flash",
+				Messages: []relaymodel.Message{
+					{
+						Role:    "user",
+						Content: "Hello",
+					},
+				},
+				Seed: tt.seed,
+			}
+
+			jsonData, err := sonic.Marshal(openAIReq)
+			require.NoError(t, err)
+
+			req, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost/v1/chat/completions",
+				bytes.NewBuffer(jsonData),
+			)
+			require.NoError(t, err)
+
+			result, err := gemini.ConvertRequest(meta, req)
+			require.NoError(t, err)
+
+			bodyBytes, err := io.ReadAll(result.Body)
+			require.NoError(t, err)
+
+			var geminiReq relaymodel.GeminiChatRequest
+
+			require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+			require.NotNil(t, geminiReq.GenerationConfig)
+
+			if tt.wantSeed == 0 {
+				assert.Nil(t, geminiReq.GenerationConfig.Seed)
+
+				return
+			}
+
+			require.NotNil(t, geminiReq.GenerationConfig.Seed)
+			assert.Equal(t, tt.wantSeed, *geminiReq.GenerationConfig.Seed)
+		})
+	}
+}

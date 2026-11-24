@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -108,22 +109,75 @@ func geminiManagesSampling(modelNames ...string) bool {
 	return false
 }
 
+// geminiRejectsPenalties reports whether the models answer presencePenalty and
+// frequencyPenalty with an error. Vertex AI accepts them up to Gemini 3.6 and
+// the Gemini API up to Gemini 2.5. A model whose version cannot be read counts
+// as a recent one.
+func geminiRejectsPenalties(channelType model.ChannelType, modelNames ...string) bool {
+	known := false
+
+	for _, modelName := range modelNames {
+		major, minor, ok := geminiVersion(modelName)
+		if !ok {
+			continue
+		}
+
+		known = true
+
+		rejectFromMajor, rejectFromMinor := 2, 5
+		if channelType == model.ChannelTypeVertexAI {
+			rejectFromMajor, rejectFromMinor = 3, 6
+		}
+
+		if major > rejectFromMajor ||
+			(major == rejectFromMajor && minor >= rejectFromMinor) {
+			return true
+		}
+	}
+
+	return !known
+}
+
 // geminiMajorVersion returns the leading version number of a model name such
 // as gemini-3.8-flash.
 func geminiMajorVersion(modelName string) (int, bool) {
+	major, _, ok := geminiVersion(modelName)
+
+	return major, ok
+}
+
+// geminiVersion returns the major and minor version of a model name such as
+// gemini-3.8-flash. The minor version is 0 for a name such as gemini-3-pro.
+func geminiVersion(modelName string) (int, int, bool) {
 	_, version, ok := strings.Cut(strings.ToLower(modelName), "gemini-")
 	if !ok {
-		return 0, false
+		return 0, 0, false
 	}
 
-	end := strings.IndexFunc(version, func(r rune) bool { return r < '0' || r > '9' })
-	if end >= 0 {
-		version = version[:end]
+	end := strings.IndexFunc(version, notDigit)
+	if end < 0 {
+		end = len(version)
 	}
 
-	major, err := strconv.Atoi(version)
+	major, err := strconv.Atoi(version[:end])
+	if err != nil {
+		return 0, 0, false
+	}
 
-	return major, err == nil
+	minor := 0
+	if rest := version[end:]; strings.HasPrefix(rest, ".") {
+		if stop := strings.IndexFunc(rest[1:], notDigit); stop >= 0 {
+			rest = rest[:stop+1]
+		}
+
+		minor, _ = strconv.Atoi(rest[1:])
+	}
+
+	return major, minor, true
+}
+
+func notDigit(r rune) bool {
+	return r < '0' || r > '9'
 }
 
 func resolveGeminiFeatureModel(meta *meta.Meta) string {
@@ -222,6 +276,41 @@ func buildSafetySettings(safetySetting string) []relaymodel.GeminiChatSafetySett
 	}
 }
 
+// openAISeed returns the OpenAI-style seed when the Gemini API can take it as
+// its int32 seed, and nil when it is absent, fractional or out of range.
+func openAISeed(seed float64) *int {
+	if seed == 0 || seed != math.Trunc(seed) ||
+		seed < math.MinInt32 || seed > math.MaxInt32 {
+		return nil
+	}
+
+	value := int(seed)
+
+	return &value
+}
+
+// applyOpenAIPenalties copies the OpenAI-style penalties into the config for
+// the models that take them. Penalties of 0 are the neutral value, so they are
+// left out like an absent parameter, and so are image and TTS models.
+func applyOpenAIPenalties(
+	meta *meta.Meta,
+	config *relaymodel.GeminiChatGenerationConfig,
+	textRequest *relaymodel.GeneralOpenAIRequest,
+) {
+	if isGeminiImageModel(meta) || isGeminiTTSModel(meta) ||
+		geminiRejectsPenalties(meta.Channel.Type, meta.OriginModel, meta.ActualModel) {
+		return
+	}
+
+	if textRequest.PresencePenalty != nil && *textRequest.PresencePenalty != 0 {
+		config.PresencePenalty = textRequest.PresencePenalty
+	}
+
+	if textRequest.FrequencyPenalty != nil && *textRequest.FrequencyPenalty != 0 {
+		config.FrequencyPenalty = textRequest.FrequencyPenalty
+	}
+}
+
 func buildGenerationConfig(
 	meta *meta.Meta,
 	httpReq *http.Request,
@@ -252,20 +341,11 @@ func buildGenerationConfig(
 		}
 	}
 
-	// Penalties of 0 are the neutral value; many clients send them by default and
-	// some Gemini models reject them ("Penalty is not enabled"), so skip zeros.
-	if config.Seed == nil && textRequest.Seed != 0 {
-		seed := int(textRequest.Seed)
-		config.Seed = &seed
+	if config.Seed == nil {
+		config.Seed = openAISeed(textRequest.Seed)
 	}
 
-	if textRequest.PresencePenalty != nil && *textRequest.PresencePenalty != 0 {
-		config.PresencePenalty = textRequest.PresencePenalty
-	}
-
-	if textRequest.FrequencyPenalty != nil && *textRequest.FrequencyPenalty != 0 {
-		config.FrequencyPenalty = textRequest.FrequencyPenalty
-	}
+	applyOpenAIPenalties(meta, &config, textRequest)
 
 	// Convert MaxTokens (int) to MaxOutputTokens (*int)
 	if limit := textRequest.OutputTokenLimit(); config.MaxOutputTokens == nil && limit != 0 {
