@@ -72,6 +72,9 @@ type GeminiChatGenerationConfig struct {
 	ResponseMimeType   string                `json:"responseMimeType,omitempty"`
 	StopSequences      []string              `json:"stopSequences,omitempty"`
 	TopK               float64               `json:"topK,omitempty"`
+	Seed               *int                  `json:"seed,omitempty"`
+	PresencePenalty    *float64              `json:"presencePenalty,omitempty"`
+	FrequencyPenalty   *float64              `json:"frequencyPenalty,omitempty"`
 	MaxOutputTokens    *int                  `json:"maxOutputTokens,omitempty"`
 	CandidateCount     int                   `json:"candidateCount,omitempty"`
 	ResponseModalities []string              `json:"responseModalities,omitempty"`
