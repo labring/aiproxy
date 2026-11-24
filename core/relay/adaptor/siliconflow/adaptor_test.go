@@ -326,6 +326,111 @@ func TestConvertAnthropicRequestUsesChatCompletionsShape(t *testing.T) {
 	assertSiliconFlowContentType(t, content[1], "image_url")
 }
 
+func TestConvertAnthropicRequestTopK(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantTopK int
+	}{
+		{
+			name: "forwarded",
+			body: `{
+				"model":"claude-alias",
+				"messages":[{"role":"user","content":"Hello"}],
+				"max_tokens":64,
+				"top_k":40
+			}`,
+			wantTopK: 40,
+		},
+		{
+			name: "absent in the Claude request",
+			body: `{
+				"model":"claude-alias",
+				"messages":[{"role":"user","content":"Hello"}],
+				"max_tokens":64
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sfAdaptor := &Adaptor{}
+			m := meta.NewMeta(nil, mode.Anthropic, "claude-alias", coremodel.ModelConfig{})
+			m.ActualModel = "Qwen/Qwen3-32B"
+
+			req := newJSONRequest(t, "/v1/messages", tt.body)
+
+			result, err := sfAdaptor.ConvertRequest(m, nil, req)
+			if err != nil {
+				t.Fatalf("ConvertRequest returned error: %v", err)
+			}
+
+			got := readJSONBody(t, result.Body)
+
+			if tt.wantTopK == 0 {
+				if topK, sent := got["top_k"]; sent {
+					t.Fatalf("expected no top_k, got %#v", topK)
+				}
+
+				return
+			}
+
+			assertMapNumber(t, got, "top_k", tt.wantTopK)
+		})
+	}
+}
+
+func TestConvertGeminiRequestTopK(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantTopK int
+	}{
+		{
+			name: "forwarded",
+			body: `{
+				"contents":[{"role":"user","parts":[{"text":"Hello"}]}],
+				"generationConfig":{"topK":40}
+			}`,
+			wantTopK: 40,
+		},
+		{
+			name: "absent in the Gemini request",
+			body: `{
+				"contents":[{"role":"user","parts":[{"text":"Hello"}]}],
+				"generationConfig":{"temperature":0.5}
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sfAdaptor := &Adaptor{}
+			m := meta.NewMeta(nil, mode.Gemini, "gemini-alias", coremodel.ModelConfig{})
+			m.ActualModel = "Qwen/Qwen3-32B"
+
+			req := newJSONRequest(t, "/v1beta/models/gemini-alias:generateContent", tt.body)
+
+			result, err := sfAdaptor.ConvertRequest(m, nil, req)
+			if err != nil {
+				t.Fatalf("ConvertRequest returned error: %v", err)
+			}
+
+			got := readJSONBody(t, result.Body)
+
+			if tt.wantTopK == 0 {
+				if topK, sent := got["top_k"]; sent {
+					t.Fatalf("expected no top_k, got %#v", topK)
+				}
+
+				return
+			}
+
+			assertMapNumber(t, got, "top_k", tt.wantTopK)
+		})
+	}
+}
+
 func TestConvertGeminiRequestUsesChatCompletionsShape(t *testing.T) {
 	sfAdaptor := &Adaptor{}
 	m := meta.NewMeta(nil, mode.Gemini, "gemini-alias", coremodel.ModelConfig{})

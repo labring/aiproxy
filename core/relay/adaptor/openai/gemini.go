@@ -2,7 +2,9 @@ package openai
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -12,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
+	"github.com/bytedance/sonic/ast"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/common"
 	"github.com/labring/aiproxy/core/model"
@@ -106,6 +109,48 @@ func ConvertGeminiRequest(
 		},
 		Body: bytes.NewReader(data),
 	}, nil
+}
+
+// ForwardGeminiTopK returns a hook that copies the topK of the Gemini request
+// generation config into the converted request. top_k is not part of the
+// OpenAI API, so ConvertGeminiRequest leaves it out; pass the hook for
+// upstreams whose API documents top_k.
+func ForwardGeminiTopK(req *http.Request) OpenAIRequestHook {
+	return forwardTopK(req, "generationConfig", "topK")
+}
+
+// forwardTopK reads the top-k field straight from the request body instead of
+// decoding the whole document. The field is left out unless it is a number
+// that fits an int32.
+func forwardTopK(req *http.Request, path ...any) OpenAIRequestHook {
+	return func(openAIRequest *relaymodel.GeneralOpenAIRequest) error {
+		body, err := common.GetRequestBodyReusable(req)
+		if err != nil {
+			return err
+		}
+
+		node, err := common.GetJSONNodeNoCopy(body, path...)
+		if errors.Is(err, ast.ErrNotExist) {
+			return nil
+		}
+
+		if err != nil {
+			return err
+		}
+
+		if node.TypeSafe() != ast.V_NUMBER {
+			return nil
+		}
+
+		topK, err := node.Float64()
+		if err != nil || topK < math.MinInt32 || topK > math.MaxInt32 {
+			return nil
+		}
+
+		openAIRequest.TopK = int(topK)
+
+		return nil
+	}
 }
 
 // ConvertOpenAIToGeminiResponse converts OpenAI response back to Gemini format

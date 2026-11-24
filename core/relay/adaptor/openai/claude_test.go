@@ -312,6 +312,77 @@ func TestConvertClaudeRequest_ReasoningEffortCompatibility(t *testing.T) {
 	assert.Equal(t, "low", *openAIReq.ReasoningEffort)
 }
 
+// top_k is not part of the OpenAI API, so the conversion leaves it out unless
+// an upstream that documents it asks for it.
+func TestConvertClaudeRequest_TopK(t *testing.T) {
+	t.Parallel()
+
+	const requestWithTopK = `{
+		"model": "claude",
+		"messages": [{"role": "user", "content": "Hello"}],
+		"max_tokens": 64,
+		"top_k": 40
+	}`
+
+	tests := []struct {
+		name     string
+		body     string
+		forward  bool
+		wantTopK any
+	}{
+		{
+			name:     "left out by default",
+			body:     requestWithTopK,
+			wantTopK: nil,
+		},
+		{
+			name:     "forwarded for an upstream that documents it",
+			body:     requestWithTopK,
+			forward:  true,
+			wantTopK: float64(40),
+		},
+		{
+			name: "absent in the Claude request",
+			body: `{
+				"model": "claude",
+				"messages": [{"role": "user", "content": "Hello"}],
+				"max_tokens": 64
+			}`,
+			forward:  true,
+			wantTopK: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			httpReq := httptest.NewRequestWithContext(t.Context(),
+				http.MethodPost,
+				"/v1/messages",
+				bytes.NewReader([]byte(tt.body)),
+			)
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			var hooks []openai.OpenAIRequestHook
+			if tt.forward {
+				hooks = append(hooks, openai.ForwardClaudeTopK(httpReq))
+			}
+
+			m := &meta.Meta{
+				ActualModel: "gpt-4o",
+			}
+
+			result, err := openai.ConvertClaudeRequest(m, httpReq, hooks...)
+			require.NoError(t, err)
+
+			var openAIReq map[string]any
+			require.NoError(t, json.NewDecoder(result.Body).Decode(&openAIReq))
+			assert.Equal(t, tt.wantTopK, openAIReq["top_k"])
+		})
+	}
+}
+
 func TestConvertClaudeToResponsesRequest_ReasoningEffortCompatibility(t *testing.T) {
 	t.Parallel()
 
