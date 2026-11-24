@@ -12,6 +12,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/ollama"
 	"github.com/labring/aiproxy/core/relay/meta"
 	relaymodel "github.com/labring/aiproxy/core/relay/model"
@@ -311,4 +312,89 @@ func TestConvertRequest_ForwardsTopK(t *testing.T) {
 	options, ok := got["options"].(map[string]any)
 	assert.True(t, ok)
 	assert.EqualValues(t, 40, options["top_k"])
+}
+
+func TestConvertEmbeddingRequest_ForwardsTopK(t *testing.T) {
+	m := meta.NewMeta(
+		&model.Channel{Type: model.ChannelTypeOllama},
+		0,
+		"llama2",
+		model.ModelConfig{},
+	)
+
+	body := `{"model":"llama2","input":"hi","top_k":40}`
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost:11434/api/embed",
+		strings.NewReader(body),
+	)
+
+	result, err := ollama.ConvertEmbeddingRequest(m, req)
+	assert.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var got map[string]any
+	assert.NoError(t, json.Unmarshal(bodyBytes, &got))
+
+	options, ok := got["options"].(map[string]any)
+	assert.True(t, ok)
+	assert.EqualValues(t, 40, options["top_k"])
+}
+
+// A request without top_k must not send the option, so that the model default
+// applies instead of a zero value.
+func TestConvertRequest_TopKOmittedWhenAbsent(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		body    string
+		convert func(*meta.Meta, *http.Request) (adaptor.ConvertResult, error)
+	}{
+		{
+			name:    "chat",
+			path:    "/api/chat",
+			body:    `{"model":"llama2","messages":[{"role":"user","content":"hi"}]}`,
+			convert: ollama.ConvertRequest,
+		},
+		{
+			name:    "embedding",
+			path:    "/api/embed",
+			body:    `{"model":"llama2","input":"hi"}`,
+			convert: ollama.ConvertEmbeddingRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := meta.NewMeta(
+				&model.Channel{Type: model.ChannelTypeOllama},
+				0,
+				"llama2",
+				model.ModelConfig{},
+			)
+
+			req, _ := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://localhost:11434"+tt.path,
+				strings.NewReader(tt.body),
+			)
+
+			result, err := tt.convert(m, req)
+			assert.NoError(t, err)
+
+			bodyBytes, _ := io.ReadAll(result.Body)
+
+			var got map[string]any
+			assert.NoError(t, json.Unmarshal(bodyBytes, &got))
+
+			options, ok := got["options"].(map[string]any)
+			assert.True(t, ok)
+
+			_, sent := options["top_k"]
+			assert.False(t, sent, "top_k must stay absent, got %v", options)
+		})
+	}
 }
