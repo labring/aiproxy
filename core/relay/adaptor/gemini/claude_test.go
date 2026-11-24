@@ -252,3 +252,46 @@ func TestConvertClaudeRequest_DisableAutoImageURLToBase64(t *testing.T) {
 	)
 	require.Equal(t, "", geminiReq.Contents[0].Parts[0].FileData.MimeType)
 }
+
+func TestConvertClaudeRequest_TemperatureAndTopPAreForwarded(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(channel, 0, "gemini-1.5-pro", model.ModelConfig{})
+
+	temperature := 0.3
+	topP := 0.8
+	reqBody := relaymodel.ClaudeAnyContentRequest{
+		Model:       "gemini-1.5-pro",
+		Temperature: &temperature,
+		TopP:        &topP,
+		Messages: []relaymodel.ClaudeAnyContentMessage{
+			{
+				Role:    relaymodel.RoleUser,
+				Content: "Hello",
+			},
+		},
+	}
+
+	data, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/messages",
+		bytes.NewReader(data),
+	)
+
+	result, err := gemini.ConvertClaudeRequest(meta, req)
+	require.NoError(t, err)
+
+	body, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+	require.NoError(t, json.Unmarshal(body, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.Temperature)
+	require.NotNil(t, geminiReq.GenerationConfig.TopP)
+	require.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
+	require.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
+}
