@@ -208,11 +208,11 @@ func buildGenerationConfig(
 	}
 
 	// Override with OpenAI-style parameters if provided
-	if config.Temperature != nil && textRequest.Temperature != nil {
+	if textRequest.Temperature != nil {
 		config.Temperature = textRequest.Temperature
 	}
 
-	if config.TopP != nil && textRequest.TopP != nil {
+	if textRequest.TopP != nil {
 		config.TopP = textRequest.TopP
 	}
 

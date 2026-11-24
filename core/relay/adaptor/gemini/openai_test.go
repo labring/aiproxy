@@ -1555,3 +1555,51 @@ func TestConvertRequest_MaxCompletionTokens(t *testing.T) {
 	require.NotNil(t, geminiReq.GenerationConfig.MaxOutputTokens)
 	assert.Equal(t, 321, *geminiReq.GenerationConfig.MaxOutputTokens)
 }
+
+func TestConvertRequest_TemperatureAndTopPAreForwarded(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+
+	temperature := 0.3
+	topP := 0.8
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-2.5-flash",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+		Temperature: &temperature,
+		TopP:        &topP,
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	require.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.Temperature)
+	require.NotNil(t, geminiReq.GenerationConfig.TopP)
+	assert.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
+	assert.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
+}
