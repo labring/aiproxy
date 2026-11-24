@@ -1788,3 +1788,101 @@ func TestConvertRequest_Gemini3KeepsNativeGenerationConfig(t *testing.T) {
 	assert.InDelta(t, 0.9, *geminiReq.GenerationConfig.Temperature, 1e-9)
 	assert.InDelta(t, 0.5, *geminiReq.GenerationConfig.TopP, 1e-9)
 }
+
+func TestConvertRequest_SeedAndPenaltiesAreForwarded(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+
+	presence := 0.4
+	frequency := 0.6
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-2.5-flash",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+		Seed:             42,
+		PresencePenalty:  &presence,
+		FrequencyPenalty: &frequency,
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	require.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	require.NotNil(t, geminiReq.GenerationConfig.Seed)
+	require.NotNil(t, geminiReq.GenerationConfig.PresencePenalty)
+	require.NotNil(t, geminiReq.GenerationConfig.FrequencyPenalty)
+	assert.Equal(t, 42, *geminiReq.GenerationConfig.Seed)
+	assert.InDelta(t, 0.4, *geminiReq.GenerationConfig.PresencePenalty, 1e-9)
+	assert.InDelta(t, 0.6, *geminiReq.GenerationConfig.FrequencyPenalty, 1e-9)
+}
+
+func TestConvertRequest_ZeroPenaltiesAreNotForwarded(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeVertexAI,
+	}
+	meta := meta.NewMeta(
+		channel,
+		mode.ChatCompletions,
+		"gemini-2.5-flash",
+		model.ModelConfig{},
+	)
+
+	presence := 0.0
+	frequency := 0.0
+	openAIReq := relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-2.5-flash",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+		Seed:             42,
+		PresencePenalty:  &presence,
+		FrequencyPenalty: &frequency,
+	}
+
+	jsonData, _ := sonic.Marshal(openAIReq)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"http://localhost/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+
+	result, err := gemini.ConvertRequest(meta, req)
+	require.NoError(t, err)
+
+	bodyBytes, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+
+	require.NoError(t, json.Unmarshal(bodyBytes, &geminiReq))
+	require.NotNil(t, geminiReq.GenerationConfig)
+	assert.Nil(t, geminiReq.GenerationConfig.PresencePenalty)
+	assert.Nil(t, geminiReq.GenerationConfig.FrequencyPenalty)
+}

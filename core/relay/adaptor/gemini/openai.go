@@ -252,6 +252,21 @@ func buildGenerationConfig(
 		}
 	}
 
+	// Penalties of 0 are the neutral value; many clients send them by default and
+	// some Gemini models reject them ("Penalty is not enabled"), so skip zeros.
+	if config.Seed == nil && textRequest.Seed != 0 {
+		seed := int(textRequest.Seed)
+		config.Seed = &seed
+	}
+
+	if textRequest.PresencePenalty != nil && *textRequest.PresencePenalty != 0 {
+		config.PresencePenalty = textRequest.PresencePenalty
+	}
+
+	if textRequest.FrequencyPenalty != nil && *textRequest.FrequencyPenalty != 0 {
+		config.FrequencyPenalty = textRequest.FrequencyPenalty
+	}
+
 	// Convert MaxTokens (int) to MaxOutputTokens (*int)
 	if limit := textRequest.OutputTokenLimit(); config.MaxOutputTokens == nil && limit != 0 {
 		config.MaxOutputTokens = &limit
