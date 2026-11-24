@@ -35,6 +35,7 @@ func ConvertRequest(meta *meta.Meta, req *http.Request) (adaptor.ConvertResult, 
 			TopP:             request.TopP,
 			FrequencyPenalty: request.FrequencyPenalty,
 			PresencePenalty:  request.PresencePenalty,
+			TopK:             request.TopK,
 			NumPredict:       request.OutputTokenLimit(),
 			NumCtx:           request.NumCtx,
 		},
@@ -343,6 +344,7 @@ func ConvertEmbeddingRequest(
 			TopP:             request.TopP,
 			FrequencyPenalty: request.FrequencyPenalty,
 			PresencePenalty:  request.PresencePenalty,
+			TopK:             request.TopK,
 		},
 	})
 	if err != nil {
