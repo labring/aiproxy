@@ -120,6 +120,7 @@ func SetAPIRouter(router *gin.Engine) {
 			groupChannelRoute := groupRoute.Group("/:group/channel")
 			{
 				groupChannelRoute.GET("/:id", controller.GetGroupChannel)
+				groupChannelRoute.GET("/:id/models", controller.GetGroupChannelModels)
 				groupChannelRoute.POST("/", controller.AddGroupChannel)
 				groupChannelRoute.PUT("/:id", controller.UpdateGroupChannel)
 				groupChannelRoute.DELETE("/:id", controller.DeleteGroupChannel)

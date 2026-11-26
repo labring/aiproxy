@@ -97,13 +97,45 @@ type ChannelModel struct {
 //	@Failure		504	{object}	middleware.APIResponse
 //	@Router			/api/channel/{id}/models [get]
 func GetChannelModels(c *gin.Context) {
+	serveChannelModelCatalog(c, model.GetChannelByID)
+}
+
+// GetGroupChannelModels godoc
+//
+//	@Summary		Get a group channel's model catalog
+//	@Description	Reads the complete upstream model catalog visible to a saved channel in the specified group.
+//	@Tags			group-channel
+//	@Produce		json
+//	@Security		ApiKeyAuth
+//	@Param			group	path		string	true	"Group ID"
+//	@Param			id		path		int		true	"Channel ID"
+//	@Success		200		{object}	middleware.APIResponse{data=[]ChannelModel}
+//	@Failure		400		{object}	middleware.APIResponse
+//	@Failure		401		{object}	middleware.APIResponse
+//	@Failure		404		{object}	middleware.APIResponse
+//	@Failure		500		{object}	middleware.APIResponse
+//	@Failure		501		{object}	middleware.APIResponse
+//	@Failure		502		{object}	middleware.APIResponse
+//	@Failure		504		{object}	middleware.APIResponse
+//	@Router			/api/group/{group}/channel/{id}/models [get]
+func GetGroupChannelModels(c *gin.Context) {
+	serveChannelModelCatalog(c, func(id int) (*model.Channel, error) {
+		channel, err := model.GetGroupChannelByID(groupParam(c), id)
+		if err != nil {
+			return nil, err
+		}
+		return channel.ToChannel(), nil
+	})
+}
+
+func serveChannelModelCatalog(c *gin.Context, loadChannel func(int) (*model.Channel, error)) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		middleware.ErrorResponse(c, http.StatusBadRequest, "invalid channel id")
 		return
 	}
 
-	channel, err := model.GetChannelByID(id)
+	channel, err := loadChannel(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			middleware.ErrorResponse(c, http.StatusNotFound, "channel not found")
