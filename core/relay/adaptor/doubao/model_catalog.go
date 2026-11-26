@@ -52,7 +52,22 @@ type doubaoStructuredOutputs struct {
 }
 
 type doubaoThinkingCapability struct {
+	Type  string   `json:"type"`
 	Types []string `json:"types"`
+}
+
+// supported reports whether the model can think on demand. The API documents
+// the capability as type; types is read as well in case a response lists the
+// modes that way.
+func (c *doubaoThinkingCapability) supported() bool {
+	return slices.ContainsFunc(
+		append([]string{c.Type}, c.Types...),
+		func(value string) bool {
+			value = strings.ToLower(strings.TrimSpace(value))
+
+			return value == "enabled" || value == "auto"
+		},
+	)
 }
 
 func (a *Adaptor) ListModels(
@@ -277,13 +292,7 @@ func doubaoSupportedParameters(features *doubaoFeatures) []string {
 		parameters = append(parameters, "structured_outputs")
 	}
 
-	if features.Thinking != nil && slices.ContainsFunc(
-		features.Thinking.Types,
-		func(value string) bool {
-			normalized := strings.ToLower(strings.TrimSpace(value))
-			return normalized == "enabled" || normalized == "auto"
-		},
-	) {
+	if features.Thinking != nil && features.Thinking.supported() {
 		parameters = append(parameters, "reasoning")
 	}
 

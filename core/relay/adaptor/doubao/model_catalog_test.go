@@ -2,15 +2,35 @@ package doubao_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/labring/aiproxy/core/model"
+	"github.com/labring/aiproxy/core/relay/adaptor"
 	"github.com/labring/aiproxy/core/relay/adaptor/doubao"
 	"github.com/labring/aiproxy/core/relay/adaptor/modelcatalog"
 	"github.com/stretchr/testify/require"
 )
+
+func listModelsFrom(t *testing.T, body string) ([]adaptor.ModelCatalogItem, error) {
+	t.Helper()
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(body))
+			require.NoError(t, err)
+		}),
+	)
+	t.Cleanup(server.Close)
+
+	return (&doubao.Adaptor{}).ListModels(context.Background(), &model.Channel{
+		Type:    model.ChannelTypeDoubao,
+		BaseURL: server.URL,
+	}, "")
+}
 
 func TestListModelsParsesArkCatalog(t *testing.T) {
 	t.Parallel()
@@ -181,6 +201,7 @@ func TestListModelsBaseURLNormalization(t *testing.T) {
 			server := httptest.NewServer(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					gotPath = r.URL.Path
+
 					w.Header().Set("Content-Type", "application/json")
 					_, err := w.Write([]byte(`{"object":"list","data":[{"id":"doubao-pro"}]}`))
 					require.NoError(t, err)
@@ -251,6 +272,111 @@ func TestListModelsRejectsInvalidConfigAndResponses(t *testing.T) {
 				BaseURL: server.URL,
 			}, "")
 			require.ErrorIs(t, err, modelcatalog.ErrInvalidResponse)
+		})
+	}
+}
+
+func TestListModelsParsesDocumentedResponse(t *testing.T) {
+	t.Parallel()
+
+	// Response example of the Ark Models API documentation.
+	models, err := listModelsFrom(t, `{
+		"object": "list",
+		"data": [
+			{
+				"id": "doubao-seed-2-1-pro-260915",
+				"object": "model",
+				"name": "doubao-seed-2-1-pro",
+				"version": "260915",
+				"created": 1789472816,
+				"domain": "VLM",
+				"task_type": ["VisualQuestionAnswering", "TextGeneration"],
+				"token_limits": {
+					"context_window": 1048576,
+					"max_output_token_length": 262144,
+					"max_input_token_length": 1048576,
+					"max_reasoning_token_length": 262144
+				},
+				"modalities": {
+					"input_modalities": ["text", "image", "video"],
+					"output_modalities": ["text"]
+				},
+				"features": {
+					"tools": {"function_calling": true},
+					"structured_outputs": {"json_object": true, "json_schema": true},
+					"cache": {"prefix_cache": false, "session_cache": false},
+					"batch": {"batch_job": false, "batch_chat": false}
+				},
+				"max_output_tokens": 262144
+			}
+		]
+	}`)
+	require.NoError(t, err)
+	require.Equal(t, []adaptor.ModelCatalogItem{{
+		"id":             "doubao-seed-2-1-pro-260915",
+		"name":           "doubao-seed-2-1-pro",
+		"created":        int64(1789472816),
+		"context_length": int64(1048576),
+		"top_provider":   map[string]any{"max_completion_tokens": int64(262144)},
+		"architecture": map[string]any{
+			"input_modalities":  []string{"text", "image", "video"},
+			"output_modalities": []string{"text"},
+		},
+		"supported_parameters": []string{"tools", "structured_outputs"},
+	}}, models)
+}
+
+func TestListModelsReadsThinkingCapability(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		thinking      string
+		wantSupported []string
+	}{
+		{
+			name:          "documented type enabled",
+			thinking:      `{"type":"enabled"}`,
+			wantSupported: []string{"reasoning"},
+		},
+		{
+			name:     "documented type disabled",
+			thinking: `{"type":"disabled"}`,
+		},
+		{
+			name:          "types lists enabled",
+			thinking:      `{"types":["enabled","disabled"]}`,
+			wantSupported: []string{"reasoning"},
+		},
+		{
+			name:          "types lists auto",
+			thinking:      `{"types":["auto"]}`,
+			wantSupported: []string{"reasoning"},
+		},
+		{
+			name:     "no thinking capability",
+			thinking: `{}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			models, err := listModelsFrom(t, fmt.Sprintf(
+				`{"object":"list","data":[{"id":"doubao-pro","features":{"thinking":%s}}]}`,
+				tt.thinking,
+			))
+			require.NoError(t, err)
+			require.Len(t, models, 1)
+
+			if len(tt.wantSupported) == 0 {
+				require.NotContains(t, models[0], "supported_parameters")
+
+				return
+			}
+
+			require.Equal(t, tt.wantSupported, models[0]["supported_parameters"])
 		})
 	}
 }
