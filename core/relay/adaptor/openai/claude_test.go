@@ -958,7 +958,12 @@ func TestConvertResponsesToClaudeStreamResponseIncompleteStopReason(t *testing.T
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/messages", nil)
+			c.Request = httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/messages",
+				nil,
+			)
 
 			_, err := openai.ConvertResponsesToClaudeStreamResponse(
 				&meta.Meta{ActualModel: "gpt-5"},
