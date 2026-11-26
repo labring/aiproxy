@@ -9,7 +9,6 @@ var unsupportedTypes = map[model.ChannelType]struct{}{
 	model.ChannelTypeBaidu:       {},
 	model.ChannelTypeCoze:        {},
 	model.ChannelTypeDoc2x:       {},
-	model.ChannelTypeDoubao:      {},
 	model.ChannelTypeDoubaoAudio: {},
 	model.ChannelTypeLingyiwanwu: {},
 	model.ChannelTypeAWS:         {},
