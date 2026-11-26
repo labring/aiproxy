@@ -340,6 +340,8 @@ func convertClaudeToolChoice(toolChoice any) any {
 				return relaymodel.ToolChoiceRequired
 			case relaymodel.ToolChoiceAuto:
 				return relaymodel.ToolChoiceAuto
+			case relaymodel.ToolChoiceNone:
+				return relaymodel.ToolChoiceNone
 			}
 		}
 	}
@@ -829,7 +831,9 @@ func ConvertClaudeToResponsesRequest(
 	}
 
 	if openAIRequest.ToolChoice != nil {
-		responsesReq.ToolChoice = openAIRequest.ToolChoice
+		responsesReq.ToolChoice = convertChatToolChoiceToResponseToolChoice(
+			openAIRequest.ToolChoice,
+		)
 	}
 
 	applyReasoningToResponsesRequestForModel(
