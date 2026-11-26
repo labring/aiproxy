@@ -53,23 +53,29 @@ func TestGroupChannelModelsRoute(t *testing.T) {
 	previousDB, previousAdminKey, previousMode := model.DB, config.AdminKey, gin.Mode()
 	model.DB = db
 	config.AdminKey = "catalog-test-admin"
+
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
 		model.DB = previousDB
 		config.AdminKey = previousAdminKey
+
 		gin.SetMode(previousMode)
 		require.NoError(t, sqlDB.Close())
 	})
 
 	const providerKey = "catalog-test-provider"
+
 	var requests atomic.Int32
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
+
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/models" ||
 			r.Header.Get("Authorization") != "Bearer "+providerKey {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		_, _ = w.Write([]byte(`{"data":[{"id":"upstream-only-model"}]}`))
 	}))
 	t.Cleanup(upstream.Close)
@@ -90,6 +96,7 @@ func TestGroupChannelModelsRoute(t *testing.T) {
 
 	engine := gin.New()
 	aiproxyrouter.SetAPIRouter(engine)
+
 	channelPath := func(group string) string {
 		return "/api/group/" + group + "/channel/" + strconv.Itoa(channel.ID)
 	}
@@ -98,19 +105,23 @@ func TestGroupChannelModelsRoute(t *testing.T) {
 		if adminKey != "" {
 			request.Header.Set("Authorization", "Bearer "+adminKey)
 		}
+
 		response := httptest.NewRecorder()
 		engine.ServeHTTP(response, request)
+
 		return response
 	}
 
 	ownerPath := channelPath("fastgpt%3Atmb%3Acatalog-owner") + "/models"
 	foreignPath := channelPath("other-member") + "/models"
+
 	require.Equal(t, http.StatusUnauthorized, get(ownerPath, "").Code)
 	require.Equal(t, http.StatusNotFound, get(foreignPath, config.AdminKey).Code)
 	require.Zero(t, requests.Load())
 
 	response := get(ownerPath, config.AdminKey)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+
 	var result struct {
 		Success bool `json:"success"`
 		Data    []struct {
@@ -179,6 +190,7 @@ func TestSwaggerDocumentsChannelModels(t *testing.T) {
 	groupPath, ok := document.Paths["/api/group/{group}/channel/{id}/models"]
 	require.True(t, ok)
 	require.Equal(t, path.Get.Security, groupPath.Get.Security)
+
 	for _, status := range []string{"200", "400", "401", "404", "500", "501", "502", "504"} {
 		require.Contains(t, groupPath.Get.Responses, status)
 	}

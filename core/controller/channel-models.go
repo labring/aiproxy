@@ -124,6 +124,7 @@ func GetGroupChannelModels(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
+
 		return channel.ToChannel(), nil
 	})
 }
