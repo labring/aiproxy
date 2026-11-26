@@ -928,3 +928,33 @@ func TestConvertResponsesToClaudeStreamResponseToolUseStopReason(t *testing.T) {
 	assert.Contains(t, w.Body.String(), `"stop_reason":"tool_use"`)
 	assert.NotContains(t, w.Body.String(), `"stop_reason":"end_turn"`)
 }
+
+func TestClaudeHandlerCachedUsageNotDoubleCounted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := `{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],
+"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110,"prompt_tokens_details":{"cached_tokens":80,"cache_write_tokens":5}}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/messages",
+		nil,
+	)
+
+	result, err := openai.ClaudeHandler(&meta.Meta{OriginModel: "gpt-4o"}, c, resp)
+	require.Nil(t, err)
+
+	assert.EqualValues(t, 100, result.Usage.InputTokens)
+	assert.EqualValues(t, 80, result.Usage.CachedTokens)
+	assert.EqualValues(t, 5, result.Usage.CacheCreationTokens)
+	assert.EqualValues(t, 10, result.Usage.OutputTokens)
+	assert.EqualValues(t, 110, result.Usage.TotalTokens)
+}

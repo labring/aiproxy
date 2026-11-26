@@ -295,3 +295,36 @@ func TestConvertClaudeRequest_TemperatureAndTopPAreForwarded(t *testing.T) {
 	require.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
 	require.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
 }
+
+func TestClaudeHandlerUsageFromGeminiMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := `{"candidates":[{"content":{"parts":[{"text":"hi"}]},"finishReason":"STOP"}],
+"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":80,"candidatesTokenCount":10,"thoughtsTokenCount":7,"totalTokenCount":117}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader([]byte(body))),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/messages",
+		nil,
+	)
+
+	result, handlerErr := gemini.ClaudeHandler(
+		&meta.Meta{OriginModel: "gemini-2.5-pro"},
+		c,
+		resp,
+	)
+	require.Nil(t, handlerErr)
+
+	require.EqualValues(t, 100, result.Usage.InputTokens)
+	require.EqualValues(t, 80, result.Usage.CachedTokens)
+	require.EqualValues(t, 17, result.Usage.OutputTokens)
+	require.EqualValues(t, 7, result.Usage.ReasoningTokens)
+	require.EqualValues(t, 117, result.Usage.TotalTokens)
+}
