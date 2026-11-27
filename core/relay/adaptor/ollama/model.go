@@ -47,6 +47,7 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
+	Error           string   `json:"error,omitempty"`
 	Model           string   `json:"model,omitempty"`
 	CreatedAt       string   `json:"created_at,omitempty"`
 	Response        string   `json:"response,omitempty"`

@@ -12,6 +12,16 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// responseError converts an error reported inside a 200 response body.
+func responseError(message string) adaptor.Error {
+	return relaymodel.WrapperOpenAIErrorWithMessage(
+		message,
+		relaymodel.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+		relaymodel.ErrorTypeUpstream,
+	)
+}
+
 func ErrorHandler(resp *http.Response) adaptor.Error {
 	defer resp.Body.Close()
 
