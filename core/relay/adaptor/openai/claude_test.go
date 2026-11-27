@@ -1109,3 +1109,78 @@ func TestConvertResponsesToClaudeResponseContentFilterStopReason(t *testing.T) {
 	assert.Len(t, resp.Content, 1)
 	assert.Equal(t, relaymodel.ClaudeStopReasonRefusal, resp.StopReason)
 }
+
+func TestConvertClaudeRequest_ToolChoice(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		toolChoice   string
+		wantChat     any
+		wantResponse any
+	}{
+		{
+			name:         "none",
+			toolChoice:   `{"type":"none"}`,
+			wantChat:     "none",
+			wantResponse: "none",
+		},
+		{
+			name:         "auto",
+			toolChoice:   `{"type":"auto"}`,
+			wantChat:     "auto",
+			wantResponse: "auto",
+		},
+		{
+			name:         "any",
+			toolChoice:   `{"type":"any"}`,
+			wantChat:     "required",
+			wantResponse: "required",
+		},
+		{
+			name:       "tool",
+			toolChoice: `{"type":"tool","name":"get_weather"}`,
+			wantChat: map[string]any{
+				"type":     "function",
+				"function": map[string]any{"name": "get_weather"},
+			},
+			wantResponse: map[string]any{"type": "function", "name": "get_weather"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			requestJSON := `{
+				"model": "claude",
+				"messages": [{"role": "user", "content": "Hello"}],
+				"max_tokens": 1024,
+				"tools": [{"name": "get_weather", "input_schema": {"type": "object"}}],
+				"tool_choice": ` + tt.toolChoice + `
+			}`
+			newRequest := func() *http.Request {
+				req := httptest.NewRequestWithContext(t.Context(),
+					http.MethodPost,
+					"/v1/messages",
+					bytes.NewReader([]byte(requestJSON)),
+				)
+				req.Header.Set("Content-Type", "application/json")
+
+				return req
+			}
+			m := &meta.Meta{ActualModel: "gpt-5-codex"}
+
+			chatReq, err := openai.ConvertClaudeRequestModel(m, newRequest())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantChat, chatReq.ToolChoice)
+
+			result, err := openai.ConvertClaudeToResponsesRequest(m, newRequest())
+			require.NoError(t, err)
+
+			var responsesReq relaymodel.CreateResponseRequest
+			require.NoError(t, json.NewDecoder(result.Body).Decode(&responsesReq))
+			assert.Equal(t, tt.wantResponse, responsesReq.ToolChoice)
+		})
+	}
+}
