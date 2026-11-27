@@ -17,6 +17,7 @@ func TestChannelMetasKeyHelpFormat(t *testing.T) {
 		model.ChannelTypeAIProxyHZH:  "sk-xxx",
 		model.ChannelTypeAIProxyUSW1: "sk-xxx",
 		model.ChannelTypeVoyage:      "pa-xxx",
+		model.ChannelTypeFake:        "any non-empty value",
 	}
 
 	for channelType, want := range expected {
@@ -24,6 +25,7 @@ func TestChannelMetasKeyHelpFormat(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing channel meta for %s (%d)", channelType.String(), channelType)
 		}
+
 		if meta.KeyHelp != want {
 			t.Errorf("%s keyHelp = %q, want %q", channelType.String(), meta.KeyHelp, want)
 		}
@@ -31,7 +33,7 @@ func TestChannelMetasKeyHelpFormat(t *testing.T) {
 
 	for channelType, meta := range adaptors.ChannelMetas {
 		if strings.Contains(meta.KeyHelp, "http://") || strings.Contains(meta.KeyHelp, "https://") {
-			t.Errorf("%s keyHelp should describe key format without URLs, got %q", channelType.String(), meta.KeyHelp)
+			t.Errorf("%s keyHelp contains a URL: %q", channelType.String(), meta.KeyHelp)
 		}
 	}
 }
