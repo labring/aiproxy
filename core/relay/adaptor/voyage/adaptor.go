@@ -118,12 +118,13 @@ func (a *Adaptor) DoResponse(
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
 		Readme: "https://www.voyageai.com\n" +
+			"API keys: https://dash.voyageai.com/api-keys\n" +
 			"Supports text embeddings, contextualized embeddings (voyage-context-*, one " +
 			"string per document, auto-chunked at 32000 tokens), multimodal embeddings " +
 			"(text and images) and rerank.\n" +
 			"The embeddings `dimensions` field is mapped to Voyage `output_dimension`; " +
 			"`input_type` (`document` or `query`) and `truncation` are passed through.",
-		KeyHelp:      "Voyage AI API key (https://dash.voyageai.com/api-keys)",
+		KeyHelp:      "pa-xxx",
 		ConfigSchema: openai.ConfigSchema(),
 		Models:       ModelList,
 	}

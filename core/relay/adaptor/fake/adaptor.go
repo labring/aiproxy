@@ -176,7 +176,7 @@ func (a *Adaptor) DoResponse(
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		KeyHelp:      "Any non-empty value. The fake adaptor does not call an upstream provider.",
+		KeyHelp:      "any non-empty value",
 		Readme:       "Fake adaptor for protocol debugging and integration testing. Supports chat, completions, responses, anthropic, gemini native, embeddings, images generations, and rerank. All outputs are synthesized locally and controlled by channel configs.",
 		ConfigSchema: configSchema(),
 		Models: []model.ModelConfig{

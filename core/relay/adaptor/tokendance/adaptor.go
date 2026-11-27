@@ -35,11 +35,12 @@ func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		KeyHelp: "Create an API key at https://tokendance.space/keys",
+		KeyHelp: "sk-xxx",
 		Readme: "TokenDance OpenAI-compatible API\n" +
 			"Supports chat completions, Responses, embeddings, image generation and editing\n" +
 			"Anthropic/Gemini requests are converted to OpenAI-compatible requests\n" +
 			"Configure model IDs with the corresponding OpenAI protocol in supported_protocols\n" +
+			"API keys: https://tokendance.space/keys\n" +
 			"Model catalog: https://tokendance.space/gateway/v1/models\n" +
 			"Documentation: https://tokendance.space/docs/quickstart",
 		ConfigSchema: openai.ConfigSchema(),
