@@ -202,7 +202,16 @@ type ClaudeThinking struct {
 }
 
 type ClaudeOutputConfig struct {
-	Effort *string `json:"effort,omitempty"`
+	Effort *string             `json:"effort,omitempty"`
+	Format *ClaudeOutputFormat `json:"format,omitempty"`
+}
+
+const ClaudeOutputFormatTypeJSONSchema = "json_schema"
+
+// ClaudeOutputFormat is the structured output format of a Claude request
+type ClaudeOutputFormat struct {
+	Type   string         `json:"type"`
+	Schema map[string]any `json:"schema,omitempty"`
 }
 
 type ClaudeRequest struct {

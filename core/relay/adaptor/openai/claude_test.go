@@ -1184,3 +1184,74 @@ func TestConvertClaudeRequest_ToolChoice(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertClaudeRequest_OutputFormat(t *testing.T) {
+	t.Parallel()
+
+	const requestJSON = `{
+		"model": "claude",
+		"messages": [{"role": "user", "content": "Hello"}],
+		"max_tokens": 64,
+		"output_config": {"format": {"type": "json_schema", "schema": {
+			"type": "object",
+			"properties": {"name": {"type": "string"}},
+			"required": ["name"],
+			"additionalProperties": false
+		}}}
+	}`
+
+	wantSchema := map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"name": map[string]any{"type": "string"}},
+		"required":             []any{"name"},
+		"additionalProperties": false,
+	}
+
+	newRequest := func(t *testing.T) *http.Request {
+		t.Helper()
+
+		httpReq := httptest.NewRequestWithContext(t.Context(),
+			http.MethodPost,
+			"/v1/messages",
+			strings.NewReader(requestJSON),
+		)
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		return httpReq
+	}
+
+	t.Run("chat completions", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := openai.ConvertClaudeRequest(
+			&meta.Meta{ActualModel: "gpt-4o"},
+			newRequest(t),
+		)
+		require.NoError(t, err)
+
+		var openAIReq relaymodel.GeneralOpenAIRequest
+		require.NoError(t, json.NewDecoder(result.Body).Decode(&openAIReq))
+		require.NotNil(t, openAIReq.ResponseFormat)
+		assert.Equal(t, "json_schema", openAIReq.ResponseFormat.Type)
+		require.NotNil(t, openAIReq.ResponseFormat.JSONSchema)
+		assert.Equal(t, "response", openAIReq.ResponseFormat.JSONSchema.Name)
+		assert.Equal(t, wantSchema, openAIReq.ResponseFormat.JSONSchema.Schema)
+	})
+
+	t.Run("responses", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := openai.ConvertClaudeToResponsesRequest(
+			&meta.Meta{ActualModel: "gpt-5.1"},
+			newRequest(t),
+		)
+		require.NoError(t, err)
+
+		var responsesReq relaymodel.CreateResponseRequest
+		require.NoError(t, json.NewDecoder(result.Body).Decode(&responsesReq))
+		require.NotNil(t, responsesReq.Text)
+		assert.Equal(t, "json_schema", responsesReq.Text.Format.Type)
+		assert.Equal(t, "response", responsesReq.Text.Format.Name)
+		assert.Equal(t, wantSchema, responsesReq.Text.Format.Schema)
+	})
+}
