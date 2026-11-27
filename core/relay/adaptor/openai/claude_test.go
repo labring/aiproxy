@@ -1045,3 +1045,67 @@ func claudeMessageDelta(t *testing.T, body string) relaymodel.ClaudeStreamRespon
 
 	return relaymodel.ClaudeStreamResponse{}
 }
+
+func TestConvertResponsesToClaudeStreamResponseIncompleteStopReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, tt := range []struct{ reason, want string }{
+		{"max_output_tokens", "max_tokens"},
+		{"content_filter", "refusal"},
+	} {
+		t.Run(tt.reason, func(t *testing.T) {
+			stream := strings.Join([]string{
+				`data: {"type":"response.created","response":{"id":"resp_4","object":"response","status":"in_progress","model":"gpt-5","output":[]}}`,
+				"",
+				`data: {"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}`,
+				"",
+				`data: {"type":"response.output_text.delta","output_index":0,"delta":"Once upon"}`,
+				"",
+				`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_1","type":"message","status":"incomplete"}}`,
+				"",
+				`data: {"type":"response.incomplete","response":{"id":"resp_4","object":"response","status":"incomplete","incomplete_details":{"reason":"` + tt.reason + `"},"model":"gpt-5","output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
+				"",
+			}, "\n")
+
+			httpResp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(stream)),
+				Header:     make(http.Header),
+			}
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/messages",
+				nil,
+			)
+
+			_, err := openai.ConvertResponsesToClaudeStreamResponse(
+				&meta.Meta{ActualModel: "gpt-5"},
+				c,
+				httpResp,
+			)
+			require.Nil(t, err)
+			assert.Contains(t, w.Body.String(), `"stop_reason":"`+tt.want+`"`)
+			assert.Contains(t, w.Body.String(), `"type":"message_stop"`)
+		})
+	}
+}
+
+func TestConvertResponsesToClaudeResponseContentFilterStopReason(t *testing.T) {
+	// A filtered response may still carry a complete function call: the
+	// filter wins so the tool call is not presented as executable.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_5","object":"response","status":"incomplete","incomplete_details":{"reason":"content_filter"},"model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Len(t, resp.Content, 1)
+	assert.Equal(t, relaymodel.ClaudeStopReasonRefusal, resp.StopReason)
+}
