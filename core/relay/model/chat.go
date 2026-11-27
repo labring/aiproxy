@@ -68,9 +68,11 @@ func (u *ChatUsage) Add(other *ChatUsage) {
 	}
 }
 
+// ToClaudeUsage converts ChatUsage to ClaudeUsage (Anthropic Claude format).
+// prompt_tokens includes the cached tokens, while Claude reports the cache in
+// fields of its own and counts only the remaining input in input_tokens.
 func (u ChatUsage) ToClaudeUsage() ClaudeUsage {
 	cu := ClaudeUsage{
-		InputTokens:  u.PromptTokens,
 		OutputTokens: u.CompletionTokens,
 	}
 
@@ -79,7 +81,19 @@ func (u ChatUsage) ToClaudeUsage() ClaudeUsage {
 		cu.CacheReadInputTokens = u.PromptTokensDetails.CachedTokens
 	}
 
+	cu.InputTokens = uncachedInputTokens(
+		u.PromptTokens,
+		cu.CacheReadInputTokens,
+		cu.CacheCreationInputTokens,
+	)
+
 	return cu
+}
+
+// uncachedInputTokens is the part of an inclusive prompt count that Claude
+// reports as input_tokens.
+func uncachedInputTokens(promptTokens, cacheRead, cacheCreation int64) int64 {
+	return max(0, promptTokens-cacheRead-cacheCreation)
 }
 
 // ToResponseUsage converts ChatUsage to ResponseUsage (OpenAI Responses API format)

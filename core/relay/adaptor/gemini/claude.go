@@ -122,10 +122,15 @@ func ClaudeHandler(
 	// Convert Gemini response to Claude response
 	claudeResponse := geminiResponse2Claude(meta, &geminiResponse)
 
+	// Bill from the upstream usage: promptTokenCount already includes cached tokens
+	var modelUsage model.Usage
+	if geminiResponse.UsageMetadata != nil {
+		modelUsage = geminiResponse.UsageMetadata.ToModelUsage()
+	}
+
 	jsonResponse, err := sonic.Marshal(claudeResponse)
 	if err != nil {
-		return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().
-				ToModelUsage()},
+		return adaptor.DoResponseResult{Usage: modelUsage},
 			relaymodel.WrapperAnthropicError(
 				err,
 				"marshal_response_body_failed",
@@ -137,7 +142,6 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(jsonResponse)))
 	_, _ = c.Writer.Write(jsonResponse)
 
-	modelUsage := claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()
 	modelUsage.WebSearchCount = model.ZeroNullInt64(geminiResponse.GetWebSearchCount())
 
 	return adaptor.DoResponseResult{Usage: modelUsage}, nil

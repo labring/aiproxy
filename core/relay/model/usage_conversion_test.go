@@ -74,7 +74,7 @@ func TestChatUsageConversions(t *testing.T) {
 
 	t.Run("ChatUsage to ClaudeUsage", func(t *testing.T) {
 		claudeUsage := chatUsage.ToClaudeUsage()
-		assert.Equal(t, int64(100), claudeUsage.InputTokens)
+		assert.Equal(t, int64(70), claudeUsage.InputTokens)
 		assert.Equal(t, int64(50), claudeUsage.OutputTokens)
 		assert.Equal(t, int64(10), claudeUsage.CacheCreationInputTokens)
 		assert.Equal(t, int64(20), claudeUsage.CacheReadInputTokens)
@@ -145,7 +145,7 @@ func TestResponseUsageConversions(t *testing.T) {
 
 	t.Run("ResponseUsage to ClaudeUsage", func(t *testing.T) {
 		claudeUsage := responseUsage.ToClaudeUsage()
-		assert.Equal(t, int64(100), claudeUsage.InputTokens)
+		assert.Equal(t, int64(70), claudeUsage.InputTokens)
 		assert.Equal(t, int64(50), claudeUsage.OutputTokens)
 		assert.Equal(t, int64(20), claudeUsage.CacheReadInputTokens)
 		assert.Equal(t, int64(10), claudeUsage.CacheCreationInputTokens)
@@ -286,7 +286,7 @@ func TestGeminiUsageConversions(t *testing.T) {
 
 	t.Run("GeminiUsage to ClaudeUsage", func(t *testing.T) {
 		claudeUsage := geminiUsage.ToClaudeUsage()
-		assert.Equal(t, int64(100), claudeUsage.InputTokens)
+		assert.Equal(t, int64(80), claudeUsage.InputTokens)
 		assert.Equal(t, int64(50), claudeUsage.OutputTokens)
 		assert.Equal(t, int64(20), claudeUsage.CacheReadInputTokens)
 	})
@@ -321,6 +321,50 @@ func TestRoundTripConversions(t *testing.T) {
 			original.CompletionTokensDetails.ReasoningTokens,
 			converted.CompletionTokensDetails.ReasoningTokens,
 		)
+	})
+
+	t.Run("ChatUsage -> ClaudeUsage -> ChatUsage", func(t *testing.T) {
+		original := model.ChatUsage{
+			PromptTokens:     100,
+			CompletionTokens: 50,
+			TotalTokens:      150,
+			PromptTokensDetails: &model.PromptTokensDetails{
+				CachedTokens:        20,
+				CacheCreationTokens: 10,
+			},
+		}
+
+		claudeUsage := original.ToClaudeUsage()
+		// input_tokens covers the prompt only, the cache is reported separately
+		assert.Equal(t, int64(70), claudeUsage.InputTokens)
+
+		converted := claudeUsage.ToOpenAIUsage()
+		assert.Equal(t, original.PromptTokens, converted.PromptTokens)
+		assert.Equal(t, original.CompletionTokens, converted.CompletionTokens)
+		assert.Equal(t, original.TotalTokens, converted.TotalTokens)
+		assert.Equal(
+			t,
+			original.PromptTokensDetails.CachedTokens,
+			converted.PromptTokensDetails.CachedTokens,
+		)
+		assert.Equal(
+			t,
+			original.PromptTokensDetails.CacheCreationTokenCount(),
+			converted.PromptTokensDetails.CacheCreationTokenCount(),
+		)
+	})
+
+	t.Run("Cached tokens above the prompt count do not go negative", func(t *testing.T) {
+		chatUsage := model.ChatUsage{
+			PromptTokens:     100,
+			CompletionTokens: 5,
+			PromptTokensDetails: &model.PromptTokensDetails{
+				CachedTokens:        90,
+				CacheCreationTokens: 20,
+			},
+		}
+
+		assert.Equal(t, int64(0), chatUsage.ToClaudeUsage().InputTokens)
 	})
 
 	t.Run("ResponseUsage -> GeminiUsage -> ResponseUsage", func(t *testing.T) {

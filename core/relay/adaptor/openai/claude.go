@@ -715,7 +715,13 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(claudeResponseData)))
 	_, _ = c.Writer.Write(claudeResponseData)
 
-	return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()}, nil
+	// Bill from the upstream usage: prompt_tokens already includes cached tokens
+	usage := openAIResponse.Usage
+	if usage.TotalTokens == 0 {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 // convertFinishReasonToClaude converts OpenAI finish reason to Claude stop reason
