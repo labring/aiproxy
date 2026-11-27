@@ -27,7 +27,7 @@ func (a *Adaptor) DefaultBaseURL() string {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		KeyHelp: "Use a Sealos AI Proxy API key",
+		KeyHelp: "sk-xxx",
 		Readme: "Sealos AIProxy OpenAI-compatible API\n" +
 			"Configure model IDs available to your API key; GET /v1/models lists accessible models\n" +
 			"Supports Anthropic/Gemini request conversion, PDF parsing relay (/v1/parse/pdf) " +

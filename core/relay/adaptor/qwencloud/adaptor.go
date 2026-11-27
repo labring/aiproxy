@@ -33,11 +33,12 @@ func (a *Adaptor) SupportMode(mt *meta.Meta) bool {
 
 func (a *Adaptor) Metadata() adaptor.Metadata {
 	return adaptor.Metadata{
-		KeyHelp: "Get an API key at https://home.qwencloud.com/api-keys",
+		KeyHelp: "sk-xxx",
 		Readme: "QwenCloud OpenAI-compatible API\n" +
 			"Supports chat completions, embeddings, Responses, and Anthropic/Gemini request conversion\n" +
 			"The default endpoint is for international API keys\n" +
 			"For Qwen AI Platform in mainland China, use https://dashscope.aliyuncs.com/compatible-mode/v1 with a China API key\n" +
+			"API keys: https://home.qwencloud.com/api-keys\n" +
 			"Documentation: https://docs.qwencloud.com/developer-guides/getting-started/introduction\n" +
 			"Models: https://www.qwencloud.com/models\n" +
 			"Pricing: https://docs.qwencloud.com/developer-guides/getting-started/pricing",
