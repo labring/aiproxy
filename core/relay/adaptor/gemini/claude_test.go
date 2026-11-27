@@ -295,3 +295,41 @@ func TestConvertClaudeRequest_TemperatureAndTopPAreForwarded(t *testing.T) {
 	require.InDelta(t, 0.3, *geminiReq.GenerationConfig.Temperature, 1e-9)
 	require.InDelta(t, 0.8, *geminiReq.GenerationConfig.TopP, 1e-9)
 }
+
+func TestConvertClaudeRequest_ToolChoiceNone(t *testing.T) {
+	channel := &model.Channel{
+		Type: model.ChannelTypeGoogleGemini,
+	}
+	meta := meta.NewMeta(channel, 0, "gemini-2.5-pro", model.ModelConfig{})
+	reqBody := map[string]any{
+		"model": "gemini-2.5-pro",
+		"tools": []map[string]any{
+			{"name": "get_weather", "input_schema": map[string]any{"type": "object"}},
+		},
+		"tool_choice": map[string]any{"type": "none"},
+		"messages":    []map[string]any{{"role": "user", "content": "Hello"}},
+	}
+
+	data, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+	req, _ := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/messages",
+		bytes.NewReader(data),
+	)
+
+	result, err := gemini.ConvertClaudeRequest(meta, req)
+	require.NoError(t, err)
+
+	body, _ := io.ReadAll(result.Body)
+
+	var geminiReq relaymodel.GeminiChatRequest
+	require.NoError(t, json.Unmarshal(body, &geminiReq))
+	require.NotNil(t, geminiReq.ToolConfig)
+	require.Equal(
+		t,
+		relaymodel.GeminiFunctionCallingModeNone,
+		geminiReq.ToolConfig.FunctionCallingConfig.Mode,
+	)
+}
