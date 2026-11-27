@@ -122,6 +122,13 @@ type GeminiChatResponse struct {
 	ModelVersion   string                    `json:"modelVersion,omitempty"`
 }
 
+// IsPromptBlocked reports whether the prompt was rejected before any candidate was generated.
+func (r *GeminiChatResponse) IsPromptBlocked() bool {
+	return len(r.Candidates) == 0 &&
+		r.PromptFeedback != nil &&
+		r.PromptFeedback.BlockReason != ""
+}
+
 // GetWebSearchCount returns billable Google Search grounding usage.
 func (r *GeminiChatResponse) GetWebSearchCount() int64 {
 	if r.IsGemini3Model() {
@@ -206,6 +213,7 @@ type GeminiGroundingMetadata struct {
 }
 
 type GeminiChatPromptFeedback struct {
+	BlockReason   string `json:"blockReason,omitempty"`
 	SafetyRatings []struct {
 		Category    string `json:"category"`
 		Probability string `json:"probability"`

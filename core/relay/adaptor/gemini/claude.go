@@ -246,6 +246,10 @@ func ClaudeStreamHandler(
 			&webSearchGemini3,
 		)
 
+		if geminiResponse.IsPromptBlocked() {
+			stopReason = relaymodel.ClaudeStopReasonRefusal
+		}
+
 		// Process each candidate
 		for _, candidate := range geminiResponse.Candidates {
 			// Handle finish reason
@@ -459,6 +463,10 @@ func geminiResponse2Claude(
 				}
 			}
 		}
+	}
+
+	if response.IsPromptBlocked() {
+		claudeResponse.StopReason = relaymodel.ClaudeStopReasonRefusal
 	}
 
 	// If no content was added, ensure at least an empty text block

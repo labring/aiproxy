@@ -1541,6 +1541,19 @@ func responseChat2OpenAI(
 		fullTextResponse.Choices = append(fullTextResponse.Choices, &choice)
 	}
 
+	if response.IsPromptBlocked() {
+		fullTextResponse.Choices = append(
+			fullTextResponse.Choices,
+			&relaymodel.TextResponseChoice{
+				Message: relaymodel.Message{
+					Role:    relaymodel.RoleAssistant,
+					Content: "",
+				},
+				FinishReason: relaymodel.FinishReasonContentFilter,
+			},
+		)
+	}
+
 	return &fullTextResponse
 }
 
@@ -1649,6 +1662,16 @@ func streamResponseChat2OpenAI(
 		}
 
 		response.Choices = append(response.Choices, &choice)
+	}
+
+	if geminiResponse.IsPromptBlocked() {
+		response.Choices = append(
+			response.Choices,
+			&relaymodel.ChatCompletionsStreamResponseChoice{
+				Delta:        relaymodel.Message{Content: ""},
+				FinishReason: relaymodel.FinishReasonContentFilter,
+			},
+		)
 	}
 
 	return response
