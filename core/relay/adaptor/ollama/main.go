@@ -286,6 +286,7 @@ func StreamHandler(
 	var usage *relaymodel.ChatUsage
 
 	toolCallCount := 0
+	written := false
 
 	scanner, cleanup := utils.NewScanner(resp.Body)
 	defer cleanup()
@@ -301,6 +302,16 @@ func StreamHandler(
 			continue
 		}
 
+		if ollamaResponse.Error != "" {
+			if !written {
+				return adaptor.DoResponseResult{}, responseError(ollamaResponse.Error)
+			}
+
+			log.Error("response stream failed after data was sent: " + ollamaResponse.Error)
+
+			break
+		}
+
 		response := streamResponse2OpenAI(meta, &ollamaResponse, toolCallCount)
 
 		toolCallCount += len(response.Choices[0].Delta.ToolCalls)
@@ -309,6 +320,7 @@ func StreamHandler(
 		}
 
 		_ = render.OpenaiObjectData(c, response)
+		written = true
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -459,6 +471,10 @@ func Handler(
 			"unmarshal_response_body_failed",
 			http.StatusInternalServerError,
 		)
+	}
+
+	if ollamaResponse.Error != "" {
+		return adaptor.DoResponseResult{}, responseError(ollamaResponse.Error)
 	}
 
 	fullTextResponse := response2OpenAI(meta, &ollamaResponse)
