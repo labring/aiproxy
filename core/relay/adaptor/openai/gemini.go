@@ -561,6 +561,33 @@ func convertGeminiToolConfigToOpenAI(geminiReq *relaymodel.GeminiChatRequest) an
 	return nil
 }
 
+func convertGeminiResponseFormatToOpenAI(
+	config *relaymodel.GeminiChatGenerationConfig,
+) *relaymodel.ResponseFormat {
+	if config.ResponseMimeType == "" {
+		return nil
+	}
+
+	if config.ResponseSchema != nil {
+		return &relaymodel.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &relaymodel.JSONSchema{
+				Name:   "response",
+				Schema: config.ResponseSchema,
+			},
+		}
+	}
+
+	switch config.ResponseMimeType {
+	case "application/json":
+		return &relaymodel.ResponseFormat{Type: "json_object"}
+	case "text/plain":
+		return &relaymodel.ResponseFormat{Type: "text"}
+	}
+
+	return nil
+}
+
 func convertGeminiGenerationConfigToOpenAI(
 	meta *meta.Meta,
 	geminiReq *relaymodel.GeminiChatRequest,
@@ -578,26 +605,7 @@ func convertGeminiGenerationConfigToOpenAI(
 			openaiReq.Stop = geminiReq.GenerationConfig.StopSequences
 		}
 
-		// Handle response format
-		if geminiReq.GenerationConfig.ResponseMimeType != "" {
-			switch geminiReq.GenerationConfig.ResponseMimeType {
-			case "application/json":
-				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "json_object"}
-			case "text/plain":
-				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{Type: "text"}
-			}
-
-			if geminiReq.GenerationConfig.ResponseSchema != nil {
-				schema := geminiReq.GenerationConfig.ResponseSchema
-				openaiReq.ResponseFormat = &relaymodel.ResponseFormat{
-					Type: "json_schema",
-					JSONSchema: &relaymodel.JSONSchema{
-						Name:   "response",
-						Schema: schema,
-					},
-				}
-			}
-		}
+		openaiReq.ResponseFormat = convertGeminiResponseFormatToOpenAI(geminiReq.GenerationConfig)
 
 		applyReasoningToOpenAIRequestForModel(
 			meta,
@@ -923,6 +931,10 @@ func ConvertGeminiToResponsesRequest(
 		if geminiReq.GenerationConfig.MaxOutputTokens != nil {
 			responsesReq.MaxOutputTokens = geminiReq.GenerationConfig.MaxOutputTokens
 		}
+
+		responsesReq.Text = convertChatResponseFormatToResponseText(
+			convertGeminiResponseFormatToOpenAI(geminiReq.GenerationConfig),
+		)
 	}
 
 	if geminiReq.GenerationConfig != nil {
@@ -966,16 +978,9 @@ func ConvertGeminiToResponsesRequest(
 	}
 
 	// Convert tool config
-	if geminiReq.ToolConfig != nil {
-		switch geminiReq.ToolConfig.FunctionCallingConfig.Mode {
-		case relaymodel.GeminiFunctionCallingModeAuto:
-			responsesReq.ToolChoice = relaymodel.ToolChoiceAuto
-		case relaymodel.GeminiFunctionCallingModeNone:
-			responsesReq.ToolChoice = relaymodel.ToolChoiceNone
-		case relaymodel.GeminiFunctionCallingModeAny:
-			responsesReq.ToolChoice = relaymodel.ToolChoiceRequired
-		}
-	}
+	responsesReq.ToolChoice = convertChatToolChoiceToResponseToolChoice(
+		convertGeminiToolConfigToOpenAI(geminiReq),
+	)
 
 	// Force non-store mode
 	storeValue := false
