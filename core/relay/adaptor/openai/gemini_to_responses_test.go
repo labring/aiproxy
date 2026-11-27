@@ -555,3 +555,82 @@ func TestConvertResponsesToGeminiResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertGeminiToResponsesRequest_ResponseFormatAndAllowedFunctions(t *testing.T) {
+	schema := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"city": map[string]any{"type": "string"}},
+	}
+
+	convert := func(t *testing.T, geminiReq map[string]any) map[string]any {
+		t.Helper()
+
+		geminiReq["contents"] = []map[string]any{
+			{"role": "user", "parts": []map[string]any{{"text": "Reply in JSON"}}},
+		}
+
+		reqBody, err := json.Marshal(geminiReq)
+		require.NoError(t, err)
+
+		httpReq, err := http.NewRequestWithContext(context.Background(),
+			http.MethodPost,
+			"/v1beta/models/gpt-5-codex:generateContent",
+			bytes.NewReader(reqBody),
+		)
+		require.NoError(t, err)
+
+		result, err := openai.ConvertGeminiToResponsesRequest(
+			&meta.Meta{ActualModel: "gpt-5-codex"},
+			httpReq,
+		)
+		require.NoError(t, err)
+
+		var got map[string]any
+		require.NoError(t, json.NewDecoder(result.Body).Decode(&got))
+
+		return got
+	}
+
+	t.Run("response schema", func(t *testing.T) {
+		got := convert(t, map[string]any{
+			"generationConfig": map[string]any{
+				"responseMimeType": "application/json",
+				"responseSchema":   schema,
+			},
+		})
+
+		assert.Equal(t, map[string]any{
+			"format": map[string]any{
+				"type":   "json_schema",
+				"name":   "response",
+				"schema": schema,
+			},
+		}, got["text"])
+	})
+
+	t.Run("json mime type", func(t *testing.T) {
+		got := convert(t, map[string]any{
+			"generationConfig": map[string]any{"responseMimeType": "application/json"},
+		})
+
+		assert.Equal(t, map[string]any{
+			"format": map[string]any{"type": "json_object"},
+		}, got["text"])
+	})
+
+	t.Run("allowed function names", func(t *testing.T) {
+		got := convert(t, map[string]any{
+			"toolConfig": map[string]any{
+				"functionCallingConfig": map[string]any{
+					"mode":                 "ANY",
+					"allowedFunctionNames": []string{"get_weather"},
+				},
+			},
+		})
+
+		assert.Equal(t, map[string]any{
+			"type": "function",
+			"name": "get_weather",
+		}, got["tool_choice"])
+	})
+}
