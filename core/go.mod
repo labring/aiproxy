@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.3
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.64.0
-	github.com/aws/smithy-go v1.28.9
+	github.com/aws/smithy-go v1.28.10
 	github.com/bytedance/sonic v1.15.5
 	github.com/gin-contrib/cors v1.7.11
 	github.com/gin-contrib/gzip v1.2.10
