@@ -976,3 +976,19 @@ func TestConvertResponsesToClaudeStreamResponseIncompleteStopReason(t *testing.T
 		})
 	}
 }
+
+func TestConvertResponsesToClaudeResponseContentFilterStopReason(t *testing.T) {
+	// A filtered response may still carry a complete function call: the
+	// filter wins so the tool call is not presented as executable.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_5","object":"response","status":"incomplete","incomplete_details":{"reason":"content_filter"},"model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Len(t, resp.Content, 1)
+	assert.Equal(t, relaymodel.ClaudeStopReasonRefusal, resp.StopReason)
+}
