@@ -682,6 +682,11 @@ func convertGeminiToolConfig(geminiReq *relaymodel.GeminiChatRequest) any {
 		}
 
 		return map[string]any{"type": relaymodel.ToolChoiceAny}
+	case relaymodel.GeminiFunctionCallingModeNone:
+		// Claude rejects tool_choice on requests that declare no tools
+		if len(convertGeminiTools(geminiReq)) > 0 {
+			return map[string]any{"type": relaymodel.ToolChoiceNone}
+		}
 	}
 
 	return nil

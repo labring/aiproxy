@@ -363,13 +363,18 @@ func (u *GeminiUsageMetadata) ToResponseUsage() ResponseUsage {
 // ToClaudeUsage converts GeminiUsageMetadata to ClaudeUsage (Anthropic Claude format)
 func (u *GeminiUsageMetadata) ToClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{
-		InputTokens:  u.GetInputTokens(),
 		OutputTokens: u.CandidatesTokenCount,
 	}
 
 	if u.CachedContentTokenCount > 0 {
 		usage.CacheReadInputTokens = u.CachedContentTokenCount
 	}
+
+	usage.InputTokens = uncachedInputTokens(
+		u.GetInputTokens(),
+		usage.CacheReadInputTokens,
+		usage.CacheCreationInputTokens,
+	)
 
 	return usage
 }

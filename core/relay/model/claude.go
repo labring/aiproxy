@@ -356,11 +356,15 @@ func (u *ClaudeUsage) ToGeminiUsage() GeminiUsageMetadata {
 }
 
 func (u *ClaudeUsage) FromModelUsage(usage model.Usage) {
-	u.InputTokens = int64(usage.InputTokens)
 	u.OutputTokens = int64(usage.OutputTokens)
 	u.CacheCreationInputTokens = int64(usage.CacheCreationTokens)
-
 	u.CacheReadInputTokens = int64(usage.CachedTokens)
+	u.InputTokens = uncachedInputTokens(
+		int64(usage.InputTokens),
+		u.CacheReadInputTokens,
+		u.CacheCreationInputTokens,
+	)
+
 	if usage.WebSearchCount > 0 {
 		u.ServerToolUse = &ClaudeServerToolUse{
 			WebSearchRequests: int64(usage.WebSearchCount),

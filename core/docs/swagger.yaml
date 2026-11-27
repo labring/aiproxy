@@ -6911,6 +6911,68 @@ paths:
       summary: Update a group channel
       tags:
       - group-channel
+  /api/group/{group}/channel/{id}/models:
+    get:
+      description: Reads the complete upstream model catalog visible to a saved channel
+        in the specified group.
+      parameters:
+      - description: Group ID
+        in: path
+        name: group
+        required: true
+        type: string
+      - description: Channel ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/controller.ChannelModel'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/middleware.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a group channel's model catalog
+      tags:
+      - group-channel
   /api/group/{group}/channel/{id}/status:
     post:
       consumes:

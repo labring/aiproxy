@@ -717,7 +717,13 @@ func ClaudeHandler(
 	c.Writer.Header().Set("Content-Length", strconv.Itoa(len(claudeResponseData)))
 	_, _ = c.Writer.Write(claudeResponseData)
 
-	return adaptor.DoResponseResult{Usage: claudeResponse.Usage.ToOpenAIUsage().ToModelUsage()}, nil
+	// Bill from the upstream usage: prompt_tokens already includes cached tokens
+	usage := openAIResponse.Usage
+	if usage.TotalTokens == 0 {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+
+	return adaptor.DoResponseResult{Usage: usage.ToModelUsage()}, nil
 }
 
 // convertFinishReasonToClaude converts OpenAI finish reason to Claude stop reason
@@ -938,7 +944,7 @@ func ConvertResponsesToClaudeResponse(
 
 	// Set stop reason based on status and output
 	claudeResp.StopReason = responsesStopReasonToClaude(
-		responsesResp.Status,
+		&responsesResp,
 		responsesOutputHasFunctionCall(responsesResp.Output),
 	)
 
@@ -1001,12 +1007,14 @@ func responsesOutputHasFunctionCall(output []relaymodel.OutputItem) bool {
 	return false
 }
 
-// responsesStopReasonToClaude maps a Responses status to a Claude stop_reason.
+// responsesStopReasonToClaude maps a Responses result to a Claude stop_reason.
 // Truncation wins over tool_use so a cut-off function call is not reported as
 // a complete, executable tool invocation.
-func responsesStopReasonToClaude(status relaymodel.ResponseStatus, hasToolUse bool) string {
+func responsesStopReasonToClaude(response *relaymodel.Response, hasToolUse bool) string {
 	switch {
-	case status == relaymodel.ResponseStatusIncomplete:
+	case responseToChatFinishReason(response) == relaymodel.FinishReasonContentFilter:
+		return relaymodel.ClaudeStopReasonRefusal
+	case response.Status == relaymodel.ResponseStatusIncomplete:
 		return relaymodel.ClaudeStopReasonMaxTokens
 	case hasToolUse:
 		return relaymodel.ClaudeStopReasonToolUse
@@ -1122,7 +1130,9 @@ func ConvertResponsesToClaudeStreamResponse(
 			state.handleFunctionCallArgumentsDelta(&event)
 		case relaymodel.EventOutputItemDone:
 			state.handleOutputItemDone(&event)
-		case relaymodel.EventResponseCompleted, relaymodel.EventResponseDone:
+		case relaymodel.EventResponseCompleted,
+			relaymodel.EventResponseIncomplete,
+			relaymodel.EventResponseDone:
 			state.handleResponseCompleted(&event)
 		}
 	}
@@ -1147,6 +1157,7 @@ func claudeResponseStreamEventWrites(eventType string) bool {
 		relaymodel.EventFunctionCallArgumentsDelta,
 		relaymodel.EventOutputItemDone,
 		relaymodel.EventResponseCompleted,
+		relaymodel.EventResponseIncomplete,
 		relaymodel.EventResponseDone:
 		return true
 	default:
@@ -1337,7 +1348,7 @@ func (s *claudeStreamState) handleOutputItemDone(event *relaymodel.ResponseStrea
 	s.currentContentType = ""
 }
 
-// handleResponseCompleted handles response.completed/done event for Claude
+// handleResponseCompleted handles response.completed/incomplete/done event for Claude
 func (s *claudeStreamState) handleResponseCompleted(event *relaymodel.ResponseStreamEvent) {
 	if event.Response == nil || event.Response.Usage == nil {
 		return
@@ -1345,7 +1356,7 @@ func (s *claudeStreamState) handleResponseCompleted(event *relaymodel.ResponseSt
 
 	// Send message_delta with stop reason
 	stopReason := responsesStopReasonToClaude(
-		event.Response.Status,
+		event.Response,
 		s.sawToolUse || responsesOutputHasFunctionCall(event.Response.Output),
 	)
 	claudeUsage := event.Response.Usage.ToClaudeUsage()

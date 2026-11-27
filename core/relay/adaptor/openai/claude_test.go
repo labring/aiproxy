@@ -929,6 +929,187 @@ func TestConvertResponsesToClaudeStreamResponseToolUseStopReason(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), `"stop_reason":"end_turn"`)
 }
 
+func TestClaudeHandlerCachedUsageNotDoubleCounted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := `{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],
+"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110,"prompt_tokens_details":{"cached_tokens":80,"cache_write_tokens":5}}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/v1/messages",
+		nil,
+	)
+
+	result, err := openai.ClaudeHandler(&meta.Meta{OriginModel: "gpt-4o"}, c, resp)
+	require.Nil(t, err)
+
+	assert.EqualValues(t, 100, result.Usage.InputTokens)
+	assert.EqualValues(t, 80, result.Usage.CachedTokens)
+	assert.EqualValues(t, 5, result.Usage.CacheCreationTokens)
+	assert.EqualValues(t, 10, result.Usage.OutputTokens)
+	assert.EqualValues(t, 110, result.Usage.TotalTokens)
+
+	// Claude reports the cache in fields of its own: input_tokens is the
+	// remaining prompt, so the three add up to the billed 100 input tokens.
+	var claudeResp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &claudeResp))
+	assert.EqualValues(t, 15, claudeResp.Usage.InputTokens)
+	assert.EqualValues(t, 80, claudeResp.Usage.CacheReadInputTokens)
+	assert.EqualValues(t, 5, claudeResp.Usage.CacheCreationInputTokens)
+	assert.EqualValues(t, 10, claudeResp.Usage.OutputTokens)
+}
+
+func TestClaudeStreamHandlerCachedUsageNotDoubleCounted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stream := strings.Join([]string{
+		`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","content":"hi"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":10,"total_tokens":110,"prompt_tokens_details":{"cached_tokens":80,"cache_write_tokens":5}}}`,
+		"",
+		`data: [DONE]`,
+		"",
+	}, "\n")
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(stream)),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/messages",
+		nil,
+	)
+
+	result, err := openai.ClaudeStreamHandler(&meta.Meta{
+		OriginModel: "gpt-4o",
+		ActualModel: "gpt-4o",
+	}, c, resp)
+	require.Nil(t, err)
+
+	assert.EqualValues(t, 100, result.Usage.InputTokens)
+	assert.EqualValues(t, 80, result.Usage.CachedTokens)
+	assert.EqualValues(t, 5, result.Usage.CacheCreationTokens)
+	assert.EqualValues(t, 110, result.Usage.TotalTokens)
+
+	delta := claudeMessageDelta(t, w.Body.String())
+	assert.EqualValues(t, 15, *delta.Usage.InputTokens)
+	assert.EqualValues(t, 80, *delta.Usage.CacheReadInputTokens)
+	assert.EqualValues(t, 5, *delta.Usage.CacheCreationInputTokens)
+	assert.EqualValues(t, 10, *delta.Usage.OutputTokens)
+}
+
+func TestConvertResponsesToClaudeResponseCachedUsage(t *testing.T) {
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_6","object":"response","status":"completed","model":"gpt-5-codex",
+"output":[{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}],
+"usage":{"input_tokens":100,"output_tokens":10,"total_tokens":110,"input_tokens_details":{"cached_tokens":80,"cache_write_tokens":5}}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.EqualValues(t, 15, resp.Usage.InputTokens)
+	assert.EqualValues(t, 80, resp.Usage.CacheReadInputTokens)
+	assert.EqualValues(t, 5, resp.Usage.CacheCreationInputTokens)
+}
+
+// claudeMessageDelta returns the message_delta event of a Claude stream.
+func claudeMessageDelta(t *testing.T, body string) relaymodel.ClaudeStreamResponse {
+	t.Helper()
+
+	for line := range strings.SplitSeq(body, "\n") {
+		if strings.Contains(line, `"type":"message_delta"`) {
+			var event relaymodel.ClaudeStreamResponse
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
+			require.NotNil(t, event.Usage)
+
+			return event
+		}
+	}
+
+	require.FailNow(t, "message_delta event not found")
+
+	return relaymodel.ClaudeStreamResponse{}
+}
+
+func TestConvertResponsesToClaudeStreamResponseIncompleteStopReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, tt := range []struct{ reason, want string }{
+		{"max_output_tokens", "max_tokens"},
+		{"content_filter", "refusal"},
+	} {
+		t.Run(tt.reason, func(t *testing.T) {
+			stream := strings.Join([]string{
+				`data: {"type":"response.created","response":{"id":"resp_4","object":"response","status":"in_progress","model":"gpt-5","output":[]}}`,
+				"",
+				`data: {"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}`,
+				"",
+				`data: {"type":"response.output_text.delta","output_index":0,"delta":"Once upon"}`,
+				"",
+				`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_1","type":"message","status":"incomplete"}}`,
+				"",
+				`data: {"type":"response.incomplete","response":{"id":"resp_4","object":"response","status":"incomplete","incomplete_details":{"reason":"` + tt.reason + `"},"model":"gpt-5","output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
+				"",
+			}, "\n")
+
+			httpResp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(stream)),
+				Header:     make(http.Header),
+			}
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/v1/messages",
+				nil,
+			)
+
+			_, err := openai.ConvertResponsesToClaudeStreamResponse(
+				&meta.Meta{ActualModel: "gpt-5"},
+				c,
+				httpResp,
+			)
+			require.Nil(t, err)
+			assert.Contains(t, w.Body.String(), `"stop_reason":"`+tt.want+`"`)
+			assert.Contains(t, w.Body.String(), `"type":"message_stop"`)
+		})
+	}
+}
+
+func TestConvertResponsesToClaudeResponseContentFilterStopReason(t *testing.T) {
+	// A filtered response may still carry a complete function call: the
+	// filter wins so the tool call is not presented as executable.
+	w := runResponsesToClaude(
+		t,
+		`{"id":"resp_5","object":"response","status":"incomplete","incomplete_details":{"reason":"content_filter"},"model":"gpt-5-codex",
+"output":[{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}],
+"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+	)
+
+	var resp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Len(t, resp.Content, 1)
+	assert.Equal(t, relaymodel.ClaudeStopReasonRefusal, resp.StopReason)
+}
+
 func TestConvertClaudeRequest_ToolChoice(t *testing.T) {
 	t.Parallel()
 
