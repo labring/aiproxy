@@ -97,6 +97,8 @@ func ConvertClaudeRequestModel(
 		openAIRequest.Stop = claudeRequest.StopSequences
 	}
 
+	openAIRequest.ResponseFormat = convertClaudeOutputFormat(claudeRequest.OutputConfig)
+
 	// Set stream options if streaming
 	if claudeRequest.Stream {
 		openAIRequest.StreamOptions = &relaymodel.StreamOptions{
@@ -111,6 +113,25 @@ func ConvertClaudeRequestModel(
 	)
 
 	return &openAIRequest, nil
+}
+
+// convertClaudeOutputFormat converts Claude output_config.format to the OpenAI
+// response_format. OpenAI requires a schema name, which Claude does not have.
+func convertClaudeOutputFormat(
+	outputConfig *relaymodel.ClaudeOutputConfig,
+) *relaymodel.ResponseFormat {
+	if outputConfig == nil || outputConfig.Format == nil ||
+		outputConfig.Format.Type != relaymodel.ClaudeOutputFormatTypeJSONSchema {
+		return nil
+	}
+
+	return &relaymodel.ResponseFormat{
+		Type: relaymodel.ClaudeOutputFormatTypeJSONSchema,
+		JSONSchema: &relaymodel.JSONSchema{
+			Name:   "response",
+			Schema: outputConfig.Format.Schema,
+		},
+	}
 }
 
 // convertClaudeMessagesToOpenAI converts Claude message format to OpenAI format
@@ -847,6 +868,10 @@ func ConvertClaudeToResponsesRequest(
 		&responsesReq,
 		utils.ParseOpenAIReasoning(openAIRequest),
 	)
+
+	if openAIRequest.ResponseFormat != nil {
+		responsesReq.Text = convertChatResponseFormatToResponseText(openAIRequest.ResponseFormat)
+	}
 
 	// Force non-store mode
 	storeValue := false
