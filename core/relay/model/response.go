@@ -506,7 +506,6 @@ func (u *ResponseUsage) ToChatUsage() ChatUsage {
 // ToClaudeUsage converts ResponseUsage to ClaudeUsage (Anthropic Claude format)
 func (u *ResponseUsage) ToClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{
-		InputTokens:  u.InputTokens,
 		OutputTokens: u.OutputTokens,
 	}
 
@@ -517,6 +516,12 @@ func (u *ResponseUsage) ToClaudeUsage() ClaudeUsage {
 	if u.InputTokensDetails != nil && u.InputTokensDetails.CacheWriteTokens > 0 {
 		usage.CacheCreationInputTokens = u.InputTokensDetails.CacheWriteTokens
 	}
+
+	usage.InputTokens = uncachedInputTokens(
+		u.InputTokens,
+		usage.CacheReadInputTokens,
+		usage.CacheCreationInputTokens,
+	)
 
 	return usage
 }

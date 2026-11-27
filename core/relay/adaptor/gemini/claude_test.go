@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -327,4 +328,52 @@ func TestClaudeHandlerUsageFromGeminiMetadata(t *testing.T) {
 	require.EqualValues(t, 17, result.Usage.OutputTokens)
 	require.EqualValues(t, 7, result.Usage.ReasoningTokens)
 	require.EqualValues(t, 117, result.Usage.TotalTokens)
+
+	// promptTokenCount includes the cached tokens, which Claude reports apart
+	var claudeResp relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &claudeResp))
+	require.EqualValues(t, 20, claudeResp.Usage.InputTokens)
+	require.EqualValues(t, 80, claudeResp.Usage.CacheReadInputTokens)
+	// output_tokens covers the answer and the thoughts
+	require.EqualValues(t, 17, claudeResp.Usage.OutputTokens)
+}
+
+func TestClaudeStreamHandlerCachedUsageNotDoubleCounted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stream := strings.Join([]string{
+		`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"index":0}]}`,
+		`data: {"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"STOP","index":0}],` +
+			`"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":80,` +
+			`"candidatesTokenCount":10,"totalTokenCount":110}}`,
+		"",
+	}, "\n\n")
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader([]byte(stream))),
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/v1/messages",
+		nil,
+	)
+
+	_, handlerErr := gemini.ClaudeStreamHandler(&meta.Meta{OriginModel: "gemini-2.5-pro"}, c, resp)
+	require.Nil(t, handlerErr)
+
+	var delta relaymodel.ClaudeStreamResponse
+	for line := range strings.SplitSeq(w.Body.String(), "\n") {
+		if strings.Contains(line, `"type":"message_delta"`) {
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &delta))
+		}
+	}
+
+	require.NotNil(t, delta.Usage)
+	require.EqualValues(t, 20, *delta.Usage.InputTokens)
+	require.EqualValues(t, 80, *delta.Usage.CacheReadInputTokens)
+	require.EqualValues(t, 10, *delta.Usage.OutputTokens)
 }

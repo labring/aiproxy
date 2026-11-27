@@ -94,7 +94,7 @@ func TestChatUsage(t *testing.T) {
 			}
 
 			cu := u.ToClaudeUsage()
-			convey.So(cu.InputTokens, convey.ShouldEqual, 10)
+			convey.So(cu.InputTokens, convey.ShouldEqual, 3)
 			convey.So(cu.OutputTokens, convey.ShouldEqual, 20)
 			convey.So(cu.CacheReadInputTokens, convey.ShouldEqual, 5)
 			convey.So(cu.CacheCreationInputTokens, convey.ShouldEqual, 2)
