@@ -193,8 +193,11 @@ func openAIConvertRequest(
 				claudeToolChoice.Name = name
 			}
 		} else if toolChoiceType, ok := textRequest.ToolChoice.(string); ok {
-			if toolChoiceType == "any" {
-				claudeToolChoice.Type = toolChoiceType
+			switch toolChoiceType {
+			case relaymodel.ToolChoiceNone:
+				claudeToolChoice.Type = relaymodel.ToolChoiceNone
+			case relaymodel.ToolChoiceRequired, relaymodel.ToolChoiceAny:
+				claudeToolChoice.Type = relaymodel.ToolChoiceAny
 			}
 		}
 
